@@ -12,25 +12,26 @@ const (
 )
 
 type Quote struct {
-	Version          string    `json:"version"`
-	QuoteID          string    `json:"quoteId"`
-	RequestID        string    `json:"requestId"`
-	SessionID        string    `json:"sessionId"`
-	ServiceID        string    `json:"serviceId"`
-	ProfileID        string    `json:"profileId"`
-	Operation        string    `json:"operation"`
-	IntentDigest     string    `json:"intentDigest"`
-	ServiceRevision  string    `json:"serviceRevision"`
-	ResourceRevision string    `json:"resourceRevision"`
-	Network          string    `json:"network"`
-	Payee            string    `json:"payee"`
-	Settlement       string    `json:"settlement"`
-	PriceNanoTOS     uint64    `json:"priceNanoTos"`
-	MaxInputBytes    uint64    `json:"maxInputBytes"`
-	MaxOutputBytes   uint64    `json:"maxOutputBytes"`
-	IssuedAt         time.Time `json:"issuedAt"`
-	Deadline         time.Time `json:"deadline"`
-	ExpiresAt        time.Time `json:"expiresAt"`
+	Version          string          `json:"version"`
+	QuoteID          string          `json:"quoteId"`
+	RequestID        string          `json:"requestId"`
+	SessionID        string          `json:"sessionId"`
+	ServiceID        string          `json:"serviceId"`
+	ProfileID        string          `json:"profileId"`
+	Operation        string          `json:"operation"`
+	IntentDigest     string          `json:"intentDigest"`
+	ServiceRevision  string          `json:"serviceRevision"`
+	ResourceRevision string          `json:"resourceRevision"`
+	Network          string          `json:"network"`
+	Payee            string          `json:"payee"`
+	Settlement       string          `json:"settlement"`
+	PriceNanoTOS     uint64          `json:"priceNanoTos"`
+	MaxInputBytes    uint64          `json:"maxInputBytes"`
+	MaxOutputBytes   uint64          `json:"maxOutputBytes"`
+	ResourceLimits   []ResourceLimit `json:"resourceLimits,omitempty"`
+	IssuedAt         time.Time       `json:"issuedAt"`
+	Deadline         time.Time       `json:"deadline"`
+	ExpiresAt        time.Time       `json:"expiresAt"`
 }
 
 type PaymentAuthorization struct {
@@ -99,6 +100,9 @@ func (q Quote) Validate(now time.Time) error {
 	if q.MaxInputBytes == 0 || q.MaxOutputBytes == 0 {
 		return errors.New("quote resource bounds are required")
 	}
+	if err := validateResourceLimits(q.ResourceLimits); err != nil {
+		return err
+	}
 	if q.IssuedAt.IsZero() || q.IssuedAt.After(now.Add(MaxClockSkewForReceipts)) ||
 		!q.Deadline.After(now) || !q.ExpiresAt.After(now) ||
 		!q.ExpiresAt.After(q.IssuedAt) || q.ExpiresAt.After(q.Deadline) {
@@ -114,6 +118,16 @@ func (p PaymentAuthorization) Validate(quote Quote, now time.Time) error {
 	if err := quote.Validate(now); err != nil {
 		return fmt.Errorf("invalid quote: %w", err)
 	}
+	if err := p.validateBinding(quote); err != nil {
+		return err
+	}
+	if !p.ExpiresAt.After(now) {
+		return errors.New("payment authorization is expired")
+	}
+	return nil
+}
+
+func (p PaymentAuthorization) validateBinding(quote Quote) error {
 	if p.Version != BaseEnvelopeVersion {
 		return errors.New("unsupported payment authorization version")
 	}
@@ -136,7 +150,7 @@ func (p PaymentAuthorization) Validate(quote Quote, now time.Time) error {
 			return err
 		}
 	}
-	if !p.ExpiresAt.After(now) || p.ExpiresAt.After(quote.ExpiresAt) {
+	if !p.ExpiresAt.After(quote.IssuedAt) || p.ExpiresAt.After(quote.ExpiresAt) {
 		return errors.New("invalid payment authorization expiry")
 	}
 	return nil
@@ -145,6 +159,9 @@ func (p PaymentAuthorization) Validate(quote Quote, now time.Time) error {
 func (r Receipt) Validate(quote Quote, authorization PaymentAuthorization) error {
 	if r.Version != BaseEnvelopeVersion {
 		return errors.New("unsupported receipt version")
+	}
+	if err := authorization.validateBinding(quote); err != nil {
+		return fmt.Errorf("invalid payment authorization binding: %w", err)
 	}
 	if err := validateCorrelationIDs(r.ReceiptID, r.RequestID, r.QuoteID, r.AuthorizationID); err != nil {
 		return err

@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "terminal-manifest.schema.json",
+  "title": "TOS edge terminal manifest v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "terminalId",
+    "serviceId",
+    "network",
+    "revision",
+    "policyRevision",
+    "collectedAt",
+    "expiresAt",
+    "readiness",
+    "resources"
+  ],
+  "properties": {
+    "version": {"$ref": "common.schema.json#/$defs/protocolVersion"},
+    "terminalId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "serviceId": {"$ref": "common.schema.json#/$defs/serviceId"},
+    "network": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "revision": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "policyRevision": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "collectedAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+    "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+    "readiness": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/readiness"}
+    },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/resource"}
+    },
+    "extensions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"$ref": "service-manifest.schema.json#/$defs/extension"}
+    }
+  },
+  "$defs": {
+    "claimEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "issuer", "collectedAt", "expiresAt"],
+      "properties": {
+        "level": {"$ref": "common.schema.json#/$defs/evidenceLevel"},
+        "issuer": {"$ref": "common.schema.json#/$defs/boundedString"},
+        "collectedAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+        "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+        "digest": {"$ref": "common.schema.json#/$defs/digest"},
+        "reference": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^[^\\x00]*$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "enum": [
+                  "benchmarked",
+                  "audited",
+                  "attested",
+                  "replicated",
+                  "cryptographically-proven"
+                ]
+              }
+            },
+            "required": ["level"]
+          },
+          "then": {"required": ["digest"]}
+        }
+      ]
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "revision", "evidence"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/serviceId"},
+        "status": {
+          "enum": ["ready", "degraded", "unavailable", "unknown", "draining"]
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\x00]+$"
+        },
+        "reasonCode": {"$ref": "common.schema.json#/$defs/serviceId"},
+        "evidence": {"$ref": "#/$defs/claimEvidence"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "class",
+        "unit",
+        "total",
+        "ownerReserved",
+        "availableExternal",
+        "revision",
+        "evidence"
+      ],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/serviceId"},
+        "class": {
+          "enum": [
+            "compute",
+            "accelerator",
+            "memory",
+            "storage",
+            "network",
+            "runtime",
+            "device",
+            "other"
+          ]
+        },
+        "unit": {
+          "enum": [
+            "count",
+            "bytes",
+            "milliseconds",
+            "milliwatts",
+            "bits-per-second"
+          ]
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "ownerReserved": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "availableExternal": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\x00]+$"
+        },
+        "evidence": {"$ref": "#/$defs/claimEvidence"},
+        "attributes": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {"$ref": "common.schema.json#/$defs/serviceId"},
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[^\\x00]*$"
+          }
+        }
+      }
+    }
+  }
+}

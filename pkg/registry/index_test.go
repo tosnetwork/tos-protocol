@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -111,5 +112,12 @@ func TestEmptySearchEncodesResultsArray(t *testing.T) {
 	}
 	if !strings.Contains(string(encoded), `"results":[]`) {
 		t.Fatalf("empty results are not an array: %s", encoded)
+	}
+}
+
+func TestPageTokenRejectsDuplicateFields(t *testing.T) {
+	token := base64.RawURLEncoding.EncodeToString([]byte(`{"o":0,"o":1,"g":7}`))
+	if _, err := decodePageToken(token, 7); err == nil {
+		t.Fatal("ambiguous pageToken accepted")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
 )
 
@@ -350,7 +351,7 @@ func decodePageToken(token string, generation uint64) (int, error) {
 		return 0, errors.New("invalid pageToken")
 	}
 	var cursor pageCursor
-	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Offset < 0 {
+	if err := jsonstrict.Decode(data, &cursor); err != nil || cursor.Offset < 0 {
 		return 0, errors.New("invalid pageToken")
 	}
 	if cursor.Generation != generation {

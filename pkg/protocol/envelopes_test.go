@@ -70,6 +70,11 @@ func TestQuotePaymentReceiptBindings(t *testing.T) {
 	if err := receipt.Validate(quote, authorization); err != nil {
 		t.Fatal(err)
 	}
+	substitutedAuthorization := authorization
+	substitutedAuthorization.Payee = "attacker"
+	if err := receipt.Validate(quote, substitutedAuthorization); err == nil {
+		t.Fatal("receipt accepted an authorization for another payee")
+	}
 	receipt.ChargedNanoTOS = 101
 	if err := receipt.Validate(quote, authorization); err == nil {
 		t.Fatal("overcharge accepted")

@@ -9,7 +9,8 @@ This repository is an early Go 1.24 foundation. It now includes the draft
 TOS Service Protocol v0.1 contracts: deterministic signed values, operational
 service manifests, exact profile negotiation, bounded sessions and
 delegations, quote/payment/receipt binding, evidence levels, error semantics,
-Draft 2020-12 JSON Schemas, and fixed conformance vectors.
+privacy-preserving terminal/resource declarations, Draft 2020-12 JSON
+Schemas, and fixed conformance vectors.
 
 The security boundary is intentional:
 
@@ -38,7 +39,8 @@ will download a compatible toolchain.
 go run ./cmd/tos-edge \
   -listen 127.0.0.1:8080 \
   -descriptor ./examples/tos-service.json \
-  -catalog ./examples/ai-catalog.json
+  -catalog ./examples/ai-catalog.json \
+  -request-journal /absolute/private/path/requests.db
 
 go run ./cmd/tos-ard-registry \
   -listen 127.0.0.1:8090 \
@@ -71,8 +73,11 @@ descriptor -> controller-signed manifest -> profile negotiation
 
 The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
-deadline. `tos-edge` still exposes discovery only until the persistent replay,
-payment observation, isolation, and cleanup layers are implemented.
+deadline. `tos-edge` still exposes discovery only until manifest-backed
+authorization, payment observation, execution isolation, and receipt
+persistence are implemented. Atomic signed-envelope nonce admission, the
+bounded durable request journal, and its cleanup owner are implemented as an
+internal Edge Core library; they do not enable public actions by themselves.
 
 ## Repository map
 
@@ -85,6 +90,7 @@ pkg/chain/            bounded JSON-RPC adapter
 pkg/edge/             safe public discovery server
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
+pkg/journal/          durable bounded replay and idempotency state
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts
 pkg/registry/         bounded ARD index and HTTP API
 spec/base/            normative draft schemas, rules, and test vectors

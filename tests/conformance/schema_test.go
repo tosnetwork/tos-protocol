@@ -54,6 +54,9 @@ func TestGoValuesConformToPublishedSchemas(t *testing.T) {
 		Network: "testnet", Payee: "payee-key-1", Settlement: "service-actor-request-1",
 		MaxInputBytes: 1024, MaxOutputBytes: 2048, IssuedAt: now, Deadline: now.Add(time.Minute),
 		ExpiresAt: now.Add(30 * time.Second),
+		ResourceLimits: []protocol.ResourceLimit{{
+			ID: "memory.ram", Unit: protocol.ResourceUnitBytes, Quantity: 4 << 30,
+		}},
 	}
 	authorization := protocol.PaymentAuthorization{
 		Version: protocol.BaseEnvelopeVersion, AuthorizationID: "authorization-0001",
@@ -72,6 +75,10 @@ func TestGoValuesConformToPublishedSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	claimEvidence := protocol.ClaimEvidence{
+		Level: protocol.EvidenceObserved, Issuer: "runtime-key-1",
+		CollectedAt: now, ExpiresAt: now.Add(time.Hour),
+	}
 	cases := map[string]interface{}{
 		"signed-envelope.schema.json": envelope,
 		"service-descriptor.schema.json": protocol.ServiceDescriptor{
@@ -81,6 +88,24 @@ func TestGoValuesConformToPublishedSchemas(t *testing.T) {
 			Profiles: []protocol.ProfileReference{profile},
 		},
 		"profile-reference.schema.json": profile,
+		"resource-limit.schema.json":    quote.ResourceLimits[0],
+		"terminal-manifest.schema.json": protocol.TerminalManifest{
+			Version: protocol.TerminalManifestVersion, TerminalID: "terminal-0001",
+			ServiceID: quote.ServiceID, Network: "testnet", Revision: "terminal-1",
+			PolicyRevision: "owner-policy-1", CollectedAt: now,
+			ExpiresAt: now.Add(time.Minute),
+			Readiness: []protocol.ReadinessComponent{{
+				ID: "runtime.ollama", Status: protocol.ReadinessReady,
+				Revision: "0.11.0", Evidence: claimEvidence,
+			}},
+			Resources: []protocol.ResourceClaim{{
+				ID: "memory.host", Class: protocol.ResourceMemory,
+				Unit: protocol.ResourceUnitBytes, Total: 64 << 30,
+				OwnerReserved: 16 << 30, AvailableExternal: 32 << 30,
+				Revision: "probe-v1", Evidence: claimEvidence,
+				Attributes: map[string]string{"architecture.name": "amd64"},
+			}},
+		},
 		"capability.schema.json": protocol.CapabilityClaim{
 			ID: "tos.ai.generate", Revision: "model-1",
 			Evidence: protocol.EvidenceBenchmarked, Attributes: map[string]string{"runtime": "stub"},

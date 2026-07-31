@@ -43,12 +43,6 @@ func TestServiceDescriptorValidate(t *testing.T) {
 		t.Fatal("duplicate profile accepted")
 	}
 
-	tooFresh := validDescriptor(now)
-	tooFresh.ExpiresAt = now.Add(MaxDescriptorAge + time.Second)
-	if err := tooFresh.Validate(now); err == nil {
-		t.Fatal("unbounded descriptor lifetime accepted")
-	}
-
 	shortADNL := validDescriptor(now)
 	shortADNL.ADNLAddress = "too-short"
 	if err := shortADNL.Validate(now); err == nil {

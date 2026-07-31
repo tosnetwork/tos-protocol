@@ -8,6 +8,18 @@ This directory contains the draft normative base specification:
   commitments, and domain labels
 - [authentication.md](authentication.md) — controller/runtime/session key
   hierarchy, replay, and bounded delegation
+- [terminal-resources.md](terminal-resources.md) — privacy-preserving
+  readiness, capacity, owner reservations, evidence, and quote limits
+- [ard-handoff.md](ard-handoff.md) — ARD publisher provenance and safe
+  transition to TOS controller authority
+- [transport-http.md](transport-http.md) and
+  [transport-rldp.md](transport-rldp.md) — transport-equivalent discovery and
+  transaction bindings
+- [payment-and-settlement.md](payment-and-settlement.md) — destination
+  binding, chain observation, reorganization, refunds, and receipts
+- [request-journal.md](request-journal.md) — atomic nonce/request admission,
+  durable idempotency, request transitions, retention, and bounded crash
+  recovery
 - [versioning.md](versioning.md) — exact profile negotiation and critical
   extension behavior
 - [errors.md](errors.md) — error codes and retry safety

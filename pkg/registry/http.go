@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
-	"strings"
 	"time"
+
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 )
 
 const maxSearchBodyBytes = 64 << 10
@@ -37,7 +39,8 @@ func (h *Handler) Routes() http.Handler {
 }
 
 func (h *Handler) search(writer http.ResponseWriter, request *http.Request) {
-	if contentType := request.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+	contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/json" {
 		writeError(writer, http.StatusUnsupportedMediaType, "INVALID_ARGUMENT", "Content-Type must be application/json")
 		return
 	}
@@ -81,13 +84,8 @@ func decodeJSONBody(reader io.Reader, output interface{}) error {
 	if len(data) > maxSearchBodyBytes {
 		return errors.New("request body too large")
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(output); err != nil {
+	if err := jsonstrict.Decode(data, output); err != nil {
 		return errors.New("invalid JSON request")
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return errors.New("request contains trailing JSON")
 	}
 	return nil
 }

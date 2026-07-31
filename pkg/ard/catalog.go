@@ -4,7 +4,6 @@
 package ard
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 )
 
 const (
@@ -168,13 +169,8 @@ func DecodeCatalog(reader io.Reader, limits Limits) (Catalog, error) {
 		return Catalog{}, errors.New("catalog exceeds byte limit")
 	}
 	var catalog Catalog
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&catalog); err != nil {
+	if err := jsonstrict.Decode(data, &catalog); err != nil {
 		return Catalog{}, fmt.Errorf("decode catalog: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return Catalog{}, errors.New("catalog contains trailing JSON")
 	}
 	if err := catalog.Validate(limits); err != nil {
 		return Catalog{}, err
@@ -241,7 +237,7 @@ func (e Entry) Validate(limits Limits) error {
 			return errors.New("embedded data exceeds byte limit")
 		}
 		var object map[string]interface{}
-		if err := json.Unmarshal(e.Data, &object); err != nil || object == nil {
+		if err := jsonstrict.Decode(e.Data, &object); err != nil || object == nil {
 			return errors.New("data must be a JSON object")
 		}
 	}

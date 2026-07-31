@@ -36,3 +36,64 @@ func TestClientBoundsResponse(t *testing.T) {
 		t.Fatal("oversized response accepted")
 	}
 }
+
+func TestClientRejectsAmbiguousOrMismatchedResponses(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "duplicate key",
+			body: `{"jsonrpc":"2.0","id":1,"id":2,"result":{}}`,
+		},
+		{
+			name: "mismatched id",
+			body: `{"jsonrpc":"2.0","id":2,"result":{}}`,
+		},
+		{
+			name: "result and error",
+			body: `{"jsonrpc":"2.0","id":1,"result":{},"error":{"code":-1,"message":"failed"}}`,
+		},
+		{
+			name: "missing result and error",
+			body: `{"jsonrpc":"2.0","id":1}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(test.body))
+			}))
+			defer server.Close()
+
+			client, err := NewClient(server.URL, time.Second, 1024)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result map[string]interface{}
+			if err := client.Call(context.Background(), "getSomething", nil, &result); err == nil {
+				t.Fatal("invalid JSON-RPC response accepted")
+			}
+		})
+	}
+}
+
+func TestClientStrictlyDecodesResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"height":7,"height":8}}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, time.Second, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Height uint64 `json:"height"`
+	}
+	if err := client.Call(context.Background(), "getHeight", nil, &result); err == nil {
+		t.Fatal("ambiguous JSON-RPC result accepted")
+	}
+}

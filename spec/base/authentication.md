@@ -30,10 +30,25 @@ these checks.
 ## Replay
 
 Every signed envelope has an unpredictable 128-bit nonce and a maximum
-24-hour validity. Nonces are necessary but not sufficient. Servers MUST keep
-bounded replay and idempotency state keyed by authority, service, session,
-operation, and request ID until the relevant expiry or durable terminal
-record. When full, the server MUST reject new admissions or safely evict only
+24-hour validity. Nonces are necessary but not sufficient. After signature,
+manifest role, delegation, revocation, profile, and payload checks succeed,
+the server MUST atomically claim the nonce and create or recover the durable
+request record. It MUST NOT claim attacker-supplied nonces before
+authentication.
+
+Nonce uniqueness is scoped by network, authority, and service. Reusing a live
+nonce for another session, operation, request, domain, or expiry is rejected.
+The claim also stores a domain-separated SHA-256 fingerprint of the complete
+signed envelope. An exact retry of the same signed, idempotent request may
+return its existing record without executing it again. A different envelope
+that reuses the nonce is rejected even when it names the same request. A
+request signed again with a fresh nonce may recover the existing record, but
+the new nonce is consumed.
+
+Servers MUST keep bounded replay and idempotency state keyed by authority,
+service, session, operation, and request ID until the relevant expiry or
+durable terminal record. Request retention MUST cover the signed-envelope
+expiry. When full, the server MUST reject new admissions or safely evict only
 records whose replay window has ended.
 
 ## Delegation

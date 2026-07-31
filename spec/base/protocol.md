@@ -24,6 +24,7 @@ obtain a live signed quote.
 | ARD catalog entry | Protocol-neutral public discovery | Publisher FQDN and Registry provenance |
 | `/.well-known/tos-service.json` | Stable TOS handoff and profile references | Controller-bound discovery |
 | Service manifest | Runtime keys, endpoints, profiles, revisions, claims | Controller signature |
+| Terminal manifest | Short-lived readiness, owner reservation, resource and evidence snapshot | Runtime key with `evidence` role |
 | Session grant | Bounded runtime access | Runtime key with `authenticate` role |
 | Quote | Admission, revisions, limits, price, expiry | Runtime key with `quote` role |
 | Payment authorization | Payer's maximum authorized payment | Payer or approved policy service |
@@ -67,8 +68,11 @@ The Go reference implementation enforces:
 - 4,096 entries in one map or array and 16,384 total decoded items
 - 24-hour maximum manifest, signed-envelope, session, delegation, and quote
   lifetime
+- 10-minute maximum terminal resource snapshot lifetime
 - 32 profile versions, profile extensions, operations, usage units, or
   evidence claims where applicable
+- 64 quote resource limits and readiness components; 128 terminal resource
+  claims
 - delegation depth no greater than four
 
 Profiles MUST publish smaller workload-specific input, output, context,

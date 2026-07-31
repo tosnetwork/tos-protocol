@@ -69,6 +69,11 @@
       "minimum": 1,
       "maximum": 18446744073709551615
     },
+    "resourceLimits": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {"$ref": "resource-limit.schema.json"}
+    },
     "issuedAt": {"$ref": "common.schema.json#/$defs/dateTime"},
     "deadline": {"$ref": "common.schema.json#/$defs/dateTime"},
     "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"}

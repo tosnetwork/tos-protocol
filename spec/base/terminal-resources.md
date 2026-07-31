@@ -1,0 +1,75 @@
+# Terminal and resource declarations
+
+A terminal manifest is a short-lived, signed operational snapshot. It is not
+an inventory record, benchmark certificate, capacity reservation, or
+permission to execute work.
+
+The base structure is defined by `terminal-manifest.schema.json` and
+`pkg/protocol.TerminalManifest`. Vertical profiles map their own dimensions to
+the generic resource classes and integer units.
+
+## Privacy
+
+`terminalId` MUST be service-scoped or rotating. It MUST NOT be derived from a
+serial number, GPU UUID, PCI address, MAC address, hostname, IP address, exact
+site location, or another stable hardware fingerprint.
+
+Public resource attributes MUST NOT contain those identifiers. A public
+terminal normally reports coarse device class, capacity, compatibility
+revision, and evidence freshness. Exact private fleet inventory stays behind
+the site or fleet controller.
+
+## Capacity accounting
+
+Every resource claim states:
+
+- total locally measured or configured capacity
+- owner-reserved capacity
+- currently available external capacity
+- unit, revision, evidence level, issuer, collection time, and expiry
+
+`availableExternal` MUST be no greater than `total - ownerReserved`. It must
+also exclude existing commitments and locally unavailable capacity. Because
+availability can change immediately after publication, it remains advisory.
+The worker performs authoritative admission again when creating a quote and
+again before executing the action.
+
+Remote quantities are unsigned 64-bit protocol values. Implementations MUST
+clamp them to a smaller administrator policy and host integer range before
+allocation.
+
+## Evidence and freshness
+
+Each readiness component and resource field group has independent evidence.
+`benchmarked`, `audited`, `attested`, `replicated`, and
+`cryptographically-proven` claims require an evidence digest. A digest proves
+artifact identity, not that the artifact is true or applicable.
+
+The terminal manifest is valid for no more than ten minutes. Supporting
+evidence must remain valid for the complete manifest interval. Clients must
+evaluate the issuer and selected profile semantics; a self-observed claim is
+not converted into third-party attestation by a Registry.
+
+## Readiness
+
+Readiness is structured by component. Allowed base states are `ready`,
+`degraded`, `unavailable`, `unknown`, and `draining`. `reasonCode` is a stable
+bounded identifier, not a free-form log or secret-bearing error.
+
+An overall ready state does not override a degraded model, runtime, network,
+thermal, storage, payment, update, or local safety component. Profiles define
+which components are required for one operation.
+
+Temperature and other signed telemetry are readiness evidence, not allocatable
+resource quantities. They therefore do not use capacity accounting fields or
+generic `ResourceUnit` values.
+
+## Quote limits
+
+`resource-limit.schema.json` defines the generic integer dimensions committed
+by a quote. Examples include RAM bytes, accelerator-memory bytes, KV-cache
+bytes, context count, batch count, and execution milliseconds.
+
+The dimension identifier gives it meaning; the unit alone does not. A client
+must compare the exact identifier, unit, quantity, profile revision, and
+resource revision. Unknown required dimensions cause rejection.

@@ -25,11 +25,88 @@ enum Priority {
   PRIORITY_BACKGROUND = 6;
 }
 
+enum EvidenceLevel {
+  EVIDENCE_LEVEL_UNSPECIFIED = 0;
+  EVIDENCE_LEVEL_DECLARED = 1;
+  EVIDENCE_LEVEL_OBSERVED = 2;
+  EVIDENCE_LEVEL_BENCHMARKED = 3;
+  EVIDENCE_LEVEL_AUDITED = 4;
+  EVIDENCE_LEVEL_ATTESTED = 5;
+  EVIDENCE_LEVEL_REPLICATED = 6;
+  EVIDENCE_LEVEL_CRYPTOGRAPHICALLY_PROVEN = 7;
+}
+
+enum ReadinessStatus {
+  READINESS_STATUS_UNSPECIFIED = 0;
+  READINESS_STATUS_READY = 1;
+  READINESS_STATUS_DEGRADED = 2;
+  READINESS_STATUS_UNAVAILABLE = 3;
+  READINESS_STATUS_UNKNOWN = 4;
+  READINESS_STATUS_DRAINING = 5;
+}
+
+enum ResourceClass {
+  RESOURCE_CLASS_UNSPECIFIED = 0;
+  RESOURCE_CLASS_COMPUTE = 1;
+  RESOURCE_CLASS_ACCELERATOR = 2;
+  RESOURCE_CLASS_MEMORY = 3;
+  RESOURCE_CLASS_STORAGE = 4;
+  RESOURCE_CLASS_NETWORK = 5;
+  RESOURCE_CLASS_RUNTIME = 6;
+  RESOURCE_CLASS_DEVICE = 7;
+  RESOURCE_CLASS_OTHER = 8;
+}
+
+enum ResourceUnit {
+  RESOURCE_UNIT_UNSPECIFIED = 0;
+  RESOURCE_UNIT_COUNT = 1;
+  RESOURCE_UNIT_BYTES = 2;
+  RESOURCE_UNIT_MILLISECONDS = 3;
+  RESOURCE_UNIT_MILLIWATTS = 4;
+  RESOURCE_UNIT_BITS_PER_SECOND = 5;
+}
+
+message ClaimEvidence {
+  EvidenceLevel level = 1;
+  string issuer = 2;
+  int64 collected_unix_millis = 3;
+  int64 expires_unix_millis = 4;
+  string digest = 5;
+  string reference = 6;
+}
+
+message ReadinessComponent {
+  string id = 1;
+  ReadinessStatus status = 2;
+  string revision = 3;
+  string reason_code = 4;
+  ClaimEvidence evidence = 5;
+}
+
+message ResourceClaim {
+  string id = 1;
+  ResourceClass resource_class = 2;
+  ResourceUnit unit = 3;
+  uint64 total = 4;
+  uint64 owner_reserved = 5;
+  uint64 available_external = 6;
+  string revision = 7;
+  ClaimEvidence evidence = 8;
+  map<string, string> attributes = 9;
+}
+
+message ResourceLimit {
+  string id = 1;
+  ResourceUnit unit = 2;
+  uint64 quantity = 3;
+}
+
 message HealthRequest {}
 
 message HealthResponse {
   string status = 1;
   string version = 2;
+  repeated ReadinessComponent readiness = 3;
 }
 
 message GetCapabilitiesRequest {}
@@ -44,11 +121,16 @@ message Capability {
   uint64 max_input_bytes = 7;
   uint64 max_output_bytes = 8;
   repeated Priority accepted_priorities = 9;
+  repeated ResourceLimit admission_limits = 10;
 }
 
 message GetCapabilitiesResponse {
   repeated Capability capabilities = 1;
   string capacity_revision = 2;
+  repeated ResourceClaim resources = 3;
+  string terminal_revision = 4;
+  int64 collected_unix_millis = 5;
+  int64 expires_unix_millis = 6;
 }
 
 message QuoteRequest {
@@ -60,6 +142,7 @@ message QuoteRequest {
   uint64 max_output_bytes = 6;
   int64 deadline_unix_millis = 7;
   Priority priority = 8;
+  repeated ResourceLimit requested_limits = 9;
 }
 
 message QuoteResponse {
@@ -70,6 +153,7 @@ message QuoteResponse {
   string capacity_revision = 5;
   string model_revision = 6;
   string runtime_revision = 7;
+  repeated ResourceLimit committed_limits = 8;
 }
 
 message InvokeRequest {

@@ -18,9 +18,19 @@ func main() {
 	var listenAddress string
 	var descriptorPath string
 	var catalogPath string
+	var requestJournalPath string
+	var cleanupInterval time.Duration
 	flag.StringVar(&listenAddress, "listen", "127.0.0.1:8080", "HTTP listen address")
 	flag.StringVar(&descriptorPath, "descriptor", "", "path to tos-service.json")
 	flag.StringVar(&catalogPath, "catalog", "", "path to ai-catalog.json")
+	flag.StringVar(
+		&requestJournalPath, "request-journal", "",
+		"absolute path to the durable request journal (optional while discovery-only)",
+	)
+	flag.DurationVar(
+		&cleanupInterval, "journal-cleanup-interval", edge.DefaultCleanupInterval,
+		"bounded expired-request cleanup interval",
+	)
 	flag.Parse()
 
 	if descriptorPath == "" || catalogPath == "" {
@@ -40,7 +50,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	handler, err := edge.NewServer(descriptor, catalog, time.Now())
+	var core *edge.Core
+	if requestJournalPath != "" {
+		coreConfig := edge.DefaultCoreConfig(requestJournalPath)
+		coreConfig.CleanupInterval = cleanupInterval
+		core, err = edge.OpenCore(coreConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() {
+			if closeErr := core.Close(); closeErr != nil {
+				log.Printf("close Edge Core: %v", closeErr)
+			}
+		}()
+	}
+	var handler *edge.Server
+	if core == nil {
+		handler, err = edge.NewServer(descriptor, catalog, time.Now())
+	} else {
+		handler, err = edge.NewServerWithCore(descriptor, catalog, time.Now(), core)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}

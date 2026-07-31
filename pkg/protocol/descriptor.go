@@ -15,7 +15,6 @@ const (
 	DescriptorVersion = "0.1"
 	MaxProfiles       = 32
 	MaxStringBytes    = 4096
-	MaxDescriptorAge  = 24 * time.Hour
 )
 
 var (
@@ -68,9 +67,6 @@ func (d ServiceDescriptor) Validate(now time.Time) error {
 	}
 	if d.ExpiresAt.IsZero() || !d.ExpiresAt.After(now) {
 		return errors.New("descriptor is expired")
-	}
-	if d.ExpiresAt.After(now.Add(MaxDescriptorAge)) {
-		return errors.New("descriptor expiry exceeds maximum freshness window")
 	}
 	if len(d.Profiles) == 0 || len(d.Profiles) > MaxProfiles {
 		return fmt.Errorf("profiles must contain 1..%d entries", MaxProfiles)

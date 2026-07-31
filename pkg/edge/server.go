@@ -13,11 +13,35 @@ import (
 )
 
 type Server struct {
-	descriptor []byte
-	catalog    []byte
+	descriptor          []byte
+	descriptorExpiresAt time.Time
+	catalog             []byte
+	now                 func() time.Time
+	core                *Core
 }
 
 func NewServer(descriptor protocol.ServiceDescriptor, catalog ard.Catalog, now time.Time) (*Server, error) {
+	return newServer(descriptor, catalog, now, nil)
+}
+
+func NewServerWithCore(
+	descriptor protocol.ServiceDescriptor,
+	catalog ard.Catalog,
+	now time.Time,
+	core *Core,
+) (*Server, error) {
+	if core == nil {
+		return nil, errors.New("nil Edge Core")
+	}
+	return newServer(descriptor, catalog, now, core)
+}
+
+func newServer(
+	descriptor protocol.ServiceDescriptor,
+	catalog ard.Catalog,
+	now time.Time,
+	core *Core,
+) (*Server, error) {
 	if err := descriptor.Validate(now); err != nil {
 		return nil, err
 	}
@@ -35,19 +59,51 @@ func NewServer(descriptor protocol.ServiceDescriptor, catalog ard.Catalog, now t
 	if len(descriptorJSON) > 256<<10 {
 		return nil, errors.New("descriptor exceeds byte limit")
 	}
-	return &Server{descriptor: descriptorJSON, catalog: catalogJSON}, nil
+	return &Server{
+		descriptor:          descriptorJSON,
+		descriptorExpiresAt: descriptor.ExpiresAt,
+		catalog:             catalogJSON,
+		now:                 time.Now,
+		core:                core,
+	}, nil
 }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
-		writeDocument(writer, []byte(`{"status":"ok"}`))
+		if s.core != nil {
+			if _, err := s.core.Health(); err != nil {
+				writeDocument(
+					writer,
+					[]byte(`{"status":"degraded","component":"request-journal"}`),
+					"application/json", "no-store", http.StatusServiceUnavailable,
+				)
+				return
+			}
+		}
+		writeDocument(
+			writer, []byte(`{"status":"ok"}`),
+			"application/json", "no-store", http.StatusOK,
+		)
 	})
 	mux.HandleFunc("GET /.well-known/tos-service.json", func(writer http.ResponseWriter, _ *http.Request) {
-		writeDocument(writer, s.descriptor)
+		if !s.descriptorExpiresAt.After(s.now()) {
+			writeDocument(
+				writer, []byte(`{"error":"service descriptor expired"}`),
+				"application/json", "no-store", http.StatusServiceUnavailable,
+			)
+			return
+		}
+		writeDocument(
+			writer, s.descriptor, ard.TOSServiceDescriptorMediaType,
+			"public, max-age=60, must-revalidate", http.StatusOK,
+		)
 	})
 	mux.HandleFunc("GET /.well-known/ai-catalog.json", func(writer http.ResponseWriter, _ *http.Request) {
-		writeDocument(writer, s.catalog)
+		writeDocument(
+			writer, s.catalog, "application/json",
+			"public, max-age=60, must-revalidate", http.StatusOK,
+		)
 	})
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
@@ -56,10 +112,15 @@ func (s *Server) Routes() http.Handler {
 	})
 }
 
-func writeDocument(writer http.ResponseWriter, document []byte) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.Header().Set("Cache-Control", "public, max-age=60")
-	writer.WriteHeader(http.StatusOK)
+func writeDocument(
+	writer http.ResponseWriter,
+	document []byte,
+	contentType, cacheControl string,
+	status int,
+) {
+	writer.Header().Set("Content-Type", contentType)
+	writer.Header().Set("Cache-Control", cacheControl)
+	writer.WriteHeader(status)
 	_, _ = writer.Write(document)
 }
 

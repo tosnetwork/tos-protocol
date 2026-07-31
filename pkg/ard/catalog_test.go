@@ -32,6 +32,8 @@ func TestDecodeCatalogRejectsUnsafeShapes(t *testing.T) {
 		`{"specVersion":"1.0","entries":[{"identifier":"urn:air:example.com:x:y","displayName":"x","type":"x","url":"https://x","data":{}}]}`,
 		`{"specVersion":"1.0","entries":[{"identifier":"urn:air:localhost:x:y","displayName":"x","type":"x","url":"https://x"}]}`,
 		`{"specVersion":"1.0","entries":[],"unknown":true}`,
+		`{"specVersion":"1.0","specVersion":"0.9","entries":[]}`,
+		`{"specVersion":"1.0","entries":[{"identifier":"urn:air:example.com:x:y","displayName":"x","displayName":"substituted","type":"x","url":"https://x"}]}`,
 	}
 	for _, document := range tests {
 		if _, err := DecodeCatalog(strings.NewReader(document), DefaultLimits()); err == nil {

@@ -62,6 +62,7 @@ Initial labels are:
 |---|---|
 | service descriptor | `tos.descriptor.v1` |
 | service manifest | `tos.manifest.v1` |
+| terminal manifest | `tos.terminal-manifest.v1` |
 | session grant | `tos.session.v1` |
 | delegation | `tos.delegation.v1` |
 | quote | `tos.quote.v1` |

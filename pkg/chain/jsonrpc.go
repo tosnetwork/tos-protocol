@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 )
 
 type RPCError struct {
@@ -46,6 +48,7 @@ func (c *Client) Call(ctx context.Context, method string, params, result interfa
 	if method == "" || len(method) > 128 {
 		return errors.New("invalid JSON-RPC method")
 	}
+	requestID := c.nextID.Add(1)
 	requestBody := struct {
 		JSONRPC string      `json:"jsonrpc"`
 		ID      uint64      `json:"id"`
@@ -53,7 +56,7 @@ func (c *Client) Call(ctx context.Context, method string, params, result interfa
 		Params  interface{} `json:"params,omitempty"`
 	}{
 		JSONRPC: "2.0",
-		ID:      c.nextID.Add(1),
+		ID:      requestID,
 		Method:  method,
 		Params:  params,
 	}
@@ -87,22 +90,29 @@ func (c *Client) Call(ctx context.Context, method string, params, result interfa
 		Result  json.RawMessage `json:"result"`
 		Error   *RPCError       `json:"error"`
 	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	if err := jsonstrict.Decode(body, &envelope); err != nil {
 		return fmt.Errorf("decode JSON-RPC response: %w", err)
-	}
-	if envelope.Error != nil {
-		return envelope.Error
 	}
 	if envelope.JSONRPC != "2.0" {
 		return errors.New("invalid JSON-RPC version")
 	}
+	if envelope.ID != requestID {
+		return errors.New("JSON-RPC response ID does not match request")
+	}
+	hasResult := len(envelope.Result) != 0
+	if envelope.Error != nil && hasResult {
+		return errors.New("JSON-RPC response contains both result and error")
+	}
+	if envelope.Error != nil {
+		return envelope.Error
+	}
+	if !hasResult {
+		return errors.New("JSON-RPC response has no result")
+	}
 	if result == nil {
 		return nil
 	}
-	if len(envelope.Result) == 0 {
-		return errors.New("JSON-RPC response has no result")
-	}
-	if err := json.Unmarshal(envelope.Result, result); err != nil {
+	if err := jsonstrict.Decode(envelope.Result, result); err != nil {
 		return fmt.Errorf("decode JSON-RPC result: %w", err)
 	}
 	return nil

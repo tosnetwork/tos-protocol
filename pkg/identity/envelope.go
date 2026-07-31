@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -84,6 +85,25 @@ func (e Envelope) Verify(publicKey ed25519.PublicKey, expectedDomain string, now
 		return errors.New("signature verification failed")
 	}
 	return nil
+}
+
+// Fingerprint returns a domain-separated digest of the complete signed
+// envelope. It is suitable for durable exact-retry binding only after Verify
+// has succeeded.
+func (e Envelope) Fingerprint() (string, error) {
+	if err := e.validateStructure(); err != nil {
+		return "", err
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(e.Signature)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return "", errors.New("invalid signature encoding")
+	}
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-SIGNED-ENVELOPE-FINGERPRINT-V1"))
+	hasher.Write([]byte{0})
+	hasher.Write(e.signingMessage())
+	hasher.Write(signature)
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 func (e Envelope) validateStructure() error {

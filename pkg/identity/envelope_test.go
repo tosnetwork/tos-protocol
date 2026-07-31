@@ -41,3 +41,47 @@ func TestEnvelopeRejectsLifetimeOverflow(t *testing.T) {
 		t.Fatal("overflowing envelope lifetime accepted")
 	}
 }
+
+func TestEnvelopeFingerprintBindsCompleteSignedEnvelope(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0)
+	envelope, err := Sign(
+		privateKey, "tos.action.v1", "runtime-key-1",
+		[]byte("payload"), now, now.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := envelope.Verify(publicKey, envelope.Domain, now); err != nil {
+		t.Fatal(err)
+	}
+	first, err := envelope.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := envelope.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second || len(first) != len("sha256:")+64 {
+		t.Fatalf("unstable envelope fingerprint: %q != %q", first, second)
+	}
+
+	changed := envelope
+	signature, err := base64.RawURLEncoding.DecodeString(changed.Signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature[0] ^= 1
+	changed.Signature = base64.RawURLEncoding.EncodeToString(signature)
+	changedFingerprint, err := changed.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedFingerprint == first {
+		t.Fatal("changed signed envelope kept the same fingerprint")
+	}
+}

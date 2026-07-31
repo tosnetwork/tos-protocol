@@ -82,6 +82,581 @@ func (Priority) EnumDescriptor() ([]byte, []int) {
 	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{0}
 }
 
+type EvidenceLevel int32
+
+const (
+	EvidenceLevel_EVIDENCE_LEVEL_UNSPECIFIED              EvidenceLevel = 0
+	EvidenceLevel_EVIDENCE_LEVEL_DECLARED                 EvidenceLevel = 1
+	EvidenceLevel_EVIDENCE_LEVEL_OBSERVED                 EvidenceLevel = 2
+	EvidenceLevel_EVIDENCE_LEVEL_BENCHMARKED              EvidenceLevel = 3
+	EvidenceLevel_EVIDENCE_LEVEL_AUDITED                  EvidenceLevel = 4
+	EvidenceLevel_EVIDENCE_LEVEL_ATTESTED                 EvidenceLevel = 5
+	EvidenceLevel_EVIDENCE_LEVEL_REPLICATED               EvidenceLevel = 6
+	EvidenceLevel_EVIDENCE_LEVEL_CRYPTOGRAPHICALLY_PROVEN EvidenceLevel = 7
+)
+
+// Enum value maps for EvidenceLevel.
+var (
+	EvidenceLevel_name = map[int32]string{
+		0: "EVIDENCE_LEVEL_UNSPECIFIED",
+		1: "EVIDENCE_LEVEL_DECLARED",
+		2: "EVIDENCE_LEVEL_OBSERVED",
+		3: "EVIDENCE_LEVEL_BENCHMARKED",
+		4: "EVIDENCE_LEVEL_AUDITED",
+		5: "EVIDENCE_LEVEL_ATTESTED",
+		6: "EVIDENCE_LEVEL_REPLICATED",
+		7: "EVIDENCE_LEVEL_CRYPTOGRAPHICALLY_PROVEN",
+	}
+	EvidenceLevel_value = map[string]int32{
+		"EVIDENCE_LEVEL_UNSPECIFIED":              0,
+		"EVIDENCE_LEVEL_DECLARED":                 1,
+		"EVIDENCE_LEVEL_OBSERVED":                 2,
+		"EVIDENCE_LEVEL_BENCHMARKED":              3,
+		"EVIDENCE_LEVEL_AUDITED":                  4,
+		"EVIDENCE_LEVEL_ATTESTED":                 5,
+		"EVIDENCE_LEVEL_REPLICATED":               6,
+		"EVIDENCE_LEVEL_CRYPTOGRAPHICALLY_PROVEN": 7,
+	}
+)
+
+func (x EvidenceLevel) Enum() *EvidenceLevel {
+	p := new(EvidenceLevel)
+	*p = x
+	return p
+}
+
+func (x EvidenceLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EvidenceLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_tos_edge_v1_worker_proto_enumTypes[1].Descriptor()
+}
+
+func (EvidenceLevel) Type() protoreflect.EnumType {
+	return &file_api_tos_edge_v1_worker_proto_enumTypes[1]
+}
+
+func (x EvidenceLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EvidenceLevel.Descriptor instead.
+func (EvidenceLevel) EnumDescriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{1}
+}
+
+type ReadinessStatus int32
+
+const (
+	ReadinessStatus_READINESS_STATUS_UNSPECIFIED ReadinessStatus = 0
+	ReadinessStatus_READINESS_STATUS_READY       ReadinessStatus = 1
+	ReadinessStatus_READINESS_STATUS_DEGRADED    ReadinessStatus = 2
+	ReadinessStatus_READINESS_STATUS_UNAVAILABLE ReadinessStatus = 3
+	ReadinessStatus_READINESS_STATUS_UNKNOWN     ReadinessStatus = 4
+	ReadinessStatus_READINESS_STATUS_DRAINING    ReadinessStatus = 5
+)
+
+// Enum value maps for ReadinessStatus.
+var (
+	ReadinessStatus_name = map[int32]string{
+		0: "READINESS_STATUS_UNSPECIFIED",
+		1: "READINESS_STATUS_READY",
+		2: "READINESS_STATUS_DEGRADED",
+		3: "READINESS_STATUS_UNAVAILABLE",
+		4: "READINESS_STATUS_UNKNOWN",
+		5: "READINESS_STATUS_DRAINING",
+	}
+	ReadinessStatus_value = map[string]int32{
+		"READINESS_STATUS_UNSPECIFIED": 0,
+		"READINESS_STATUS_READY":       1,
+		"READINESS_STATUS_DEGRADED":    2,
+		"READINESS_STATUS_UNAVAILABLE": 3,
+		"READINESS_STATUS_UNKNOWN":     4,
+		"READINESS_STATUS_DRAINING":    5,
+	}
+)
+
+func (x ReadinessStatus) Enum() *ReadinessStatus {
+	p := new(ReadinessStatus)
+	*p = x
+	return p
+}
+
+func (x ReadinessStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReadinessStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_tos_edge_v1_worker_proto_enumTypes[2].Descriptor()
+}
+
+func (ReadinessStatus) Type() protoreflect.EnumType {
+	return &file_api_tos_edge_v1_worker_proto_enumTypes[2]
+}
+
+func (x ReadinessStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReadinessStatus.Descriptor instead.
+func (ReadinessStatus) EnumDescriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{2}
+}
+
+type ResourceClass int32
+
+const (
+	ResourceClass_RESOURCE_CLASS_UNSPECIFIED ResourceClass = 0
+	ResourceClass_RESOURCE_CLASS_COMPUTE     ResourceClass = 1
+	ResourceClass_RESOURCE_CLASS_ACCELERATOR ResourceClass = 2
+	ResourceClass_RESOURCE_CLASS_MEMORY      ResourceClass = 3
+	ResourceClass_RESOURCE_CLASS_STORAGE     ResourceClass = 4
+	ResourceClass_RESOURCE_CLASS_NETWORK     ResourceClass = 5
+	ResourceClass_RESOURCE_CLASS_RUNTIME     ResourceClass = 6
+	ResourceClass_RESOURCE_CLASS_DEVICE      ResourceClass = 7
+	ResourceClass_RESOURCE_CLASS_OTHER       ResourceClass = 8
+)
+
+// Enum value maps for ResourceClass.
+var (
+	ResourceClass_name = map[int32]string{
+		0: "RESOURCE_CLASS_UNSPECIFIED",
+		1: "RESOURCE_CLASS_COMPUTE",
+		2: "RESOURCE_CLASS_ACCELERATOR",
+		3: "RESOURCE_CLASS_MEMORY",
+		4: "RESOURCE_CLASS_STORAGE",
+		5: "RESOURCE_CLASS_NETWORK",
+		6: "RESOURCE_CLASS_RUNTIME",
+		7: "RESOURCE_CLASS_DEVICE",
+		8: "RESOURCE_CLASS_OTHER",
+	}
+	ResourceClass_value = map[string]int32{
+		"RESOURCE_CLASS_UNSPECIFIED": 0,
+		"RESOURCE_CLASS_COMPUTE":     1,
+		"RESOURCE_CLASS_ACCELERATOR": 2,
+		"RESOURCE_CLASS_MEMORY":      3,
+		"RESOURCE_CLASS_STORAGE":     4,
+		"RESOURCE_CLASS_NETWORK":     5,
+		"RESOURCE_CLASS_RUNTIME":     6,
+		"RESOURCE_CLASS_DEVICE":      7,
+		"RESOURCE_CLASS_OTHER":       8,
+	}
+)
+
+func (x ResourceClass) Enum() *ResourceClass {
+	p := new(ResourceClass)
+	*p = x
+	return p
+}
+
+func (x ResourceClass) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResourceClass) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_tos_edge_v1_worker_proto_enumTypes[3].Descriptor()
+}
+
+func (ResourceClass) Type() protoreflect.EnumType {
+	return &file_api_tos_edge_v1_worker_proto_enumTypes[3]
+}
+
+func (x ResourceClass) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResourceClass.Descriptor instead.
+func (ResourceClass) EnumDescriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{3}
+}
+
+type ResourceUnit int32
+
+const (
+	ResourceUnit_RESOURCE_UNIT_UNSPECIFIED     ResourceUnit = 0
+	ResourceUnit_RESOURCE_UNIT_COUNT           ResourceUnit = 1
+	ResourceUnit_RESOURCE_UNIT_BYTES           ResourceUnit = 2
+	ResourceUnit_RESOURCE_UNIT_MILLISECONDS    ResourceUnit = 3
+	ResourceUnit_RESOURCE_UNIT_MILLIWATTS      ResourceUnit = 4
+	ResourceUnit_RESOURCE_UNIT_BITS_PER_SECOND ResourceUnit = 5
+)
+
+// Enum value maps for ResourceUnit.
+var (
+	ResourceUnit_name = map[int32]string{
+		0: "RESOURCE_UNIT_UNSPECIFIED",
+		1: "RESOURCE_UNIT_COUNT",
+		2: "RESOURCE_UNIT_BYTES",
+		3: "RESOURCE_UNIT_MILLISECONDS",
+		4: "RESOURCE_UNIT_MILLIWATTS",
+		5: "RESOURCE_UNIT_BITS_PER_SECOND",
+	}
+	ResourceUnit_value = map[string]int32{
+		"RESOURCE_UNIT_UNSPECIFIED":     0,
+		"RESOURCE_UNIT_COUNT":           1,
+		"RESOURCE_UNIT_BYTES":           2,
+		"RESOURCE_UNIT_MILLISECONDS":    3,
+		"RESOURCE_UNIT_MILLIWATTS":      4,
+		"RESOURCE_UNIT_BITS_PER_SECOND": 5,
+	}
+)
+
+func (x ResourceUnit) Enum() *ResourceUnit {
+	p := new(ResourceUnit)
+	*p = x
+	return p
+}
+
+func (x ResourceUnit) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResourceUnit) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_tos_edge_v1_worker_proto_enumTypes[4].Descriptor()
+}
+
+func (ResourceUnit) Type() protoreflect.EnumType {
+	return &file_api_tos_edge_v1_worker_proto_enumTypes[4]
+}
+
+func (x ResourceUnit) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResourceUnit.Descriptor instead.
+func (ResourceUnit) EnumDescriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{4}
+}
+
+type ClaimEvidence struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Level               EvidenceLevel          `protobuf:"varint,1,opt,name=level,proto3,enum=tos.edge.v1.EvidenceLevel" json:"level,omitempty"`
+	Issuer              string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	CollectedUnixMillis int64                  `protobuf:"varint,3,opt,name=collected_unix_millis,json=collectedUnixMillis,proto3" json:"collected_unix_millis,omitempty"`
+	ExpiresUnixMillis   int64                  `protobuf:"varint,4,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
+	Digest              string                 `protobuf:"bytes,5,opt,name=digest,proto3" json:"digest,omitempty"`
+	Reference           string                 `protobuf:"bytes,6,opt,name=reference,proto3" json:"reference,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ClaimEvidence) Reset() {
+	*x = ClaimEvidence{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimEvidence) ProtoMessage() {}
+
+func (x *ClaimEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimEvidence.ProtoReflect.Descriptor instead.
+func (*ClaimEvidence) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ClaimEvidence) GetLevel() EvidenceLevel {
+	if x != nil {
+		return x.Level
+	}
+	return EvidenceLevel_EVIDENCE_LEVEL_UNSPECIFIED
+}
+
+func (x *ClaimEvidence) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *ClaimEvidence) GetCollectedUnixMillis() int64 {
+	if x != nil {
+		return x.CollectedUnixMillis
+	}
+	return 0
+}
+
+func (x *ClaimEvidence) GetExpiresUnixMillis() int64 {
+	if x != nil {
+		return x.ExpiresUnixMillis
+	}
+	return 0
+}
+
+func (x *ClaimEvidence) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *ClaimEvidence) GetReference() string {
+	if x != nil {
+		return x.Reference
+	}
+	return ""
+}
+
+type ReadinessComponent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Status        ReadinessStatus        `protobuf:"varint,2,opt,name=status,proto3,enum=tos.edge.v1.ReadinessStatus" json:"status,omitempty"`
+	Revision      string                 `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	ReasonCode    string                 `protobuf:"bytes,4,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	Evidence      *ClaimEvidence         `protobuf:"bytes,5,opt,name=evidence,proto3" json:"evidence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadinessComponent) Reset() {
+	*x = ReadinessComponent{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadinessComponent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadinessComponent) ProtoMessage() {}
+
+func (x *ReadinessComponent) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadinessComponent.ProtoReflect.Descriptor instead.
+func (*ReadinessComponent) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ReadinessComponent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReadinessComponent) GetStatus() ReadinessStatus {
+	if x != nil {
+		return x.Status
+	}
+	return ReadinessStatus_READINESS_STATUS_UNSPECIFIED
+}
+
+func (x *ReadinessComponent) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *ReadinessComponent) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *ReadinessComponent) GetEvidence() *ClaimEvidence {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+type ResourceClaim struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ResourceClass     ResourceClass          `protobuf:"varint,2,opt,name=resource_class,json=resourceClass,proto3,enum=tos.edge.v1.ResourceClass" json:"resource_class,omitempty"`
+	Unit              ResourceUnit           `protobuf:"varint,3,opt,name=unit,proto3,enum=tos.edge.v1.ResourceUnit" json:"unit,omitempty"`
+	Total             uint64                 `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
+	OwnerReserved     uint64                 `protobuf:"varint,5,opt,name=owner_reserved,json=ownerReserved,proto3" json:"owner_reserved,omitempty"`
+	AvailableExternal uint64                 `protobuf:"varint,6,opt,name=available_external,json=availableExternal,proto3" json:"available_external,omitempty"`
+	Revision          string                 `protobuf:"bytes,7,opt,name=revision,proto3" json:"revision,omitempty"`
+	Evidence          *ClaimEvidence         `protobuf:"bytes,8,opt,name=evidence,proto3" json:"evidence,omitempty"`
+	Attributes        map[string]string      `protobuf:"bytes,9,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ResourceClaim) Reset() {
+	*x = ResourceClaim{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResourceClaim) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResourceClaim) ProtoMessage() {}
+
+func (x *ResourceClaim) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResourceClaim.ProtoReflect.Descriptor instead.
+func (*ResourceClaim) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ResourceClaim) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ResourceClaim) GetResourceClass() ResourceClass {
+	if x != nil {
+		return x.ResourceClass
+	}
+	return ResourceClass_RESOURCE_CLASS_UNSPECIFIED
+}
+
+func (x *ResourceClaim) GetUnit() ResourceUnit {
+	if x != nil {
+		return x.Unit
+	}
+	return ResourceUnit_RESOURCE_UNIT_UNSPECIFIED
+}
+
+func (x *ResourceClaim) GetTotal() uint64 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *ResourceClaim) GetOwnerReserved() uint64 {
+	if x != nil {
+		return x.OwnerReserved
+	}
+	return 0
+}
+
+func (x *ResourceClaim) GetAvailableExternal() uint64 {
+	if x != nil {
+		return x.AvailableExternal
+	}
+	return 0
+}
+
+func (x *ResourceClaim) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *ResourceClaim) GetEvidence() *ClaimEvidence {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+func (x *ResourceClaim) GetAttributes() map[string]string {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+type ResourceLimit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Unit          ResourceUnit           `protobuf:"varint,2,opt,name=unit,proto3,enum=tos.edge.v1.ResourceUnit" json:"unit,omitempty"`
+	Quantity      uint64                 `protobuf:"varint,3,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResourceLimit) Reset() {
+	*x = ResourceLimit{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResourceLimit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResourceLimit) ProtoMessage() {}
+
+func (x *ResourceLimit) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResourceLimit.ProtoReflect.Descriptor instead.
+func (*ResourceLimit) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ResourceLimit) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ResourceLimit) GetUnit() ResourceUnit {
+	if x != nil {
+		return x.Unit
+	}
+	return ResourceUnit_RESOURCE_UNIT_UNSPECIFIED
+}
+
+func (x *ResourceLimit) GetQuantity() uint64 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
 type HealthRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -90,7 +665,7 @@ type HealthRequest struct {
 
 func (x *HealthRequest) Reset() {
 	*x = HealthRequest{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[0]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -102,7 +677,7 @@ func (x *HealthRequest) String() string {
 func (*HealthRequest) ProtoMessage() {}
 
 func (x *HealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[0]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -115,20 +690,21 @@ func (x *HealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthRequest.ProtoReflect.Descriptor instead.
 func (*HealthRequest) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{0}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{4}
 }
 
 type HealthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Readiness     []*ReadinessComponent  `protobuf:"bytes,3,rep,name=readiness,proto3" json:"readiness,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[1]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -140,7 +716,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[1]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -153,7 +729,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{1}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HealthResponse) GetStatus() string {
@@ -170,6 +746,13 @@ func (x *HealthResponse) GetVersion() string {
 	return ""
 }
 
+func (x *HealthResponse) GetReadiness() []*ReadinessComponent {
+	if x != nil {
+		return x.Readiness
+	}
+	return nil
+}
+
 type GetCapabilitiesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -178,7 +761,7 @@ type GetCapabilitiesRequest struct {
 
 func (x *GetCapabilitiesRequest) Reset() {
 	*x = GetCapabilitiesRequest{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[2]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -190,7 +773,7 @@ func (x *GetCapabilitiesRequest) String() string {
 func (*GetCapabilitiesRequest) ProtoMessage() {}
 
 func (x *GetCapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[2]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -203,7 +786,7 @@ func (x *GetCapabilitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCapabilitiesRequest.ProtoReflect.Descriptor instead.
 func (*GetCapabilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{2}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{6}
 }
 
 type Capability struct {
@@ -217,13 +800,14 @@ type Capability struct {
 	MaxInputBytes      uint64                 `protobuf:"varint,7,opt,name=max_input_bytes,json=maxInputBytes,proto3" json:"max_input_bytes,omitempty"`
 	MaxOutputBytes     uint64                 `protobuf:"varint,8,opt,name=max_output_bytes,json=maxOutputBytes,proto3" json:"max_output_bytes,omitempty"`
 	AcceptedPriorities []Priority             `protobuf:"varint,9,rep,packed,name=accepted_priorities,json=acceptedPriorities,proto3,enum=tos.edge.v1.Priority" json:"accepted_priorities,omitempty"`
+	AdmissionLimits    []*ResourceLimit       `protobuf:"bytes,10,rep,name=admission_limits,json=admissionLimits,proto3" json:"admission_limits,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Capability) Reset() {
 	*x = Capability{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[3]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -235,7 +819,7 @@ func (x *Capability) String() string {
 func (*Capability) ProtoMessage() {}
 
 func (x *Capability) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[3]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -248,7 +832,7 @@ func (x *Capability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Capability.ProtoReflect.Descriptor instead.
 func (*Capability) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{3}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Capability) GetServiceId() string {
@@ -314,17 +898,28 @@ func (x *Capability) GetAcceptedPriorities() []Priority {
 	return nil
 }
 
+func (x *Capability) GetAdmissionLimits() []*ResourceLimit {
+	if x != nil {
+		return x.AdmissionLimits
+	}
+	return nil
+}
+
 type GetCapabilitiesResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Capabilities     []*Capability          `protobuf:"bytes,1,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	CapacityRevision string                 `protobuf:"bytes,2,opt,name=capacity_revision,json=capacityRevision,proto3" json:"capacity_revision,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Capabilities        []*Capability          `protobuf:"bytes,1,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	CapacityRevision    string                 `protobuf:"bytes,2,opt,name=capacity_revision,json=capacityRevision,proto3" json:"capacity_revision,omitempty"`
+	Resources           []*ResourceClaim       `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
+	TerminalRevision    string                 `protobuf:"bytes,4,opt,name=terminal_revision,json=terminalRevision,proto3" json:"terminal_revision,omitempty"`
+	CollectedUnixMillis int64                  `protobuf:"varint,5,opt,name=collected_unix_millis,json=collectedUnixMillis,proto3" json:"collected_unix_millis,omitempty"`
+	ExpiresUnixMillis   int64                  `protobuf:"varint,6,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetCapabilitiesResponse) Reset() {
 	*x = GetCapabilitiesResponse{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[4]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -336,7 +931,7 @@ func (x *GetCapabilitiesResponse) String() string {
 func (*GetCapabilitiesResponse) ProtoMessage() {}
 
 func (x *GetCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[4]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -349,7 +944,7 @@ func (x *GetCapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*GetCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{4}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetCapabilitiesResponse) GetCapabilities() []*Capability {
@@ -366,6 +961,34 @@ func (x *GetCapabilitiesResponse) GetCapacityRevision() string {
 	return ""
 }
 
+func (x *GetCapabilitiesResponse) GetResources() []*ResourceClaim {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+func (x *GetCapabilitiesResponse) GetTerminalRevision() string {
+	if x != nil {
+		return x.TerminalRevision
+	}
+	return ""
+}
+
+func (x *GetCapabilitiesResponse) GetCollectedUnixMillis() int64 {
+	if x != nil {
+		return x.CollectedUnixMillis
+	}
+	return 0
+}
+
+func (x *GetCapabilitiesResponse) GetExpiresUnixMillis() int64 {
+	if x != nil {
+		return x.ExpiresUnixMillis
+	}
+	return 0
+}
+
 type QuoteRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	RequestId          string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -376,13 +999,14 @@ type QuoteRequest struct {
 	MaxOutputBytes     uint64                 `protobuf:"varint,6,opt,name=max_output_bytes,json=maxOutputBytes,proto3" json:"max_output_bytes,omitempty"`
 	DeadlineUnixMillis int64                  `protobuf:"varint,7,opt,name=deadline_unix_millis,json=deadlineUnixMillis,proto3" json:"deadline_unix_millis,omitempty"`
 	Priority           Priority               `protobuf:"varint,8,opt,name=priority,proto3,enum=tos.edge.v1.Priority" json:"priority,omitempty"`
+	RequestedLimits    []*ResourceLimit       `protobuf:"bytes,9,rep,name=requested_limits,json=requestedLimits,proto3" json:"requested_limits,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
 
 func (x *QuoteRequest) Reset() {
 	*x = QuoteRequest{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[5]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -394,7 +1018,7 @@ func (x *QuoteRequest) String() string {
 func (*QuoteRequest) ProtoMessage() {}
 
 func (x *QuoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[5]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -407,7 +1031,7 @@ func (x *QuoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuoteRequest.ProtoReflect.Descriptor instead.
 func (*QuoteRequest) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{5}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *QuoteRequest) GetRequestId() string {
@@ -466,6 +1090,13 @@ func (x *QuoteRequest) GetPriority() Priority {
 	return Priority_PRIORITY_UNSPECIFIED
 }
 
+func (x *QuoteRequest) GetRequestedLimits() []*ResourceLimit {
+	if x != nil {
+		return x.RequestedLimits
+	}
+	return nil
+}
+
 type QuoteResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	QuoteId           string                 `protobuf:"bytes,1,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
@@ -475,13 +1106,14 @@ type QuoteResponse struct {
 	CapacityRevision  string                 `protobuf:"bytes,5,opt,name=capacity_revision,json=capacityRevision,proto3" json:"capacity_revision,omitempty"`
 	ModelRevision     string                 `protobuf:"bytes,6,opt,name=model_revision,json=modelRevision,proto3" json:"model_revision,omitempty"`
 	RuntimeRevision   string                 `protobuf:"bytes,7,opt,name=runtime_revision,json=runtimeRevision,proto3" json:"runtime_revision,omitempty"`
+	CommittedLimits   []*ResourceLimit       `protobuf:"bytes,8,rep,name=committed_limits,json=committedLimits,proto3" json:"committed_limits,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *QuoteResponse) Reset() {
 	*x = QuoteResponse{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[6]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +1125,7 @@ func (x *QuoteResponse) String() string {
 func (*QuoteResponse) ProtoMessage() {}
 
 func (x *QuoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[6]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +1138,7 @@ func (x *QuoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuoteResponse.ProtoReflect.Descriptor instead.
 func (*QuoteResponse) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{6}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *QuoteResponse) GetQuoteId() string {
@@ -558,6 +1190,13 @@ func (x *QuoteResponse) GetRuntimeRevision() string {
 	return ""
 }
 
+func (x *QuoteResponse) GetCommittedLimits() []*ResourceLimit {
+	if x != nil {
+		return x.CommittedLimits
+	}
+	return nil
+}
+
 type InvokeRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	RequestId          string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -576,7 +1215,7 @@ type InvokeRequest struct {
 
 func (x *InvokeRequest) Reset() {
 	*x = InvokeRequest{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[7]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +1227,7 @@ func (x *InvokeRequest) String() string {
 func (*InvokeRequest) ProtoMessage() {}
 
 func (x *InvokeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[7]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +1240,7 @@ func (x *InvokeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeRequest.ProtoReflect.Descriptor instead.
 func (*InvokeRequest) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{7}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *InvokeRequest) GetRequestId() string {
@@ -687,7 +1326,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[8]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -699,7 +1338,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[8]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -712,7 +1351,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{8}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Usage) GetInputBytes() uint64 {
@@ -763,7 +1402,7 @@ type InvokeResponse struct {
 
 func (x *InvokeResponse) Reset() {
 	*x = InvokeResponse{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[9]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -775,7 +1414,7 @@ func (x *InvokeResponse) String() string {
 func (*InvokeResponse) ProtoMessage() {}
 
 func (x *InvokeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[9]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -788,7 +1427,7 @@ func (x *InvokeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeResponse.ProtoReflect.Descriptor instead.
 func (*InvokeResponse) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{9}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *InvokeResponse) GetRequestId() string {
@@ -835,7 +1474,7 @@ type CancelRequest struct {
 
 func (x *CancelRequest) Reset() {
 	*x = CancelRequest{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[10]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -847,7 +1486,7 @@ func (x *CancelRequest) String() string {
 func (*CancelRequest) ProtoMessage() {}
 
 func (x *CancelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[10]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -860,7 +1499,7 @@ func (x *CancelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRequest.ProtoReflect.Descriptor instead.
 func (*CancelRequest) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{10}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CancelRequest) GetRequestId() string {
@@ -879,7 +1518,7 @@ type CancelResponse struct {
 
 func (x *CancelResponse) Reset() {
 	*x = CancelResponse{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[11]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -891,7 +1530,7 @@ func (x *CancelResponse) String() string {
 func (*CancelResponse) ProtoMessage() {}
 
 func (x *CancelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[11]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -904,7 +1543,7 @@ func (x *CancelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelResponse.ProtoReflect.Descriptor instead.
 func (*CancelResponse) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{11}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CancelResponse) GetAccepted() bool {
@@ -918,12 +1557,46 @@ var File_api_tos_edge_v1_worker_proto protoreflect.FileDescriptor
 
 const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\n" +
-	"\x1capi/tos/edge/v1/worker.proto\x12\vtos.edge.v1\"\x0f\n" +
-	"\rHealthRequest\"B\n" +
+	"\x1capi/tos/edge/v1/worker.proto\x12\vtos.edge.v1\"\xf3\x01\n" +
+	"\rClaimEvidence\x120\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x1a.tos.edge.v1.EvidenceLevelR\x05level\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x122\n" +
+	"\x15collected_unix_millis\x18\x03 \x01(\x03R\x13collectedUnixMillis\x12.\n" +
+	"\x13expires_unix_millis\x18\x04 \x01(\x03R\x11expiresUnixMillis\x12\x16\n" +
+	"\x06digest\x18\x05 \x01(\tR\x06digest\x12\x1c\n" +
+	"\treference\x18\x06 \x01(\tR\treference\"\xcf\x01\n" +
+	"\x12ReadinessComponent\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x124\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1c.tos.edge.v1.ReadinessStatusR\x06status\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\tR\brevision\x12\x1f\n" +
+	"\vreason_code\x18\x04 \x01(\tR\n" +
+	"reasonCode\x126\n" +
+	"\bevidence\x18\x05 \x01(\v2\x1a.tos.edge.v1.ClaimEvidenceR\bevidence\"\xdc\x03\n" +
+	"\rResourceClaim\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12A\n" +
+	"\x0eresource_class\x18\x02 \x01(\x0e2\x1a.tos.edge.v1.ResourceClassR\rresourceClass\x12-\n" +
+	"\x04unit\x18\x03 \x01(\x0e2\x19.tos.edge.v1.ResourceUnitR\x04unit\x12\x14\n" +
+	"\x05total\x18\x04 \x01(\x04R\x05total\x12%\n" +
+	"\x0eowner_reserved\x18\x05 \x01(\x04R\rownerReserved\x12-\n" +
+	"\x12available_external\x18\x06 \x01(\x04R\x11availableExternal\x12\x1a\n" +
+	"\brevision\x18\a \x01(\tR\brevision\x126\n" +
+	"\bevidence\x18\b \x01(\v2\x1a.tos.edge.v1.ClaimEvidenceR\bevidence\x12J\n" +
+	"\n" +
+	"attributes\x18\t \x03(\v2*.tos.edge.v1.ResourceClaim.AttributesEntryR\n" +
+	"attributes\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"j\n" +
+	"\rResourceLimit\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
+	"\x04unit\x18\x02 \x01(\x0e2\x19.tos.edge.v1.ResourceUnitR\x04unit\x12\x1a\n" +
+	"\bquantity\x18\x03 \x01(\x04R\bquantity\"\x0f\n" +
+	"\rHealthRequest\"\x81\x01\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\x18\n" +
-	"\x16GetCapabilitiesRequest\"\xe1\x02\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12=\n" +
+	"\treadiness\x18\x03 \x03(\v2\x1f.tos.edge.v1.ReadinessComponentR\treadiness\"\x18\n" +
+	"\x16GetCapabilitiesRequest\"\xa8\x03\n" +
 	"\n" +
 	"Capability\x12\x1d\n" +
 	"\n" +
@@ -935,10 +1608,16 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x10runtime_revision\x18\x06 \x01(\tR\x0fruntimeRevision\x12&\n" +
 	"\x0fmax_input_bytes\x18\a \x01(\x04R\rmaxInputBytes\x12(\n" +
 	"\x10max_output_bytes\x18\b \x01(\x04R\x0emaxOutputBytes\x12F\n" +
-	"\x13accepted_priorities\x18\t \x03(\x0e2\x15.tos.edge.v1.PriorityR\x12acceptedPriorities\"\x83\x01\n" +
+	"\x13accepted_priorities\x18\t \x03(\x0e2\x15.tos.edge.v1.PriorityR\x12acceptedPriorities\x12E\n" +
+	"\x10admission_limits\x18\n" +
+	" \x03(\v2\x1a.tos.edge.v1.ResourceLimitR\x0fadmissionLimits\"\xce\x02\n" +
 	"\x17GetCapabilitiesResponse\x12;\n" +
 	"\fcapabilities\x18\x01 \x03(\v2\x17.tos.edge.v1.CapabilityR\fcapabilities\x12+\n" +
-	"\x11capacity_revision\x18\x02 \x01(\tR\x10capacityRevision\"\xb0\x02\n" +
+	"\x11capacity_revision\x18\x02 \x01(\tR\x10capacityRevision\x128\n" +
+	"\tresources\x18\x03 \x03(\v2\x1a.tos.edge.v1.ResourceClaimR\tresources\x12+\n" +
+	"\x11terminal_revision\x18\x04 \x01(\tR\x10terminalRevision\x122\n" +
+	"\x15collected_unix_millis\x18\x05 \x01(\x03R\x13collectedUnixMillis\x12.\n" +
+	"\x13expires_unix_millis\x18\x06 \x01(\x03R\x11expiresUnixMillis\"\xf7\x02\n" +
 	"\fQuoteRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1d\n" +
@@ -950,7 +1629,8 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"inputBytes\x12(\n" +
 	"\x10max_output_bytes\x18\x06 \x01(\x04R\x0emaxOutputBytes\x120\n" +
 	"\x14deadline_unix_millis\x18\a \x01(\x03R\x12deadlineUnixMillis\x121\n" +
-	"\bpriority\x18\b \x01(\x0e2\x15.tos.edge.v1.PriorityR\bpriority\"\x9e\x02\n" +
+	"\bpriority\x18\b \x01(\x0e2\x15.tos.edge.v1.PriorityR\bpriority\x12E\n" +
+	"\x10requested_limits\x18\t \x03(\v2\x1a.tos.edge.v1.ResourceLimitR\x0frequestedLimits\"\xe5\x02\n" +
 	"\rQuoteResponse\x12\x19\n" +
 	"\bquote_id\x18\x01 \x01(\tR\aquoteId\x12\x1d\n" +
 	"\n" +
@@ -959,7 +1639,8 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x0eprice_nano_tos\x18\x04 \x01(\x04R\fpriceNanoTos\x12+\n" +
 	"\x11capacity_revision\x18\x05 \x01(\tR\x10capacityRevision\x12%\n" +
 	"\x0emodel_revision\x18\x06 \x01(\tR\rmodelRevision\x12)\n" +
-	"\x10runtime_revision\x18\a \x01(\tR\x0fruntimeRevision\"\xde\x02\n" +
+	"\x10runtime_revision\x18\a \x01(\tR\x0fruntimeRevision\x12E\n" +
+	"\x10committed_limits\x18\b \x03(\v2\x1a.tos.edge.v1.ResourceLimitR\x0fcommittedLimits\"\xde\x02\n" +
 	"\rInvokeRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
@@ -1000,7 +1681,40 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x1cPRIORITY_REALTIME_PERCEPTION\x10\x03\x12\x18\n" +
 	"\x14PRIORITY_LOCAL_ASYNC\x10\x04\x12\x1d\n" +
 	"\x19PRIORITY_EXTERNAL_SERVICE\x10\x05\x12\x17\n" +
-	"\x13PRIORITY_BACKGROUND\x10\x062\xf6\x02\n" +
+	"\x13PRIORITY_BACKGROUND\x10\x06*\x8e\x02\n" +
+	"\rEvidenceLevel\x12\x1e\n" +
+	"\x1aEVIDENCE_LEVEL_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17EVIDENCE_LEVEL_DECLARED\x10\x01\x12\x1b\n" +
+	"\x17EVIDENCE_LEVEL_OBSERVED\x10\x02\x12\x1e\n" +
+	"\x1aEVIDENCE_LEVEL_BENCHMARKED\x10\x03\x12\x1a\n" +
+	"\x16EVIDENCE_LEVEL_AUDITED\x10\x04\x12\x1b\n" +
+	"\x17EVIDENCE_LEVEL_ATTESTED\x10\x05\x12\x1d\n" +
+	"\x19EVIDENCE_LEVEL_REPLICATED\x10\x06\x12+\n" +
+	"'EVIDENCE_LEVEL_CRYPTOGRAPHICALLY_PROVEN\x10\a*\xcd\x01\n" +
+	"\x0fReadinessStatus\x12 \n" +
+	"\x1cREADINESS_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16READINESS_STATUS_READY\x10\x01\x12\x1d\n" +
+	"\x19READINESS_STATUS_DEGRADED\x10\x02\x12 \n" +
+	"\x1cREADINESS_STATUS_UNAVAILABLE\x10\x03\x12\x1c\n" +
+	"\x18READINESS_STATUS_UNKNOWN\x10\x04\x12\x1d\n" +
+	"\x19READINESS_STATUS_DRAINING\x10\x05*\x8f\x02\n" +
+	"\rResourceClass\x12\x1e\n" +
+	"\x1aRESOURCE_CLASS_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16RESOURCE_CLASS_COMPUTE\x10\x01\x12\x1e\n" +
+	"\x1aRESOURCE_CLASS_ACCELERATOR\x10\x02\x12\x19\n" +
+	"\x15RESOURCE_CLASS_MEMORY\x10\x03\x12\x1a\n" +
+	"\x16RESOURCE_CLASS_STORAGE\x10\x04\x12\x1a\n" +
+	"\x16RESOURCE_CLASS_NETWORK\x10\x05\x12\x1a\n" +
+	"\x16RESOURCE_CLASS_RUNTIME\x10\x06\x12\x19\n" +
+	"\x15RESOURCE_CLASS_DEVICE\x10\a\x12\x18\n" +
+	"\x14RESOURCE_CLASS_OTHER\x10\b*\xc0\x01\n" +
+	"\fResourceUnit\x12\x1d\n" +
+	"\x19RESOURCE_UNIT_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13RESOURCE_UNIT_COUNT\x10\x01\x12\x17\n" +
+	"\x13RESOURCE_UNIT_BYTES\x10\x02\x12\x1e\n" +
+	"\x1aRESOURCE_UNIT_MILLISECONDS\x10\x03\x12\x1c\n" +
+	"\x18RESOURCE_UNIT_MILLIWATTS\x10\x04\x12!\n" +
+	"\x1dRESOURCE_UNIT_BITS_PER_SECOND\x10\x052\xf6\x02\n" +
 	"\rWorkerService\x12A\n" +
 	"\x06Health\x12\x1a.tos.edge.v1.HealthRequest\x1a\x1b.tos.edge.v1.HealthResponse\x12\\\n" +
 	"\x0fGetCapabilities\x12#.tos.edge.v1.GetCapabilitiesRequest\x1a$.tos.edge.v1.GetCapabilitiesResponse\x12>\n" +
@@ -1020,44 +1734,66 @@ func file_api_tos_edge_v1_worker_proto_rawDescGZIP() []byte {
 	return file_api_tos_edge_v1_worker_proto_rawDescData
 }
 
-var file_api_tos_edge_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_tos_edge_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_api_tos_edge_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_api_tos_edge_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_api_tos_edge_v1_worker_proto_goTypes = []any{
 	(Priority)(0),                   // 0: tos.edge.v1.Priority
-	(*HealthRequest)(nil),           // 1: tos.edge.v1.HealthRequest
-	(*HealthResponse)(nil),          // 2: tos.edge.v1.HealthResponse
-	(*GetCapabilitiesRequest)(nil),  // 3: tos.edge.v1.GetCapabilitiesRequest
-	(*Capability)(nil),              // 4: tos.edge.v1.Capability
-	(*GetCapabilitiesResponse)(nil), // 5: tos.edge.v1.GetCapabilitiesResponse
-	(*QuoteRequest)(nil),            // 6: tos.edge.v1.QuoteRequest
-	(*QuoteResponse)(nil),           // 7: tos.edge.v1.QuoteResponse
-	(*InvokeRequest)(nil),           // 8: tos.edge.v1.InvokeRequest
-	(*Usage)(nil),                   // 9: tos.edge.v1.Usage
-	(*InvokeResponse)(nil),          // 10: tos.edge.v1.InvokeResponse
-	(*CancelRequest)(nil),           // 11: tos.edge.v1.CancelRequest
-	(*CancelResponse)(nil),          // 12: tos.edge.v1.CancelResponse
+	(EvidenceLevel)(0),              // 1: tos.edge.v1.EvidenceLevel
+	(ReadinessStatus)(0),            // 2: tos.edge.v1.ReadinessStatus
+	(ResourceClass)(0),              // 3: tos.edge.v1.ResourceClass
+	(ResourceUnit)(0),               // 4: tos.edge.v1.ResourceUnit
+	(*ClaimEvidence)(nil),           // 5: tos.edge.v1.ClaimEvidence
+	(*ReadinessComponent)(nil),      // 6: tos.edge.v1.ReadinessComponent
+	(*ResourceClaim)(nil),           // 7: tos.edge.v1.ResourceClaim
+	(*ResourceLimit)(nil),           // 8: tos.edge.v1.ResourceLimit
+	(*HealthRequest)(nil),           // 9: tos.edge.v1.HealthRequest
+	(*HealthResponse)(nil),          // 10: tos.edge.v1.HealthResponse
+	(*GetCapabilitiesRequest)(nil),  // 11: tos.edge.v1.GetCapabilitiesRequest
+	(*Capability)(nil),              // 12: tos.edge.v1.Capability
+	(*GetCapabilitiesResponse)(nil), // 13: tos.edge.v1.GetCapabilitiesResponse
+	(*QuoteRequest)(nil),            // 14: tos.edge.v1.QuoteRequest
+	(*QuoteResponse)(nil),           // 15: tos.edge.v1.QuoteResponse
+	(*InvokeRequest)(nil),           // 16: tos.edge.v1.InvokeRequest
+	(*Usage)(nil),                   // 17: tos.edge.v1.Usage
+	(*InvokeResponse)(nil),          // 18: tos.edge.v1.InvokeResponse
+	(*CancelRequest)(nil),           // 19: tos.edge.v1.CancelRequest
+	(*CancelResponse)(nil),          // 20: tos.edge.v1.CancelResponse
+	nil,                             // 21: tos.edge.v1.ResourceClaim.AttributesEntry
 }
 var file_api_tos_edge_v1_worker_proto_depIdxs = []int32{
-	0,  // 0: tos.edge.v1.Capability.accepted_priorities:type_name -> tos.edge.v1.Priority
-	4,  // 1: tos.edge.v1.GetCapabilitiesResponse.capabilities:type_name -> tos.edge.v1.Capability
-	0,  // 2: tos.edge.v1.QuoteRequest.priority:type_name -> tos.edge.v1.Priority
-	0,  // 3: tos.edge.v1.InvokeRequest.priority:type_name -> tos.edge.v1.Priority
-	9,  // 4: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
-	1,  // 5: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
-	3,  // 6: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
-	6,  // 7: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
-	8,  // 8: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
-	11, // 9: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
-	2,  // 10: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
-	5,  // 11: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
-	7,  // 12: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
-	10, // 13: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
-	12, // 14: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
-	10, // [10:15] is the sub-list for method output_type
-	5,  // [5:10] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	1,  // 0: tos.edge.v1.ClaimEvidence.level:type_name -> tos.edge.v1.EvidenceLevel
+	2,  // 1: tos.edge.v1.ReadinessComponent.status:type_name -> tos.edge.v1.ReadinessStatus
+	5,  // 2: tos.edge.v1.ReadinessComponent.evidence:type_name -> tos.edge.v1.ClaimEvidence
+	3,  // 3: tos.edge.v1.ResourceClaim.resource_class:type_name -> tos.edge.v1.ResourceClass
+	4,  // 4: tos.edge.v1.ResourceClaim.unit:type_name -> tos.edge.v1.ResourceUnit
+	5,  // 5: tos.edge.v1.ResourceClaim.evidence:type_name -> tos.edge.v1.ClaimEvidence
+	21, // 6: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
+	4,  // 7: tos.edge.v1.ResourceLimit.unit:type_name -> tos.edge.v1.ResourceUnit
+	6,  // 8: tos.edge.v1.HealthResponse.readiness:type_name -> tos.edge.v1.ReadinessComponent
+	0,  // 9: tos.edge.v1.Capability.accepted_priorities:type_name -> tos.edge.v1.Priority
+	8,  // 10: tos.edge.v1.Capability.admission_limits:type_name -> tos.edge.v1.ResourceLimit
+	12, // 11: tos.edge.v1.GetCapabilitiesResponse.capabilities:type_name -> tos.edge.v1.Capability
+	7,  // 12: tos.edge.v1.GetCapabilitiesResponse.resources:type_name -> tos.edge.v1.ResourceClaim
+	0,  // 13: tos.edge.v1.QuoteRequest.priority:type_name -> tos.edge.v1.Priority
+	8,  // 14: tos.edge.v1.QuoteRequest.requested_limits:type_name -> tos.edge.v1.ResourceLimit
+	8,  // 15: tos.edge.v1.QuoteResponse.committed_limits:type_name -> tos.edge.v1.ResourceLimit
+	0,  // 16: tos.edge.v1.InvokeRequest.priority:type_name -> tos.edge.v1.Priority
+	17, // 17: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
+	9,  // 18: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
+	11, // 19: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
+	14, // 20: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
+	16, // 21: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
+	19, // 22: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
+	10, // 23: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
+	13, // 24: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
+	15, // 25: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
+	18, // 26: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
+	20, // 27: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
+	23, // [23:28] is the sub-list for method output_type
+	18, // [18:23] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_api_tos_edge_v1_worker_proto_init() }
@@ -1070,8 +1806,8 @@ func file_api_tos_edge_v1_worker_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_tos_edge_v1_worker_proto_rawDesc), len(file_api_tos_edge_v1_worker_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   12,
+			NumEnums:      5,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
