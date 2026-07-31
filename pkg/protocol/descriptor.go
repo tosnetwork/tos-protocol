@@ -15,6 +15,7 @@ const (
 	DescriptorVersion = "0.1"
 	MaxProfiles       = 32
 	MaxStringBytes    = 4096
+	MaxDescriptorAge  = 24 * time.Hour
 )
 
 var (
@@ -68,6 +69,9 @@ func (d ServiceDescriptor) Validate(now time.Time) error {
 	if d.ExpiresAt.IsZero() || !d.ExpiresAt.After(now) {
 		return errors.New("descriptor is expired")
 	}
+	if d.ExpiresAt.After(now.Add(MaxDescriptorAge)) {
+		return errors.New("descriptor expiry exceeds maximum freshness window")
+	}
 	if len(d.Profiles) == 0 || len(d.Profiles) > MaxProfiles {
 		return fmt.Errorf("profiles must contain 1..%d entries", MaxProfiles)
 	}
@@ -82,8 +86,23 @@ func (d ServiceDescriptor) Validate(now time.Time) error {
 		}
 		seen[key] = struct{}{}
 	}
-	if d.TOSName != "" && !strings.HasSuffix(strings.ToLower(d.TOSName), ".tos") {
-		return errors.New("tosName must end in .tos")
+	if d.ARDIdentifier != "" {
+		if err := boundedString("ardIdentifier", d.ARDIdentifier, 1, 4096); err != nil {
+			return err
+		}
+	}
+	if d.TOSName != "" {
+		if err := boundedString("tosName", d.TOSName, 5, 256); err != nil {
+			return err
+		}
+		if !strings.HasSuffix(strings.ToLower(d.TOSName), ".tos") {
+			return errors.New("tosName must end in .tos")
+		}
+	}
+	if d.ADNLAddress != "" {
+		if err := boundedString("adnlAddress", d.ADNLAddress, 16, 256); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -99,7 +118,8 @@ func (p ProfileReference) Validate() error {
 		return err
 	}
 	parsed, err := url.ParseRequestURI(p.URL)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+	if err != nil || len(p.URL) > MaxStringBytes ||
+		(parsed.Scheme != "https" && parsed.Scheme != "http") {
 		return errors.New("profile URL must be an absolute HTTP(S) URL")
 	}
 	if !digestPattern.MatchString(p.Digest) {

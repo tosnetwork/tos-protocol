@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "service-descriptor.schema.json",
+  "title": "TOS service descriptor v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "serviceId",
+    "displayName",
+    "controller",
+    "network",
+    "revision",
+    "expiresAt",
+    "profiles"
+  ],
+  "properties": {
+    "protocolVersion": {"$ref": "common.schema.json#/$defs/protocolVersion"},
+    "serviceId": {"$ref": "common.schema.json#/$defs/serviceId"},
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\x00]+$"
+    },
+    "controller": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "network": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\x00]+$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\x00]+$"
+    },
+    "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"$ref": "common.schema.json#/$defs/profileReference"}
+    },
+    "ardIdentifier": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "tosName": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 256,
+      "pattern": "\\.[Tt][Oo][Ss]$"
+    },
+    "adnlAddress": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256
+    }
+  }
+}

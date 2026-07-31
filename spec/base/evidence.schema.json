@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence.schema.json",
+  "title": "TOS evidence bundle v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "bundleId", "claims"],
+  "properties": {
+    "version": {"$ref": "common.schema.json#/$defs/protocolVersion"},
+    "bundleId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "requestId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"$ref": "#/$defs/claim"}
+    }
+  },
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "level",
+        "subject",
+        "issuer",
+        "collectedAt",
+        "expiresAt",
+        "digest"
+      ],
+      "properties": {
+        "type": {"$ref": "common.schema.json#/$defs/serviceId"},
+        "level": {"$ref": "common.schema.json#/$defs/evidenceLevel"},
+        "subject": {"$ref": "common.schema.json#/$defs/boundedString"},
+        "issuer": {"$ref": "common.schema.json#/$defs/boundedString"},
+        "collectedAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+        "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"},
+        "digest": {"$ref": "common.schema.json#/$defs/digest"},
+        "reference": {
+          "type": "string",
+          "maxLength": 2048
+        }
+      }
+    }
+  }
+}

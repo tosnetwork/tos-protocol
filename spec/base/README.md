@@ -1,0 +1,27 @@
+# TOS Service Protocol v0.1 base package
+
+This directory contains the draft normative base specification:
+
+- [protocol.md](protocol.md) — roles, documents, flow, limits, and trust
+  boundaries
+- [canonical-encoding.md](canonical-encoding.md) — deterministic CBOR,
+  commitments, and domain labels
+- [authentication.md](authentication.md) — controller/runtime/session key
+  hierarchy, replay, and bounded delegation
+- [versioning.md](versioning.md) — exact profile negotiation and critical
+  extension behavior
+- [errors.md](errors.md) — error codes and retry safety
+- [security-considerations.md](security-considerations.md) — parser, state,
+  transport, execution, and cleanup requirements
+- `*.schema.json` — Draft 2020-12 machine-readable JSON contracts
+- [test-vectors/canonical-v0.1.json](test-vectors/canonical-v0.1.json) —
+  fixed positive and negative cross-language encoding vectors
+
+The adjacent Go implementation is in `pkg/protocol`, `pkg/codec`, and
+`pkg/identity`. CI compiles every schema, validates representative Go values,
+checks unknown-field rejection, and verifies fixed canonical vectors.
+
+This package is a draft foundation, not a complete network implementation.
+Remote Registry crawling, authenticated public sessions, paid execution,
+settlement reconciliation, transport profiles, terminal isolation, and
+vertical conformance remain separate milestones.

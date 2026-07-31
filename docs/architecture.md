@@ -19,10 +19,12 @@ vertical worker (for example tos-ai-worker)
    +--> isolated executor (next milestone)
 ```
 
-The public process must eventually enforce authentication, signed live quotes,
-payment authorization, invocation binding, receipt signing, bounded replay,
-and settlement before it forwards paid work. Those operations are absent from
-the bootstrap public server, so it exposes no invocation route.
+The base value contracts, canonical encoding, signatures, schemas, and
+conformance vectors now exist. The public process must still add persistent
+authentication, nonce/idempotency state, payment observation and
+reconciliation, invocation isolation, receipt persistence, and cleanup before
+it forwards paid work. Those runtime operations remain absent from the public
+server, so it exposes no invocation route.
 
 ## Dependency decisions
 
@@ -31,6 +33,7 @@ the bootstrap public server, so it exposes no invocation route.
 | Language | Go 1.24+ | implemented |
 | Local process API | ConnectRPC + Protobuf | implemented |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
+| Base service protocol | TOS v0.1 Draft | schemas, Go types, canonical encoding and conformance vectors implemented |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded generic JSON-RPC client and interface implemented |
 | Policy | OPA | adapter planned after policy vocabulary is normative |

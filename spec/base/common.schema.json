@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "title": "TOS Service Protocol v0.1 common definitions",
+  "$defs": {
+    "protocolVersion": {
+      "const": "0.1"
+    },
+    "serviceId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._:-]{2,127}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[^\\x00]+$"
+    },
+    "boundedString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\x00]+$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "maxLength": 64
+    },
+    "evidenceLevel": {
+      "enum": [
+        "declared",
+        "observed",
+        "benchmarked",
+        "audited",
+        "attested",
+        "replicated",
+        "cryptographically-proven"
+      ]
+    },
+    "profileReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "mediaType", "url", "digest"],
+      "properties": {
+        "id": {"$ref": "#/$defs/serviceId"},
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\x00]+$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://",
+          "maxLength": 4096
+        },
+        "digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "usageItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "quantity"],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\x00]+$"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      }
+    }
+  }
+}

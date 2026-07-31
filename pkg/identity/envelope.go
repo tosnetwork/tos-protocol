@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,7 @@ const (
 	Version         = 1
 	MaxPayloadBytes = 1 << 20
 	MaxClockSkew    = 2 * time.Minute
+	MaxLifetime     = 24 * time.Hour
 )
 
 type Envelope struct {
@@ -91,11 +93,28 @@ func (e Envelope) validateStructure() error {
 	if e.Domain == "" || len(e.Domain) > 128 || e.KeyID == "" || len(e.KeyID) > 512 {
 		return errors.New("invalid domain or keyId")
 	}
+	if strings.ContainsRune(e.KeyID, '\x00') {
+		return errors.New("keyId contains NUL")
+	}
+	if len(e.Domain) < 5 || e.Domain[:4] != "tos." {
+		return errors.New("signature domain must be a tos.* label")
+	}
+	for _, character := range e.Domain {
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') &&
+			character != '.' && character != '-' {
+			return errors.New("signature domain contains an invalid character")
+		}
+	}
 	if len(e.Payload) > MaxPayloadBytes {
 		return errors.New("payload too large")
 	}
 	if e.ExpiresAt <= e.IssuedAt {
 		return errors.New("invalid validity interval")
+	}
+	maxLifetimeMillis := MaxLifetime.Milliseconds()
+	if e.IssuedAt > int64(^uint64(0)>>1)-maxLifetimeMillis ||
+		e.ExpiresAt > e.IssuedAt+maxLifetimeMillis {
+		return errors.New("envelope validity exceeds maximum lifetime")
 	}
 	nonce, err := base64.RawURLEncoding.DecodeString(e.Nonce)
 	if err != nil || len(nonce) != 16 {

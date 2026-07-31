@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delegation.schema.json",
+  "title": "TOS bounded delegation v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "delegationId",
+    "issuer",
+    "subject",
+    "audience",
+    "scopes",
+    "depth",
+    "maxNanoTos",
+    "maxActions",
+    "notBefore",
+    "expiresAt"
+  ],
+  "properties": {
+    "version": {"$ref": "common.schema.json#/$defs/protocolVersion"},
+    "delegationId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "issuer": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "subject": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "audience": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/serviceId"}
+    },
+    "parentId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "depth": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "maxNanoTos": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "maxActions": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 18446744073709551615
+    },
+    "notBefore": {"$ref": "common.schema.json#/$defs/dateTime"},
+    "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"depth": {"const": 0}},
+        "required": ["depth"]
+      },
+      "then": {"not": {"required": ["parentId"]}},
+      "else": {"required": ["parentId"]}
+    }
+  ]
+}

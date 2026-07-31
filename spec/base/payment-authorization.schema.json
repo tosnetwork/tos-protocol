@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "payment-authorization.schema.json",
+  "title": "TOS payment authorization v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "authorizationId",
+    "quoteId",
+    "requestId",
+    "network",
+    "payer",
+    "payee",
+    "maxNanoTos",
+    "reference",
+    "expiresAt"
+  ],
+  "properties": {
+    "version": {"$ref": "common.schema.json#/$defs/protocolVersion"},
+    "authorizationId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "quoteId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "requestId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "network": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "payer": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "payee": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "maxNanoTos": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "reference": {"$ref": "common.schema.json#/$defs/boundedString"},
+    "expiresAt": {"$ref": "common.schema.json#/$defs/dateTime"}
+  }
+}
