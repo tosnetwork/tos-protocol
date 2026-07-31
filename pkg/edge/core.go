@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
 )
@@ -102,14 +103,35 @@ func (c *Core) BeginRequest(
 	return c.requests.Begin(scope, intentDigest, c.now(), retainUntil)
 }
 
-// AdmitVerifiedEnvelope atomically binds a caller-verified signed envelope to
-// its durable request record. The caller must first verify the signature,
-// manifest role, delegation, revocation, profile, and semantic payload.
-func (c *Core) AdmitVerifiedEnvelope(
+// AdmitAuthorizedEnvelope atomically binds a manifest-authorized, semantically
+// validated signed envelope to its durable request record.
+func (c *Core) AdmitAuthorizedEnvelope(
+	scope journal.Scope,
+	intentDigest string,
+	authorized authorization.AuthorizedEnvelope,
+	retainUntil time.Time,
+) (journal.Record, journal.BeginDisposition, error) {
+	now := c.now()
+	binding := authorization.AdmissionBinding{
+		SessionID: scope.SessionID, Operation: scope.Operation,
+		RequestID: scope.RequestID, IntentDigest: intentDigest,
+	}
+	envelope, err := authorized.EnvelopeForAdmission(
+		scope.Network, scope.ServiceID, scope.Authority, binding, now,
+	)
+	if err != nil {
+		return journal.Record{}, "", fmt.Errorf("authorize Edge Core admission: %w", err)
+	}
+	return c.admitVerifiedEnvelope(
+		scope, intentDigest, envelope, now, retainUntil,
+	)
+}
+
+func (c *Core) admitVerifiedEnvelope(
 	scope journal.Scope,
 	intentDigest string,
 	envelope identity.Envelope,
-	retainUntil time.Time,
+	now, retainUntil time.Time,
 ) (journal.Record, journal.BeginDisposition, error) {
 	if scope.Authority != envelope.KeyID {
 		return journal.Record{}, "", errors.New("envelope key does not match request authority")
@@ -124,7 +146,7 @@ func (c *Core) AdmitVerifiedEnvelope(
 		Domain:         envelope.Domain, Nonce: envelope.Nonce,
 		EnvelopeExpiresAt: time.UnixMilli(envelope.ExpiresAt),
 		RetainUntil:       retainUntil,
-	}, c.now())
+	}, now)
 }
 
 func (c *Core) Request(scope journal.Scope) (journal.Record, error) {

@@ -10,13 +10,19 @@ import (
 )
 
 const (
-	ManifestVersion     = "0.1"
-	MaxManifestLifetime = 24 * time.Hour
-	MaxRuntimeKeys      = 16
-	MaxEndpoints        = 16
-	MaxCapabilities     = 128
-	MaxExtensions       = 32
-	MaxClaimAttributes  = 64
+	ManifestVersion       = "0.1"
+	ServiceManifestDomain = "tos.manifest.v1"
+	MaxManifestLifetime   = 24 * time.Hour
+	MaxRuntimeKeys        = 16
+	MaxEndpoints          = 16
+	MaxCapabilities       = 128
+	MaxExtensions         = 32
+	MaxClaimAttributes    = 64
+
+	RuntimeRoleAuthenticate = "authenticate"
+	RuntimeRoleQuote        = "quote"
+	RuntimeRoleReceipt      = "receipt"
+	RuntimeRoleEvidence     = "evidence"
 )
 
 // ServiceManifest is the signed, operational description referenced by a
@@ -178,7 +184,8 @@ func (k RuntimeKey) Validate(manifestStart, manifestEnd time.Time) error {
 	roles := make(map[string]struct{}, len(k.Roles))
 	for _, role := range k.Roles {
 		switch role {
-		case "authenticate", "quote", "receipt", "evidence":
+		case RuntimeRoleAuthenticate, RuntimeRoleQuote,
+			RuntimeRoleReceipt, RuntimeRoleEvidence:
 		default:
 			return fmt.Errorf("unsupported runtime key role %q", role)
 		}

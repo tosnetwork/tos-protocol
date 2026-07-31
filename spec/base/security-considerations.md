@@ -17,6 +17,18 @@ all of them.
 Clients MUST re-resolve controller and revocation authority, verify a fresh
 manifest and runtime role, negotiate critical extensions, and bind session,
 quote, authorization, execution, and receipt identifiers and revisions.
+Authority snapshots must have a bounded age and bind the current canonical
+manifest digest; a still-valid old signature does not authorize a replaced
+manifest or revoked runtime key. Semantic payload validation and complete
+session/operation/request/intent binding occur before nonce or request state
+is committed.
+
+A chain authority adapter must match the requested network, contract address,
+and service ID; require an approved contract code hash and the configured
+finality level; honor cancellation and timeout; and reject state older than a
+caller-maintained masterchain high-water mark. Service response-attestation
+keys are not manifest-controller keys unless an explicit authoritative
+binding says so.
 
 ## Bounded state
 

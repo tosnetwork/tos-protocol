@@ -27,6 +27,11 @@ Before accepting a runtime signature, a verifier MUST:
 HTTPS, RLDP, relay, ARD, DNS, and Registry transport identity do not replace
 these checks.
 
+The reference implementation and its exact admission boundary are described
+in [authorization-pipeline.md](authorization-pipeline.md). Its authority
+snapshot is time-bounded; a valid old signature does not override controller
+rotation, manifest replacement, or runtime-key revocation.
+
 ## Replay
 
 Every signed envelope has an unpredictable 128-bit nonce and a maximum

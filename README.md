@@ -16,7 +16,8 @@ The security boundary is intentional:
 
 - `tos-edge` is the public control-plane process. The initial binary serves
   health and discovery documents only; public paid invocation stays disabled
-  until authentication and payment authorization are implemented.
+  until chain authority resolution, client/session policy, payment
+  authorization, and isolated execution are wired end to end.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs.
@@ -74,10 +75,12 @@ descriptor -> controller-signed manifest -> profile negotiation
 The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
 deadline. `tos-edge` still exposes discovery only until manifest-backed
-authorization, payment observation, execution isolation, and receipt
-persistence are implemented. Atomic signed-envelope nonce admission, the
-bounded durable request journal, and its cleanup owner are implemented as an
-internal Edge Core library; they do not enable public actions by themselves.
+authorization is connected to the live TOS contract/RPC decoder and payment
+observation, execution isolation, and receipt persistence are implemented.
+The manifest/runtime verifier, strict stateless chain-resolver boundary,
+atomic signed-envelope nonce admission, bounded durable request journal, and
+cleanup owner are implemented as internal libraries; they do not enable
+public actions by themselves.
 
 ## Repository map
 
@@ -88,6 +91,7 @@ cmd/tos-ard-registry/ ARD HTTP Registry entry point
 pkg/ard/              pinned ARD v0.9 data model and validation
 pkg/chain/            bounded JSON-RPC adapter
 pkg/edge/             safe public discovery server
+pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
 pkg/journal/          durable bounded replay and idempotency state

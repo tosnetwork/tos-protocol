@@ -20,9 +20,21 @@ type ServiceReference struct {
 }
 
 type ServiceState struct {
-	Active              bool
+	Network   string
+	Address   string
+	ServiceID string
+	Active    bool
+	Finalized bool
+	// ControllerPublicKey is the current manifest-signing key resolved from
+	// authoritative chain state. It is not automatically the Service Actor
+	// response-attestor key.
 	Controller          string
-	ManifestDigest      string
+	ControllerPublicKey []byte
+	// ManifestDigest is the canonical tos.manifest.v1 value commitment.
+	ManifestDigest       string
+	RevokedRuntimeKeyIDs []string
+	// CodeHash identifies the decoded registration/service contract and is
+	// checked against the authorization resolver's local allowlist.
 	CodeHash            string
 	ObservedMasterSeqno uint64
 	ObservedAt          time.Time

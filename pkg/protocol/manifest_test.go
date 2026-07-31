@@ -21,7 +21,9 @@ func validManifest(now time.Time) ServiceManifest {
 			KeyID:     "runtime-key-1",
 			Algorithm: "Ed25519",
 			PublicKey: base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
-			Roles:     []string{"authenticate", "quote", "receipt"},
+			Roles: []string{
+				RuntimeRoleAuthenticate, RuntimeRoleQuote, RuntimeRoleReceipt,
+			},
 			NotBefore: now.Add(-time.Minute),
 			NotAfter:  now.Add(time.Hour),
 		}},

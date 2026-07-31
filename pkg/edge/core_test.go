@@ -3,6 +3,7 @@ package edge
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -10,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/pkg/authorization"
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
+	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
 
 func coreScope() journal.Scope {
@@ -20,6 +24,111 @@ func coreScope() journal.Scope {
 		ServiceID: "edge.example.ai", SessionID: "session-0001",
 		Operation: "invoke", RequestID: "request-0001",
 	}
+}
+
+type corePayload struct {
+	RequestID string `json:"requestId"`
+	SessionID string `json:"sessionId"`
+	Operation string `json:"operation"`
+}
+
+func authorizedCoreEnvelope(
+	t *testing.T,
+	now time.Time,
+) authorization.AuthorizedEnvelope {
+	t.Helper()
+	controllerPublic, controllerPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimePublic, runtimePrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := coreScope()
+	manifest := protocol.ServiceManifest{
+		Version: protocol.ManifestVersion, ManifestID: "manifest-0001",
+		ServiceID: scope.ServiceID, Controller: "tos:test:controller",
+		Network: scope.Network, Revision: "manifest-revision-1",
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour),
+		RuntimeKeys: []protocol.RuntimeKey{{
+			KeyID: scope.Authority, Algorithm: "Ed25519",
+			PublicKey: base64.RawURLEncoding.EncodeToString(runtimePublic),
+			Roles:     []string{protocol.RuntimeRoleAuthenticate},
+			NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
+		}},
+		Endpoints: []protocol.ServiceEndpoint{{
+			Transport: "https", Audience: "authenticated",
+			URL: "https://edge.example/v1",
+		}},
+		Profiles: []protocol.ProfileReference{{
+			ID: "tos.ai.inference", Version: "0.1.0",
+			MediaType: "application/vnd.tos.ai-inference+json",
+			URL:       "https://edge.example/.well-known/tos-inference.json",
+			Digest:    "sha256:" + strings.Repeat("a", 64),
+		}},
+	}
+	manifestEnvelope, err := identity.SignCanonical(
+		controllerPrivate, protocol.ServiceManifestDomain,
+		manifest.Controller, manifest, manifest.IssuedAt, manifest.ExpiresAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestDigest, err := codec.Digest(protocol.ServiceManifestDomain, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := authorization.NewVerifier(authorization.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := verifier.VerifyManifest(
+		authorization.AuthoritySnapshot{
+			Active: true, Network: scope.Network, ServiceID: scope.ServiceID,
+			Controller: manifest.Controller, ControllerPublicKey: controllerPublic,
+			ManifestDigest: manifestDigest, ObservedAt: now,
+		},
+		manifestEnvelope,
+		now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := corePayload{
+		RequestID: scope.RequestID, SessionID: scope.SessionID,
+		Operation: scope.Operation,
+	}
+	runtimeEnvelope, err := identity.SignCanonical(
+		runtimePrivate, "tos.invoke.v1", scope.Authority,
+		payload, now.Add(-time.Second), now.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorized, err := verified.AuthorizeRuntimeEnvelope(
+		runtimeEnvelope, "tos.invoke.v1", protocol.RuntimeRoleAuthenticate,
+		now,
+		authorization.AdmissionBinding{
+			SessionID: scope.SessionID, Operation: scope.Operation,
+			RequestID:    scope.RequestID,
+			IntentDigest: "sha256:" + strings.Repeat("9", 64),
+		},
+		func(encoded []byte) error {
+			var decoded corePayload
+			if err := codec.Unmarshal(encoded, &decoded); err != nil {
+				return err
+			}
+			if decoded != payload {
+				return errors.New("core payload binding mismatch")
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return authorized
 }
 
 func TestCoreOwnsDurableRequestLifecycle(t *testing.T) {
@@ -63,7 +172,7 @@ func TestCoreOwnsDurableRequestLifecycle(t *testing.T) {
 	}
 }
 
-func TestCoreAdmitsVerifiedEnvelopeAtomically(t *testing.T) {
+func TestCoreAdmitsAuthorizedEnvelopeAtomically(t *testing.T) {
 	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
 	config.CleanupInterval = time.Hour
 	now := time.Unix(1_800_000_000, 0).UTC()
@@ -73,23 +182,10 @@ func TestCoreAdmitsVerifiedEnvelopeAtomically(t *testing.T) {
 	}
 	defer core.Close()
 
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	envelope, err := identity.Sign(
-		privateKey, "tos.invoke.v1", coreScope().Authority,
-		[]byte("canonical request intent"), now.Add(-time.Second), now.Add(time.Minute),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := envelope.Verify(publicKey, "tos.invoke.v1", now); err != nil {
-		t.Fatal(err)
-	}
+	authorized := authorizedCoreEnvelope(t, now)
 	intent := "sha256:" + strings.Repeat("9", 64)
-	record, disposition, err := core.AdmitVerifiedEnvelope(
-		coreScope(), intent, envelope, now.Add(time.Hour),
+	record, disposition, err := core.AdmitAuthorizedEnvelope(
+		coreScope(), intent, authorized, now.Add(time.Hour),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -97,8 +193,8 @@ func TestCoreAdmitsVerifiedEnvelopeAtomically(t *testing.T) {
 	if disposition != journal.BeginCreated || record.Scope != coreScope() {
 		t.Fatalf("unexpected admission: %#v, %q", record, disposition)
 	}
-	replayed, disposition, err := core.AdmitVerifiedEnvelope(
-		coreScope(), intent, envelope, now.Add(time.Hour),
+	replayed, disposition, err := core.AdmitAuthorizedEnvelope(
+		coreScope(), intent, authorized, now.Add(time.Hour),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +211,7 @@ func TestCoreAdmitsVerifiedEnvelopeAtomically(t *testing.T) {
 	}
 }
 
-func TestCoreRejectsEnvelopeAuthorityMismatchBeforeClaim(t *testing.T) {
+func TestCoreRejectsAuthorizationScopeMismatchBeforeClaim(t *testing.T) {
 	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
 	config.CleanupInterval = time.Hour
 	now := time.Unix(1_800_000_000, 0).UTC()
@@ -125,22 +221,20 @@ func TestCoreRejectsEnvelopeAuthorityMismatchBeforeClaim(t *testing.T) {
 	}
 	defer core.Close()
 
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	envelope, err := identity.Sign(
-		privateKey, "tos.invoke.v1", "different-runtime-key",
-		[]byte("canonical request intent"), now.Add(-time.Second), now.Add(time.Minute),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := core.AdmitVerifiedEnvelope(
-		coreScope(), "sha256:"+strings.Repeat("8", 64),
-		envelope, now.Add(time.Hour),
+	authorized := authorizedCoreEnvelope(t, now)
+	mismatched := coreScope()
+	mismatched.Authority = "different-runtime-key"
+	if _, _, err := core.AdmitAuthorizedEnvelope(
+		mismatched, "sha256:"+strings.Repeat("9", 64),
+		authorized, now.Add(time.Hour),
 	); err == nil {
-		t.Fatal("mismatched envelope authority accepted")
+		t.Fatal("mismatched authorization scope accepted")
+	}
+	if _, _, err := core.AdmitAuthorizedEnvelope(
+		coreScope(), "sha256:"+strings.Repeat("8", 64),
+		authorized, now.Add(time.Hour),
+	); err == nil {
+		t.Fatal("mismatched authorization intent accepted")
 	}
 	health, err := core.Health()
 	if err != nil {
