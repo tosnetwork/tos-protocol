@@ -46,9 +46,11 @@ and pending-to-authorized request transition are persisted atomically.
 Monotonic reorganization state blocks paid dispatch. Post-expiry rechecks use
 the durable immutable binding, and a count-bounded coordinator advances one
 crash-safe CAS scan cursor only after attempting its page. A concrete TOS
-contract adapter, automatic watcher scheduling/backoff, operational
-observability, and refund handling remain required before public paid
-execution.
+contract adapter and `tos-edge` wiring, adaptive watcher backoff, exported
+operational metrics, and refund handling remain required before public paid
+execution. The library scheduler is opt-in and applies a whole-batch timeout
+and shutdown cancellation; it does not infer production chain endpoints or
+policy.
 
 ## Reorganization and failure
 

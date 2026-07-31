@@ -15,17 +15,25 @@ import (
 )
 
 const (
-	DefaultCleanupInterval = 30 * time.Second
-	minCleanupInterval     = 10 * time.Millisecond
-	maxCleanupInterval     = time.Hour
+	DefaultCleanupInterval    = 30 * time.Second
+	minCleanupInterval        = 10 * time.Millisecond
+	maxCleanupInterval        = time.Hour
+	minReconciliationInterval = 10 * time.Millisecond
+	maxReconciliationInterval = 24 * time.Hour
+	minReconciliationTimeout  = 10 * time.Millisecond
+	maxReconciliationTimeout  = 10 * time.Minute
 )
 
 // CoreConfig contains only generic Edge Core state policy. Vertical runtime,
 // wallet, and owner policy configuration remain outside this package.
 type CoreConfig struct {
-	RequestJournalPath   string
-	RequestJournalLimits journal.Limits
-	CleanupInterval      time.Duration
+	RequestJournalPath            string
+	RequestJournalLimits          journal.Limits
+	CleanupInterval               time.Duration
+	PaymentObserver               *payment.Observer
+	PaymentReconciliationInterval time.Duration
+	PaymentReconciliationTimeout  time.Duration
+	PaymentReconciliationBatch    int
 }
 
 func DefaultCoreConfig(journalPath string) CoreConfig {
@@ -37,15 +45,20 @@ func DefaultCoreConfig(journalPath string) CoreConfig {
 }
 
 type CoreHealth struct {
-	RequestRecords       uint64
-	NonceClaims          uint64
-	BudgetUsages         uint64
-	PaymentRecords       uint64
-	JournalFileBytes     int64
-	LastCleanupAt        time.Time
-	LastCleanupDeleted   int
-	LastCleanupHasMore   bool
-	LastCleanupSucceeded bool
+	RequestRecords                     uint64
+	NonceClaims                        uint64
+	BudgetUsages                       uint64
+	PaymentRecords                     uint64
+	JournalFileBytes                   int64
+	LastCleanupAt                      time.Time
+	LastCleanupDeleted                 int
+	LastCleanupHasMore                 bool
+	LastCleanupSucceeded               bool
+	LastPaymentReconciliationAt        time.Time
+	LastPaymentReconciliationScanned   int
+	LastPaymentReconciliationFailed    int
+	LastPaymentReconciliationHasMore   bool
+	LastPaymentReconciliationSucceeded bool
 }
 
 type PaymentReconciliationFailure struct {
@@ -70,9 +83,15 @@ type PaymentReconciliationReport struct {
 // Core owns durable request replay state and its bounded cleanup lifecycle.
 // It intentionally has no public HTTP action handler yet.
 type Core struct {
-	requests *journal.Store
-	limits   journal.Limits
-	now      func() time.Time
+	requests                      *journal.Store
+	limits                        journal.Limits
+	now                           func() time.Time
+	paymentObserver               *payment.Observer
+	paymentReconciliationInterval time.Duration
+	paymentReconciliationTimeout  time.Duration
+	paymentReconciliationBatch    int
+	runContext                    context.Context
+	cancelRun                     context.CancelFunc
 
 	stop      chan struct{}
 	done      chan struct{}
@@ -84,6 +103,13 @@ type Core struct {
 	lastDeleted   int
 	lastMore      bool
 	lastError     error
+
+	paymentReconciliationSlot        chan struct{}
+	lastPaymentReconciliationAt      time.Time
+	lastPaymentReconciliationScanned int
+	lastPaymentReconciliationFailed  int
+	lastPaymentReconciliationMore    bool
+	lastPaymentReconciliationError   error
 }
 
 func OpenCore(config CoreConfig) (*Core, error) {
@@ -98,20 +124,31 @@ func openCore(config CoreConfig, now func() time.Time) (*Core, error) {
 	if now == nil {
 		return nil, errors.New("nil Edge Core clock")
 	}
+	if err := validatePaymentReconciliationConfig(config); err != nil {
+		return nil, err
+	}
 	requests, err := journal.Open(config.RequestJournalPath, config.RequestJournalLimits)
 	if err != nil {
 		return nil, fmt.Errorf("open Edge Core request state: %w", err)
 	}
+	runContext, cancelRun := context.WithCancel(context.Background())
 	core := &Core{
 		requests: requests, limits: config.RequestJournalLimits,
 		now: now, stop: make(chan struct{}), done: make(chan struct{}),
+		paymentObserver:               config.PaymentObserver,
+		paymentReconciliationInterval: config.PaymentReconciliationInterval,
+		paymentReconciliationTimeout:  config.PaymentReconciliationTimeout,
+		paymentReconciliationBatch:    config.PaymentReconciliationBatch,
+		runContext:                    runContext, cancelRun: cancelRun,
+		paymentReconciliationSlot: make(chan struct{}, 1),
 	}
-	go core.cleanupLoop(config.CleanupInterval)
+	go core.lifecycleLoop(config.CleanupInterval)
 	return core, nil
 }
 
 func (c *Core) Close() error {
 	c.closeOnce.Do(func() {
+		c.cancelRun()
 		close(c.stop)
 		<-c.done
 		c.closeErr = c.requests.Close()
@@ -338,6 +375,12 @@ func (c *Core) ReconcilePaymentBatch(
 			"nil payment reconciliation observer",
 		)
 	}
+	select {
+	case c.paymentReconciliationSlot <- struct{}{}:
+		defer func() { <-c.paymentReconciliationSlot }()
+	case <-ctx.Done():
+		return PaymentReconciliationReport{}, ctx.Err()
+	}
 	now := c.now()
 	scan, err := c.requests.ScanPayments(now, maxScan)
 	if err != nil {
@@ -528,23 +571,54 @@ func (c *Core) Health() (CoreHealth, error) {
 		BudgetUsages: stats.BudgetUsages, PaymentRecords: stats.Payments,
 		JournalFileBytes: stats.FileSize,
 		LastCleanupAt:    c.lastCleanupAt, LastCleanupDeleted: c.lastDeleted,
-		LastCleanupHasMore:   c.lastMore,
-		LastCleanupSucceeded: !c.lastCleanupAt.IsZero() && c.lastError == nil,
+		LastCleanupHasMore:               c.lastMore,
+		LastCleanupSucceeded:             !c.lastCleanupAt.IsZero() && c.lastError == nil,
+		LastPaymentReconciliationAt:      c.lastPaymentReconciliationAt,
+		LastPaymentReconciliationScanned: c.lastPaymentReconciliationScanned,
+		LastPaymentReconciliationFailed:  c.lastPaymentReconciliationFailed,
+		LastPaymentReconciliationHasMore: c.lastPaymentReconciliationMore,
+		LastPaymentReconciliationSucceeded: !c.lastPaymentReconciliationAt.IsZero() &&
+			c.lastPaymentReconciliationError == nil &&
+			c.lastPaymentReconciliationFailed == 0,
 	}
 	if c.lastError != nil {
 		return output, fmt.Errorf("Edge Core request cleanup: %w", c.lastError)
 	}
+	if c.lastPaymentReconciliationError != nil {
+		return output, fmt.Errorf(
+			"Edge Core payment reconciliation: %w",
+			c.lastPaymentReconciliationError,
+		)
+	}
 	return output, nil
 }
 
-func (c *Core) cleanupLoop(interval time.Duration) {
+func (c *Core) lifecycleLoop(cleanupInterval time.Duration) {
 	defer close(c.done)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	cleanupTicker := time.NewTicker(cleanupInterval)
+	defer cleanupTicker.Stop()
+	var reconciliationTicker *time.Ticker
+	var reconciliationTicks <-chan time.Time
+	if c.paymentObserver != nil {
+		reconciliationTicker = time.NewTicker(c.paymentReconciliationInterval)
+		reconciliationTicks = reconciliationTicker.C
+		defer reconciliationTicker.Stop()
+	}
 	for {
 		select {
-		case <-ticker.C:
+		case <-cleanupTicker.C:
 			_, _, _ = c.PruneNow()
+		case <-reconciliationTicks:
+			reconciliationContext, cancel := context.WithTimeout(
+				c.runContext, c.paymentReconciliationTimeout,
+			)
+			report, err := c.ReconcilePaymentBatch(
+				reconciliationContext,
+				c.paymentObserver,
+				c.paymentReconciliationBatch,
+			)
+			cancel()
+			c.recordPaymentReconciliation(report, err)
 		case <-c.stop:
 			return
 		}
@@ -558,4 +632,40 @@ func (c *Core) recordCleanup(deleted int, more bool, err error) {
 	c.lastDeleted = deleted
 	c.lastMore = more
 	c.lastError = err
+}
+
+func (c *Core) recordPaymentReconciliation(
+	report PaymentReconciliationReport,
+	err error,
+) {
+	c.healthMu.Lock()
+	defer c.healthMu.Unlock()
+	c.lastPaymentReconciliationAt = c.now().UTC()
+	c.lastPaymentReconciliationScanned = report.Scanned
+	c.lastPaymentReconciliationFailed = report.Failed
+	c.lastPaymentReconciliationMore = report.HasMore
+	c.lastPaymentReconciliationError = err
+}
+
+func validatePaymentReconciliationConfig(config CoreConfig) error {
+	if config.PaymentObserver == nil {
+		if config.PaymentReconciliationInterval != 0 ||
+			config.PaymentReconciliationTimeout != 0 ||
+			config.PaymentReconciliationBatch != 0 {
+			return errors.New(
+				"payment reconciliation settings require an observer",
+			)
+		}
+		return nil
+	}
+	if config.PaymentReconciliationInterval < minReconciliationInterval ||
+		config.PaymentReconciliationInterval > maxReconciliationInterval ||
+		config.PaymentReconciliationTimeout < minReconciliationTimeout ||
+		config.PaymentReconciliationTimeout > maxReconciliationTimeout ||
+		config.PaymentReconciliationBatch <= 0 ||
+		config.PaymentReconciliationBatch >
+			config.RequestJournalLimits.MaxPrunePerWrite {
+		return errors.New("invalid payment reconciliation configuration")
+	}
+	return nil
 }

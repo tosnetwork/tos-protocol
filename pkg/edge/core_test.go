@@ -255,6 +255,20 @@ func (r corePaymentMapResolver) ObservePayment(
 	return state, nil
 }
 
+type coreBlockingPaymentResolver struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (r *coreBlockingPaymentResolver) ObservePayment(
+	ctx context.Context,
+	_ chain.PaymentReference,
+) (chain.PaymentState, error) {
+	r.once.Do(func() { close(r.started) })
+	<-ctx.Done()
+	return chain.PaymentState{}, ctx.Err()
+}
+
 func (f coreSessionFixture) authorize(
 	t *testing.T,
 	requestID string,
@@ -854,11 +868,137 @@ func TestCoreCleanupLoopExpiresInBoundedBatch(t *testing.T) {
 	t.Fatalf("cleanup did not converge: health=%#v error=%v", health, healthErr)
 }
 
+func TestCorePaymentReconciliationLoopReportsHealth(t *testing.T) {
+	observer, err := payment.NewObserver(
+		corePaymentResolver{},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	config.PaymentObserver = observer
+	config.PaymentReconciliationInterval = 10 * time.Millisecond
+	config.PaymentReconciliationTimeout = 100 * time.Millisecond
+	config.PaymentReconciliationBatch = 1
+	now := time.Unix(1_800_000_000, 0).UTC()
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		health, healthErr := core.Health()
+		if healthErr == nil &&
+			health.LastPaymentReconciliationSucceeded &&
+			health.LastPaymentReconciliationAt.Equal(now) &&
+			health.LastPaymentReconciliationScanned == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	health, healthErr := core.Health()
+	t.Fatalf(
+		"payment reconciliation loop did not run: health=%#v error=%v",
+		health, healthErr,
+	)
+}
+
+func TestCoreCloseCancelsScheduledPaymentReconciliation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := journal.DefaultLimits()
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := journal.Scope{
+		Network: "testnet", Authority: "client-key-1",
+		ServiceID: "edge.example.ai", SessionID: "session-0001",
+		Operation: "invoke", RequestID: "scheduled-payment-0001",
+	}
+	intent := "sha256:" + strings.Repeat("a", 64)
+	store, err := journal.Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.Begin(
+		scope, intent, now, now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := store.ApplyPayment(journal.PaymentAdmission{
+		Scope: scope, IntentDigest: intent,
+		AuthorizationID: "authorization-scheduled-0001",
+		QuoteID:         "quote-scheduled-0001",
+		Reference:       "payment-reference-scheduled-0001",
+		Payer:           "payer-wallet", Payee: "service-wallet",
+		AmountNanoTOS:         5,
+		QuoteEnvelopeDigest:   "sha256:" + strings.Repeat("e", 64),
+		PaymentEnvelopeDigest: "sha256:" + strings.Repeat("f", 64),
+		ObservedMasterSeqno:   101, ObservedAt: now,
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	resolver := &coreBlockingPaymentResolver{started: make(chan struct{})}
+	observer, err := payment.NewObserver(resolver, payment.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultCoreConfig(path)
+	config.CleanupInterval = time.Hour
+	config.PaymentObserver = observer
+	config.PaymentReconciliationInterval = 10 * time.Millisecond
+	config.PaymentReconciliationTimeout = time.Minute
+	config.PaymentReconciliationBatch = 1
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-resolver.started:
+	case <-time.After(time.Second):
+		_ = core.Close()
+		t.Fatal("scheduled payment reconciliation did not start")
+	}
+	startedClose := time.Now()
+	if err := core.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(startedClose); elapsed > time.Second {
+		t.Fatalf("Core close did not cancel reconciliation: %v", elapsed)
+	}
+}
+
 func TestCoreRejectsInvalidCleanupConfiguration(t *testing.T) {
 	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
 	config.CleanupInterval = 0
 	if _, err := OpenCore(config); err == nil {
 		t.Fatal("zero cleanup interval accepted")
+	}
+	config = DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.PaymentReconciliationInterval = time.Minute
+	if _, err := OpenCore(config); err == nil {
+		t.Fatal("payment reconciliation settings without observer accepted")
+	}
+	observer, err := payment.NewObserver(
+		corePaymentResolver{},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config = DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.PaymentObserver = observer
+	config.PaymentReconciliationInterval = time.Minute
+	config.PaymentReconciliationTimeout = time.Second
+	config.PaymentReconciliationBatch =
+		config.RequestJournalLimits.MaxPrunePerWrite + 1
+	if _, err := OpenCore(config); err == nil {
+		t.Fatal("oversized payment reconciliation batch accepted")
 	}
 }
 

@@ -95,10 +95,13 @@ global replay index, and pending-to-authorized request transition commit in
 one bounded journal transaction and survive restart. The journal can also
 record a monotonic reorganization and block paid dispatch. A production chain
 recheck can run after quote expiry, and Edge Core provides a count-bounded
-batch coordinator with a crash-safe CAS scan cursor. The concrete TOS payment
-contract adapter, automatic watcher scheduling, refund/completion policy, and
-isolated executor remain intentionally disconnected, so none of these
-internal boundaries enable public actions by themselves.
+batch coordinator with a crash-safe CAS scan cursor. An optional fixed-interval
+scheduler adds whole-batch deadlines, shutdown cancellation, serialized scan
+ownership, and health counters; it is disabled unless an observer and all
+bounds are explicitly configured. The concrete TOS payment contract adapter,
+`tos-edge` binary configuration, adaptive retry policy, refund/completion
+policy, and isolated executor remain intentionally disconnected, so none of
+these internal boundaries enable public actions by themselves.
 
 ## Repository map
 

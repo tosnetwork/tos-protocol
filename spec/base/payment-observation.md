@@ -111,9 +111,16 @@ a concurrent stale scanner cannot skip ahead. Expired records count toward
 the scan bound but are not queried, preventing an expired run from turning
 one batch into an unbounded traversal.
 
+The optional Edge Core scheduler is disabled by default. Enabling it requires
+an observer, an interval, a whole-batch timeout, and a batch count no larger
+than the journal limit. One cancelable lifecycle goroutine serializes
+scheduled and manual batches, reports the most recent scanned/failed/backlog
+state, and cancels in-flight resolver calls during Core shutdown.
+
 ## Remaining integration
 
 A subsequent milestone must implement the concrete TOS payment contract
-adapter, automatic watcher scheduling/backoff, operator observability, and
-signed completion/refund policy. Until those pieces and isolated execution
-are connected, the public server exposes no paid invocation route.
+adapter, `tos-edge` deployment configuration, adaptive watcher backoff and
+metrics export, and signed completion/refund policy. Until those pieces and
+isolated execution are connected, the public server exposes no paid
+invocation route.
