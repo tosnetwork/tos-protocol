@@ -107,6 +107,38 @@ func (c *Core) mapAndClaimPaidExecution(
 			err,
 		)
 	}
+	return c.mapAndClaimPaidExecutionMaterial(
+		ctx,
+		scope,
+		expectedRevision,
+		material,
+		intent,
+		mapper,
+		worker,
+	)
+}
+
+func (c *Core) mapAndClaimPaidExecutionMaterial(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	material authorization.ReceiptInvocationMaterial,
+	intent []byte,
+	mapper ProfileInvocationMapper,
+	worker *localrpc.WorkerClient,
+) (ClaimedInvocation, error) {
+	if ctx == nil {
+		return ClaimedInvocation{}, errors.New("nil profile mapping context")
+	}
+	if mapper == nil {
+		return ClaimedInvocation{}, errors.New("nil profile invocation mapper")
+	}
+	if worker == nil {
+		return ClaimedInvocation{}, errors.New("nil Worker client")
+	}
+	if err := ctx.Err(); err != nil {
+		return ClaimedInvocation{}, err
+	}
 	if scope.Network != material.Network ||
 		scope.ServiceID != material.ServiceID ||
 		scope.SessionID != material.SessionID ||
@@ -185,10 +217,10 @@ func (c *Core) mapAndClaimPaidExecution(
 		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 	}
 	if state.State == journal.StateRunning {
-		claimed, err := c.ClaimPaidExecution(
+		claimed, err := c.claimPaidExecutionMaterial(
 			scope,
 			expectedRevision,
-			paymentAuthorization,
+			material,
 			request,
 		)
 		if err != nil {
@@ -211,10 +243,10 @@ func (c *Core) mapAndClaimPaidExecution(
 			err,
 		)
 	}
-	return c.ClaimPaidExecution(
+	return c.claimPaidExecutionMaterial(
 		scope,
 		expectedRevision,
-		paymentAuthorization,
+		material,
 		request,
 	)
 }

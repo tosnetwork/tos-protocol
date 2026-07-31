@@ -2,6 +2,7 @@ package journal
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -79,7 +80,7 @@ func testPaymentAdmission(
 	now time.Time,
 	observedMasterSeqno uint64,
 ) PaymentAdmission {
-	return PaymentAdmission{
+	admission := PaymentAdmission{
 		Scope:                 scope,
 		IntentDigest:          "sha256:" + strings.Repeat("a", 64),
 		AuthorizationID:       "authorization-0001",
@@ -93,6 +94,54 @@ func testPaymentAdmission(
 		ObservedMasterSeqno:   observedMasterSeqno,
 		ObservedAt:            now,
 	}
+	admission.ExecutionAuthorization = &PaymentExecutionAuthorization{
+		Quote: protocol.Quote{
+			Version: protocol.BaseEnvelopeVersion,
+			QuoteID: admission.QuoteID, RequestID: scope.RequestID,
+			SessionID: scope.SessionID, ServiceID: scope.ServiceID,
+			ProfileID: "tos.ai.inference", Operation: scope.Operation,
+			IntentDigest:     admission.IntentDigest,
+			ServiceRevision:  "manifest-revision-1",
+			ResourceRevision: "resource-revision-1",
+			Network:          scope.Network, Payee: admission.Payee,
+			Settlement: admission.Reference, PriceNanoTOS: admission.AmountNanoTOS,
+			MaxInputBytes: 1_024, MaxOutputBytes: 2_048,
+			IssuedAt: now, Deadline: now.Add(5 * time.Minute),
+			ExpiresAt: now.Add(time.Minute),
+		},
+		PaymentAuthorization: protocol.PaymentAuthorization{
+			Version:         protocol.BaseEnvelopeVersion,
+			AuthorizationID: admission.AuthorizationID,
+			QuoteID:         admission.QuoteID, RequestID: scope.RequestID,
+			Network: scope.Network, Payer: admission.Payer,
+			Payee: admission.Payee, MaxNanoTOS: admission.AmountNanoTOS,
+			Reference: admission.Reference, ExpiresAt: now.Add(time.Minute),
+		},
+		ProfileVersion: "0.1.0",
+	}
+	return admission
+}
+
+func syncTestPaymentExecutionAuthorization(admission *PaymentAdmission) {
+	context := admission.ExecutionAuthorization
+	context.Quote.Network = admission.Scope.Network
+	context.Quote.ServiceID = admission.Scope.ServiceID
+	context.Quote.SessionID = admission.Scope.SessionID
+	context.Quote.Operation = admission.Scope.Operation
+	context.Quote.RequestID = admission.Scope.RequestID
+	context.Quote.IntentDigest = admission.IntentDigest
+	context.Quote.QuoteID = admission.QuoteID
+	context.Quote.Settlement = admission.Reference
+	context.Quote.Payee = admission.Payee
+	context.Quote.PriceNanoTOS = admission.AmountNanoTOS
+	context.PaymentAuthorization.AuthorizationID = admission.AuthorizationID
+	context.PaymentAuthorization.QuoteID = admission.QuoteID
+	context.PaymentAuthorization.RequestID = admission.Scope.RequestID
+	context.PaymentAuthorization.Network = admission.Scope.Network
+	context.PaymentAuthorization.Payer = admission.Payer
+	context.PaymentAuthorization.Payee = admission.Payee
+	context.PaymentAuthorization.MaxNanoTOS = admission.AmountNanoTOS
+	context.PaymentAuthorization.Reference = admission.Reference
 }
 
 func testExecutionAdmission(
@@ -467,14 +516,14 @@ func TestApplyPaymentAtomicallyAuthorizesAndReplays(t *testing.T) {
 		t.Fatal(err)
 	}
 	if disposition != PaymentReplay ||
-		replayedRecord != record || replayedPayment != payment {
+		replayedRecord != record || !reflect.DeepEqual(replayedPayment, payment) {
 		t.Fatalf(
 			"payment replay changed state: record=%#v payment=%#v disposition=%q",
 			replayedRecord, replayedPayment, disposition,
 		)
 	}
 	stored, err := store.GetPayment(scope, now)
-	if err != nil || stored != payment {
+	if err != nil || !reflect.DeepEqual(stored, payment) {
 		t.Fatalf("stored payment=%#v err=%v", stored, err)
 	}
 	stats, err := store.Stats()
@@ -641,6 +690,142 @@ func TestApplyPaymentConcurrentReplayHasOneWinner(t *testing.T) {
 	}
 }
 
+func TestPaymentExecutionAuthorizationFailsClosedOnCorruption(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("payment-context-corrupt")
+	if _, _, err := store.Begin(
+		scope,
+		"sha256:"+strings.Repeat("a", 64),
+		now,
+		now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	if _, _, _, err := store.ApplyPayment(admission, now); err != nil {
+		t.Fatal(err)
+	}
+	key := paymentKey(scope.Network, admission.AuthorizationID, admission.Reference)
+	if err := store.db.Update(func(transaction *bolt.Tx) error {
+		bucket := transaction.Bucket(paymentsBucket)
+		payment, err := store.decodePayment(bucket.Get(key[:]))
+		if err != nil {
+			return err
+		}
+		payment.ExecutionAuthorization.Quote.IntentDigest =
+			"sha256:" + strings.Repeat("9", 64)
+		encoded, err := json.Marshal(payment)
+		if err != nil {
+			return err
+		}
+		return bucket.Put(key[:], encoded)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetPayment(scope, now); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("corrupt execution authorization error = %v", err)
+	}
+}
+
+func TestLegacyPaymentWithoutExecutionAuthorizationStillOpens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := testScope("legacy-payment-context")
+	if _, _, err := store.Begin(
+		scope,
+		"sha256:"+strings.Repeat("a", 64),
+		now,
+		now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	if _, _, _, err := store.ApplyPayment(admission, now); err != nil {
+		t.Fatal(err)
+	}
+	key := paymentKey(scope.Network, admission.AuthorizationID, admission.Reference)
+	if err := store.db.Update(func(transaction *bolt.Tx) error {
+		bucket := transaction.Bucket(paymentsBucket)
+		payment, err := store.decodePayment(bucket.Get(key[:]))
+		if err != nil {
+			return err
+		}
+		payment.ExecutionAuthorization = nil
+		encoded, err := json.Marshal(payment)
+		if err != nil {
+			return err
+		}
+		return bucket.Put(key[:], encoded)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	legacy, err := reopened.GetPayment(scope, now)
+	if err != nil || legacy.ExecutionAuthorization != nil {
+		t.Fatalf("legacy payment = %#v, err = %v", legacy, err)
+	}
+}
+
+func TestPaymentExecutionAuthorizationReplaysAfterReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := testScope("payment-context-reopen")
+	if _, _, err := store.Begin(
+		scope,
+		"sha256:"+strings.Repeat("a", 64),
+		now,
+		now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	if _, _, _, err := store.ApplyPayment(admission, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	_, payment, disposition, err := reopened.ApplyPayment(
+		admission,
+		now.Add(time.Second),
+	)
+	if err != nil || disposition != PaymentReplay ||
+		!samePaymentExecutionAuthorization(
+			payment.ExecutionAuthorization,
+			admission.ExecutionAuthorization,
+		) {
+		t.Fatalf(
+			"payment replay = %#v, disposition=%q, err=%v",
+			payment,
+			disposition,
+			err,
+		)
+	}
+}
+
 func TestClaimExecutionAtomicallyRunsAndReplaysExactRequest(t *testing.T) {
 	store, _ := openTestStore(t, testLimits(100))
 	now := time.Unix(1_800_000_000, 0).UTC()
@@ -801,6 +986,7 @@ func TestClaimExecutionRejectsTaskReplayAcrossRequests(t *testing.T) {
 	secondPayment.Reference = "payment-reference-0002"
 	secondPayment.QuoteEnvelopeDigest = "sha256:" + strings.Repeat("9", 64)
 	secondPayment.PaymentEnvelopeDigest = "sha256:" + strings.Repeat("0", 64)
+	syncTestPaymentExecutionAuthorization(&secondPayment)
 
 	var authorized []Record
 	for _, item := range []struct {
@@ -941,7 +1127,8 @@ func TestPaymentReorganizationBlocksPaidDispatch(t *testing.T) {
 	replayed, disposition, err := store.MarkPaymentReorganized(
 		reorganization, now.Add(2*time.Second),
 	)
-	if err != nil || disposition != PaymentReplay || replayed != payment {
+	if err != nil || disposition != PaymentReplay ||
+		!reflect.DeepEqual(replayed, payment) {
 		t.Fatalf(
 			"reorganization replay: payment=%#v disposition=%q err=%v",
 			replayed, disposition, err,
@@ -1042,6 +1229,7 @@ func TestPaymentScanCursorIsBoundedDurableAndCASProtected(t *testing.T) {
 		admission.AuthorizationID = fmt.Sprintf("authorization-scan-%d", index)
 		admission.QuoteID = fmt.Sprintf("quote-scan-%d", index)
 		admission.Reference = fmt.Sprintf("payment-reference-scan-%d", index)
+		syncTestPaymentExecutionAuthorization(&admission)
 		if _, _, err := store.Begin(
 			scope, admission.IntentDigest, now, now.Add(time.Hour),
 		); err != nil {
@@ -1119,6 +1307,7 @@ func TestPaymentScanCountsExpiredEntriesTowardBound(t *testing.T) {
 		admission.AuthorizationID = fmt.Sprintf("authorization-expiry-%d", index)
 		admission.QuoteID = fmt.Sprintf("quote-expiry-%d", index)
 		admission.Reference = fmt.Sprintf("payment-reference-expiry-%d", index)
+		syncTestPaymentExecutionAuthorization(&admission)
 		if _, _, err := store.Begin(
 			scope, admission.IntentDigest, now, now.Add(retention),
 		); err != nil {
@@ -1290,6 +1479,7 @@ func TestApplyReceiptRejectsReplayChargeAndReorganization(t *testing.T) {
 	secondPayment.AuthorizationID = "authorization-0002"
 	secondPayment.QuoteID = "quote-0002"
 	secondPayment.Reference = "payment-reference-0002"
+	syncTestPaymentExecutionAuthorization(&secondPayment)
 	if _, _, err := store.Begin(
 		secondScope, secondPayment.IntentDigest, now, now.Add(time.Hour),
 	); err != nil {

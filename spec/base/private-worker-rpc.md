@@ -144,6 +144,15 @@ Edge's journal stores only the digest, not the potentially sensitive
 invocation payload. Recovery therefore starts from an authenticated replay or
 a deterministic profile mapping that reproduces the exact request. The
 persisted claim and `BindInvocationRequest` reject any changed reconstruction.
+For paid restart recovery, the payment transaction also preserves a bounded
+semantic copy of the verified quote, payment authorization, and negotiated
+profile selector. This permits deterministic reconstruction after the quote's
+acceptance window expires without treating the expired quote as authority for
+new work. The caller still supplies the exact intent bytes; Edge recomputes the
+intent commitment before mapping. A durable `running` request can only call
+read-only `GetTask`, while a durable terminal request can only replay the
+receipt already committed in the journal. Reorganization blocks nonterminal
+recovery before the Worker is contacted.
 
 The generic Edge mapping boundary is deterministic and fail closed. It first
 recomputes `tos.request-intent.v1` over the negotiated profile ID, version and

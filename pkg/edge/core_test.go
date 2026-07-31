@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -331,6 +332,44 @@ func (r *coreRecoveringPaymentResolver) callTimes() []time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]time.Time(nil), r.calls...)
+}
+
+func coreJournalExecutionAuthorization(
+	scope journal.Scope,
+	intentDigest string,
+	authorizationID string,
+	quoteID string,
+	reference string,
+	payer string,
+	payee string,
+	amountNanoTOS uint64,
+	now time.Time,
+) *journal.PaymentExecutionAuthorization {
+	return &journal.PaymentExecutionAuthorization{
+		Quote: protocol.Quote{
+			Version: protocol.BaseEnvelopeVersion,
+			QuoteID: quoteID, RequestID: scope.RequestID,
+			SessionID: scope.SessionID, ServiceID: scope.ServiceID,
+			ProfileID: "tos.ai.inference", Operation: scope.Operation,
+			IntentDigest:     intentDigest,
+			ServiceRevision:  "manifest-revision-1",
+			ResourceRevision: "resource-revision-1",
+			Network:          scope.Network, Payee: payee, Settlement: reference,
+			PriceNanoTOS:  amountNanoTOS,
+			MaxInputBytes: 1_024, MaxOutputBytes: 2_048,
+			IssuedAt: now, Deadline: now.Add(5 * time.Minute),
+			ExpiresAt: now.Add(time.Minute),
+		},
+		PaymentAuthorization: protocol.PaymentAuthorization{
+			Version:         protocol.BaseEnvelopeVersion,
+			AuthorizationID: authorizationID,
+			QuoteID:         quoteID, RequestID: scope.RequestID,
+			Network: scope.Network, Payer: payer, Payee: payee,
+			MaxNanoTOS: amountNanoTOS, Reference: reference,
+			ExpiresAt: now.Add(time.Minute),
+		},
+		ProfileVersion: "0.1.0",
+	}
 }
 
 func (r *coreBlockingPaymentResolver) ObservePayment(
@@ -698,14 +737,14 @@ func TestCoreAppliesOnlyVerifiedPaymentObservation(t *testing.T) {
 		core.ApplyVerifiedPayment(scope, intent, authorized, verified, 101)
 	if err != nil ||
 		paymentDisposition != journal.PaymentReplay ||
-		replayedRecord != record || replayedPayment != applied {
+		replayedRecord != record || !reflect.DeepEqual(replayedPayment, applied) {
 		t.Fatalf(
 			"payment replay: record=%#v payment=%#v disposition=%q err=%v",
 			replayedRecord, replayedPayment, paymentDisposition, err,
 		)
 	}
 	stored, err := core.Payment(scope)
-	if err != nil || stored != applied {
+	if err != nil || !reflect.DeepEqual(stored, applied) {
 		t.Fatalf("stored payment=%#v err=%v", stored, err)
 	}
 	refreshedState := initialState
@@ -1180,6 +1219,17 @@ func TestCorePaymentReconciliationBacksOffAndRecovers(t *testing.T) {
 		QuoteEnvelopeDigest:   material.QuoteEnvelopeDigest,
 		PaymentEnvelopeDigest: material.PaymentEnvelopeDigest,
 		ObservedMasterSeqno:   101, ObservedAt: now,
+		ExecutionAuthorization: coreJournalExecutionAuthorization(
+			scope,
+			intent,
+			material.AuthorizationID,
+			material.QuoteID,
+			material.Reference,
+			material.Payer,
+			material.Payee,
+			material.PriceNanoTOS,
+			now,
+		),
 	}, now); err != nil {
 		t.Fatal(err)
 	}
@@ -1270,6 +1320,17 @@ func TestCoreCloseCancelsScheduledPaymentReconciliation(t *testing.T) {
 		QuoteEnvelopeDigest:   "sha256:" + strings.Repeat("e", 64),
 		PaymentEnvelopeDigest: "sha256:" + strings.Repeat("f", 64),
 		ObservedMasterSeqno:   101, ObservedAt: now,
+		ExecutionAuthorization: coreJournalExecutionAuthorization(
+			scope,
+			intent,
+			"authorization-scheduled-0001",
+			"quote-scheduled-0001",
+			"payment-reference-scheduled-0001",
+			"payer-wallet",
+			"service-wallet",
+			5,
+			now,
+		),
 	}, now); err != nil {
 		t.Fatal(err)
 	}

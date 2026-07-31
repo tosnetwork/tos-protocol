@@ -154,6 +154,45 @@ func (c *Core) MapAndClaimRegisteredPaidExecution(
 	)
 }
 
+// MapAndClaimRecoveredPaidExecution reconstructs only the exact paid
+// authorization previously committed in the request journal. It permits
+// restart recovery after the quote acceptance window has elapsed, while the
+// original execution deadline and request retention remain authoritative.
+func (c *Core) MapAndClaimRecoveredPaidExecution(
+	ctx context.Context,
+	scope journal.Scope,
+	intent []byte,
+	registry *ProfileInvocationRegistry,
+	worker *localrpc.WorkerClient,
+) (ClaimedInvocation, error) {
+	if registry == nil {
+		return ClaimedInvocation{}, errors.New(
+			"nil profile invocation registry",
+		)
+	}
+	_, material, request, err := c.recoveredExecutionAuthorization(scope)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	if request.State != journal.StateAuthorized &&
+		request.State != journal.StateRunning {
+		return ClaimedInvocation{}, journal.ErrTransition
+	}
+	mapper, err := registry.resolve(material)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	return c.mapAndClaimPaidExecutionMaterial(
+		ctx,
+		scope,
+		request.Revision,
+		material,
+		intent,
+		mapper,
+		worker,
+	)
+}
+
 func canonicalProfileInvocationSelector(
 	profileID string,
 	profileVersion string,

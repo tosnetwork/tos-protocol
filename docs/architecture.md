@@ -25,7 +25,11 @@ transactional replay/idempotency records, compare-and-swap request
 transitions, authenticated-envelope nonce admission, restart recovery data,
 capacity backpressure, exact-once payment application, payment reorganization
 gating, atomic paid execution claims, atomic signed-receipt terminal
-application, and bounded expiry cleanup.
+application, and bounded expiry cleanup. Payment application atomically retains
+the minimum verified quote/payment/profile context required to reconstruct the
+same execution after restart and quote expiry. Recovery revalidates every
+binding, never stores the intent or Worker payload, uses `GetTask` for a
+running claim, and can only replay an already-committed terminal receipt.
 The authorization library
 verifies fresh controller authority, the current signed manifest, runtime
 roles and revocation, canonical semantic payloads, and admission bindings.
@@ -84,10 +88,10 @@ no invocation route.
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
-| Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, post-expiry recheck, bounded batch coordinator, adaptive scheduler and binary runtime composition implemented; refund reconciliation remains |
+| Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, atomic bounded recovery context, post-expiry recheck, bounded batch coordinator, adaptive scheduler and binary runtime composition implemented; refund reconciliation remains |
 | Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results and zero-charge failed/canceled/timed-out outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; production signer, profile refund/charging policy and public delivery remain |
 | Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; reviewed vertical mapper implementations and startup configuration remain |
-| Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment application, reorganization dispatch gate, exact paid execution claim, full signed-receipt terminal application, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
+| Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment plus bounded execution-authorization persistence, reorganization dispatch gate, exact paid execution claim, quote-expiry-safe Worker recovery, full signed-receipt terminal application/replay, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded TOS success/error envelopes plus strict-majority authority, key and native-payment adapters, startup preflight and freshness-bounded readiness implemented and three-node tested |
 | Policy | OPA | adapter planned after policy vocabulary is normative |

@@ -42,15 +42,20 @@ application boundary described in
 client/delegation-signed authorization, exact echoed chain reference, party
 and amount checks, high-water/freshness checks, and explicit finality and
 overpayment policy. The resulting opaque observation, payment replay index,
-and pending-to-authorized request transition are persisted atomically.
+pending-to-authorized request transition, and minimal immutable execution
+authorization derived from the verified quote/payment/profile binding are
+persisted atomically. The durable authorization is recovery material for that
+exact paid request only; it MUST NOT admit another request or extend the quote
+acceptance window.
 Monotonic reorganization state blocks paid dispatch. Post-expiry rechecks use
 the durable immutable binding, and a count-bounded coordinator advances one
-crash-safe CAS scan cursor only after attempting its page. A concrete TOS
-contract adapter and `tos-edge` wiring, adaptive watcher backoff, exported
-operational metrics, and refund handling remain required before public paid
-execution. The library scheduler is opt-in and applies a whole-batch timeout
-and shutdown cancellation; it does not infer production chain endpoints or
-policy.
+crash-safe CAS scan cursor only after attempting its page. The concrete quorum
+TOS adapter, `tos-edge` startup composition, adaptive watcher backoff, and
+operational health counters are implemented. Refund handling, reviewed public
+profile wiring, and production receipt delivery remain required before public
+paid execution. The library scheduler is opt-in and applies a whole-batch
+timeout and shutdown cancellation; it does not infer production chain
+endpoints or policy.
 
 ## Reorganization and failure
 
@@ -105,6 +110,17 @@ remain nonterminal and do not call key custody or mutate receipt state.
 Terminal resolution derives `receipt-<sha256>` from the durable execution
 identity. Exact retry therefore replays the stored receipt, while a changed
 terminal meaning for the same execution conflicts at the journal boundary.
+
+For restart recovery, the reference journal stores bounded semantic quote and
+payment-authorization values plus the negotiated profile selector in the same
+transaction that applies payment. It deliberately does not store the public
+intent or private Worker payload. A caller must resupply the intent; Edge
+recomputes its profile-bound digest and exact Worker mapping. An authorized
+request may be invoked once, an already-running request may only use read-only
+`GetTask`, and a terminal request may only replay its stored receipt. Missing
+legacy context, malformed or mismatched context, and a reorganized nonterminal
+payment fail closed. Receipt issuance still requires the current manifest and
+current `receipt` role; persisted recovery context is never signing authority.
 
 This does not provide production key custody or public delivery. A deployment
 must supply a bounded signer adapter, keep its private key outside the Worker,

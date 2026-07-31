@@ -101,14 +101,47 @@ func (c *Core) DispatchRegisteredPaidExecution(
 		registry,
 		worker,
 	)
-	if err != nil {
+	return dispatchClaimedExecution(ctx, claimed, worker, err)
+}
+
+// DispatchRecoveredPaidExecution performs the same one-safe-next-action rule
+// using only the exact durable payment context committed before restart. A
+// previously running request is queried through GetTask and is never invoked
+// again.
+func (c *Core) DispatchRecoveredPaidExecution(
+	ctx context.Context,
+	scope journal.Scope,
+	intent []byte,
+	registry *ProfileInvocationRegistry,
+	worker *localrpc.WorkerClient,
+) (ExecutionDispatch, error) {
+	claimed, err := c.MapAndClaimRecoveredPaidExecution(
+		ctx,
+		scope,
+		intent,
+		registry,
+		worker,
+	)
+	return dispatchClaimedExecution(ctx, claimed, worker, err)
+}
+
+func dispatchClaimedExecution(
+	ctx context.Context,
+	claimed ClaimedInvocation,
+	worker *localrpc.WorkerClient,
+	claimErr error,
+) (ExecutionDispatch, error) {
+	if worker == nil {
+		return ExecutionDispatch{}, errors.New("nil Worker client")
+	}
+	if claimErr != nil {
 		if claimed.Request != nil && claimed.Disposition != "" {
 			return ExecutionDispatch{
 				valid: true, disposition: ExecutionDispatchUncertain,
 				claim: cloneClaimedInvocation(claimed),
-			}, err
+			}, claimErr
 		}
-		return ExecutionDispatch{}, err
+		return ExecutionDispatch{}, claimErr
 	}
 	dispatch := ExecutionDispatch{
 		valid: true, disposition: ExecutionDispatchUncertain,

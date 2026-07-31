@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -240,18 +241,30 @@ const (
 // PaymentAdmission is material from a fresh opaque chain observation. The
 // request must already exist in pending state with the same intent.
 type PaymentAdmission struct {
-	Scope                 Scope
-	IntentDigest          string
-	AuthorizationID       string
-	QuoteID               string
-	Reference             string
-	Payer                 string
-	Payee                 string
-	AmountNanoTOS         uint64
-	QuoteEnvelopeDigest   string
-	PaymentEnvelopeDigest string
-	ObservedMasterSeqno   uint64
-	ObservedAt            time.Time
+	Scope                  Scope
+	IntentDigest           string
+	AuthorizationID        string
+	QuoteID                string
+	Reference              string
+	Payer                  string
+	Payee                  string
+	AmountNanoTOS          uint64
+	QuoteEnvelopeDigest    string
+	PaymentEnvelopeDigest  string
+	ObservedMasterSeqno    uint64
+	ObservedAt             time.Time
+	ExecutionAuthorization *PaymentExecutionAuthorization
+}
+
+// PaymentExecutionAuthorization is the bounded semantic context required to
+// reconstruct a paid execution and receipt after process restart. It is
+// persisted only after the live authorization and chain-observation layers
+// have produced opaque verified results.
+type PaymentExecutionAuthorization struct {
+	Quote                protocol.Quote                `json:"quote"`
+	PaymentAuthorization protocol.PaymentAuthorization `json:"paymentAuthorization"`
+	ProfileVersion       string                        `json:"profileVersion"`
+	ProfileExtensions    []string                      `json:"profileExtensions,omitempty"`
 }
 
 type PaymentReorganization struct {
@@ -264,24 +277,25 @@ type PaymentReorganization struct {
 }
 
 type PaymentRecord struct {
-	Version               string        `json:"version"`
-	Scope                 Scope         `json:"scope"`
-	IntentDigest          string        `json:"intentDigest"`
-	AuthorizationID       string        `json:"authorizationId"`
-	QuoteID               string        `json:"quoteId"`
-	Reference             string        `json:"reference"`
-	Payer                 string        `json:"payer"`
-	Payee                 string        `json:"payee"`
-	AmountNanoTOS         uint64        `json:"amountNanoTos"`
-	QuoteEnvelopeDigest   string        `json:"quoteEnvelopeDigest"`
-	PaymentEnvelopeDigest string        `json:"paymentEnvelopeDigest"`
-	Status                PaymentStatus `json:"status"`
-	Revision              uint64        `json:"revision"`
-	ObservedMasterSeqno   uint64        `json:"observedMasterSeqno"`
-	ObservedAt            time.Time     `json:"observedAt"`
-	AppliedAt             time.Time     `json:"appliedAt"`
-	ReorganizedAt         time.Time     `json:"reorganizedAt,omitempty"`
-	RetainUntil           time.Time     `json:"retainUntil"`
+	Version                string                         `json:"version"`
+	Scope                  Scope                          `json:"scope"`
+	IntentDigest           string                         `json:"intentDigest"`
+	AuthorizationID        string                         `json:"authorizationId"`
+	QuoteID                string                         `json:"quoteId"`
+	Reference              string                         `json:"reference"`
+	Payer                  string                         `json:"payer"`
+	Payee                  string                         `json:"payee"`
+	AmountNanoTOS          uint64                         `json:"amountNanoTos"`
+	QuoteEnvelopeDigest    string                         `json:"quoteEnvelopeDigest"`
+	PaymentEnvelopeDigest  string                         `json:"paymentEnvelopeDigest"`
+	Status                 PaymentStatus                  `json:"status"`
+	Revision               uint64                         `json:"revision"`
+	ObservedMasterSeqno    uint64                         `json:"observedMasterSeqno"`
+	ObservedAt             time.Time                      `json:"observedAt"`
+	AppliedAt              time.Time                      `json:"appliedAt"`
+	ReorganizedAt          time.Time                      `json:"reorganizedAt,omitempty"`
+	RetainUntil            time.Time                      `json:"retainUntil"`
+	ExecutionAuthorization *PaymentExecutionAuthorization `json:"executionAuthorization,omitempty"`
 }
 
 // ExecutionAdmission binds one exact private Worker request to a paid request.
@@ -718,6 +732,9 @@ func (s *Store) ApplyPayment(
 	admission PaymentAdmission,
 	now time.Time,
 ) (Record, PaymentRecord, PaymentDisposition, error) {
+	admission.ExecutionAuthorization = clonePaymentExecutionAuthorization(
+		admission.ExecutionAuthorization,
+	)
 	now, err := admission.validate(now)
 	if err != nil {
 		return Record{}, PaymentRecord{}, "", err
@@ -807,6 +824,23 @@ func (s *Store) ApplyPayment(
 		if record.State != StatePending {
 			return ErrTransition
 		}
+		if admission.ExecutionAuthorization == nil {
+			return errors.New(
+				"new payment requires durable execution authorization",
+			)
+		}
+		if err := admission.ExecutionAuthorization.validateBinding(
+			admission.Scope,
+			admission.IntentDigest,
+			admission.AuthorizationID,
+			admission.QuoteID,
+			admission.Reference,
+			admission.Payer,
+			admission.Payee,
+			admission.AmountNanoTOS,
+		); err != nil {
+			return err
+		}
 		payment := PaymentRecord{
 			Version: "1", Scope: admission.Scope,
 			IntentDigest:    admission.IntentDigest,
@@ -820,6 +854,9 @@ func (s *Store) ApplyPayment(
 			ObservedMasterSeqno: admission.ObservedMasterSeqno,
 			ObservedAt:          admission.ObservedAt.UTC(),
 			AppliedAt:           now, RetainUntil: record.RetainUntil,
+			ExecutionAuthorization: clonePaymentExecutionAuthorization(
+				admission.ExecutionAuthorization,
+			),
 		}
 		encodedPayment, err := s.encodePayment(payment)
 		if err != nil {
@@ -2703,7 +2740,80 @@ func (a PaymentAdmission) validate(now time.Time) (time.Time, error) {
 	if a.ObservedAt.UTC().After(now.Add(maxPaymentClockSkew)) {
 		return time.Time{}, errors.New("payment observation is excessively future-dated")
 	}
+	if a.ExecutionAuthorization != nil {
+		if err := a.ExecutionAuthorization.validate(); err != nil {
+			return time.Time{}, err
+		}
+	}
 	return now, nil
+}
+
+func (a PaymentExecutionAuthorization) validate() error {
+	if a.Quote.IssuedAt.IsZero() {
+		return errors.New("payment execution authorization has no quote issue time")
+	}
+	if err := a.Quote.Validate(a.Quote.IssuedAt); err != nil {
+		return fmt.Errorf("invalid durable execution quote: %w", err)
+	}
+	if err := a.PaymentAuthorization.Validate(
+		a.Quote,
+		a.Quote.IssuedAt,
+	); err != nil {
+		return fmt.Errorf("invalid durable payment authorization: %w", err)
+	}
+	negotiated, err := protocol.NegotiateProfile(
+		protocol.ProfileRequest{
+			ID:                a.Quote.ProfileID,
+			SupportedVersions: []string{a.ProfileVersion},
+			SupportedExtensions: append(
+				[]string(nil), a.ProfileExtensions...,
+			),
+		},
+		protocol.ProfileOffer{
+			ID:       a.Quote.ProfileID,
+			Versions: []string{a.ProfileVersion},
+			CriticalExtensions: append(
+				[]string(nil), a.ProfileExtensions...,
+			),
+		},
+	)
+	if err != nil || negotiated.Version != a.ProfileVersion ||
+		!slices.Equal(negotiated.Extensions, a.ProfileExtensions) {
+		return errors.New("invalid durable execution profile")
+	}
+	return nil
+}
+
+func (a PaymentExecutionAuthorization) validateBinding(
+	scope Scope,
+	intentDigest string,
+	authorizationID string,
+	quoteID string,
+	reference string,
+	payer string,
+	payee string,
+	amountNanoTOS uint64,
+) error {
+	if err := a.validate(); err != nil {
+		return err
+	}
+	if a.Quote.Network != scope.Network ||
+		a.Quote.ServiceID != scope.ServiceID ||
+		a.Quote.SessionID != scope.SessionID ||
+		a.Quote.Operation != scope.Operation ||
+		a.Quote.RequestID != scope.RequestID ||
+		a.Quote.IntentDigest != intentDigest ||
+		a.Quote.QuoteID != quoteID ||
+		a.Quote.Settlement != reference ||
+		a.Quote.Payee != payee ||
+		a.Quote.PriceNanoTOS > amountNanoTOS ||
+		a.PaymentAuthorization.AuthorizationID != authorizationID ||
+		a.PaymentAuthorization.Payer != payer {
+		return errors.New(
+			"durable execution authorization does not match payment binding",
+		)
+	}
+	return nil
 }
 
 func (r PaymentReorganization) validate(now time.Time) (time.Time, error) {
@@ -2804,6 +2914,20 @@ func (p PaymentRecord) validateStored(limits Limits) error {
 		}
 	default:
 		return errors.New("invalid payment status")
+	}
+	if p.ExecutionAuthorization != nil {
+		if err := p.ExecutionAuthorization.validateBinding(
+			p.Scope,
+			p.IntentDigest,
+			p.AuthorizationID,
+			p.QuoteID,
+			p.Reference,
+			p.Payer,
+			p.Payee,
+			p.AmountNanoTOS,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -3531,6 +3655,22 @@ func cloneReceiptEnvelope(envelope identity.Envelope) identity.Envelope {
 	return envelope
 }
 
+func clonePaymentExecutionAuthorization(
+	value *PaymentExecutionAuthorization,
+) *PaymentExecutionAuthorization {
+	if value == nil {
+		return nil
+	}
+	output := *value
+	output.Quote.ResourceLimits = append(
+		[]protocol.ResourceLimit(nil), value.Quote.ResourceLimits...,
+	)
+	output.ProfileExtensions = append(
+		[]string(nil), value.ProfileExtensions...,
+	)
+	return &output
+}
+
 func receiptStatusString(status State) string {
 	switch status {
 	case StateSucceeded:
@@ -3568,7 +3708,12 @@ func samePaymentBinding(
 	record PaymentRecord,
 	admission PaymentAdmission,
 ) bool {
-	return record.Scope == admission.Scope &&
+	return (admission.ExecutionAuthorization == nil ||
+		samePaymentExecutionAuthorization(
+			record.ExecutionAuthorization,
+			admission.ExecutionAuthorization,
+		)) &&
+		record.Scope == admission.Scope &&
 		record.IntentDigest == admission.IntentDigest &&
 		record.AuthorizationID == admission.AuthorizationID &&
 		record.QuoteID == admission.QuoteID &&
@@ -3578,6 +3723,21 @@ func samePaymentBinding(
 		record.AmountNanoTOS == admission.AmountNanoTOS &&
 		record.QuoteEnvelopeDigest == admission.QuoteEnvelopeDigest &&
 		record.PaymentEnvelopeDigest == admission.PaymentEnvelopeDigest
+}
+
+func samePaymentExecutionAuthorization(
+	left *PaymentExecutionAuthorization,
+	right *PaymentExecutionAuthorization,
+) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	leftEncoded, err := codec.Marshal(left)
+	if err != nil {
+		return false
+	}
+	rightEncoded, err := codec.Marshal(right)
+	return err == nil && bytes.Equal(leftEncoded, rightEncoded)
 }
 
 func budgetKey(

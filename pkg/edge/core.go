@@ -133,6 +133,13 @@ type ClaimedInvocation struct {
 	Disposition journal.ExecutionDisposition
 }
 
+type receiptIssuer func(
+	context.Context,
+	authorization.ReceiptDraft,
+	time.Time,
+	time.Time,
+) (authorization.VerifiedReceipt, error)
+
 // Core owns durable request replay state and its bounded cleanup lifecycle.
 // It intentionally has no public HTTP action handler yet.
 type Core struct {
@@ -348,16 +355,23 @@ func (c *Core) ApplyVerifiedPayment(
 			"authorize payment application: %w", err,
 		)
 	}
+	durable, err := authorized.DurableExecutionAuthorization()
+	if err != nil {
+		return journal.Record{}, journal.PaymentRecord{}, "", fmt.Errorf(
+			"extract durable execution authorization: %w", err,
+		)
+	}
 	return c.requests.ApplyPayment(journal.PaymentAdmission{
 		Scope: scope, IntentDigest: material.IntentDigest,
 		AuthorizationID: material.AuthorizationID,
 		QuoteID:         material.QuoteID, Reference: material.Reference,
 		Payer: material.Payer, Payee: material.Payee,
-		AmountNanoTOS:         material.AmountNanoTOS,
-		QuoteEnvelopeDigest:   material.QuoteEnvelopeDigest,
-		PaymentEnvelopeDigest: material.PaymentEnvelopeDigest,
-		ObservedMasterSeqno:   material.ObservedMasterSeqno,
-		ObservedAt:            material.ObservedAt,
+		AmountNanoTOS:          material.AmountNanoTOS,
+		QuoteEnvelopeDigest:    material.QuoteEnvelopeDigest,
+		PaymentEnvelopeDigest:  material.PaymentEnvelopeDigest,
+		ObservedMasterSeqno:    material.ObservedMasterSeqno,
+		ObservedAt:             material.ObservedAt,
+		ExecutionAuthorization: journalExecutionAuthorization(durable),
 	}, now)
 }
 
@@ -473,10 +487,6 @@ func (c *Core) ClaimPaidExecution(
 	paymentAuthorization authorization.AuthorizedPayment,
 	request *edgev1.InvokeRequest,
 ) (ClaimedInvocation, error) {
-	if request == nil {
-		return ClaimedInvocation{}, errors.New("nil Worker invocation request")
-	}
-	request = proto.Clone(request).(*edgev1.InvokeRequest)
 	material, err := paymentAuthorization.ReceiptInvocationMaterial()
 	if err != nil {
 		return ClaimedInvocation{}, fmt.Errorf(
@@ -484,6 +494,24 @@ func (c *Core) ClaimPaidExecution(
 			err,
 		)
 	}
+	return c.claimPaidExecutionMaterial(
+		scope,
+		expectedRevision,
+		material,
+		request,
+	)
+}
+
+func (c *Core) claimPaidExecutionMaterial(
+	scope journal.Scope,
+	expectedRevision uint64,
+	material authorization.ReceiptInvocationMaterial,
+	request *edgev1.InvokeRequest,
+) (ClaimedInvocation, error) {
+	if request == nil {
+		return ClaimedInvocation{}, errors.New("nil Worker invocation request")
+	}
+	request = proto.Clone(request).(*edgev1.InvokeRequest)
 	if scope.Network != material.Network ||
 		scope.ServiceID != material.ServiceID ||
 		scope.SessionID != material.SessionID ||
@@ -587,6 +615,105 @@ func (c *Core) CompleteSuccessfulInvocation(
 			err,
 		)
 	}
+	return c.completeSuccessfulInvocation(
+		ctx,
+		scope,
+		expectedRevision,
+		material,
+		invocation,
+		receiptID,
+		receiptLifetime,
+		func(
+			ctx context.Context,
+			draft authorization.ReceiptDraft,
+			issuedAt time.Time,
+			expiresAt time.Time,
+		) (authorization.VerifiedReceipt, error) {
+			return manifest.IssueReceipt(
+				ctx,
+				paymentAuthorization,
+				draft,
+				signer,
+				issuedAt,
+				expiresAt,
+			)
+		},
+	)
+}
+
+// CompleteRecoveredSuccessfulInvocation issues the terminal receipt from the
+// exact semantic authorization stored with the applied payment. It exists for
+// restart recovery after the quote acceptance window, not for admitting new
+// work or observing another payment.
+func (c *Core) CompleteRecoveredSuccessfulInvocation(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	manifest *authorization.VerifiedManifest,
+	invocation localrpc.ValidatedInvocation,
+	signer authorization.ReceiptSigner,
+	receiptID string,
+	receiptLifetime time.Duration,
+) (CompletedInvocation, error) {
+	durable, material, _, err := c.recoveredExecutionAuthorization(scope)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
+	return c.completeSuccessfulInvocation(
+		ctx,
+		scope,
+		expectedRevision,
+		material,
+		invocation,
+		receiptID,
+		receiptLifetime,
+		func(
+			ctx context.Context,
+			draft authorization.ReceiptDraft,
+			issuedAt time.Time,
+			expiresAt time.Time,
+		) (authorization.VerifiedReceipt, error) {
+			return manifest.IssueDurableReceipt(
+				ctx,
+				durable,
+				draft,
+				signer,
+				issuedAt,
+				expiresAt,
+			)
+		},
+	)
+}
+
+func (c *Core) completeSuccessfulInvocation(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	material authorization.ReceiptInvocationMaterial,
+	invocation localrpc.ValidatedInvocation,
+	receiptID string,
+	receiptLifetime time.Duration,
+	issue receiptIssuer,
+) (CompletedInvocation, error) {
+	if ctx == nil {
+		return CompletedInvocation{}, errors.New(
+			"nil invocation completion context",
+		)
+	}
+	if expectedRevision == 0 {
+		return CompletedInvocation{}, errors.New(
+			"expected revision must be positive",
+		)
+	}
+	if receiptLifetime < minReceiptLifetime ||
+		receiptLifetime > maxReceiptLifetime {
+		return CompletedInvocation{}, errors.New(
+			"invalid receipt envelope lifetime",
+		)
+	}
+	if issue == nil {
+		return CompletedInvocation{}, errors.New("nil receipt issuer")
+	}
 	if scope.Network != material.Network ||
 		scope.ServiceID != material.ServiceID ||
 		scope.SessionID != material.SessionID ||
@@ -682,15 +809,13 @@ func (c *Core) CompleteSuccessfulInvocation(
 			"receipt request has insufficient applied payment",
 		)
 	}
-	verified, err := manifest.IssueReceipt(
+	verified, err := issue(
 		ctx,
-		paymentAuthorization,
 		authorization.ReceiptDraft{
 			ReceiptID: receiptID, Status: "succeeded",
 			Usage: usage, ChargedNanoTOS: material.PriceNanoTOS,
 			ResultDigest: resultDigest, CompletedAt: completion.CompletedAt,
 		},
-		signer,
 		now,
 		now.Add(receiptLifetime),
 	)
@@ -745,6 +870,91 @@ func (c *Core) CompleteInvocationFailure(
 	status NonSuccessStatus,
 	receiptLifetime time.Duration,
 ) (TerminatedInvocation, error) {
+	material, err := paymentAuthorization.ReceiptInvocationMaterial()
+	if err != nil {
+		return TerminatedInvocation{}, fmt.Errorf(
+			"extract receipt invocation binding: %w",
+			err,
+		)
+	}
+	return c.completeInvocationFailure(
+		ctx,
+		scope,
+		expectedRevision,
+		material,
+		receiptID,
+		status,
+		receiptLifetime,
+		func(
+			ctx context.Context,
+			draft authorization.ReceiptDraft,
+			issuedAt time.Time,
+			expiresAt time.Time,
+		) (authorization.VerifiedReceipt, error) {
+			return manifest.IssueReceipt(
+				ctx,
+				paymentAuthorization,
+				draft,
+				signer,
+				issuedAt,
+				expiresAt,
+			)
+		},
+	)
+}
+
+// CompleteRecoveredInvocationFailure applies the conservative zero-charge
+// failure policy using only the exact durable payment context.
+func (c *Core) CompleteRecoveredInvocationFailure(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	manifest *authorization.VerifiedManifest,
+	signer authorization.ReceiptSigner,
+	receiptID string,
+	status NonSuccessStatus,
+	receiptLifetime time.Duration,
+) (TerminatedInvocation, error) {
+	durable, material, _, err := c.recoveredExecutionAuthorization(scope)
+	if err != nil {
+		return TerminatedInvocation{}, err
+	}
+	return c.completeInvocationFailure(
+		ctx,
+		scope,
+		expectedRevision,
+		material,
+		receiptID,
+		status,
+		receiptLifetime,
+		func(
+			ctx context.Context,
+			draft authorization.ReceiptDraft,
+			issuedAt time.Time,
+			expiresAt time.Time,
+		) (authorization.VerifiedReceipt, error) {
+			return manifest.IssueDurableReceipt(
+				ctx,
+				durable,
+				draft,
+				signer,
+				issuedAt,
+				expiresAt,
+			)
+		},
+	)
+}
+
+func (c *Core) completeInvocationFailure(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	material authorization.ReceiptInvocationMaterial,
+	receiptID string,
+	status NonSuccessStatus,
+	receiptLifetime time.Duration,
+	issue receiptIssuer,
+) (TerminatedInvocation, error) {
 	if ctx == nil {
 		return TerminatedInvocation{}, errors.New(
 			"nil invocation failure context",
@@ -767,12 +977,8 @@ func (c *Core) CompleteInvocationFailure(
 			"unsupported invocation failure status",
 		)
 	}
-	material, err := paymentAuthorization.ReceiptInvocationMaterial()
-	if err != nil {
-		return TerminatedInvocation{}, fmt.Errorf(
-			"extract receipt invocation binding: %w",
-			err,
-		)
+	if issue == nil {
+		return TerminatedInvocation{}, errors.New("nil receipt issuer")
 	}
 	if scope.Network != material.Network ||
 		scope.ServiceID != material.ServiceID ||
@@ -848,15 +1054,13 @@ func (c *Core) CompleteInvocationFailure(
 	if status == InvocationTimedOut && material.Deadline.Before(completedAt) {
 		completedAt = material.Deadline
 	}
-	verified, err := manifest.IssueReceipt(
+	verified, err := issue(
 		ctx,
-		paymentAuthorization,
 		authorization.ReceiptDraft{
 			ReceiptID: receiptID, Status: string(status),
 			Usage: []protocol.UsageItem{}, ChargedNanoTOS: 0,
 			CompletedAt: completedAt,
 		},
-		signer,
 		now,
 		now.Add(receiptLifetime),
 	)
@@ -1029,11 +1233,12 @@ func (c *Core) applyVerifiedPaymentReconciliation(
 				AuthorizationID: binding.AuthorizationID,
 				QuoteID:         binding.QuoteID, Reference: binding.Reference,
 				Payer: binding.Payer, Payee: binding.Payee,
-				AmountNanoTOS:         binding.AmountNanoTOS,
-				QuoteEnvelopeDigest:   binding.QuoteEnvelopeDigest,
-				PaymentEnvelopeDigest: binding.PaymentEnvelopeDigest,
-				ObservedMasterSeqno:   material.ObservedMasterSeqno,
-				ObservedAt:            material.ObservedAt,
+				AmountNanoTOS:          binding.AmountNanoTOS,
+				QuoteEnvelopeDigest:    binding.QuoteEnvelopeDigest,
+				PaymentEnvelopeDigest:  binding.PaymentEnvelopeDigest,
+				ObservedMasterSeqno:    material.ObservedMasterSeqno,
+				ObservedAt:             material.ObservedAt,
+				ExecutionAuthorization: current.ExecutionAuthorization,
 			},
 			now,
 		)
@@ -1070,6 +1275,126 @@ func paymentReconciliationBinding(
 		QuoteEnvelopeDigest:   record.QuoteEnvelopeDigest,
 		PaymentEnvelopeDigest: record.PaymentEnvelopeDigest,
 	}
+}
+
+func journalExecutionAuthorization(
+	value authorization.DurableExecutionAuthorization,
+) *journal.PaymentExecutionAuthorization {
+	return &journal.PaymentExecutionAuthorization{
+		Quote:                value.Quote,
+		PaymentAuthorization: value.PaymentAuthorization,
+		ProfileVersion:       value.ProfileVersion,
+		ProfileExtensions: append(
+			[]string(nil), value.ProfileExtensions...,
+		),
+	}
+}
+
+func durableExecutionAuthorization(
+	value *journal.PaymentExecutionAuthorization,
+) (authorization.DurableExecutionAuthorization, error) {
+	if value == nil {
+		return authorization.DurableExecutionAuthorization{}, errors.New(
+			"payment has no durable execution authorization",
+		)
+	}
+	output := authorization.DurableExecutionAuthorization{
+		Quote:                value.Quote,
+		PaymentAuthorization: value.PaymentAuthorization,
+		ProfileVersion:       value.ProfileVersion,
+		ProfileExtensions: append(
+			[]string(nil), value.ProfileExtensions...,
+		),
+	}
+	if _, err := output.ReceiptInvocationMaterial(); err != nil {
+		return authorization.DurableExecutionAuthorization{}, fmt.Errorf(
+			"validate durable execution authorization: %w", err,
+		)
+	}
+	return output, nil
+}
+
+func (c *Core) recoveredExecutionAuthorization(
+	scope journal.Scope,
+) (
+	authorization.DurableExecutionAuthorization,
+	authorization.ReceiptInvocationMaterial,
+	journal.Record,
+	error,
+) {
+	now := c.now().UTC()
+	request, err := c.requests.Get(scope, now)
+	if err != nil {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{}, err
+	}
+	if request.State != journal.StateAuthorized &&
+		request.State != journal.StateRunning &&
+		!request.State.Terminal() {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{},
+			journal.ErrTransition
+	}
+	if request.State.Terminal() {
+		if _, receiptErr := c.requests.GetReceipt(scope, now); receiptErr != nil {
+			if errors.Is(receiptErr, journal.ErrNotFound) {
+				return authorization.DurableExecutionAuthorization{},
+					authorization.ReceiptInvocationMaterial{}, journal.Record{},
+					journal.ErrCorrupt
+			}
+			return authorization.DurableExecutionAuthorization{},
+				authorization.ReceiptInvocationMaterial{}, journal.Record{},
+				receiptErr
+		}
+	}
+	applied, err := c.requests.GetPayment(scope, now)
+	if err != nil {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{}, err
+	}
+	if applied.Status == journal.PaymentStatusReorganized &&
+		!request.State.Terminal() {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{},
+			journal.ErrPaymentReorganized
+	}
+	if applied.Status != journal.PaymentStatusApplied &&
+		!(request.State.Terminal() &&
+			applied.Status == journal.PaymentStatusReorganized) {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{},
+			errors.New("request has no applied payment")
+	}
+	durable, err := durableExecutionAuthorization(
+		applied.ExecutionAuthorization,
+	)
+	if err != nil {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{}, err
+	}
+	material, err := durable.ReceiptInvocationMaterial()
+	if err != nil {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{}, err
+	}
+	if scope.Network != material.Network ||
+		scope.ServiceID != material.ServiceID ||
+		scope.SessionID != material.SessionID ||
+		scope.Operation != material.Operation ||
+		scope.RequestID != material.RequestID ||
+		request.IntentDigest != material.IntentDigest ||
+		applied.IntentDigest != material.IntentDigest ||
+		applied.AuthorizationID != material.AuthorizationID ||
+		applied.QuoteID != material.QuoteID ||
+		applied.Reference != durable.PaymentAuthorization.Reference ||
+		applied.Payer != durable.PaymentAuthorization.Payer ||
+		applied.Payee != durable.PaymentAuthorization.Payee ||
+		applied.AmountNanoTOS < material.PriceNanoTOS {
+		return authorization.DurableExecutionAuthorization{},
+			authorization.ReceiptInvocationMaterial{}, journal.Record{},
+			journal.ErrConflict
+	}
+	return durable, material, request, nil
 }
 
 func boundedErrorMessage(err error, maximum int) string {

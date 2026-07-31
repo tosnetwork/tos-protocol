@@ -215,6 +215,140 @@ func (c *Core) ResolveExecutionDispatch(
 	}
 }
 
+// ResolveRecoveredExecutionDispatch converts a validated Worker recovery
+// result into a receipt using only the execution authorization committed with
+// the durable payment. It is the restart-safe counterpart of
+// ResolveExecutionDispatch.
+func (c *Core) ResolveRecoveredExecutionDispatch(
+	ctx context.Context,
+	dispatch ExecutionDispatch,
+	manifest *authorization.VerifiedManifest,
+	signer authorization.ReceiptSigner,
+	receiptLifetime time.Duration,
+) (ExecutionResolution, error) {
+	if c == nil {
+		return ExecutionResolution{}, errors.New("nil Edge Core")
+	}
+	if ctx == nil {
+		return ExecutionResolution{}, errors.New(
+			"nil execution resolution context",
+		)
+	}
+	if err := ctx.Err(); err != nil {
+		return ExecutionResolution{}, err
+	}
+	if !dispatch.valid {
+		return ExecutionResolution{}, errors.New("invalid execution dispatch")
+	}
+	claim := cloneClaimedInvocation(dispatch.claim)
+	base := ExecutionResolution{valid: true, claim: claim}
+	resolveSuccess := func(
+		invocation localrpc.ValidatedInvocation,
+	) (ExecutionResolution, error) {
+		receiptID, err := executionReceiptID(base.claim)
+		if err != nil {
+			return ExecutionResolution{}, err
+		}
+		completed, err := c.CompleteRecoveredSuccessfulInvocation(
+			ctx,
+			base.claim.State.Scope,
+			base.claim.State.Revision,
+			manifest,
+			invocation,
+			signer,
+			receiptID,
+			receiptLifetime,
+		)
+		if err != nil {
+			return ExecutionResolution{}, err
+		}
+		base.disposition = ExecutionResolutionSucceeded
+		base.completed = completed
+		return base, nil
+	}
+	resolveFailure := func(
+		disposition ExecutionResolutionDisposition,
+		status NonSuccessStatus,
+	) (ExecutionResolution, error) {
+		receiptID, err := executionReceiptID(base.claim)
+		if err != nil {
+			return ExecutionResolution{}, err
+		}
+		terminated, err := c.CompleteRecoveredInvocationFailure(
+			ctx,
+			base.claim.State.Scope,
+			base.claim.State.Revision,
+			manifest,
+			signer,
+			receiptID,
+			status,
+			receiptLifetime,
+		)
+		if err != nil {
+			return ExecutionResolution{}, err
+		}
+		base.disposition = disposition
+		base.terminated = terminated
+		return base, nil
+	}
+	switch dispatch.disposition {
+	case ExecutionDispatchUncertain:
+		base.disposition = ExecutionResolutionUncertain
+		return base, nil
+	case ExecutionDispatchInvoked:
+		return resolveSuccess(dispatch.invocation)
+	case ExecutionDispatchRecovered:
+	default:
+		return ExecutionResolution{}, errors.New(
+			"invalid execution dispatch disposition",
+		)
+	}
+	status, err := dispatch.recovery.Status()
+	if err != nil {
+		return ExecutionResolution{}, fmt.Errorf(
+			"read recovered Worker status: %w", err,
+		)
+	}
+	switch status {
+	case edgev1.TaskStatus_TASK_STATUS_NOT_FOUND:
+		base.disposition = ExecutionResolutionNotFound
+		return base, nil
+	case edgev1.TaskStatus_TASK_STATUS_ACCEPTED:
+		base.disposition = ExecutionResolutionAccepted
+		return base, nil
+	case edgev1.TaskStatus_TASK_STATUS_RUNNING:
+		base.disposition = ExecutionResolutionRunning
+		return base, nil
+	case edgev1.TaskStatus_TASK_STATUS_SUCCEEDED:
+		invocation, err := dispatch.recovery.Invocation()
+		if err != nil {
+			return ExecutionResolution{}, fmt.Errorf(
+				"read recovered Worker invocation: %w", err,
+			)
+		}
+		return resolveSuccess(invocation)
+	case edgev1.TaskStatus_TASK_STATUS_FAILED:
+		return resolveFailure(
+			ExecutionResolutionFailed,
+			InvocationFailed,
+		)
+	case edgev1.TaskStatus_TASK_STATUS_CANCELED:
+		return resolveFailure(
+			ExecutionResolutionCanceled,
+			InvocationCanceled,
+		)
+	case edgev1.TaskStatus_TASK_STATUS_TIMED_OUT:
+		return resolveFailure(
+			ExecutionResolutionTimedOut,
+			InvocationTimedOut,
+		)
+	default:
+		return ExecutionResolution{}, errors.New(
+			"unsupported recovered Worker status",
+		)
+	}
+}
+
 func (c *Core) resolveSuccessfulExecution(
 	ctx context.Context,
 	base ExecutionResolution,

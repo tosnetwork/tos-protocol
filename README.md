@@ -102,18 +102,22 @@ client-signed payment authorizations can also be matched to a fresh, exact,
 final-by-default chain observation through the bounded payment observer.
 Edge Core can apply that opaque observation exactly once: the payment record,
 global replay index, and pending-to-authorized request transition commit in
-one bounded journal transaction and survive restart. The journal can also
-record a monotonic reorganization and block paid dispatch. Before paid work
-may enter `running`, Edge Core now commits the globally unique Worker task ID,
+one bounded journal transaction and survive restart. That transaction also
+stores the minimal immutable quote, payment, and negotiated-profile context
+needed to reconstruct only the already-paid execution after a process restart;
+it does not preserve an expired quote as authority for new work. The journal
+can also record a monotonic reorganization and block paid dispatch. Before
+paid work may enter `running`, Edge Core now commits the globally unique Worker task ID,
 a deterministic digest of the exact private invocation, its quote/payment
 binding, and the `authorized -> running` transition in one transaction. An
 exact recovery replay returns the immutable claim without another transition;
 a changed request or cross-request task reuse fails closed. A production chain
 recheck can run after quote expiry, and Edge Core provides a count-bounded
-batch coordinator with a crash-safe CAS scan cursor. An optional fixed-interval
+batch coordinator with a crash-safe CAS scan cursor. An optional adaptive
 scheduler adds whole-batch deadlines, shutdown cancellation, serialized scan
-ownership, and health counters; it is disabled unless an observer and all
-bounds are explicitly configured. A current manifest `receipt` key can also
+ownership, health counters, and bounded exponential failure backoff; it is
+disabled unless an observer and all bounds are explicitly configured. A current
+manifest `receipt` key can also
 produce an opaque verified receipt; its full signed envelope, intent/payment
 binding, bounded usage, charge, and terminal request transition persist in
 one exact-replay-safe transaction. The private Worker client now requires a
@@ -149,6 +153,11 @@ validated recovered `FAILED`, `CANCELED`, or `TIMED_OUT` outcome enters the
 existing atomic receipt path. The receipt ID is derived deterministically from
 the durable execution identity, so concurrent or restarted resolution reaches
 one exact-replay-safe terminal record instead of inventing new IDs.
+After restart, Edge can recover the exact persisted payment context, recompute
+and compare the supplied intent, query an already-running Worker task without
+invoking it again, and issue or replay the terminal receipt under the current
+manifest key. Missing legacy recovery context, changed intent, corrupt binding,
+or a reorganized nonterminal payment fails closed before Worker access.
 Explicit cancellation is also claim-bound: Edge rechecks that the exact
 execution still owns the durable `running` request before sending the
 request/task/digest tuple to the Worker. Accepted, rejected, and ambiguous

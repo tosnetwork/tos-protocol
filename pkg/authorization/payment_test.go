@@ -3,6 +3,7 @@ package authorization
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -507,6 +508,67 @@ func TestReceiptIssuanceBindsDraftAndExternalSigner(t *testing.T) {
 	draft.Usage[0].Quantity = 999
 	if material.Usage[0].Quantity != 10 {
 		t.Fatal("issued receipt aliased caller usage")
+	}
+}
+
+func TestDurableReceiptIssuanceAfterQuoteExpiry(t *testing.T) {
+	fixture := newReceiptAuthorizationFixture(t)
+	durable, err := fixture.authorized.DurableExecutionAuthorization()
+	if err != nil {
+		t.Fatal(err)
+	}
+	material, err := durable.ReceiptInvocationMaterial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	live, err := fixture.authorized.ReceiptInvocationMaterial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(material, live) {
+		t.Fatalf("durable material = %#v, live = %#v", material, live)
+	}
+	receiptNow := fixture.quote.ExpiresAt.Add(time.Minute)
+	if _, err := fixture.authorized.ObservationMaterial(receiptNow); err == nil {
+		t.Fatal("expired payment authorization remained observable")
+	}
+	signer := receiptSignerFunc(func(
+		ctx context.Context,
+		payload []byte,
+		issuedAt time.Time,
+		expiresAt time.Time,
+	) (identity.Envelope, error) {
+		if err := ctx.Err(); err != nil {
+			return identity.Envelope{}, err
+		}
+		return identity.Sign(
+			fixture.session.runtimePrivate,
+			protocol.ReceiptDomain,
+			fixture.session.manifest.RuntimeKeys[0].KeyID,
+			payload,
+			issuedAt,
+			expiresAt,
+		)
+	})
+	if _, err := fixture.manifest.IssueDurableReceipt(
+		context.Background(),
+		durable,
+		ReceiptDraft{
+			ReceiptID: "receipt-durable-0001", Status: "failed",
+			Usage: []protocol.UsageItem{}, CompletedAt: receiptNow,
+		},
+		signer,
+		receiptNow,
+		receiptNow.Add(time.Minute),
+	); err != nil {
+		t.Fatal(err)
+	}
+	changed := durable
+	changed.ProfileExtensions = []string{
+		"urn:tos:extension:z", "urn:tos:extension:a",
+	}
+	if _, err := changed.ReceiptInvocationMaterial(); err == nil {
+		t.Fatal("noncanonical durable profile accepted")
 	}
 }
 
