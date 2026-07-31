@@ -10,7 +10,7 @@ Internet
    v
 tos-edge ------------------> TOS chain adapter
    |
-   | private versioned ConnectRPC, Unix socket 0600
+   | validated private ConnectRPC, owned Unix socket 0600
    v
 vertical worker (for example tos-ai-worker)
    |
@@ -28,7 +28,10 @@ verifies fresh controller authority, the current signed manifest, runtime
 roles and revocation, canonical semantic payloads, and admission bindings.
 Its stateless chain-resolver boundary enforces finality, code-hash allowlists,
 timeouts, reference matching, and caller high-water sequence checks. The
-public process must still supply the TOS contract decoder/RPC composition,
+private Worker client enforces socket-directory and socket ownership/mode,
+Connect message limits, request deadlines, response correlation and byte
+accounting, no implicit retries, and a default external-service-only priority
+policy. The public process must still supply the TOS contract decoder/RPC composition,
 client session/delegation policy, payment observation and reconciliation,
 invocation isolation, and receipt persistence before it forwards paid work.
 Those runtime operations remain absent from the public server, so it exposes
@@ -39,7 +42,7 @@ no invocation route.
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
 | Language | Go 1.24+ | implemented |
-| Local process API | ConnectRPC + Protobuf | implemented |
+| Local process API | ConnectRPC + Protobuf over private Unix socket | contract and validated client implemented: owner/mode, message/deadline, response-binding, priority and no-retry controls |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, and strict stateless chain-resolver boundary implemented; live TOS contract/RPC composition remains |

@@ -54,6 +54,14 @@ timeouts, and total fan-out.
 Transport encryption does not replace signed object verification. RLDP and
 relay endpoints are subject to the same authority and replay checks as HTTPS.
 
+The Edge-to-worker RPC is not a public transport. Its Unix socket and parent
+directory must be non-symlink objects owned by the Edge process user, with no
+group or other permissions. Both peers bound protobuf messages. Edge applies
+its own deadline and byte policy before dispatch, verifies correlation and
+usage fields on every result, and never retries an invocation implicitly.
+Public work must not acquire emergency, control, real-time, owner-local, or
+background priority merely by setting a wire enum.
+
 ## Keys and updates
 
 Runtime and update keys are distinct. Rotation must overlap safely, honor

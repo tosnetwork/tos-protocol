@@ -23,6 +23,9 @@ This directory contains the draft normative base specification:
 - [request-journal.md](request-journal.md) — atomic nonce/request admission,
   durable idempotency, request transitions, retention, and bounded crash
   recovery
+- [private-worker-rpc.md](private-worker-rpc.md) — owned Unix-socket
+  transport, bounded local RPC, response validation, priority separation, and
+  retry ownership
 - [versioning.md](versioning.md) — exact profile negotiation and critical
   extension behavior
 - [errors.md](errors.md) — error codes and retry safety

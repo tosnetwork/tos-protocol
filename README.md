@@ -22,7 +22,9 @@ The security boundary is intentional:
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs.
 - vertical workers use the versioned ConnectRPC API over a private Unix
-  socket. They do not receive wallet owner keys.
+  socket. The reference client verifies the private directory, socket type,
+  mode and owner, bounds messages and deadlines, and does not retry work.
+  Workers do not receive wallet owner keys.
 
 ## Build
 
@@ -79,8 +81,11 @@ authorization is connected to the live TOS contract/RPC decoder and payment
 observation, execution isolation, and receipt persistence are implemented.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
-cleanup owner are implemented as internal libraries; they do not enable
-public actions by themselves.
+cleanup owner are implemented as internal libraries. The private Worker RPC
+client also enforces Unix-socket ownership, message limits, response
+correlation, byte accounting, deadlines, and an external-service priority
+allowlist. None of these internal boundaries enable public actions by
+themselves.
 
 ## Repository map
 
@@ -95,6 +100,7 @@ pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
 pkg/journal/          durable bounded replay and idempotency state
+pkg/localrpc/         validated private Unix-socket Worker RPC client
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts
 pkg/registry/         bounded ARD index and HTTP API
 spec/base/            normative draft schemas, rules, and test vectors
