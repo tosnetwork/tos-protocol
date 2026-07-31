@@ -18,6 +18,9 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
+	"github.com/tosnetwork/tos-protocol/pkg/identity"
+	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -36,6 +39,7 @@ const (
 	maxConfiguredBatch       = 4_096
 	maxAdmissionBudgets      = 6
 	maxPaymentClockSkew      = 2 * time.Minute
+	maxReceiptClockSkew      = 2 * time.Minute
 	expiryPrefixBytes        = 12
 	expiryKeyBytes           = expiryPrefixBytes + sha256.Size
 )
@@ -53,6 +57,7 @@ var (
 	ErrPaymentReorganized = errors.New("applied payment was reorganized")
 	ErrPaymentRollback    = errors.New("payment observation regressed below its high-water mark")
 	ErrPaymentScanCursor  = errors.New("payment scan cursor changed concurrently")
+	ErrReceiptReplay      = errors.New("receipt is already bound to another request")
 	ErrCorrupt            = errors.New("request journal is corrupt")
 
 	recordsBucket         = []byte("records-v1")
@@ -70,6 +75,8 @@ var (
 	paymentsBucket        = []byte("payments-v1")
 	requestPaymentsBucket = []byte("request-payments-v1")
 	paymentScanCursorKey  = []byte("payment-scan-cursor")
+	receiptsBucket        = []byte("receipts-v1")
+	requestReceiptsBucket = []byte("request-receipts-v1")
 
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	idPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
@@ -273,6 +280,55 @@ type PaymentRecord struct {
 	RetainUntil           time.Time     `json:"retainUntil"`
 }
 
+type ReceiptUsage struct {
+	Unit     string `json:"unit"`
+	Quantity uint64 `json:"quantity"`
+}
+
+// ReceiptAdmission is material from an opaque manifest-authorized receipt.
+// The request must already be running and its payment must remain applied.
+type ReceiptAdmission struct {
+	Scope                 Scope
+	IntentDigest          string
+	ReceiptID             string
+	RuntimeKeyID          string
+	AuthorizationID       string
+	QuoteID               string
+	Status                State
+	Usage                 []ReceiptUsage
+	ChargedNanoTOS        uint64
+	ResultDigest          string
+	ErrorCode             string
+	ServiceRevision       string
+	ResourceRevision      string
+	CompletedAt           time.Time
+	ReceiptEnvelopeDigest string
+	Envelope              identity.Envelope
+}
+
+type ReceiptRecord struct {
+	Version               string            `json:"version"`
+	Scope                 Scope             `json:"scope"`
+	IntentDigest          string            `json:"intentDigest"`
+	ReceiptID             string            `json:"receiptId"`
+	RuntimeKeyID          string            `json:"runtimeKeyId"`
+	AuthorizationID       string            `json:"authorizationId"`
+	QuoteID               string            `json:"quoteId"`
+	Status                State             `json:"status"`
+	Usage                 []ReceiptUsage    `json:"usage"`
+	ChargedNanoTOS        uint64            `json:"chargedNanoTos"`
+	ResultDigest          string            `json:"resultDigest,omitempty"`
+	ErrorCode             string            `json:"errorCode,omitempty"`
+	ServiceRevision       string            `json:"serviceRevision"`
+	ResourceRevision      string            `json:"resourceRevision"`
+	CompletedAt           time.Time         `json:"completedAt"`
+	ReceiptEnvelopeDigest string            `json:"receiptEnvelopeDigest"`
+	Envelope              identity.Envelope `json:"envelope"`
+	Revision              uint64            `json:"revision"`
+	StoredAt              time.Time         `json:"storedAt"`
+	RetainUntil           time.Time         `json:"retainUntil"`
+}
+
 type BeginDisposition string
 
 const (
@@ -289,6 +345,13 @@ const (
 	PaymentReorganized PaymentDisposition = "reorganized"
 )
 
+type ReceiptDisposition string
+
+const (
+	ReceiptApplied ReceiptDisposition = "applied"
+	ReceiptReplay  ReceiptDisposition = "replay"
+)
+
 type nonceDisposition uint8
 
 const (
@@ -301,6 +364,7 @@ type Stats struct {
 	Nonces       uint64
 	BudgetUsages uint64
 	Payments     uint64
+	Receipts     uint64
 	FileSize     int64
 }
 
@@ -969,6 +1033,279 @@ func (s *Store) MarkPaymentReorganized(
 	return output, disposition, nil
 }
 
+// ApplyReceipt persists one globally unique signed receipt and transitions its
+// exact paid running request to the receipt's terminal state in one
+// transaction. Exact replay has no second state effect.
+func (s *Store) ApplyReceipt(
+	admission ReceiptAdmission,
+	expectedRevision uint64,
+	now time.Time,
+) (Record, ReceiptRecord, ReceiptDisposition, error) {
+	admission.Usage = cloneReceiptUsage(admission.Usage)
+	admission.Envelope = cloneReceiptEnvelope(admission.Envelope)
+	now, err := admission.validate(now)
+	if err != nil {
+		return Record{}, ReceiptRecord{}, "", err
+	}
+	if expectedRevision == 0 {
+		return Record{}, ReceiptRecord{}, "", errors.New(
+			"expected revision must be positive",
+		)
+	}
+	requestKey := scopeKey(admission.Scope)
+	receiptKeyValue := receiptKey(
+		admission.Scope.Network,
+		admission.ReceiptID,
+	)
+	var output Record
+	var receiptOutput ReceiptRecord
+	var disposition ReceiptDisposition
+	err = s.db.Update(func(transaction *bolt.Tx) error {
+		records := transaction.Bucket(recordsBucket)
+		encodedRequest := records.Get(requestKey[:])
+		if encodedRequest == nil {
+			return ErrNotFound
+		}
+		record, err := s.decodeRecord(encodedRequest)
+		if err != nil {
+			return err
+		}
+		if record.Scope != admission.Scope {
+			return fmt.Errorf("%w: request key collision", ErrCorrupt)
+		}
+		if record.IntentDigest != admission.IntentDigest {
+			return ErrConflict
+		}
+		if !record.RetainUntil.After(now) {
+			return ErrExpired
+		}
+		if !record.RetainUntil.After(admission.CompletedAt.UTC()) {
+			return errors.New(
+				"request retention does not cover receipt completion",
+			)
+		}
+
+		receipts := transaction.Bucket(receiptsBucket)
+		requestReceipts := transaction.Bucket(requestReceiptsBucket)
+		indexedReceiptKey := requestReceipts.Get(requestKey[:])
+		if encodedReceipt := receipts.Get(receiptKeyValue[:]); encodedReceipt != nil {
+			existing, err := s.decodeReceipt(encodedReceipt)
+			if err != nil {
+				return err
+			}
+			if !sameReceiptBinding(existing, admission) {
+				if existing.Scope != admission.Scope {
+					return ErrReceiptReplay
+				}
+				return ErrConflict
+			}
+			if len(indexedReceiptKey) != sha256.Size ||
+				!bytes.Equal(indexedReceiptKey, receiptKeyValue[:]) {
+				return fmt.Errorf(
+					"%w: missing or mismatched request receipt index",
+					ErrCorrupt,
+				)
+			}
+			if err := verifyReceiptRequestState(record, existing); err != nil {
+				return err
+			}
+			output, receiptOutput, disposition =
+				record, existing, ReceiptReplay
+			return nil
+		}
+		if indexedReceiptKey != nil {
+			return fmt.Errorf(
+				"%w: request receipt index references missing receipt",
+				ErrCorrupt,
+			)
+		}
+		if record.Revision != expectedRevision {
+			return ErrRevision
+		}
+		if !canApplyReceipt(record.State, admission.Status) {
+			return ErrTransition
+		}
+		payment, err := s.paymentForReceiptTx(
+			transaction,
+			requestKey,
+			admission.AuthorizationID,
+			admission.QuoteID,
+		)
+		if err != nil {
+			return err
+		}
+		if payment.IntentDigest != admission.IntentDigest {
+			return fmt.Errorf(
+				"%w: receipt payment intent mismatch",
+				ErrCorrupt,
+			)
+		}
+		if admission.ChargedNanoTOS > payment.AmountNanoTOS {
+			return errors.New("receipt charge exceeds applied payment")
+		}
+		receipt := ReceiptRecord{
+			Version: "1", Scope: admission.Scope,
+			IntentDigest:          admission.IntentDigest,
+			ReceiptID:             admission.ReceiptID,
+			RuntimeKeyID:          admission.RuntimeKeyID,
+			AuthorizationID:       admission.AuthorizationID,
+			QuoteID:               admission.QuoteID,
+			Status:                admission.Status,
+			Usage:                 cloneReceiptUsage(admission.Usage),
+			ChargedNanoTOS:        admission.ChargedNanoTOS,
+			ResultDigest:          admission.ResultDigest,
+			ErrorCode:             admission.ErrorCode,
+			ServiceRevision:       admission.ServiceRevision,
+			ResourceRevision:      admission.ResourceRevision,
+			CompletedAt:           admission.CompletedAt.UTC(),
+			ReceiptEnvelopeDigest: admission.ReceiptEnvelopeDigest,
+			Envelope:              cloneReceiptEnvelope(admission.Envelope),
+			Revision:              1, StoredAt: now, RetainUntil: record.RetainUntil,
+		}
+		encodedReceipt, err := s.encodeReceipt(receipt)
+		if err != nil {
+			return err
+		}
+		if err := receipts.Put(receiptKeyValue[:], encodedReceipt); err != nil {
+			return err
+		}
+		if err := requestReceipts.Put(
+			requestKey[:],
+			receiptKeyValue[:],
+		); err != nil {
+			return err
+		}
+		record.State = admission.Status
+		record.Revision++
+		if now.After(record.UpdatedAt) {
+			record.UpdatedAt = now
+		}
+		if admission.Status == StateSucceeded {
+			record.ResultDigest = admission.ResultDigest
+		} else {
+			record.ResultDigest = ""
+		}
+		record.ErrorCode = admission.ErrorCode
+		encodedRequest, err = s.encodeRecord(record)
+		if err != nil {
+			return err
+		}
+		if err := records.Put(requestKey[:], encodedRequest); err != nil {
+			return err
+		}
+		output, receiptOutput, disposition =
+			record, receipt, ReceiptApplied
+		return nil
+	})
+	if err != nil {
+		return Record{}, ReceiptRecord{}, "", err
+	}
+	return output, receiptOutput, disposition, nil
+}
+
+func (s *Store) GetReceipt(
+	scope Scope,
+	now time.Time,
+) (ReceiptRecord, error) {
+	if err := scope.Validate(); err != nil {
+		return ReceiptRecord{}, err
+	}
+	if err := validateNow(now); err != nil {
+		return ReceiptRecord{}, err
+	}
+	requestKey := scopeKey(scope)
+	var output ReceiptRecord
+	err := s.db.View(func(transaction *bolt.Tx) error {
+		receiptKeyBytes := transaction.Bucket(requestReceiptsBucket).Get(
+			requestKey[:],
+		)
+		if receiptKeyBytes == nil {
+			return ErrNotFound
+		}
+		if len(receiptKeyBytes) != sha256.Size {
+			return fmt.Errorf(
+				"%w: invalid request receipt index",
+				ErrCorrupt,
+			)
+		}
+		encoded := transaction.Bucket(receiptsBucket).Get(receiptKeyBytes)
+		if encoded == nil {
+			return fmt.Errorf("%w: request receipt is missing", ErrCorrupt)
+		}
+		receipt, err := s.decodeReceipt(encoded)
+		if err != nil {
+			return err
+		}
+		if receipt.Scope != scope {
+			return fmt.Errorf(
+				"%w: request receipt scope mismatch",
+				ErrCorrupt,
+			)
+		}
+		if !receipt.RetainUntil.After(now.UTC()) {
+			return ErrExpired
+		}
+		output = receipt
+		output.Usage = cloneReceiptUsage(receipt.Usage)
+		output.Envelope = cloneReceiptEnvelope(receipt.Envelope)
+		return nil
+	})
+	return output, err
+}
+
+func (s *Store) paymentForReceiptTx(
+	transaction *bolt.Tx,
+	requestKey [32]byte,
+	authorizationID string,
+	quoteID string,
+) (PaymentRecord, error) {
+	paymentKeyBytes := transaction.Bucket(requestPaymentsBucket).Get(
+		requestKey[:],
+	)
+	if paymentKeyBytes == nil {
+		return PaymentRecord{}, errors.New(
+			"receipt request has no applied payment",
+		)
+	}
+	if len(paymentKeyBytes) != sha256.Size {
+		return PaymentRecord{}, fmt.Errorf(
+			"%w: invalid request payment index",
+			ErrCorrupt,
+		)
+	}
+	encoded := transaction.Bucket(paymentsBucket).Get(paymentKeyBytes)
+	if encoded == nil {
+		return PaymentRecord{}, fmt.Errorf(
+			"%w: request payment is missing",
+			ErrCorrupt,
+		)
+	}
+	payment, err := s.decodePayment(encoded)
+	if err != nil {
+		return PaymentRecord{}, err
+	}
+	if scopeKey(payment.Scope) != requestKey {
+		return PaymentRecord{}, fmt.Errorf(
+			"%w: request payment scope mismatch",
+			ErrCorrupt,
+		)
+	}
+	if payment.AuthorizationID != authorizationID ||
+		payment.QuoteID != quoteID {
+		return PaymentRecord{}, ErrConflict
+	}
+	if payment.Status == PaymentStatusReorganized {
+		return PaymentRecord{}, ErrPaymentReorganized
+	}
+	if payment.Status != PaymentStatusApplied {
+		return PaymentRecord{}, fmt.Errorf(
+			"%w: invalid request payment status",
+			ErrCorrupt,
+		)
+	}
+	return payment, nil
+}
+
 func (s *Store) Transition(
 	scope Scope,
 	expectedRevision uint64,
@@ -1012,6 +1349,13 @@ func (s *Store) Transition(
 		}
 		if !canTransition(record.State, next) {
 			return ErrTransition
+		}
+		if next.Terminal() &&
+			(record.State == StateAuthorized || record.State == StateRunning) &&
+			transaction.Bucket(requestPaymentsBucket).Get(key[:]) != nil {
+			return errors.New(
+				"paid request terminal transition requires a receipt",
+			)
 		}
 		if record.State == StateAuthorized && next == StateRunning {
 			if err := s.ensurePaymentRunnableTx(transaction, key); err != nil {
@@ -1097,6 +1441,9 @@ func (s *Store) beginTx(
 			if err := s.deletePaymentForRequestTx(transaction, key); err != nil {
 				return Record{}, "", err
 			}
+			if err := s.deleteReceiptForRequestTx(transaction, key); err != nil {
+				return Record{}, "", err
+			}
 			if err := transaction.Bucket(budgetClaimsBucket).Delete(key[:]); err != nil {
 				return Record{}, "", err
 			}
@@ -1175,6 +1522,45 @@ func (s *Store) deletePaymentForRequestTx(
 		return err
 	}
 	return requestPayments.Delete(requestKey[:])
+}
+
+func (s *Store) deleteReceiptForRequestTx(
+	transaction *bolt.Tx,
+	requestKey [32]byte,
+) error {
+	requestReceipts := transaction.Bucket(requestReceiptsBucket)
+	receiptKeyBytes := requestReceipts.Get(requestKey[:])
+	if receiptKeyBytes == nil {
+		return nil
+	}
+	if len(receiptKeyBytes) != sha256.Size {
+		return fmt.Errorf(
+			"%w: invalid request receipt index",
+			ErrCorrupt,
+		)
+	}
+	receipts := transaction.Bucket(receiptsBucket)
+	encoded := receipts.Get(receiptKeyBytes)
+	if encoded == nil {
+		return fmt.Errorf(
+			"%w: request receipt index references missing receipt",
+			ErrCorrupt,
+		)
+	}
+	receipt, err := s.decodeReceipt(encoded)
+	if err != nil {
+		return err
+	}
+	if scopeKey(receipt.Scope) != requestKey {
+		return fmt.Errorf(
+			"%w: request receipt index scope mismatch",
+			ErrCorrupt,
+		)
+	}
+	if err := receipts.Delete(receiptKeyBytes); err != nil {
+		return err
+	}
+	return requestReceipts.Delete(requestKey[:])
 }
 
 func (s *Store) claimNonceTx(
@@ -1384,6 +1770,7 @@ func (s *Store) Stats() (Stats, error) {
 		}
 		output.BudgetUsages = budgetCount
 		output.Payments = uint64(transaction.Bucket(paymentsBucket).Stats().KeyN)
+		output.Receipts = uint64(transaction.Bucket(receiptsBucket).Stats().KeyN)
 		return nil
 	})
 	if err != nil {
@@ -1433,6 +1820,16 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	if err != nil {
 		return err
 	}
+	receipts, err := transaction.CreateBucketIfNotExists(receiptsBucket)
+	if err != nil {
+		return err
+	}
+	requestReceipts, err := transaction.CreateBucketIfNotExists(
+		requestReceiptsBucket,
+	)
+	if err != nil {
+		return err
+	}
 	meta, err := transaction.CreateBucketIfNotExists(metaBucket)
 	if err != nil {
 		return err
@@ -1462,6 +1859,10 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	if cursor := meta.Get(paymentScanCursorKey); len(cursor) != 0 &&
 		len(cursor) != sha256.Size {
 		return fmt.Errorf("%w: invalid payment scan cursor", ErrCorrupt)
+	}
+	if receipts.Stats().KeyN != requestReceipts.Stats().KeyN ||
+		receipts.Stats().KeyN > records.Stats().KeyN {
+		return fmt.Errorf("%w: receipt index count mismatch", ErrCorrupt)
 	}
 	return nil
 }
@@ -1506,6 +1907,11 @@ func (s *Store) pruneExpiredTx(
 			return deleted, false, err
 		}
 		if err := s.deletePaymentForRequestTx(
+			transaction, array32(recordKey),
+		); err != nil {
+			return deleted, false, err
+		}
+		if err := s.deleteReceiptForRequestTx(
 			transaction, array32(recordKey),
 		); err != nil {
 			return deleted, false, err
@@ -1797,6 +2203,41 @@ func (s *Store) decodePayment(encoded []byte) (PaymentRecord, error) {
 	return payment, nil
 }
 
+func (s *Store) encodeReceipt(receipt ReceiptRecord) ([]byte, error) {
+	if err := receipt.validateStored(s.limits); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	encoded, err := json.Marshal(receipt)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > s.limits.MaxRecordBytes {
+		return nil, errors.New("receipt record exceeds byte limit")
+	}
+	return encoded, nil
+}
+
+func (s *Store) decodeReceipt(encoded []byte) (ReceiptRecord, error) {
+	if len(encoded) == 0 || len(encoded) > s.limits.MaxRecordBytes {
+		return ReceiptRecord{}, fmt.Errorf(
+			"%w: invalid receipt record size",
+			ErrCorrupt,
+		)
+	}
+	var receipt ReceiptRecord
+	if err := jsonstrict.Decode(encoded, &receipt); err != nil {
+		return ReceiptRecord{}, fmt.Errorf(
+			"%w: decode receipt record: %v",
+			ErrCorrupt,
+			err,
+		)
+	}
+	if err := receipt.validateStored(s.limits); err != nil {
+		return ReceiptRecord{}, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	return receipt, nil
+}
+
 func (l Limits) validate() error {
 	if l.MaxRecords == 0 || l.MaxRecords > maxConfiguredRecords ||
 		l.MaxNonces == 0 || l.MaxNonces > maxConfiguredRecords ||
@@ -1993,6 +2434,202 @@ func (p PaymentRecord) validateStored(limits Limits) error {
 		}
 	default:
 		return errors.New("invalid payment status")
+	}
+	return nil
+}
+
+func (a ReceiptAdmission) validate(now time.Time) (time.Time, error) {
+	if err := validateNow(now); err != nil {
+		return time.Time{}, err
+	}
+	now = now.UTC()
+	if err := validateReceiptBinding(
+		a.Scope, a.IntentDigest, a.ReceiptID, a.RuntimeKeyID,
+		a.AuthorizationID, a.QuoteID, a.Status, a.Usage,
+		a.ChargedNanoTOS, a.ResultDigest, a.ErrorCode, a.ServiceRevision,
+		a.ResourceRevision, a.CompletedAt,
+		a.ReceiptEnvelopeDigest, a.Envelope,
+	); err != nil {
+		return time.Time{}, err
+	}
+	if a.CompletedAt.UTC().After(now.Add(maxReceiptClockSkew)) {
+		return time.Time{}, errors.New(
+			"receipt completion is excessively future-dated",
+		)
+	}
+	return now, nil
+}
+
+func (r ReceiptRecord) validateStored(limits Limits) error {
+	if r.Version != "1" {
+		return errors.New("unsupported receipt record version")
+	}
+	if err := validateReceiptBinding(
+		r.Scope, r.IntentDigest, r.ReceiptID, r.RuntimeKeyID,
+		r.AuthorizationID, r.QuoteID, r.Status, r.Usage,
+		r.ChargedNanoTOS, r.ResultDigest, r.ErrorCode, r.ServiceRevision,
+		r.ResourceRevision, r.CompletedAt,
+		r.ReceiptEnvelopeDigest, r.Envelope,
+	); err != nil {
+		return err
+	}
+	if r.Revision != 1 || r.StoredAt.IsZero() ||
+		r.RetainUntil.IsZero() ||
+		!r.RetainUntil.After(r.StoredAt) ||
+		!r.RetainUntil.After(r.CompletedAt) ||
+		r.RetainUntil.Sub(r.StoredAt) > limits.MaxRetention {
+		return errors.New("invalid receipt record time or revision")
+	}
+	return nil
+}
+
+func validateReceiptBinding(
+	scope Scope,
+	intentDigest string,
+	receiptID string,
+	runtimeKeyID string,
+	authorizationID string,
+	quoteID string,
+	status State,
+	usage []ReceiptUsage,
+	chargedNanoTOS uint64,
+	resultDigest string,
+	errorCode string,
+	serviceRevision string,
+	resourceRevision string,
+	completedAt time.Time,
+	envelopeDigest string,
+	envelope identity.Envelope,
+) error {
+	if err := scope.Validate(); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(intentDigest) {
+		return errors.New("invalid receipt intent digest")
+	}
+	for name, value := range map[string]string{
+		"receipt ID":               receiptID,
+		"payment authorization ID": authorizationID,
+		"quote ID":                 quoteID,
+	} {
+		if err := bounded(name, value, 8, 128); err != nil {
+			return err
+		}
+	}
+	if err := bounded("receipt runtime key ID", runtimeKeyID, 1, 512); err != nil {
+		return err
+	}
+	if err := bounded(
+		"receipt service revision",
+		serviceRevision,
+		1,
+		128,
+	); err != nil {
+		return err
+	}
+	if err := bounded(
+		"receipt resource revision",
+		resourceRevision,
+		1,
+		256,
+	); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(envelopeDigest) {
+		return errors.New("invalid receipt envelope digest")
+	}
+	if envelope.Domain != protocol.ReceiptDomain ||
+		envelope.KeyID != runtimeKeyID {
+		return errors.New("receipt envelope authority mismatch")
+	}
+	fingerprint, err := envelope.Fingerprint()
+	if err != nil || fingerprint != envelopeDigest {
+		return errors.New("receipt envelope fingerprint mismatch")
+	}
+	if resultDigest != "" && !digestPattern.MatchString(resultDigest) {
+		return errors.New("invalid receipt result digest")
+	}
+	switch status {
+	case StateSucceeded:
+		if resultDigest == "" {
+			return errors.New(
+				"successful receipt requires a result digest",
+			)
+		}
+	case StateFailed, StateCanceled, StateTimedOut:
+	default:
+		return errors.New("invalid receipt terminal status")
+	}
+	requestResultDigest := ""
+	if status == StateSucceeded {
+		requestResultDigest = resultDigest
+	}
+	if err := validateOutcome(
+		status,
+		requestResultDigest,
+		errorCode,
+	); err != nil {
+		return err
+	}
+	expectedErrorCode := ""
+	switch status {
+	case StateFailed:
+		expectedErrorCode = string(protocol.ErrorRuntimeFailed)
+	case StateCanceled:
+		expectedErrorCode = string(protocol.ErrorCanceled)
+	case StateTimedOut:
+		expectedErrorCode = string(protocol.ErrorDeadlineExceeded)
+	}
+	if errorCode != expectedErrorCode {
+		return errors.New("receipt error code does not match status")
+	}
+	if usage == nil || len(usage) > 32 {
+		return errors.New("receipt usage must be a bounded array")
+	}
+	seen := make(map[string]struct{}, len(usage))
+	for index, item := range usage {
+		if err := bounded(
+			fmt.Sprintf("receipt usage[%d].unit", index),
+			item.Unit,
+			1,
+			64,
+		); err != nil {
+			return err
+		}
+		if _, duplicate := seen[item.Unit]; duplicate {
+			return errors.New("duplicate receipt usage unit")
+		}
+		seen[item.Unit] = struct{}{}
+	}
+	if completedAt.IsZero() ||
+		completedAt.Year() < 1970 ||
+		completedAt.Year() > 9999 {
+		return errors.New("invalid receipt completion time")
+	}
+	var signed protocol.Receipt
+	if err := codec.Unmarshal(envelope.Payload, &signed); err != nil {
+		return errors.New("invalid canonical receipt envelope payload")
+	}
+	if signed.Version != protocol.BaseEnvelopeVersion ||
+		signed.ReceiptID != receiptID ||
+		signed.RequestID != scope.RequestID ||
+		signed.QuoteID != quoteID ||
+		signed.AuthorizationID != authorizationID ||
+		signed.ServiceID != scope.ServiceID ||
+		signed.Status != receiptStatusString(status) ||
+		signed.ChargedNanoTOS != chargedNanoTOS ||
+		signed.ResultDigest != resultDigest ||
+		signed.ServiceRevision != serviceRevision ||
+		signed.ResourceRevision != resourceRevision ||
+		!signed.CompletedAt.Equal(completedAt.UTC()) ||
+		len(signed.Usage) != len(usage) {
+		return errors.New("receipt envelope payload binding mismatch")
+	}
+	for index, item := range usage {
+		if signed.Usage[index].Unit != item.Unit ||
+			signed.Usage[index].Quantity != item.Quantity {
+			return errors.New("receipt envelope usage binding mismatch")
+		}
 	}
 	return nil
 }
@@ -2203,6 +2840,22 @@ func canTransition(current, next State) bool {
 	}
 }
 
+func canApplyReceipt(current, terminal State) bool {
+	switch current {
+	case StateRunning:
+		return terminal == StateSucceeded ||
+			terminal == StateFailed ||
+			terminal == StateCanceled ||
+			terminal == StateTimedOut
+	case StateAuthorized:
+		return terminal == StateFailed ||
+			terminal == StateCanceled ||
+			terminal == StateTimedOut
+	default:
+		return false
+	}
+}
+
 func validateOutcome(state State, resultDigest, errorCode string) error {
 	switch state {
 	case StateSucceeded:
@@ -2314,6 +2967,97 @@ func paymentKey(
 	var output [32]byte
 	copy(output[:], hasher.Sum(nil))
 	return output
+}
+
+func receiptKey(network, receiptID string) [32]byte {
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-EDGE-JOURNAL-RECEIPT-V1"))
+	for _, value := range []string{network, receiptID} {
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(len(value)))
+		hasher.Write(length[:])
+		hasher.Write([]byte(value))
+	}
+	var output [32]byte
+	copy(output[:], hasher.Sum(nil))
+	return output
+}
+
+func sameReceiptBinding(
+	record ReceiptRecord,
+	admission ReceiptAdmission,
+) bool {
+	if record.Scope != admission.Scope ||
+		record.IntentDigest != admission.IntentDigest ||
+		record.ReceiptID != admission.ReceiptID ||
+		record.RuntimeKeyID != admission.RuntimeKeyID ||
+		record.AuthorizationID != admission.AuthorizationID ||
+		record.QuoteID != admission.QuoteID ||
+		record.Status != admission.Status ||
+		record.ChargedNanoTOS != admission.ChargedNanoTOS ||
+		record.ResultDigest != admission.ResultDigest ||
+		record.ErrorCode != admission.ErrorCode ||
+		record.ServiceRevision != admission.ServiceRevision ||
+		record.ResourceRevision != admission.ResourceRevision ||
+		!record.CompletedAt.Equal(admission.CompletedAt.UTC()) ||
+		record.ReceiptEnvelopeDigest != admission.ReceiptEnvelopeDigest ||
+		len(record.Usage) != len(admission.Usage) {
+		return false
+	}
+	for index := range record.Usage {
+		if record.Usage[index] != admission.Usage[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyReceiptRequestState(
+	record Record,
+	receipt ReceiptRecord,
+) error {
+	resultDigest := ""
+	if receipt.Status == StateSucceeded {
+		resultDigest = receipt.ResultDigest
+	}
+	if !record.State.Terminal() ||
+		record.IntentDigest != receipt.IntentDigest ||
+		record.State != receipt.Status ||
+		record.ResultDigest != resultDigest ||
+		record.ErrorCode != receipt.ErrorCode {
+		return fmt.Errorf(
+			"%w: receipt does not match terminal request",
+			ErrCorrupt,
+		)
+	}
+	return nil
+}
+
+func cloneReceiptUsage(usage []ReceiptUsage) []ReceiptUsage {
+	if usage == nil {
+		return nil
+	}
+	return append([]ReceiptUsage(nil), usage...)
+}
+
+func cloneReceiptEnvelope(envelope identity.Envelope) identity.Envelope {
+	envelope.Payload = append([]byte(nil), envelope.Payload...)
+	return envelope
+}
+
+func receiptStatusString(status State) string {
+	switch status {
+	case StateSucceeded:
+		return "succeeded"
+	case StateFailed:
+		return "failed"
+	case StateCanceled:
+		return "canceled"
+	case StateTimedOut:
+		return "timed_out"
+	default:
+		return ""
+	}
 }
 
 func encodePaymentScanCursor(value []byte) string {

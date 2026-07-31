@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,10 @@ import (
 	"time"
 
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
+	"github.com/tosnetwork/tos-protocol/pkg/identity"
+	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
 
 func testScope(requestID string) Scope {
@@ -88,6 +93,147 @@ func testPaymentAdmission(
 		ObservedMasterSeqno:   observedMasterSeqno,
 		ObservedAt:            now,
 	}
+}
+
+func testReceiptAdmission(
+	scope Scope,
+	now time.Time,
+	status State,
+) ReceiptAdmission {
+	admission := ReceiptAdmission{
+		Scope: scope, IntentDigest: "sha256:" + strings.Repeat("a", 64),
+		ReceiptID:       "receipt-0001",
+		RuntimeKeyID:    "runtime-receipt-key-1",
+		AuthorizationID: "authorization-0001",
+		QuoteID:         "quote-0001",
+		Status:          status,
+		Usage: []ReceiptUsage{
+			{Unit: "output_tokens", Quantity: 10},
+		},
+		ChargedNanoTOS:   5,
+		ServiceRevision:  "manifest-revision-1",
+		ResourceRevision: "resource-revision-1",
+		CompletedAt:      now,
+	}
+	switch status {
+	case StateSucceeded:
+		admission.ResultDigest = "sha256:" + strings.Repeat("8", 64)
+	case StateFailed:
+		admission.ErrorCode = string(protocol.ErrorRuntimeFailed)
+	case StateTimedOut:
+		admission.ErrorCode = string(protocol.ErrorDeadlineExceeded)
+	case StateCanceled:
+		admission.ErrorCode = string(protocol.ErrorCanceled)
+	}
+	signed := protocol.Receipt{
+		Version:   protocol.BaseEnvelopeVersion,
+		ReceiptID: admission.ReceiptID, RequestID: scope.RequestID,
+		QuoteID:         admission.QuoteID,
+		AuthorizationID: admission.AuthorizationID,
+		ServiceID:       scope.ServiceID,
+		Status:          receiptStatusString(admission.Status),
+		Usage: []protocol.UsageItem{
+			{Unit: "output_tokens", Quantity: 10},
+		},
+		ChargedNanoTOS:   admission.ChargedNanoTOS,
+		ResultDigest:     admission.ResultDigest,
+		ServiceRevision:  admission.ServiceRevision,
+		ResourceRevision: admission.ResourceRevision,
+		CompletedAt:      admission.CompletedAt,
+	}
+	payload, err := codec.Marshal(signed)
+	if err != nil {
+		panic(err)
+	}
+	admission.Envelope = identity.Envelope{
+		Version: identity.Version, Domain: protocol.ReceiptDomain,
+		KeyID:    admission.RuntimeKeyID,
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli(),
+		Nonce: testNonce(77), Payload: payload,
+		Signature: base64.RawURLEncoding.EncodeToString(
+			make([]byte, 64),
+		),
+	}
+	admission.ReceiptEnvelopeDigest, err = admission.Envelope.Fingerprint()
+	if err != nil {
+		panic(err)
+	}
+	return admission
+}
+
+func refreshReceiptEnvelope(
+	admission *ReceiptAdmission,
+	issuedAt time.Time,
+) {
+	signed := protocol.Receipt{
+		Version:          protocol.BaseEnvelopeVersion,
+		ReceiptID:        admission.ReceiptID,
+		RequestID:        admission.Scope.RequestID,
+		QuoteID:          admission.QuoteID,
+		AuthorizationID:  admission.AuthorizationID,
+		ServiceID:        admission.Scope.ServiceID,
+		Status:           receiptStatusString(admission.Status),
+		Usage:            make([]protocol.UsageItem, len(admission.Usage)),
+		ChargedNanoTOS:   admission.ChargedNanoTOS,
+		ResultDigest:     admission.ResultDigest,
+		ServiceRevision:  admission.ServiceRevision,
+		ResourceRevision: admission.ResourceRevision,
+		CompletedAt:      admission.CompletedAt,
+	}
+	for index, item := range admission.Usage {
+		signed.Usage[index] = protocol.UsageItem{
+			Unit: item.Unit, Quantity: item.Quantity,
+		}
+	}
+	payload, err := codec.Marshal(signed)
+	if err != nil {
+		panic(err)
+	}
+	admission.Envelope = identity.Envelope{
+		Version: identity.Version, Domain: protocol.ReceiptDomain,
+		KeyID:     admission.RuntimeKeyID,
+		IssuedAt:  issuedAt.UnixMilli(),
+		ExpiresAt: issuedAt.Add(time.Minute).UnixMilli(),
+		Nonce:     testNonce(77), Payload: payload,
+		Signature: base64.RawURLEncoding.EncodeToString(
+			make([]byte, 64),
+		),
+	}
+	admission.ReceiptEnvelopeDigest, err =
+		admission.Envelope.Fingerprint()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func preparePaidRunningRequest(
+	t *testing.T,
+	store *Store,
+	scope Scope,
+	now time.Time,
+) (Record, PaymentAdmission) {
+	t.Helper()
+	paymentAdmission := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, paymentAdmission.IntentDigest, now, now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	authorized, _, _, err := store.ApplyPayment(paymentAdmission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	running, err := store.Transition(
+		scope, authorized.Revision, StateRunning, "", "", now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return running, paymentAdmission
+}
+
+func sameReceiptRecord(left, right ReceiptRecord) bool {
+	return reflect.DeepEqual(left, right)
 }
 
 func testNonceClaim(scope Scope, nonce string, expiresAt time.Time) NonceClaim {
@@ -683,6 +829,324 @@ func TestPaymentScanCountsExpiredEntriesTowardBound(t *testing.T) {
 	}
 	if scan.Scanned != 2 || len(scan.Payments) != 1 {
 		t.Fatalf("expired scan bypassed batch bound: %#v", scan)
+	}
+}
+
+func TestApplyReceiptAtomicallyTerminatesPaidRequestAndReplays(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("receipt-request-0001")
+	running, _ := preparePaidRunningRequest(t, store, scope, now)
+	admission := testReceiptAdmission(scope, now.Add(time.Second), StateSucceeded)
+	if _, err := store.Transition(
+		scope, running.Revision, StateSucceeded,
+		admission.ResultDigest, "", now.Add(time.Second),
+	); err == nil || !strings.Contains(err.Error(), "requires a receipt") {
+		t.Fatalf("paid request bypassed receipt application: %v", err)
+	}
+	record, receipt, disposition, err := store.ApplyReceipt(
+		admission, running.Revision, now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != ReceiptApplied ||
+		record.State != StateSucceeded ||
+		record.Revision != running.Revision+1 ||
+		record.ResultDigest != admission.ResultDigest ||
+		receipt.Status != StateSucceeded ||
+		receipt.Revision != 1 {
+		t.Fatalf(
+			"unexpected receipt application: record=%#v receipt=%#v disposition=%q",
+			record, receipt, disposition,
+		)
+	}
+	replayedRecord, replayedReceipt, disposition, err := store.ApplyReceipt(
+		admission, running.Revision, now.Add(2*time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != ReceiptReplay ||
+		replayedRecord != record ||
+		!sameReceiptRecord(replayedReceipt, receipt) {
+		t.Fatalf(
+			"receipt replay changed state: record=%#v receipt=%#v disposition=%q",
+			replayedRecord, replayedReceipt, disposition,
+		)
+	}
+	receipt.Usage[0].Quantity = 999
+	receipt.Envelope.Payload[0] ^= 1
+	stored, err := store.GetReceipt(scope, now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Usage[0].Quantity != 10 {
+		t.Fatal("returned receipt aliased durable usage")
+	}
+	fingerprint, err := stored.Envelope.Fingerprint()
+	if err != nil || fingerprint != stored.ReceiptEnvelopeDigest {
+		t.Fatalf("stored signed receipt envelope: digest=%q err=%v", fingerprint, err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 1 || stats.Payments != 1 || stats.Receipts != 1 {
+		t.Fatalf("unexpected receipt stats: %#v", stats)
+	}
+}
+
+func TestApplyReceiptConcurrentReplayHasOneWinner(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("receipt-concurrent-request")
+	running, _ := preparePaidRunningRequest(t, store, scope, now)
+	admission := testReceiptAdmission(
+		scope,
+		now.Add(time.Second),
+		StateSucceeded,
+	)
+	const attempts = 32
+	var applied atomic.Int32
+	var replayed atomic.Int32
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, attempts)
+	for range attempts {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, _, disposition, err := store.ApplyReceipt(
+				admission,
+				running.Revision,
+				now.Add(time.Second),
+			)
+			switch {
+			case err != nil:
+				errorsSeen <- err
+			case disposition == ReceiptApplied:
+				applied.Add(1)
+			case disposition == ReceiptReplay:
+				replayed.Add(1)
+			default:
+				errorsSeen <- fmt.Errorf(
+					"unexpected disposition %q",
+					disposition,
+				)
+			}
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		t.Error(err)
+	}
+	record, err := store.Get(scope, now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.Load() != 1 ||
+		replayed.Load() != attempts-1 ||
+		record.State != StateSucceeded ||
+		record.Revision != running.Revision+1 ||
+		stats.Receipts != 1 {
+		t.Fatalf(
+			"applied=%d replayed=%d record=%#v stats=%#v",
+			applied.Load(),
+			replayed.Load(),
+			record,
+			stats,
+		)
+	}
+}
+
+func TestApplyReceiptRejectsReplayChargeAndReorganization(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	firstScope := testScope("receipt-first-request")
+	firstRunning, _ := preparePaidRunningRequest(
+		t, store, firstScope, now,
+	)
+	firstReceipt := testReceiptAdmission(
+		firstScope, now.Add(time.Second), StateSucceeded,
+	)
+	if _, _, _, err := store.ApplyReceipt(
+		firstReceipt, firstRunning.Revision, now.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	secondScope := testScope("receipt-second-request")
+	secondPayment := testPaymentAdmission(secondScope, now, 101)
+	secondPayment.AuthorizationID = "authorization-0002"
+	secondPayment.QuoteID = "quote-0002"
+	secondPayment.Reference = "payment-reference-0002"
+	if _, _, err := store.Begin(
+		secondScope, secondPayment.IntentDigest, now, now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	secondAuthorized, _, _, err := store.ApplyPayment(secondPayment, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondRunning, err := store.Transition(
+		secondScope, secondAuthorized.Revision, StateRunning, "", "", now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedReceipt := testReceiptAdmission(
+		secondScope, now.Add(time.Second), StateSucceeded,
+	)
+	replayedReceipt.AuthorizationID = secondPayment.AuthorizationID
+	replayedReceipt.QuoteID = secondPayment.QuoteID
+	refreshReceiptEnvelope(&replayedReceipt, now.Add(time.Second))
+	if _, _, _, err := store.ApplyReceipt(
+		replayedReceipt, secondRunning.Revision, now.Add(time.Second),
+	); !errors.Is(err, ErrReceiptReplay) {
+		t.Fatalf("cross-request receipt replay error=%v", err)
+	}
+	overcharged := replayedReceipt
+	overcharged.ReceiptID = "receipt-0002"
+	overcharged.ChargedNanoTOS = secondPayment.AmountNanoTOS + 1
+	refreshReceiptEnvelope(&overcharged, now.Add(time.Second))
+	if _, _, _, err := store.ApplyReceipt(
+		overcharged, secondRunning.Revision, now.Add(time.Second),
+	); err == nil {
+		t.Fatal("receipt charge above applied payment accepted")
+	}
+	second, err := store.Get(secondScope, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.State != StateRunning || second.Revision != secondRunning.Revision {
+		t.Fatalf("rejected receipt mutated request: %#v", second)
+	}
+
+	reorganization := PaymentReorganization{
+		Scope:               secondScope,
+		AuthorizationID:     secondPayment.AuthorizationID,
+		QuoteID:             secondPayment.QuoteID,
+		Reference:           secondPayment.Reference,
+		ObservedMasterSeqno: 102,
+		ObservedAt:          now.Add(time.Second),
+	}
+	if _, _, err := store.MarkPaymentReorganized(
+		reorganization, now.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	valid := replayedReceipt
+	valid.ReceiptID = "receipt-0003"
+	refreshReceiptEnvelope(&valid, now.Add(time.Second))
+	if _, _, _, err := store.ApplyReceipt(
+		valid, secondRunning.Revision, now.Add(time.Second),
+	); !errors.Is(err, ErrPaymentReorganized) {
+		t.Fatalf("receipt after payment reorganization error=%v", err)
+	}
+}
+
+func TestApplyReceiptAllowsAuthorizedTerminalFailure(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("receipt-authorized-failure")
+	payment := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, payment.IntentDigest, now, now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	authorized, _, _, err := store.ApplyPayment(payment, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := testReceiptAdmission(
+		scope, now.Add(time.Second), StateFailed,
+	)
+	record, receipt, disposition, err := store.ApplyReceipt(
+		admission, authorized.Revision, now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != ReceiptApplied ||
+		record.State != StateFailed ||
+		record.ErrorCode != admission.ErrorCode ||
+		receipt.Status != StateFailed {
+		t.Fatalf(
+			"authorized failure receipt: record=%#v receipt=%#v disposition=%q",
+			record, receipt, disposition,
+		)
+	}
+}
+
+func TestReceiptSurvivesRestartAndExpiresWithRequest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("receipt-restart")
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payment := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, payment.IntentDigest, now, now.Add(5*time.Millisecond),
+	); err != nil {
+		t.Fatal(err)
+	}
+	authorized, _, _, err := store.ApplyPayment(payment, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	running, err := store.Transition(
+		scope, authorized.Revision, StateRunning, "", "", now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := testReceiptAdmission(
+		scope, now.Add(time.Millisecond), StateSucceeded,
+	)
+	if _, _, _, err := store.ApplyReceipt(
+		admission, running.Revision, now.Add(time.Millisecond),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if _, err := reopened.GetReceipt(
+		scope, now.Add(2*time.Millisecond),
+	); err != nil {
+		t.Fatal(err)
+	}
+	deleted, more, err := reopened.PruneExpired(
+		now.Add(6*time.Millisecond), 1,
+	)
+	if err != nil || deleted != 1 || more {
+		t.Fatalf(
+			"prune receipted request: deleted=%d more=%v err=%v",
+			deleted, more, err,
+		)
+	}
+	stats, err := reopened.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 0 || stats.Payments != 0 || stats.Receipts != 0 {
+		t.Fatalf("expired receipt state retained: %#v", stats)
 	}
 }
 
@@ -1358,6 +1822,45 @@ func TestJournalFailsClosedOnMissingNonceExpiryIndexAtOpen(t *testing.T) {
 	}
 	if !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("missing nonce expiry error = %v", err)
+	}
+}
+
+func TestJournalFailsClosedOnMissingReceiptIndexAtOpen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("request-corrupt-receipt")
+	running, _ := preparePaidRunningRequest(t, store, scope, now)
+	admission := testReceiptAdmission(
+		scope, now.Add(time.Second), StateSucceeded,
+	)
+	if _, _, _, err := store.ApplyReceipt(
+		admission, running.Revision, now.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	key := scopeKey(scope)
+	if err := store.db.Update(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(requestReceiptsBucket).Delete(
+			key[:],
+		)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, limits)
+	if err == nil {
+		reopened.Close()
+		t.Fatal("journal with a missing receipt index reopened")
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("missing receipt index error=%v", err)
 	}
 }
 

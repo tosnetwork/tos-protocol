@@ -56,6 +56,7 @@ func newAuthFixture(t *testing.T) authFixture {
 			Roles: []string{
 				protocol.RuntimeRoleAuthenticate,
 				protocol.RuntimeRoleQuote,
+				protocol.RuntimeRoleReceipt,
 			},
 			NotBefore: now.Add(-time.Minute),
 			NotAfter:  now.Add(20 * time.Minute),
@@ -262,7 +263,7 @@ func TestVerifierRejectsRevokedWrongRoleDomainAndKeyWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := verified.AuthorizeRuntimeEnvelope(
-		envelope, runtimeDomain, protocol.RuntimeRoleReceipt,
+		envelope, runtimeDomain, protocol.RuntimeRoleEvidence,
 		fixture.now, testAdmissionBinding(payload), validateTestPayload(payload),
 	); err == nil {
 		t.Fatal("runtime key without the required role accepted")

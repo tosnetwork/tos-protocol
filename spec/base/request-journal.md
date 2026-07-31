@@ -77,6 +77,20 @@ request revision. A newer observation may advance only monotonically; a
 rollback is rejected. A recorded reorganization prevents
 `authorized -> running` for the paid request.
 
+Receipt application also uses one transaction. A globally unique
+`network + receiptId`, its request index, the complete signed receipt
+envelope, parsed bounded fields, and the request terminal transition commit or
+roll back together. The journal recomputes the envelope fingerprint and
+requires its canonical payload to match every persisted receipt field.
+Exact replay returns the existing terminal record. A receipt cannot move a
+different request, exceed the applied payment, or complete a reorganized
+payment.
+
+Paid `authorized` and `running` requests cannot use the generic terminal
+transition. Success requires a receipt from `running`; failed, canceled, and
+timed-out receipts may terminate an authorized request before worker dispatch
+or a running request after dispatch.
+
 The store has explicit limits for request count, nonce count, encoded record
 bytes, retention, cleanup batch size, and file-open time. When capacity is
 full it removes only entries whose retention deadline has passed. If no safely
@@ -86,6 +100,9 @@ There is at most one payment record and index per request, so payment state
 cannot exceed the configured request count. Its encoded size uses the request
 record byte limit, it inherits the immutable request retention deadline, and
 cleanup deletes the payment and index in the same transaction as the request.
+There is likewise at most one receipt and receipt index per request. It uses
+the same encoded-record and retention limits and is deleted atomically with
+the request.
 
 The payment reconciliation scanner stores one fixed-size cursor in journal
 metadata. Each page examines at most the configured cleanup/write batch
@@ -98,7 +115,7 @@ position.
 Cleanup runs in bounded batches owned by Edge Core. The on-disk file may keep
 previously allocated pages for reuse, so file high-water size is not treated
 as current record count. Operators monitor logical request records, nonce
-claims, budget usage, payment records, and file bytes. The database file is
+claims, budget usage, payment and receipt records, and file bytes. The database file is
 mode `0600`; its parent directory, backup, filesystem encryption, and offline
 compaction remain deployment policy.
 

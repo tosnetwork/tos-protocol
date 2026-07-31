@@ -60,6 +60,13 @@ block new paid dispatch until an authenticated reconciliation policy resolves
 it. Payment records, watcher cursors, retry history, and tombstones require
 the same count, lifetime, and cleanup ownership as requests.
 
+A paid request terminal state and its signed receipt must commit atomically.
+Persist the complete envelope, recompute its fingerprint, and require the
+canonical payload to match the request, payment, revisions, status, usage,
+charge, result commitment, and completion time. Workers never receive the
+receipt private key. Receipt IDs and request indexes are bounded and unique;
+exact retry must not create a second terminal effect.
+
 ## Parsing and transport
 
 Reject unknown fields in security-sensitive typed values, duplicate JSON or

@@ -71,6 +71,21 @@ quote, authorization, service/resource revisions, status, usage, charge,
 result commitment, and completion time. It is evidence of that signer's
 statement, not automatic proof of semantic correctness or chain finality.
 
+The Go reference verifies the receipt against the original opaque payment and
+current manifest role. Edge Core then persists the complete signed envelope,
+its fingerprint, request-intent/payment identifiers, bounded usage and charge
+while transitioning the exact paid request to its terminal state in one
+transaction. A paid `authorized` or `running` request cannot bypass this path
+with a plain terminal journal transition. Receipt IDs are globally unique per
+network, exact replay has no second effect, and a charge above the applied
+payment or a reorganized payment is rejected.
+
+This is verification and durable evidence storage, not receipt generation.
+The production Edge composition must keep the receipt private key outside the
+worker, construct the receipt from a correlated and metered worker result,
+and expose only the stored signed envelope through the authenticated receipt
+resource.
+
 The initial integration should consume the released Service Actor and escrow
 interfaces through a pinned chain adapter. Contract code, ABI, deployment
 address, network, confirmation policy, and feature flags belong in the

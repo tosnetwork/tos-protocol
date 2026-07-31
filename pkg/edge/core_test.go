@@ -92,6 +92,7 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 			Roles: []string{
 				protocol.RuntimeRoleAuthenticate,
 				protocol.RuntimeRoleQuote,
+				protocol.RuntimeRoleReceipt,
 			},
 			NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
 		}},
@@ -688,6 +689,142 @@ func TestCoreAppliesOnlyVerifiedPaymentObservation(t *testing.T) {
 	}
 	if health.RequestRecords != 1 || health.PaymentRecords != 1 {
 		t.Fatalf("unexpected payment health: %#v", health)
+	}
+}
+
+func TestCoreAtomicallyAppliesManifestAuthorizedReceipt(t *testing.T) {
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	now := time.Unix(1_800_000_000, 0).UTC()
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized := fixture.authorizePayment(t, "receipt-request-0001")
+	intent := "sha256:" + strings.Repeat("9", 64)
+	if _, disposition, err := core.AdmitAuthorizedPayment(
+		scope, intent, authorized, now.Add(30*time.Minute),
+	); err != nil || disposition != journal.BeginCreated {
+		t.Fatalf(
+			"admit receipted payment: disposition=%q err=%v",
+			disposition, err,
+		)
+	}
+	material, err := authorized.ObservationMaterial(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := chain.PaymentState{
+		Network: material.Network, AuthorizationID: material.AuthorizationID,
+		QuoteID: material.QuoteID, RequestID: material.RequestID,
+		Reference: material.Reference, Confirmed: true, Finalized: true,
+		AmountNanoTOS: material.PriceNanoTOS,
+		Payer:         material.Payer, Payee: material.Payee,
+		ObservedMasterSeqno: 101, ObservedAt: now,
+	}
+	observer, err := payment.NewObserver(
+		corePaymentResolver{state: state},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err := observer.Observe(
+		context.Background(), authorized, 100, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, _, disposition, err := core.ApplyVerifiedPayment(
+		scope, intent, authorized, observed, 101,
+	)
+	if err != nil || disposition != journal.PaymentApplied {
+		t.Fatalf(
+			"apply receipted payment: disposition=%q err=%v",
+			disposition, err,
+		)
+	}
+	running, err := core.TransitionRequest(
+		scope, request.Revision, journal.StateRunning, "", "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptValue := protocol.Receipt{
+		Version:   protocol.BaseEnvelopeVersion,
+		ReceiptID: "receipt-0001", RequestID: scope.RequestID,
+		QuoteID:         material.QuoteID,
+		AuthorizationID: material.AuthorizationID,
+		ServiceID:       scope.ServiceID, Status: "succeeded",
+		Usage: []protocol.UsageItem{
+			{Unit: "output_tokens", Quantity: 10},
+		},
+		ChargedNanoTOS:   material.PriceNanoTOS,
+		ResultDigest:     "sha256:" + strings.Repeat("6", 64),
+		ServiceRevision:  "manifest-revision-1",
+		ResourceRevision: "resource-revision-1",
+		CompletedAt:      now,
+	}
+	receiptEnvelope, err := identity.SignCanonical(
+		fixture.runtimePrivate, protocol.ReceiptDomain,
+		"runtime-auth-key", receiptValue, now, now.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedReceipt, err := fixture.manifest.VerifyReceipt(
+		receiptEnvelope, authorized, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.ApplyVerifiedReceipt(
+		scope, running.Revision, authorization.VerifiedReceipt{},
+	); err == nil {
+		t.Fatal("unverified receipt accepted")
+	}
+	terminal, stored, receiptDisposition, err := core.ApplyVerifiedReceipt(
+		scope, running.Revision, verifiedReceipt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receiptDisposition != journal.ReceiptApplied ||
+		terminal.State != journal.StateSucceeded ||
+		terminal.Revision != running.Revision+1 ||
+		terminal.ResultDigest != receiptValue.ResultDigest ||
+		stored.ReceiptID != receiptValue.ReceiptID ||
+		stored.RuntimeKeyID != "runtime-auth-key" {
+		t.Fatalf(
+			"receipt application: record=%#v receipt=%#v disposition=%q",
+			terminal, stored, receiptDisposition,
+		)
+	}
+	replayedRecord, replayedReceipt, receiptDisposition, err :=
+		core.ApplyVerifiedReceipt(scope, running.Revision, verifiedReceipt)
+	if err != nil ||
+		receiptDisposition != journal.ReceiptReplay ||
+		replayedRecord != terminal ||
+		replayedReceipt.ReceiptID != stored.ReceiptID {
+		t.Fatalf(
+			"receipt replay: record=%#v receipt=%#v disposition=%q err=%v",
+			replayedRecord, replayedReceipt, receiptDisposition, err,
+		)
+	}
+	recovered, err := core.Receipt(scope)
+	if err != nil || recovered.ReceiptID != stored.ReceiptID {
+		t.Fatalf("recovered receipt=%#v err=%v", recovered, err)
+	}
+	health, err := core.Health()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if health.RequestRecords != 1 ||
+		health.PaymentRecords != 1 ||
+		health.ReceiptRecords != 1 {
+		t.Fatalf("unexpected receipt health: %#v", health)
 	}
 }
 

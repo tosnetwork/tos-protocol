@@ -113,7 +113,8 @@ revocation, payment, and local policy before continuing.
 This library does not by itself enable a public session or invocation route.
 The bootstrap server still exposes discovery only. A production route must
 wire a real authority resolver, typed payload policy, the concrete TOS payment
-adapter and watcher schedule, execution isolation, and receipt persistence.
+adapter and watcher schedule, execution isolation, receipt generation/key
+custody, and authenticated receipt delivery.
 
 Runtime requests such as quotes and receipts can use the opaque
 `AuthorizedEnvelope` path directly. Client actions additionally require a
@@ -127,3 +128,9 @@ manifest/session; the client authorization must bind the exact destination
 and cannot expand session/delegation budgets. A strict observer then requires
 an exact, fresh, high-water, final chain response before producing another
 opaque result. See [payment-observation.md](payment-observation.md).
+
+Receipts use another typed continuation. The current manifest key must have
+the `receipt` role, and the canonical signed receipt must validate against the
+original opaque quote/payment authorization. The opaque result repeats the
+complete request, quote, authorization, revisions, charge, usage, and signed
+envelope binding immediately before atomic terminal persistence.

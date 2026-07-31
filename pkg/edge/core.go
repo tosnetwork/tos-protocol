@@ -12,6 +12,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
 	"github.com/tosnetwork/tos-protocol/pkg/payment"
+	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
 
 const (
@@ -49,6 +50,7 @@ type CoreHealth struct {
 	NonceClaims                        uint64
 	BudgetUsages                       uint64
 	PaymentRecords                     uint64
+	ReceiptRecords                     uint64
 	JournalFileBytes                   int64
 	LastCleanupAt                      time.Time
 	LastCleanupDeleted                 int
@@ -333,6 +335,75 @@ func (c *Core) Payment(scope journal.Scope) (journal.PaymentRecord, error) {
 	return c.requests.GetPayment(scope, c.now())
 }
 
+// ApplyVerifiedReceipt consumes only opaque output from current
+// manifest/runtime receipt authorization. Receipt uniqueness and the paid
+// request terminal transition commit atomically in the journal.
+func (c *Core) ApplyVerifiedReceipt(
+	scope journal.Scope,
+	expectedRevision uint64,
+	verified authorization.VerifiedReceipt,
+) (journal.Record, journal.ReceiptRecord, journal.ReceiptDisposition, error) {
+	now := c.now()
+	request, err := c.requests.Get(scope, now)
+	if err != nil {
+		return journal.Record{}, journal.ReceiptRecord{}, "", err
+	}
+	appliedPayment, err := c.requests.GetPayment(scope, now)
+	if err != nil {
+		return journal.Record{}, journal.ReceiptRecord{}, "", err
+	}
+	material, err := verified.ApplicationMaterial(
+		authorization.ReceiptBinding{
+			Network: scope.Network, ServiceID: scope.ServiceID,
+			SessionID: scope.SessionID, Operation: scope.Operation,
+			RequestID: scope.RequestID, IntentDigest: request.IntentDigest,
+			AuthorizationID: appliedPayment.AuthorizationID,
+			QuoteID:         appliedPayment.QuoteID,
+		},
+		now,
+	)
+	if err != nil {
+		return journal.Record{}, journal.ReceiptRecord{}, "", fmt.Errorf(
+			"authorize receipt application: %w",
+			err,
+		)
+	}
+	status, errorCode, err := receiptTerminalState(material.Status)
+	if err != nil {
+		return journal.Record{}, journal.ReceiptRecord{}, "", err
+	}
+	usage := make([]journal.ReceiptUsage, len(material.Usage))
+	for index, item := range material.Usage {
+		usage[index] = journal.ReceiptUsage{
+			Unit: item.Unit, Quantity: item.Quantity,
+		}
+	}
+	return c.requests.ApplyReceipt(
+		journal.ReceiptAdmission{
+			Scope: scope, ReceiptID: material.ReceiptID,
+			IntentDigest:    material.Binding.IntentDigest,
+			RuntimeKeyID:    material.RuntimeKeyID,
+			AuthorizationID: material.Binding.AuthorizationID,
+			QuoteID:         material.Binding.QuoteID,
+			Status:          status, Usage: usage,
+			ChargedNanoTOS:        material.ChargedNanoTOS,
+			ResultDigest:          material.ResultDigest,
+			ErrorCode:             errorCode,
+			ServiceRevision:       material.ServiceRevision,
+			ResourceRevision:      material.ResourceRevision,
+			CompletedAt:           material.CompletedAt,
+			ReceiptEnvelopeDigest: material.EnvelopeDigest,
+			Envelope:              material.Envelope,
+		},
+		expectedRevision,
+		now,
+	)
+}
+
+func (c *Core) Receipt(scope journal.Scope) (journal.ReceiptRecord, error) {
+	return c.requests.GetReceipt(scope, c.now())
+}
+
 // ReconcilePayment performs one strict post-application chain recheck and
 // applies its opaque result against the latest durable high-water mark.
 func (c *Core) ReconcilePayment(
@@ -524,6 +595,21 @@ func boundedErrorMessage(err error, maximum int) string {
 	return strings.Clone(message[:maximum])
 }
 
+func receiptTerminalState(status string) (journal.State, string, error) {
+	switch status {
+	case "succeeded":
+		return journal.StateSucceeded, "", nil
+	case "failed":
+		return journal.StateFailed, string(protocol.ErrorRuntimeFailed), nil
+	case "canceled":
+		return journal.StateCanceled, string(protocol.ErrorCanceled), nil
+	case "timed_out":
+		return journal.StateTimedOut, string(protocol.ErrorDeadlineExceeded), nil
+	default:
+		return "", "", errors.New("unsupported verified receipt status")
+	}
+}
+
 func (c *Core) TransitionRequest(
 	scope journal.Scope,
 	expectedRevision uint64,
@@ -569,6 +655,7 @@ func (c *Core) Health() (CoreHealth, error) {
 	output := CoreHealth{
 		RequestRecords: stats.Records, NonceClaims: stats.Nonces,
 		BudgetUsages: stats.BudgetUsages, PaymentRecords: stats.Payments,
+		ReceiptRecords:   stats.Receipts,
 		JournalFileBytes: stats.FileSize,
 		LastCleanupAt:    c.lastCleanupAt, LastCleanupDeleted: c.lastDeleted,
 		LastCleanupHasMore:               c.lastMore,

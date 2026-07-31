@@ -78,8 +78,8 @@ The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
 deadline. `tos-edge` still exposes discovery only until manifest-backed
 authorization is connected to the live TOS contract/RPC decoder and durable
-payment watching, execution isolation, and receipt persistence are
-implemented.
+payment watching, execution isolation, receipt generation, and public
+delivery are implemented.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
@@ -98,10 +98,14 @@ recheck can run after quote expiry, and Edge Core provides a count-bounded
 batch coordinator with a crash-safe CAS scan cursor. An optional fixed-interval
 scheduler adds whole-batch deadlines, shutdown cancellation, serialized scan
 ownership, and health counters; it is disabled unless an observer and all
-bounds are explicitly configured. The concrete TOS payment contract adapter,
-`tos-edge` binary configuration, adaptive retry policy, refund/completion
-policy, and isolated executor remain intentionally disconnected, so none of
-these internal boundaries enable public actions by themselves.
+bounds are explicitly configured. A current manifest `receipt` key can also
+produce an opaque verified receipt; its full signed envelope, intent/payment
+binding, bounded usage, charge, and terminal request transition persist in
+one exact-replay-safe transaction. The concrete TOS payment contract adapter,
+`tos-edge` binary configuration, adaptive retry policy, worker-result receipt
+generation/key custody, refund/completion policy, isolated executor, and
+public receipt route remain intentionally disconnected, so none of these
+internal boundaries enable public actions by themselves.
 
 ## Repository map
 
@@ -115,7 +119,7 @@ pkg/edge/             safe public discovery server
 pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
-pkg/journal/          durable bounded replay, payment and idempotency state
+pkg/journal/          durable bounded replay, payment, receipt and request state
 pkg/localrpc/         validated private Unix-socket Worker RPC client
 pkg/payment/          strict signed quote/payment chain observation
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts
