@@ -77,6 +77,19 @@ request revision. A newer observation may advance only monotonically; a
 rollback is rejected. A recorded reorganization prevents
 `authorized -> running` for the paid request.
 
+Paid dispatch uses a separate execution claim in that same database. One
+globally unique `network + serviceId + taskId`, one request-to-execution index,
+the exact quote and payment identifiers, a deterministic digest of the complete
+private Worker invocation, its deadline, and the request's
+`authorized -> running` transition commit or roll back together. The payment
+must still be applied and not reorganized. Generic state transition cannot
+bypass this claim. Exact replay returns the original claim and request revision
+even after the execution deadline only while payment remains applied; it does
+not authorize new work. A later recorded payment reorganization blocks claim
+replay but does not erase the audit record. Changing the task, invocation
+digest, quote, deadline, or request binding is a conflict, and reusing a live
+task ID for another request is rejected.
+
 Receipt application also uses one transaction. A globally unique
 `network + receiptId`, its request index, the complete signed receipt
 envelope, parsed bounded fields, and the request terminal transition commit or
@@ -104,7 +117,9 @@ record byte limit, it inherits the immutable request retention deadline, and
 cleanup deletes the payment and index in the same transaction as the request.
 There is likewise at most one receipt and receipt index per request. It uses
 the same encoded-record and retention limits and is deleted atomically with
-the request.
+the request. There is also at most one execution record and execution index per
+request. It has a fixed encoded-size bound, inherits the immutable request
+retention deadline, and is deleted in the same transaction as the request.
 
 The payment reconciliation scanner stores one fixed-size cursor in journal
 metadata. Each page examines at most the configured cleanup/write batch
@@ -117,7 +132,8 @@ position.
 Cleanup runs in bounded batches owned by Edge Core. The on-disk file may keep
 previously allocated pages for reuse, so file high-water size is not treated
 as current record count. Operators monitor logical request records, nonce
-claims, budget usage, payment and receipt records, and file bytes. The database file is
+claims, budget usage, payment, execution and receipt records, and file bytes.
+The database file is
 mode `0600`; its parent directory, backup, filesystem encryption, and offline
 compaction remain deployment policy.
 
@@ -131,6 +147,14 @@ automatically executed. A recovery coordinator must recheck current
 controller/runtime authority, request expiry, payment state, owner policy,
 worker disposition, and profile-specific recovery rules before taking the
 next legal transition.
+
+For a claimed `running` request, recovery may use only the stored task ID and
+the exact invocation whose digest matches the claim. The claim proves that
+Edge committed its dispatch decision; it does not prove that the Worker
+received, started, or completed the call. The current private RPC has no task
+status/result-replay method and performs no retry. Production recovery
+therefore remains blocked until the Worker contract can return the same outcome
+for an exact task replay and reject a changed request under the same task ID.
 
 The bootstrap `tos-edge` binary still exposes discovery only. The journal does
 not enable public session, payment, or action routes by itself.

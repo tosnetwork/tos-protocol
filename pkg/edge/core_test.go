@@ -710,8 +710,11 @@ func TestCoreAppliesOnlyVerifiedPaymentObservation(t *testing.T) {
 			reorganized, paymentDisposition, err,
 		)
 	}
-	if _, err := core.TransitionRequest(
-		scope, record.Revision, journal.StateRunning, "", "",
+	if _, err := core.ClaimPaidExecution(
+		scope,
+		record.Revision,
+		authorized,
+		completionInvokeRequest(scope, now),
 	); !errors.Is(err, journal.ErrPaymentReorganized) {
 		t.Fatalf("reorganized dispatch error=%v", err)
 	}
@@ -778,12 +781,16 @@ func TestCoreAtomicallyAppliesManifestAuthorizedReceipt(t *testing.T) {
 			disposition, err,
 		)
 	}
-	running, err := core.TransitionRequest(
-		scope, request.Revision, journal.StateRunning, "", "",
+	claimed, err := core.ClaimPaidExecution(
+		scope,
+		request.Revision,
+		authorized,
+		completionInvokeRequest(scope, now),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	running := claimed.State
 	receiptValue := protocol.Receipt{
 		Version:   protocol.BaseEnvelopeVersion,
 		ReceiptID: "receipt-0001", RequestID: scope.RequestID,

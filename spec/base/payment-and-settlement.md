@@ -81,12 +81,15 @@ network, exact replay has no second effect, and a charge above the applied
 payment or a reorganized payment is rejected.
 
 The Go reference also implements the internal successful-result issuance
-boundary. The private Worker client returns an opaque validated response; Edge
-Core repeats the paid running request and quote limits, derives the output
-digest and fixed bounded usage fields, and gives only canonical receipt bytes
-to a purpose-specific signer. It rejects payload, validity, key, role, or
-signature substitution before atomic persistence. Concurrent equivalent
-signatures resolve to the one durable semantic receipt.
+boundary. Before dispatch, Edge Core atomically stores the exact private
+invocation digest and globally unique task ID with the paid request's running
+transition. The private Worker client returns an opaque validated response;
+Edge Core repeats that durable execution claim, the paid running request and
+quote limits, derives the output digest and fixed bounded usage fields, and
+gives only canonical receipt bytes to a purpose-specific signer. It rejects
+payload, task, invocation, validity, key, role, or signature substitution
+before atomic persistence. Concurrent equivalent signatures resolve to the
+one durable semantic receipt.
 
 The generic fail-closed non-success policy is also implemented internally.
 `failed`, `canceled`, and `timed_out` receipts contain an empty usage array,
@@ -99,8 +102,9 @@ work charging policy.
 This does not provide production key custody or public delivery. A deployment
 must supply a bounded signer adapter, keep its private key outside the Worker,
 define profile intent-to-Worker mapping and any partial-work refund/charging
-policy, and expose only the stored signed envelope through an authenticated
-receipt resource.
+policy, add an idempotent Worker task-status/result-replay recovery contract,
+and expose only the stored signed envelope through an authenticated receipt
+resource.
 
 The initial integration should consume the released Service Actor and escrow
 interfaces through a pinned chain adapter. Contract code, ABI, deployment

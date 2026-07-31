@@ -86,9 +86,10 @@ rejected. Payment records are bounded one-to-one by request records and are
 deleted with the request retention boundary.
 
 The journal can monotonically mark an applied payment `reorganized`. A paid
-request with that status cannot transition from `authorized` to `running`.
-This is a storage and dispatch safety primitive; callers cannot treat a raw
-RPC response as a verified reorganization.
+request with that status cannot acquire the atomic execution claim required
+for `authorized -> running`. The generic transition path cannot bypass that
+claim. This is a storage and dispatch safety primitive; callers cannot treat a
+raw RPC response as a verified reorganization.
 
 ## Post-application reconciliation
 

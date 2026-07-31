@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	"github.com/tosnetwork/tos-protocol/gen/tos/edge/v1/edgev1connect"
+	"google.golang.org/protobuf/proto"
 )
 
 type testWorkerService struct {
@@ -175,8 +176,29 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(response.Output) != "echo:hello" ||
-		response.Usage.OutputBytes != uint64(len(response.Output)) {
+		response.Usage.OutputBytes != uint64(len(response.Output)) ||
+		response.TaskID != invokeRequest.TaskId {
 		t.Fatalf("unexpected completion %#v", response)
+	}
+	expectedRequestDigest, err := InvocationRequestDigest(invokeRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.RequestDigest != expectedRequestDigest {
+		t.Fatalf(
+			"request digest=%q want=%q",
+			response.RequestDigest,
+			expectedRequestDigest,
+		)
+	}
+	changedRequest := proto.Clone(invokeRequest).(*edgev1.InvokeRequest)
+	changedRequest.Payload = []byte("changed")
+	changedDigest, err := InvocationRequestDigest(changedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedDigest == expectedRequestDigest {
+		t.Fatal("different Worker invocation produced the same digest")
 	}
 	response.Output[0] ^= 1
 	again, err := validated.Completion(response.Binding)
@@ -409,6 +431,7 @@ func validQuoteRequest(now time.Time) *edgev1.QuoteRequest {
 func validInvokeRequest(now time.Time) *edgev1.InvokeRequest {
 	return &edgev1.InvokeRequest{
 		RequestId: "request-0001", QuoteId: "quote-0001",
+		TaskId:    "task-request-0001",
 		ServiceId: "tos.ai.mock", Operation: "generate",
 		Model: "deterministic-echo", Payload: []byte("hello"),
 		MaxOutputBytes:     1024,

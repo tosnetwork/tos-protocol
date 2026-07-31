@@ -24,7 +24,8 @@ vectors, and a durable bounded request journal now exist. Edge Core owns
 transactional replay/idempotency records, compare-and-swap request
 transitions, authenticated-envelope nonce admission, restart recovery data,
 capacity backpressure, exact-once payment application, payment reorganization
-gating, atomic signed-receipt terminal application, and bounded expiry cleanup.
+gating, atomic paid execution claims, atomic signed-receipt terminal
+application, and bounded expiry cleanup.
 The authorization library
 verifies fresh controller authority, the current signed manifest, runtime
 roles and revocation, canonical semantic payloads, and admission bindings.
@@ -38,17 +39,21 @@ budget in one bbolt transaction, so concurrent requests and replay cannot
 overspend. The private Worker client enforces socket-directory and socket
 ownership/mode, Connect message limits, request deadlines, response
 correlation and byte accounting, no implicit retries, and a default
-external-service-only priority policy. Successful invocation responses cross
-into Edge Core only as opaque validated results. Edge repeats the exact paid
-running scope, quote limits, and deadline, hashes the output, delegates
-canonical receipt bytes to an external signer, verifies the returned envelope
-against the current manifest, and applies it atomically. The public process
-must still supply
+external-service-only priority policy. Before dispatch, Edge atomically binds
+one globally unique task ID and deterministic private-request digest to the
+paid request's `authorized -> running` transition. Successful invocation
+responses cross into Edge Core only as opaque validated results. Edge repeats
+the exact paid execution claim, scope, quote limits, and deadline, hashes the
+output, delegates canonical receipt bytes to an external signer, verifies the
+returned envelope against the current manifest, and applies it atomically. The
+public process must still supply
 the TOS contract decoder/RPC composition, the production client-key resolver,
 the production payment adapter and watcher schedule, a reconciliation/refund
 policy, profile-specific invocation mapping, invocation isolation, production
 receipt key custody, partial-work refund/charging policy, and public receipt
-delivery before it forwards paid work.
+delivery before it forwards paid work. A production Worker must additionally
+support idempotent task lookup/result replay so Edge can resolve the remaining
+crash window after a claim commits but before an RPC result is received.
 Those runtime operations remain absent from the public server, so it exposes
 no invocation route.
 
@@ -57,14 +62,14 @@ no invocation route.
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
 | Language | Go 1.24+ | implemented |
-| Local process API | ConnectRPC + Protobuf over private Unix socket | contract and opaque validated-result client implemented: owner/mode, message/deadline, response-binding, priority and no-retry controls |
+| Local process API | ConnectRPC + Protobuf over private Unix socket | contract and opaque validated-result client implemented: owner/mode, message/deadline, response-binding, mandatory task ID, priority and no-retry controls; task-status/result-replay recovery remains |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, and strict stateless chain-resolver boundary implemented; live TOS contract/RPC composition remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, and atomic cumulative budget admission implemented; production key source remains |
 | Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | manifest/session/destination/amount binding, query deadline, freshness, high-water, reorganization and explicit finality/overpayment policy implemented; post-expiry strict recheck, bounded batch coordinator, and opt-in cancelable scheduler implemented; production adapter/binary wiring, adaptive backoff, and refund reconciliation remain |
 | Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results and zero-charge failed/canceled/timed-out outcomes use a purpose-specific signer, immediate manifest re-verification and concurrency-safe application; production signer, profile refund/charging policy and public delivery remain |
-| Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment application, reorganization dispatch gate, full signed-receipt terminal application, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
+| Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment application, reorganization dispatch gate, exact paid execution claim, full signed-receipt terminal application, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded generic JSON-RPC client and interface implemented |
 | Policy | OPA | adapter planned after policy vocabulary is normative |

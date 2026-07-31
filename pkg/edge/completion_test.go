@@ -79,6 +79,87 @@ func (s *edgeReceiptSigner) SignReceipt(
 	)
 }
 
+func TestCoreClaimsExactPaidWorkerInvocation(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized, request := prepareAuthorizedCompletionRequest(
+		t,
+		core,
+		fixture,
+		"execution-claim-0001",
+		now,
+	)
+	expanded := completionInvokeRequest(scope, now)
+	expanded.MaxOutputBytes++
+	if _, err := core.ClaimPaidExecution(
+		scope, request.Revision, authorized, expanded,
+	); err == nil {
+		t.Fatal("Worker request exceeding quote was claimed")
+	}
+	unchanged, err := core.Request(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged != request {
+		t.Fatalf("rejected claim mutated request: %#v", unchanged)
+	}
+	if _, err := core.Execution(scope); !errors.Is(err, journal.ErrNotFound) {
+		t.Fatalf("rejected claim persisted execution: %v", err)
+	}
+	invocation := completionInvokeRequest(scope, now)
+	claimed, err := core.ClaimPaidExecution(
+		scope, request.Revision, authorized, invocation,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed.Disposition != journal.ExecutionClaimed ||
+		claimed.State.State != journal.StateRunning ||
+		claimed.Execution.TaskID != invocation.TaskId {
+		t.Fatalf("unexpected execution claim: %#v", claimed)
+	}
+	invocation.Payload[0] ^= 1
+	if string(claimed.Request.Payload) != "input" {
+		t.Fatal("claimed Worker request aliases caller payload")
+	}
+	replayed, err := core.ClaimPaidExecution(
+		scope,
+		request.Revision,
+		authorized,
+		completionInvokeRequest(scope, now),
+	)
+	if err != nil || replayed.Disposition != journal.ExecutionReplay ||
+		replayed.State != claimed.State ||
+		replayed.Execution != claimed.Execution {
+		t.Fatalf("execution replay=%#v err=%v", replayed, err)
+	}
+	changed := completionInvokeRequest(scope, now)
+	changed.Model = "different-model"
+	if _, err := core.ClaimPaidExecution(
+		scope, request.Revision, authorized, changed,
+	); !errors.Is(err, journal.ErrConflict) {
+		t.Fatalf("changed Worker request replay error=%v", err)
+	}
+	stored, err := core.Execution(scope)
+	if err != nil || stored != claimed.Execution {
+		t.Fatalf("stored execution=%#v err=%v", stored, err)
+	}
+	health, err := core.Health()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if health.ExecutionRecords != 1 {
+		t.Fatalf("unexpected execution health: %#v", health)
+	}
+}
+
 func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	clock := now
@@ -539,17 +620,16 @@ func prepareCompletionRequest(
 		requestID,
 		now,
 	)
-	running, err := core.TransitionRequest(
+	claimed, err := core.ClaimPaidExecution(
 		scope,
 		request.Revision,
-		journal.StateRunning,
-		"",
-		"",
+		authorized,
+		completionInvokeRequest(scope, now),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return scope, authorized, running
+	return scope, authorized, claimed.State
 }
 
 func prepareAuthorizedCompletionRequest(

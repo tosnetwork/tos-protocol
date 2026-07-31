@@ -95,6 +95,20 @@ func testPaymentAdmission(
 	}
 }
 
+func testExecutionAdmission(
+	scope Scope,
+	payment PaymentAdmission,
+	deadline time.Time,
+) ExecutionAdmission {
+	return ExecutionAdmission{
+		Scope: scope, IntentDigest: payment.IntentDigest,
+		AuthorizationID: payment.AuthorizationID,
+		QuoteID:         payment.QuoteID, TaskID: "task-" + scope.RequestID,
+		RequestDigest: "sha256:" + strings.Repeat("7", 64),
+		Deadline:      deadline,
+	}
+}
+
 func testReceiptAdmission(
 	scope Scope,
 	now time.Time,
@@ -223,8 +237,14 @@ func preparePaidRunningRequest(
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := store.Transition(
-		scope, authorized.Revision, StateRunning, "", "", now,
+	running, _, _, err := store.ClaimExecution(
+		testExecutionAdmission(
+			scope,
+			paymentAdmission,
+			now.Add(30*time.Minute),
+		),
+		authorized.Revision,
+		now,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -464,11 +484,26 @@ func TestApplyPaymentAtomicallyAuthorizesAndReplays(t *testing.T) {
 	if stats.Records != 1 || stats.Payments != 1 {
 		t.Fatalf("unexpected payment stats: %#v", stats)
 	}
-	running, err := store.Transition(
+	if _, err := store.Transition(
 		scope, record.Revision, StateRunning, "", "", now.Add(2*time.Second),
+	); !errors.Is(err, ErrExecutionRequired) {
+		t.Fatalf("paid request bypassed execution claim: %v", err)
+	}
+	running, execution, executionDisposition, err := store.ClaimExecution(
+		testExecutionAdmission(
+			scope,
+			paymentAdmission,
+			now.Add(30*time.Minute),
+		),
+		record.Revision,
+		now.Add(2*time.Second),
 	)
-	if err != nil || running.State != StateRunning {
-		t.Fatalf("run paid request: record=%#v err=%v", running, err)
+	if err != nil || running.State != StateRunning ||
+		executionDisposition != ExecutionClaimed || execution.Revision != 1 {
+		t.Fatalf(
+			"claim paid request: record=%#v execution=%#v disposition=%q err=%v",
+			running, execution, executionDisposition, err,
+		)
 	}
 }
 
@@ -606,6 +641,274 @@ func TestApplyPaymentConcurrentReplayHasOneWinner(t *testing.T) {
 	}
 }
 
+func TestClaimExecutionAtomicallyRunsAndReplaysExactRequest(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("execution-exact-replay")
+	paymentAdmission := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, paymentAdmission.IntentDigest, now, now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	authorized, _, _, err := store.ApplyPayment(paymentAdmission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := testExecutionAdmission(
+		scope, paymentAdmission, now.Add(30*time.Minute),
+	)
+	running, execution, disposition, err := store.ClaimExecution(
+		admission, authorized.Revision, now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != ExecutionClaimed || running.State != StateRunning ||
+		running.Revision != authorized.Revision+1 || execution.Revision != 1 {
+		t.Fatalf(
+			"claim: state=%#v execution=%#v disposition=%q",
+			running, execution, disposition,
+		)
+	}
+
+	// A recovery replay remains valid after the execution deadline because it
+	// returns an existing immutable claim rather than authorizing new work.
+	replayedState, replayedExecution, disposition, err := store.ClaimExecution(
+		admission, authorized.Revision, now.Add(31*time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != ExecutionReplay || replayedState != running ||
+		replayedExecution != execution {
+		t.Fatalf(
+			"replay changed claim: state=%#v execution=%#v disposition=%q",
+			replayedState, replayedExecution, disposition,
+		)
+	}
+	conflict := admission
+	conflict.RequestDigest = "sha256:" + strings.Repeat("8", 64)
+	if _, _, _, err := store.ClaimExecution(
+		conflict, authorized.Revision, now.Add(2*time.Second),
+	); !errors.Is(err, ErrConflict) {
+		t.Fatalf("changed execution replay error=%v", err)
+	}
+	stored, err := store.GetExecution(scope, now.Add(2*time.Second))
+	if err != nil || stored != execution {
+		t.Fatalf("stored execution=%#v err=%v", stored, err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 1 || stats.Payments != 1 || stats.Executions != 1 {
+		t.Fatalf("unexpected execution stats: %#v", stats)
+	}
+	reorganization := PaymentReorganization{
+		Scope: scope, AuthorizationID: paymentAdmission.AuthorizationID,
+		QuoteID:             paymentAdmission.QuoteID,
+		Reference:           paymentAdmission.Reference,
+		ObservedMasterSeqno: 102, ObservedAt: now.Add(32 * time.Minute),
+	}
+	if _, disposition, err := store.MarkPaymentReorganized(
+		reorganization, now.Add(32*time.Minute),
+	); err != nil || disposition != PaymentReorganized {
+		t.Fatalf("reorganize claimed payment: disposition=%q err=%v", disposition, err)
+	}
+	if _, _, _, err := store.ClaimExecution(
+		admission, authorized.Revision, now.Add(33*time.Minute),
+	); !errors.Is(err, ErrPaymentReorganized) {
+		t.Fatalf("reorganized execution replay error=%v", err)
+	}
+}
+
+func TestClaimExecutionConcurrentReplayHasOneWinner(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("execution-concurrent")
+	paymentAdmission := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, paymentAdmission.IntentDigest, now, now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	authorized, _, _, err := store.ApplyPayment(paymentAdmission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := testExecutionAdmission(
+		scope, paymentAdmission, now.Add(30*time.Minute),
+	)
+	const attempts = 32
+	var claimed atomic.Int32
+	var replayed atomic.Int32
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, attempts)
+	for range attempts {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, _, disposition, err := store.ClaimExecution(
+				admission, authorized.Revision, now.Add(time.Second),
+			)
+			switch {
+			case err != nil:
+				errorsSeen <- err
+			case disposition == ExecutionClaimed:
+				claimed.Add(1)
+			case disposition == ExecutionReplay:
+				replayed.Add(1)
+			default:
+				errorsSeen <- fmt.Errorf(
+					"unexpected execution disposition %q", disposition,
+				)
+			}
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		t.Error(err)
+	}
+	record, err := store.Get(scope, now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed.Load() != 1 || replayed.Load() != attempts-1 ||
+		record.State != StateRunning || record.Revision != 3 ||
+		stats.Executions != 1 {
+		t.Fatalf(
+			"claimed=%d replayed=%d record=%#v stats=%#v",
+			claimed.Load(), replayed.Load(), record, stats,
+		)
+	}
+}
+
+func TestClaimExecutionRejectsTaskReplayAcrossRequests(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	firstScope := testScope("execution-task-first")
+	secondScope := testScope("execution-task-second")
+	firstPayment := testPaymentAdmission(firstScope, now, 101)
+	secondPayment := testPaymentAdmission(secondScope, now, 101)
+	secondPayment.AuthorizationID = "authorization-0002"
+	secondPayment.QuoteID = "quote-0002"
+	secondPayment.Reference = "payment-reference-0002"
+	secondPayment.QuoteEnvelopeDigest = "sha256:" + strings.Repeat("9", 64)
+	secondPayment.PaymentEnvelopeDigest = "sha256:" + strings.Repeat("0", 64)
+
+	var authorized []Record
+	for _, item := range []struct {
+		scope     Scope
+		admission PaymentAdmission
+	}{
+		{firstScope, firstPayment},
+		{secondScope, secondPayment},
+	} {
+		if _, _, err := store.Begin(
+			item.scope,
+			item.admission.IntentDigest,
+			now,
+			now.Add(time.Hour),
+		); err != nil {
+			t.Fatal(err)
+		}
+		record, _, _, err := store.ApplyPayment(item.admission, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		authorized = append(authorized, record)
+	}
+	firstExecution := testExecutionAdmission(
+		firstScope, firstPayment, now.Add(30*time.Minute),
+	)
+	firstExecution.TaskID = "globally-shared-task"
+	if _, _, _, err := store.ClaimExecution(
+		firstExecution, authorized[0].Revision, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	secondExecution := testExecutionAdmission(
+		secondScope, secondPayment, now.Add(30*time.Minute),
+	)
+	secondExecution.TaskID = firstExecution.TaskID
+	if _, _, _, err := store.ClaimExecution(
+		secondExecution, authorized[1].Revision, now,
+	); !errors.Is(err, ErrExecutionReplay) {
+		t.Fatalf("cross-request task replay error=%v", err)
+	}
+	second, err := store.Get(secondScope, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.State != StateAuthorized ||
+		second.Revision != authorized[1].Revision {
+		t.Fatalf("task replay mutated second request: %#v", second)
+	}
+}
+
+func TestExecutionSurvivesRestartAndExpiresWithRequest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("execution-restart")
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paymentAdmission := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, paymentAdmission.IntentDigest, now, now.Add(2*time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	authorized, _, _, err := store.ApplyPayment(paymentAdmission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := testExecutionAdmission(
+		scope, paymentAdmission, now.Add(time.Second),
+	)
+	_, claimed, _, err := store.ClaimExecution(
+		admission, authorized.Revision, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	stored, err := reopened.GetExecution(scope, now.Add(time.Second))
+	if err != nil || stored != claimed {
+		t.Fatalf("reopened execution=%#v err=%v", stored, err)
+	}
+	deleted, more, err := reopened.PruneExpired(
+		now.Add(3*time.Second),
+		limits.MaxPrunePerWrite,
+	)
+	if err != nil || deleted != 1 || more {
+		t.Fatalf("prune: deleted=%d more=%v err=%v", deleted, more, err)
+	}
+	stats, err := reopened.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 0 || stats.Payments != 0 || stats.Executions != 0 {
+		t.Fatalf("execution children survived request expiry: %#v", stats)
+	}
+}
+
 func TestPaymentReorganizationBlocksPaidDispatch(t *testing.T) {
 	store, _ := openTestStore(t, testLimits(100))
 	now := time.Unix(1_800_000_000, 0).UTC()
@@ -649,8 +952,10 @@ func TestPaymentReorganizationBlocksPaidDispatch(t *testing.T) {
 	); !errors.Is(err, ErrPaymentReorganized) {
 		t.Fatalf("reorganized payment application error=%v", err)
 	}
-	if _, err := store.Transition(
-		scope, record.Revision, StateRunning, "", "", now.Add(2*time.Second),
+	if _, _, _, err := store.ClaimExecution(
+		testExecutionAdmission(scope, admission, now.Add(time.Minute)),
+		record.Revision,
+		now.Add(2*time.Second),
 	); !errors.Is(err, ErrPaymentReorganized) {
 		t.Fatalf("reorganized paid dispatch error=%v", err)
 	}
@@ -994,8 +1299,14 @@ func TestApplyReceiptRejectsReplayChargeAndReorganization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondRunning, err := store.Transition(
-		secondScope, secondAuthorized.Revision, StateRunning, "", "", now,
+	secondRunning, _, _, err := store.ClaimExecution(
+		testExecutionAdmission(
+			secondScope,
+			secondPayment,
+			now.Add(30*time.Minute),
+		),
+		secondAuthorized.Revision,
+		now,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1133,8 +1444,10 @@ func TestReceiptSurvivesRestartAndExpiresWithRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := store.Transition(
-		scope, authorized.Revision, StateRunning, "", "", now,
+	running, _, _, err := store.ClaimExecution(
+		testExecutionAdmission(scope, payment, now.Add(2*time.Millisecond)),
+		authorized.Revision,
+		now,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1890,6 +2203,35 @@ func TestJournalFailsClosedOnMissingReceiptIndexAtOpen(t *testing.T) {
 	}
 	if !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("missing receipt index error=%v", err)
+	}
+}
+
+func TestJournalFailsClosedOnMissingExecutionIndexAtOpen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("request-corrupt-execution")
+	preparePaidRunningRequest(t, store, scope, now)
+	key := scopeKey(scope)
+	if err := store.db.Update(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(requestExecutionsBucket).Delete(key[:])
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, limits)
+	if err == nil {
+		reopened.Close()
+		t.Fatal("journal with a missing execution index reopened")
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("missing execution index error=%v", err)
 	}
 }
 

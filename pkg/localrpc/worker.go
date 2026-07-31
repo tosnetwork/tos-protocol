@@ -2,6 +2,8 @@ package localrpc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -90,6 +92,8 @@ type InvocationCompletion struct {
 	Binding         InvocationBinding
 	Output          []byte
 	Usage           InvocationUsage
+	TaskID          string
+	RequestDigest   string
 	MaxOutputBytes  uint64
 	Deadline        time.Time
 	ModelRevision   string
@@ -104,6 +108,8 @@ type ValidatedInvocation struct {
 	binding         InvocationBinding
 	output          []byte
 	usage           InvocationUsage
+	taskID          string
+	requestDigest   string
 	maxOutputBytes  uint64
 	deadline        time.Time
 	modelRevision   string
@@ -130,6 +136,8 @@ func (v ValidatedInvocation) Completion(
 		Binding:         binding,
 		Output:          append([]byte(nil), v.output...),
 		Usage:           v.usage,
+		TaskID:          v.taskID,
+		RequestDigest:   v.requestDigest,
 		MaxOutputBytes:  v.maxOutputBytes,
 		Deadline:        v.deadline,
 		ModelRevision:   v.modelRevision,
@@ -267,6 +275,10 @@ func (c *WorkerClient) Invoke(
 	if err := c.validateInvokeRequest(request, now); err != nil {
 		return ValidatedInvocation{}, err
 	}
+	requestDigest, err := InvocationRequestDigest(request)
+	if err != nil {
+		return ValidatedInvocation{}, err
+	}
 	deadline := time.UnixMilli(request.DeadlineUnixMillis)
 	callContext, cancel, err := boundedContext(ctx, deadline)
 	if err != nil {
@@ -301,12 +313,32 @@ func (c *WorkerClient) Invoke(
 			OutputTokens:    response.Msg.Usage.OutputTokens,
 			ExecutionMillis: response.Msg.Usage.ExecutionMillis,
 		},
+		taskID:          request.TaskId,
+		requestDigest:   requestDigest,
 		maxOutputBytes:  request.MaxOutputBytes,
 		deadline:        deadline.UTC(),
 		modelRevision:   response.Msg.ModelRevision,
 		runtimeRevision: response.Msg.RuntimeRevision,
 		completedAt:     completedAt,
 	}, nil
+}
+
+// InvocationRequestDigest is the internal crash-recovery commitment to the
+// exact protobuf request sent over the private Worker RPC. It is not a public
+// protocol commitment and must not replace a profile request-intent digest.
+func InvocationRequestDigest(request *edgev1.InvokeRequest) (string, error) {
+	if request == nil {
+		return "", errors.New("nil Worker invocation request")
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("encode Worker invocation request: %w", err)
+	}
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-PRIVATE-WORKER-INVOKE-V1"))
+	hasher.Write([]byte{0})
+	hasher.Write(encoded)
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 func (c *WorkerClient) Cancel(
@@ -408,6 +440,9 @@ func (c *WorkerClient) validateInvokeRequest(
 		return err
 	}
 	if err := validateWorkerID("quote ID", request.QuoteId); err != nil {
+		return err
+	}
+	if err := validateWorkerID("task ID", request.TaskId); err != nil {
 		return err
 	}
 	if err := validateWorkerSelector(

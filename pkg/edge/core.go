@@ -10,12 +10,14 @@ import (
 	"sync"
 	"time"
 
+	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/payment"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -56,6 +58,7 @@ type CoreHealth struct {
 	BudgetUsages                       uint64
 	PaymentRecords                     uint64
 	ReceiptRecords                     uint64
+	ExecutionRecords                   uint64
 	JournalFileBytes                   int64
 	LastCleanupAt                      time.Time
 	LastCleanupDeleted                 int
@@ -112,6 +115,15 @@ type TerminatedInvocation struct {
 	Request     journal.Record
 	Receipt     journal.ReceiptRecord
 	Disposition journal.ReceiptDisposition
+}
+
+// ClaimedInvocation is the exact defensively cloned Worker request whose
+// durable claim was committed with the paid request's running transition.
+type ClaimedInvocation struct {
+	Request     *edgev1.InvokeRequest
+	State       journal.Record
+	Execution   journal.ExecutionRecord
+	Disposition journal.ExecutionDisposition
 }
 
 // Core owns durable request replay state and its bounded cleanup lifecycle.
@@ -436,6 +448,76 @@ func (c *Core) Receipt(scope journal.Scope) (journal.ReceiptRecord, error) {
 	return c.requests.GetReceipt(scope, c.now())
 }
 
+func (c *Core) Execution(scope journal.Scope) (journal.ExecutionRecord, error) {
+	return c.requests.GetExecution(scope, c.now())
+}
+
+// ClaimPaidExecution validates an exact private Worker request against its
+// opaque quote/payment authority and atomically binds its task and digest to
+// the authorized-to-running transition. No Worker RPC is performed here.
+func (c *Core) ClaimPaidExecution(
+	scope journal.Scope,
+	expectedRevision uint64,
+	paymentAuthorization authorization.AuthorizedPayment,
+	request *edgev1.InvokeRequest,
+) (ClaimedInvocation, error) {
+	if request == nil {
+		return ClaimedInvocation{}, errors.New("nil Worker invocation request")
+	}
+	request = proto.Clone(request).(*edgev1.InvokeRequest)
+	material, err := paymentAuthorization.ReceiptInvocationMaterial()
+	if err != nil {
+		return ClaimedInvocation{}, fmt.Errorf(
+			"extract paid execution binding: %w",
+			err,
+		)
+	}
+	if scope.Network != material.Network ||
+		scope.ServiceID != material.ServiceID ||
+		scope.SessionID != material.SessionID ||
+		scope.Operation != material.Operation ||
+		scope.RequestID != material.RequestID ||
+		request.RequestId != material.RequestID ||
+		request.QuoteId != material.QuoteID ||
+		request.ServiceId != material.ServiceID ||
+		request.Operation != material.Operation {
+		return ClaimedInvocation{}, errors.New(
+			"Worker invocation does not match paid request",
+		)
+	}
+	deadline := time.UnixMilli(request.DeadlineUnixMillis).UTC()
+	if uint64(len(request.Payload)) > material.MaxInputBytes ||
+		request.MaxOutputBytes == 0 ||
+		request.MaxOutputBytes > material.MaxOutputBytes ||
+		deadline.After(material.Deadline) {
+		return ClaimedInvocation{}, errors.New(
+			"Worker invocation expands quoted limits or deadline",
+		)
+	}
+	requestDigest, err := localrpc.InvocationRequestDigest(request)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	now := c.now().UTC()
+	state, execution, disposition, err := c.requests.ClaimExecution(
+		journal.ExecutionAdmission{
+			Scope: scope, IntentDigest: material.IntentDigest,
+			AuthorizationID: material.AuthorizationID,
+			QuoteID:         material.QuoteID, TaskID: request.TaskId,
+			RequestDigest: requestDigest, Deadline: deadline,
+		},
+		expectedRevision,
+		now,
+	)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	return ClaimedInvocation{
+		Request: request, State: state, Execution: execution,
+		Disposition: disposition,
+	}, nil
+}
+
 // CompleteSuccessfulInvocation is the only generic bridge from an opaque,
 // validated private Worker result to a signed success receipt. It requires the
 // exact request to remain paid and running, keeps receipt signing outside the
@@ -507,6 +589,18 @@ func (c *Core) CompleteSuccessfulInvocation(
 		return CompletedInvocation{}, errors.New(
 			"invalid Worker completion time",
 		)
+	}
+	execution, err := c.requests.GetExecution(scope, now)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
+	if execution.IntentDigest != material.IntentDigest ||
+		execution.AuthorizationID != material.AuthorizationID ||
+		execution.QuoteID != material.QuoteID ||
+		execution.TaskID != completion.TaskID ||
+		execution.RequestDigest != completion.RequestDigest ||
+		!execution.Deadline.Equal(completion.Deadline) {
+		return CompletedInvocation{}, journal.ErrConflict
 	}
 	usage := completionReceiptUsage(completion.Usage)
 	resultDigest := digestInvocationOutput(completion.Output)
@@ -690,6 +784,17 @@ func (c *Core) CompleteInvocationFailure(
 	if request.State != journal.StateAuthorized &&
 		request.State != journal.StateRunning {
 		return TerminatedInvocation{}, journal.ErrTransition
+	}
+	if request.State == journal.StateRunning {
+		execution, executionErr := c.requests.GetExecution(scope, now)
+		if executionErr != nil {
+			return TerminatedInvocation{}, executionErr
+		}
+		if execution.IntentDigest != material.IntentDigest ||
+			execution.AuthorizationID != material.AuthorizationID ||
+			execution.QuoteID != material.QuoteID {
+			return TerminatedInvocation{}, journal.ErrConflict
+		}
 	}
 	appliedPayment, err := c.requests.GetPayment(scope, now)
 	if err != nil {
@@ -1140,7 +1245,7 @@ func (c *Core) Health() (CoreHealth, error) {
 	output := CoreHealth{
 		RequestRecords: stats.Records, NonceClaims: stats.Nonces,
 		BudgetUsages: stats.BudgetUsages, PaymentRecords: stats.Payments,
-		ReceiptRecords:   stats.Receipts,
+		ReceiptRecords: stats.Receipts, ExecutionRecords: stats.Executions,
 		JournalFileBytes: stats.FileSize,
 		LastCleanupAt:    c.lastCleanupAt, LastCleanupDeleted: c.lastDeleted,
 		LastCleanupHasMore:               c.lastMore,

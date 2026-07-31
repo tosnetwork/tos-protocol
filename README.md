@@ -93,7 +93,12 @@ final-by-default chain observation through the bounded payment observer.
 Edge Core can apply that opaque observation exactly once: the payment record,
 global replay index, and pending-to-authorized request transition commit in
 one bounded journal transaction and survive restart. The journal can also
-record a monotonic reorganization and block paid dispatch. A production chain
+record a monotonic reorganization and block paid dispatch. Before paid work
+may enter `running`, Edge Core now commits the globally unique Worker task ID,
+a deterministic digest of the exact private invocation, its quote/payment
+binding, and the `authorized -> running` transition in one transaction. An
+exact recovery replay returns the immutable claim without another transition;
+a changed request or cross-request task reuse fails closed. A production chain
 recheck can run after quote expiry, and Edge Core provides a count-bounded
 batch coordinator with a crash-safe CAS scan cursor. An optional fixed-interval
 scheduler adds whole-batch deadlines, shutdown cancellation, serialized scan
@@ -101,12 +106,13 @@ ownership, and health counters; it is disabled unless an observer and all
 bounds are explicitly configured. A current manifest `receipt` key can also
 produce an opaque verified receipt; its full signed envelope, intent/payment
 binding, bounded usage, charge, and terminal request transition persist in
-one exact-replay-safe transaction. The private Worker client now returns an
-opaque validated invocation result rather than a caller-mutable protobuf.
-Edge Core can correlate its retained limits, deadline, byte accounting, and
-output digest to the exact paid running request, delegate only canonical
-receipt bytes to purpose-specific key custody, re-verify the signature against
-the current manifest, and commit one success receipt under concurrent retry.
+one exact-replay-safe transaction. The private Worker client now requires a
+task ID and returns an opaque validated invocation result rather than a
+caller-mutable protobuf. Edge Core correlates its task ID and invocation
+digest, retained limits, deadline, byte accounting, and output digest to the
+exact durable execution claim, delegates only canonical receipt bytes to
+purpose-specific key custody, re-verifies the signature against the current
+manifest, and commits one success receipt under concurrent retry.
 Failed, canceled, and timed-out paid requests use the same signer and atomic
 path with an empty usage array, no result or diagnostic payload, deterministic
 bounded error code, and zero charge; timeout cannot be declared before the
@@ -115,7 +121,10 @@ failure converge under concurrent retry.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, profile intent-to-Worker mapping, failed/canceled
 refund/charging policy, production signer adapter, isolated executor, and
-public receipt route remain intentionally disconnected, so none of these
+public receipt route remain intentionally disconnected. Worker task-status
+lookup and idempotent result replay are also still absent: the durable claim
+removes journal ambiguity but does not prove that a Worker accepted or
+completed an RPC interrupted by a crash. None of these
 internal boundaries enable public actions by themselves.
 
 ## Repository map
@@ -130,7 +139,7 @@ pkg/edge/             safe public discovery server
 pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
-pkg/journal/          durable bounded replay, payment, receipt and request state
+pkg/journal/          durable bounded request, payment, execution and receipt state
 pkg/localrpc/         validated private Unix-socket Worker RPC client
 pkg/payment/          strict signed quote/payment chain observation
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts

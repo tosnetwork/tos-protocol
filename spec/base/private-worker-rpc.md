@@ -32,7 +32,7 @@ payload and requested output limits before serialization and applies:
 
 Nil contexts, expired deadlines, unknown priorities, invalid identifiers,
 duplicate resource limits, and locally excessive byte limits fail before the
-worker is called.
+worker is called. Every invocation has a mandatory bounded task ID.
 
 ## Response validation
 
@@ -50,8 +50,9 @@ Control and quote protobuf objects are defensively cloned across the boundary.
 An invocation response is instead returned as an opaque validated result. To
 consume it, Edge Core must repeat the request, quote, service, and operation
 binding. The opaque result retains the requested output limit, absolute
-deadline, completion time, byte/token usage, output, and worker revisions so
-later receipt issuance cannot substitute a less restrictive request.
+deadline, task ID, deterministic digest of the exact private protobuf request,
+completion time, byte/token usage, output, and worker revisions so later
+receipt issuance cannot substitute a different or less restrictive request.
 
 ## Priority and retries
 
@@ -60,15 +61,23 @@ Emergency, control, real-time perception, owner-local, and background classes
 belong to explicitly configured local control planes. A remote caller cannot
 raise its priority by choosing an enum value.
 
-The client performs no automatic RPC retries. Edge Core and its durable
-request journal own idempotency and recovery; retrying below that layer could
-execute a non-idempotent action twice.
+The client performs no automatic RPC retries. Before the first call, Edge Core
+must atomically bind the exact invocation digest and globally unique task ID to
+the paid request's `running` transition. This makes Edge recovery decisions
+durable, but it does not make a non-idempotent Worker safe to retry.
+
+A production recovery extension must let Edge query or replay a task by ID.
+The Worker must return the same stored outcome for the same task and exact
+request, reject a different request under that task ID, and bound result
+retention. That extension is not implemented in the current RPC, so an
+interrupted invocation remains a manual/profile-specific recovery case.
 
 For a successful paid request, Edge Core accepts only this opaque result. It
-requires the durable request to remain `running`, repeats the signed quote's
-byte limits and deadline, commits the output digest and bounded usage to a
-receipt, and sends only canonical receipt bytes to purpose-specific signing
-key custody. The Worker never receives that key.
+requires the durable request to remain `running`, repeats the execution
+claim's task and invocation digest and the signed quote's byte limits and
+deadline, commits the output digest and bounded usage to a receipt, and sends
+only canonical receipt bytes to purpose-specific signing key custody. The
+Worker never receives that key.
 
 RPC failure text is not receipt material. The generic Edge failure path emits
 only a typed `failed`, `canceled`, or `timed_out` status with an empty usage

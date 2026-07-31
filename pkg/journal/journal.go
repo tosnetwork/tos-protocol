@@ -58,25 +58,29 @@ var (
 	ErrPaymentRollback    = errors.New("payment observation regressed below its high-water mark")
 	ErrPaymentScanCursor  = errors.New("payment scan cursor changed concurrently")
 	ErrReceiptReplay      = errors.New("receipt is already bound to another request")
+	ErrExecutionReplay    = errors.New("execution task is already bound to another request")
+	ErrExecutionRequired  = errors.New("paid request dispatch requires an execution claim")
 	ErrCorrupt            = errors.New("request journal is corrupt")
 
-	recordsBucket         = []byte("records-v1")
-	expiryBucket          = []byte("expiry-v1")
-	metaBucket            = []byte("meta-v1")
-	countKey              = []byte("record-count")
-	expiryMarker          = []byte{1}
-	noncesBucket          = []byte("nonces-v1")
-	nonceExpiryBucket     = []byte("nonce-expiry-v1")
-	nonceCountKey         = []byte("nonce-count")
-	budgetsBucket         = []byte("budgets-v1")
-	budgetExpiryBucket    = []byte("budget-expiry-v1")
-	budgetClaimsBucket    = []byte("budget-claims-v1")
-	budgetCountKey        = []byte("budget-count")
-	paymentsBucket        = []byte("payments-v1")
-	requestPaymentsBucket = []byte("request-payments-v1")
-	paymentScanCursorKey  = []byte("payment-scan-cursor")
-	receiptsBucket        = []byte("receipts-v1")
-	requestReceiptsBucket = []byte("request-receipts-v1")
+	recordsBucket           = []byte("records-v1")
+	expiryBucket            = []byte("expiry-v1")
+	metaBucket              = []byte("meta-v1")
+	countKey                = []byte("record-count")
+	expiryMarker            = []byte{1}
+	noncesBucket            = []byte("nonces-v1")
+	nonceExpiryBucket       = []byte("nonce-expiry-v1")
+	nonceCountKey           = []byte("nonce-count")
+	budgetsBucket           = []byte("budgets-v1")
+	budgetExpiryBucket      = []byte("budget-expiry-v1")
+	budgetClaimsBucket      = []byte("budget-claims-v1")
+	budgetCountKey          = []byte("budget-count")
+	paymentsBucket          = []byte("payments-v1")
+	requestPaymentsBucket   = []byte("request-payments-v1")
+	paymentScanCursorKey    = []byte("payment-scan-cursor")
+	receiptsBucket          = []byte("receipts-v1")
+	requestReceiptsBucket   = []byte("request-receipts-v1")
+	executionsBucket        = []byte("executions-v1")
+	requestExecutionsBucket = []byte("request-executions-v1")
 
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	idPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
@@ -280,6 +284,32 @@ type PaymentRecord struct {
 	RetainUntil           time.Time     `json:"retainUntil"`
 }
 
+// ExecutionAdmission binds one exact private Worker request to a paid request.
+// Claiming it atomically performs the authorized-to-running transition.
+type ExecutionAdmission struct {
+	Scope           Scope
+	IntentDigest    string
+	AuthorizationID string
+	QuoteID         string
+	TaskID          string
+	RequestDigest   string
+	Deadline        time.Time
+}
+
+type ExecutionRecord struct {
+	Version         string    `json:"version"`
+	Scope           Scope     `json:"scope"`
+	IntentDigest    string    `json:"intentDigest"`
+	AuthorizationID string    `json:"authorizationId"`
+	QuoteID         string    `json:"quoteId"`
+	TaskID          string    `json:"taskId"`
+	RequestDigest   string    `json:"requestDigest"`
+	Deadline        time.Time `json:"deadline"`
+	Revision        uint64    `json:"revision"`
+	ClaimedAt       time.Time `json:"claimedAt"`
+	RetainUntil     time.Time `json:"retainUntil"`
+}
+
 type ReceiptUsage struct {
 	Unit     string `json:"unit"`
 	Quantity uint64 `json:"quantity"`
@@ -352,6 +382,13 @@ const (
 	ReceiptReplay  ReceiptDisposition = "replay"
 )
 
+type ExecutionDisposition string
+
+const (
+	ExecutionClaimed ExecutionDisposition = "claimed"
+	ExecutionReplay  ExecutionDisposition = "replay"
+)
+
 type nonceDisposition uint8
 
 const (
@@ -365,6 +402,7 @@ type Stats struct {
 	BudgetUsages uint64
 	Payments     uint64
 	Receipts     uint64
+	Executions   uint64
 	FileSize     int64
 }
 
@@ -1033,6 +1071,249 @@ func (s *Store) MarkPaymentReorganized(
 	return output, disposition, nil
 }
 
+// ClaimExecution persists one globally unique Worker task and performs the
+// exact paid request's authorized-to-running transition in one transaction.
+// Exact replay returns the original claim without advancing request state.
+func (s *Store) ClaimExecution(
+	admission ExecutionAdmission,
+	expectedRevision uint64,
+	now time.Time,
+) (Record, ExecutionRecord, ExecutionDisposition, error) {
+	now, err := admission.validate(now)
+	if err != nil {
+		return Record{}, ExecutionRecord{}, "", err
+	}
+	if expectedRevision == 0 {
+		return Record{}, ExecutionRecord{}, "", errors.New(
+			"expected revision must be positive",
+		)
+	}
+	requestKey := scopeKey(admission.Scope)
+	executionKeyValue := executionKey(
+		admission.Scope.Network,
+		admission.Scope.ServiceID,
+		admission.TaskID,
+	)
+	var output Record
+	var executionOutput ExecutionRecord
+	var disposition ExecutionDisposition
+	err = s.db.Update(func(transaction *bolt.Tx) error {
+		records := transaction.Bucket(recordsBucket)
+		encodedRequest := records.Get(requestKey[:])
+		if encodedRequest == nil {
+			return ErrNotFound
+		}
+		record, err := s.decodeRecord(encodedRequest)
+		if err != nil {
+			return err
+		}
+		if record.Scope != admission.Scope {
+			return fmt.Errorf("%w: request key collision", ErrCorrupt)
+		}
+		if record.IntentDigest != admission.IntentDigest {
+			return ErrConflict
+		}
+		if !record.RetainUntil.After(now) {
+			return ErrExpired
+		}
+		executions := transaction.Bucket(executionsBucket)
+		requestExecutions := transaction.Bucket(requestExecutionsBucket)
+		indexedExecutionKey := requestExecutions.Get(requestKey[:])
+		if encodedExecution := executions.Get(
+			executionKeyValue[:],
+		); encodedExecution != nil {
+			existing, err := s.decodeExecution(encodedExecution)
+			if err != nil {
+				return err
+			}
+			if !sameExecutionBinding(existing, admission) {
+				if existing.Scope != admission.Scope {
+					return ErrExecutionReplay
+				}
+				return ErrConflict
+			}
+			if len(indexedExecutionKey) != sha256.Size ||
+				!bytes.Equal(indexedExecutionKey, executionKeyValue[:]) {
+				return fmt.Errorf(
+					"%w: missing or mismatched request execution index",
+					ErrCorrupt,
+				)
+			}
+			payment, err := s.paymentForPaidRequestTx(
+				transaction,
+				requestKey,
+				admission.AuthorizationID,
+				admission.QuoteID,
+			)
+			if err != nil {
+				return err
+			}
+			if payment.IntentDigest != admission.IntentDigest {
+				return fmt.Errorf(
+					"%w: execution payment intent mismatch",
+					ErrCorrupt,
+				)
+			}
+			if err := verifyExecutionRequestState(record, existing); err != nil {
+				return err
+			}
+			output, executionOutput, disposition =
+				record, existing, ExecutionReplay
+			return nil
+		}
+		if indexedExecutionKey != nil {
+			if len(indexedExecutionKey) != sha256.Size {
+				return fmt.Errorf(
+					"%w: invalid request execution index",
+					ErrCorrupt,
+				)
+			}
+			indexedBytes := executions.Get(indexedExecutionKey)
+			if indexedBytes == nil {
+				return fmt.Errorf(
+					"%w: request execution index references missing execution",
+					ErrCorrupt,
+				)
+			}
+			indexed, err := s.decodeExecution(indexedBytes)
+			if err != nil {
+				return err
+			}
+			if scopeKey(indexed.Scope) != requestKey {
+				return fmt.Errorf(
+					"%w: request execution index scope mismatch",
+					ErrCorrupt,
+				)
+			}
+			return ErrConflict
+		}
+		if record.Revision != expectedRevision {
+			return ErrRevision
+		}
+		if record.State != StateAuthorized {
+			return ErrTransition
+		}
+		if !admission.Deadline.After(now) {
+			return errors.New("execution deadline has elapsed")
+		}
+		if !record.RetainUntil.After(admission.Deadline) {
+			return errors.New(
+				"request retention does not cover execution deadline",
+			)
+		}
+		payment, err := s.paymentForPaidRequestTx(
+			transaction,
+			requestKey,
+			admission.AuthorizationID,
+			admission.QuoteID,
+		)
+		if err != nil {
+			return err
+		}
+		if payment.IntentDigest != admission.IntentDigest {
+			return fmt.Errorf(
+				"%w: execution payment intent mismatch",
+				ErrCorrupt,
+			)
+		}
+		execution := ExecutionRecord{
+			Version: "1", Scope: admission.Scope,
+			IntentDigest:    admission.IntentDigest,
+			AuthorizationID: admission.AuthorizationID,
+			QuoteID:         admission.QuoteID, TaskID: admission.TaskID,
+			RequestDigest: admission.RequestDigest,
+			Deadline:      admission.Deadline.UTC(), Revision: 1,
+			ClaimedAt: now, RetainUntil: record.RetainUntil,
+		}
+		encodedExecution, err := s.encodeExecution(execution)
+		if err != nil {
+			return err
+		}
+		if err := executions.Put(
+			executionKeyValue[:],
+			encodedExecution,
+		); err != nil {
+			return err
+		}
+		if err := requestExecutions.Put(
+			requestKey[:],
+			executionKeyValue[:],
+		); err != nil {
+			return err
+		}
+		record.State = StateRunning
+		record.Revision++
+		if now.After(record.UpdatedAt) {
+			record.UpdatedAt = now
+		}
+		encodedRequest, err = s.encodeRecord(record)
+		if err != nil {
+			return err
+		}
+		if err := records.Put(requestKey[:], encodedRequest); err != nil {
+			return err
+		}
+		output, executionOutput, disposition =
+			record, execution, ExecutionClaimed
+		return nil
+	})
+	if err != nil {
+		return Record{}, ExecutionRecord{}, "", err
+	}
+	return output, executionOutput, disposition, nil
+}
+
+func (s *Store) GetExecution(
+	scope Scope,
+	now time.Time,
+) (ExecutionRecord, error) {
+	if err := scope.Validate(); err != nil {
+		return ExecutionRecord{}, err
+	}
+	if err := validateNow(now); err != nil {
+		return ExecutionRecord{}, err
+	}
+	requestKey := scopeKey(scope)
+	var output ExecutionRecord
+	err := s.db.View(func(transaction *bolt.Tx) error {
+		executionKeyBytes := transaction.Bucket(requestExecutionsBucket).Get(
+			requestKey[:],
+		)
+		if executionKeyBytes == nil {
+			return ErrNotFound
+		}
+		if len(executionKeyBytes) != sha256.Size {
+			return fmt.Errorf(
+				"%w: invalid request execution index",
+				ErrCorrupt,
+			)
+		}
+		encoded := transaction.Bucket(executionsBucket).Get(executionKeyBytes)
+		if encoded == nil {
+			return fmt.Errorf(
+				"%w: request execution is missing",
+				ErrCorrupt,
+			)
+		}
+		execution, err := s.decodeExecution(encoded)
+		if err != nil {
+			return err
+		}
+		if execution.Scope != scope {
+			return fmt.Errorf(
+				"%w: request execution scope mismatch",
+				ErrCorrupt,
+			)
+		}
+		if !execution.RetainUntil.After(now.UTC()) {
+			return ErrExpired
+		}
+		output = execution
+		return nil
+	})
+	return output, err
+}
+
 // ApplyReceipt persists one globally unique signed receipt and transitions its
 // exact paid running request to the receipt's terminal state in one
 // transaction. Exact replay has no second state effect.
@@ -1145,7 +1426,7 @@ func (s *Store) ApplyReceipt(
 		if !canApplyReceipt(record.State, admission.Status) {
 			return ErrTransition
 		}
-		payment, err := s.paymentForReceiptTx(
+		payment, err := s.paymentForPaidRequestTx(
 			transaction,
 			requestKey,
 			admission.AuthorizationID,
@@ -1273,7 +1554,7 @@ func (s *Store) GetReceipt(
 	return output, err
 }
 
-func (s *Store) paymentForReceiptTx(
+func (s *Store) paymentForPaidRequestTx(
 	transaction *bolt.Tx,
 	requestKey [32]byte,
 	authorizationID string,
@@ -1284,7 +1565,7 @@ func (s *Store) paymentForReceiptTx(
 	)
 	if paymentKeyBytes == nil {
 		return PaymentRecord{}, errors.New(
-			"receipt request has no applied payment",
+			"paid request has no applied payment",
 		)
 	}
 	if len(paymentKeyBytes) != sha256.Size {
@@ -1378,8 +1659,8 @@ func (s *Store) Transition(
 			)
 		}
 		if record.State == StateAuthorized && next == StateRunning {
-			if err := s.ensurePaymentRunnableTx(transaction, key); err != nil {
-				return err
+			if transaction.Bucket(requestPaymentsBucket).Get(key[:]) != nil {
+				return ErrExecutionRequired
 			}
 		}
 		record.State = next
@@ -1400,34 +1681,6 @@ func (s *Store) Transition(
 		return nil
 	})
 	return output, err
-}
-
-func (s *Store) ensurePaymentRunnableTx(
-	transaction *bolt.Tx,
-	requestKey [32]byte,
-) error {
-	paymentKeyBytes := transaction.Bucket(requestPaymentsBucket).Get(requestKey[:])
-	if paymentKeyBytes == nil {
-		return nil
-	}
-	if len(paymentKeyBytes) != sha256.Size {
-		return fmt.Errorf("%w: invalid request payment index", ErrCorrupt)
-	}
-	encoded := transaction.Bucket(paymentsBucket).Get(paymentKeyBytes)
-	if encoded == nil {
-		return fmt.Errorf("%w: request payment is missing", ErrCorrupt)
-	}
-	payment, err := s.decodePayment(encoded)
-	if err != nil {
-		return err
-	}
-	if payment.Status == PaymentStatusReorganized {
-		return ErrPaymentReorganized
-	}
-	if payment.Status != PaymentStatusApplied {
-		return fmt.Errorf("%w: invalid request payment status", ErrCorrupt)
-	}
-	return nil
 }
 
 func (s *Store) beginTx(
@@ -1462,6 +1715,9 @@ func (s *Store) beginTx(
 				return Record{}, "", err
 			}
 			if err := s.deleteReceiptForRequestTx(transaction, key); err != nil {
+				return Record{}, "", err
+			}
+			if err := s.deleteExecutionForRequestTx(transaction, key); err != nil {
 				return Record{}, "", err
 			}
 			if err := transaction.Bucket(budgetClaimsBucket).Delete(key[:]); err != nil {
@@ -1581,6 +1837,45 @@ func (s *Store) deleteReceiptForRequestTx(
 		return err
 	}
 	return requestReceipts.Delete(requestKey[:])
+}
+
+func (s *Store) deleteExecutionForRequestTx(
+	transaction *bolt.Tx,
+	requestKey [32]byte,
+) error {
+	requestExecutions := transaction.Bucket(requestExecutionsBucket)
+	executionKeyBytes := requestExecutions.Get(requestKey[:])
+	if executionKeyBytes == nil {
+		return nil
+	}
+	if len(executionKeyBytes) != sha256.Size {
+		return fmt.Errorf(
+			"%w: invalid request execution index",
+			ErrCorrupt,
+		)
+	}
+	executions := transaction.Bucket(executionsBucket)
+	encoded := executions.Get(executionKeyBytes)
+	if encoded == nil {
+		return fmt.Errorf(
+			"%w: request execution index references missing execution",
+			ErrCorrupt,
+		)
+	}
+	execution, err := s.decodeExecution(encoded)
+	if err != nil {
+		return err
+	}
+	if scopeKey(execution.Scope) != requestKey {
+		return fmt.Errorf(
+			"%w: request execution index scope mismatch",
+			ErrCorrupt,
+		)
+	}
+	if err := executions.Delete(executionKeyBytes); err != nil {
+		return err
+	}
+	return requestExecutions.Delete(requestKey[:])
 }
 
 func (s *Store) claimNonceTx(
@@ -1791,6 +2086,7 @@ func (s *Store) Stats() (Stats, error) {
 		output.BudgetUsages = budgetCount
 		output.Payments = uint64(transaction.Bucket(paymentsBucket).Stats().KeyN)
 		output.Receipts = uint64(transaction.Bucket(receiptsBucket).Stats().KeyN)
+		output.Executions = uint64(transaction.Bucket(executionsBucket).Stats().KeyN)
 		return nil
 	})
 	if err != nil {
@@ -1850,6 +2146,16 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	if err != nil {
 		return err
 	}
+	executions, err := transaction.CreateBucketIfNotExists(executionsBucket)
+	if err != nil {
+		return err
+	}
+	requestExecutions, err := transaction.CreateBucketIfNotExists(
+		requestExecutionsBucket,
+	)
+	if err != nil {
+		return err
+	}
 	meta, err := transaction.CreateBucketIfNotExists(metaBucket)
 	if err != nil {
 		return err
@@ -1883,6 +2189,10 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	if receipts.Stats().KeyN != requestReceipts.Stats().KeyN ||
 		receipts.Stats().KeyN > records.Stats().KeyN {
 		return fmt.Errorf("%w: receipt index count mismatch", ErrCorrupt)
+	}
+	if executions.Stats().KeyN != requestExecutions.Stats().KeyN ||
+		executions.Stats().KeyN > records.Stats().KeyN {
+		return fmt.Errorf("%w: execution index count mismatch", ErrCorrupt)
 	}
 	return nil
 }
@@ -1932,6 +2242,11 @@ func (s *Store) pruneExpiredTx(
 			return deleted, false, err
 		}
 		if err := s.deleteReceiptForRequestTx(
+			transaction, array32(recordKey),
+		); err != nil {
+			return deleted, false, err
+		}
+		if err := s.deleteExecutionForRequestTx(
 			transaction, array32(recordKey),
 		); err != nil {
 			return deleted, false, err
@@ -2223,6 +2538,41 @@ func (s *Store) decodePayment(encoded []byte) (PaymentRecord, error) {
 	return payment, nil
 }
 
+func (s *Store) encodeExecution(execution ExecutionRecord) ([]byte, error) {
+	if err := execution.validateStored(s.limits); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	encoded, err := json.Marshal(execution)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > s.limits.MaxRecordBytes {
+		return nil, errors.New("execution record exceeds byte limit")
+	}
+	return encoded, nil
+}
+
+func (s *Store) decodeExecution(encoded []byte) (ExecutionRecord, error) {
+	if len(encoded) == 0 || len(encoded) > s.limits.MaxRecordBytes {
+		return ExecutionRecord{}, fmt.Errorf(
+			"%w: invalid execution record size",
+			ErrCorrupt,
+		)
+	}
+	var execution ExecutionRecord
+	if err := jsonstrict.Decode(encoded, &execution); err != nil {
+		return ExecutionRecord{}, fmt.Errorf(
+			"%w: decode execution record: %v",
+			ErrCorrupt,
+			err,
+		)
+	}
+	if err := execution.validateStored(s.limits); err != nil {
+		return ExecutionRecord{}, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	return execution, nil
+}
+
 func (s *Store) encodeReceipt(receipt ReceiptRecord) ([]byte, error) {
 	if err := receipt.validateStored(s.limits); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
@@ -2454,6 +2804,80 @@ func (p PaymentRecord) validateStored(limits Limits) error {
 		}
 	default:
 		return errors.New("invalid payment status")
+	}
+	return nil
+}
+
+func (a ExecutionAdmission) validate(now time.Time) (time.Time, error) {
+	if err := validateNow(now); err != nil {
+		return time.Time{}, err
+	}
+	if err := validateExecutionBinding(
+		a.Scope,
+		a.IntentDigest,
+		a.AuthorizationID,
+		a.QuoteID,
+		a.TaskID,
+		a.RequestDigest,
+		a.Deadline,
+	); err != nil {
+		return time.Time{}, err
+	}
+	return now.UTC(), nil
+}
+
+func (e ExecutionRecord) validateStored(limits Limits) error {
+	if e.Version != "1" {
+		return errors.New("unsupported execution record version")
+	}
+	if err := validateExecutionBinding(
+		e.Scope,
+		e.IntentDigest,
+		e.AuthorizationID,
+		e.QuoteID,
+		e.TaskID,
+		e.RequestDigest,
+		e.Deadline,
+	); err != nil {
+		return err
+	}
+	if e.Revision != 1 || e.ClaimedAt.IsZero() ||
+		e.RetainUntil.IsZero() ||
+		!e.Deadline.After(e.ClaimedAt) ||
+		!e.RetainUntil.After(e.Deadline) ||
+		e.RetainUntil.Sub(e.ClaimedAt) > limits.MaxRetention {
+		return errors.New("invalid execution record time or revision")
+	}
+	return nil
+}
+
+func validateExecutionBinding(
+	scope Scope,
+	intentDigest string,
+	authorizationID string,
+	quoteID string,
+	taskID string,
+	requestDigest string,
+	deadline time.Time,
+) error {
+	if err := scope.Validate(); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(intentDigest) ||
+		!digestPattern.MatchString(requestDigest) {
+		return errors.New("invalid execution digest")
+	}
+	for name, value := range map[string]string{
+		"execution authorization ID": authorizationID,
+		"execution quote ID":         quoteID,
+		"execution task ID":          taskID,
+	} {
+		if err := bounded(name, value, 8, 128); err != nil {
+			return err
+		}
+	}
+	if deadline.IsZero() || deadline.Year() < 1970 || deadline.Year() > 9999 {
+		return errors.New("invalid execution deadline")
 	}
 	return nil
 }
@@ -3001,6 +3425,48 @@ func receiptKey(network, receiptID string) [32]byte {
 	var output [32]byte
 	copy(output[:], hasher.Sum(nil))
 	return output
+}
+
+func executionKey(network, serviceID, taskID string) [32]byte {
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-EDGE-JOURNAL-EXECUTION-V1"))
+	for _, value := range []string{network, serviceID, taskID} {
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(len(value)))
+		hasher.Write(length[:])
+		hasher.Write([]byte(value))
+	}
+	var output [32]byte
+	copy(output[:], hasher.Sum(nil))
+	return output
+}
+
+func sameExecutionBinding(
+	record ExecutionRecord,
+	admission ExecutionAdmission,
+) bool {
+	return record.Scope == admission.Scope &&
+		record.IntentDigest == admission.IntentDigest &&
+		record.AuthorizationID == admission.AuthorizationID &&
+		record.QuoteID == admission.QuoteID &&
+		record.TaskID == admission.TaskID &&
+		record.RequestDigest == admission.RequestDigest &&
+		record.Deadline.Equal(admission.Deadline.UTC())
+}
+
+func verifyExecutionRequestState(
+	record Record,
+	execution ExecutionRecord,
+) error {
+	if record.IntentDigest != execution.IntentDigest ||
+		!record.RetainUntil.Equal(execution.RetainUntil) ||
+		(record.State != StateRunning && !record.State.Terminal()) {
+		return fmt.Errorf(
+			"%w: execution does not match running request",
+			ErrCorrupt,
+		)
+	}
+	return nil
 }
 
 func sameReceiptBinding(

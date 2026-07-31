@@ -26,8 +26,8 @@ This directory contains the draft normative base specification:
 - [payment-observation.md](payment-observation.md) — implemented signed
   quote/client authorization and strict fresh chain-observation gate
 - [request-journal.md](request-journal.md) — atomic nonce/request admission,
-  durable idempotency, request transitions, retention, and bounded crash
-  recovery
+  durable idempotency, paid execution claims, request transitions, retention,
+  and bounded crash recovery
 - [private-worker-rpc.md](private-worker-rpc.md) — owned Unix-socket
   transport, bounded local RPC, response validation, priority separation, and
   retry ownership

@@ -60,6 +60,14 @@ block new paid dispatch until an authenticated reconciliation policy resolves
 it. Payment records, watcher cursors, retry history, and tombstones require
 the same count, lifetime, and cleanup ownership as requests.
 
+Paid dispatch must atomically persist one globally unique Worker task ID, an
+internal digest of the exact private invocation, its quote/payment/deadline
+binding, and the `authorized -> running` transition. Generic transitions must
+not bypass the claim. Exact claim replay is read-only; a changed request or
+cross-request task reuse must fail. Replay must recheck that the persisted
+payment has not been reorganized. The execution record and both indexes must be
+size/count/lifetime bounded and deleted with their request.
+
 A paid request terminal state and its signed receipt must commit atomically.
 Persist the complete envelope, recompute its fingerprint, and require the
 canonical payload to match the request, payment, revisions, status, usage,
@@ -69,8 +77,9 @@ exact retry must not create a second terminal effect.
 
 Do not accept a raw Worker protobuf as receipt evidence. Preserve an opaque
 validated result containing its immutable request binding, requested output
-limit, deadline, completion time, byte accounting, usage, and output. Before
-signing, repeat these against the exact paid running request and quote. Give
+limit, deadline, task ID, private-request digest, completion time, byte
+accounting, usage, and output. Before signing, repeat these against the exact
+paid running request, durable execution claim and quote. Give
 key custody only canonical receipt bytes, then re-verify its returned payload,
 validity, key role, and signature. Concurrent semantically identical signing
 attempts may create more than one envelope but must resolve to exactly one
@@ -101,6 +110,11 @@ its own deadline and byte policy before dispatch, verifies correlation and
 usage fields on every result, and never retries an invocation implicitly.
 Public work must not acquire emergency, control, real-time, owner-local, or
 background priority merely by setting a wire enum.
+
+A durable Edge claim is not proof that the Worker observed the call. Across
+the claim/RPC crash boundary, recovery must use an idempotent task-status or
+exact-result-replay contract with bounded retention. Until that contract is
+implemented, automatic invocation retry is unsafe and must remain disabled.
 
 ## Keys and updates
 
