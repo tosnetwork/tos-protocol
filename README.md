@@ -173,11 +173,14 @@ defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A
 reusable bbolt Worker task store now provides atomic claim/replay, exact
 `GetTask`, bounded terminal persistence, capacity backpressure, expiry cleanup,
-and startup corruption auditing. A production Worker must still reconcile its
-durable `ACCEPTED/RUNNING` records with an idempotent runtime job or sandbox
-supervisor: neither the Edge claim nor the task table alone proves that an
-external executor accepted or completed an RPC interrupted by a crash. None
-of these internal boundaries enable public actions by themselves.
+startup corruption auditing, and bounded payload-free active-task pagination.
+A production Worker must still choose an explicit reconciliation policy:
+`tos-ai` fails interrupted synchronous work closed before opening its listener,
+while a future durable runtime may recover only through an idempotent job or
+sandbox supervisor bound to the exact task ID. Neither the Edge claim nor the
+task table alone proves that an external executor accepted or completed an RPC
+interrupted by a crash. None of these internal boundaries enable public
+actions by themselves.
 
 The chain mapping, quorum rules, canonical references, startup composition,
 and local rehearsal are documented in

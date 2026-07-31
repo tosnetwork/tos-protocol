@@ -116,9 +116,16 @@ replay cannot start a second execution.
 
 `GetTask` is read-only. `Cancel` repeats and verifies all three identity
 fields; request-ID-only cancellation is obsolete. A process restart retains
-accepted, running, and terminal observations. An accepted or running task for
-which the worker no longer has executor ownership remains uncertain until
-expiry; it is never silently resubmitted.
+accepted, running, and terminal observations. The task store alone cannot
+decide whether an accepted or running task still has executor ownership, and
+it never silently resubmits one.
+
+The current synchronous `tos-ai` adapters have no durable runtime job handle.
+Before their private listener becomes reachable, startup therefore performs a
+bounded paginated scan and converts every retained interrupted active task to
+`FAILED/RUNTIME_FAILED`. Exact terminal lookup remains available until
+retention expiry. A future supervisor may recover rather than fail a task only
+when it can bind durable executor ownership to the exact task ID.
 
 ## Cross-repository release gate
 

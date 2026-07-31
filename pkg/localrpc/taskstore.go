@@ -3,6 +3,7 @@ package localrpc
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -23,10 +24,12 @@ import (
 const (
 	DefaultWorkerMaxTasks         = 10_000
 	DefaultWorkerMaxPrunePerWrite = 64
+	DefaultWorkerActiveScanLimit  = 256
 	DefaultWorkerTaskOpenTimeout  = 5 * time.Second
 
 	maximumWorkerTasks         = 1_000_000
 	maximumWorkerPrunePerWrite = 4096
+	maximumWorkerActiveScan    = 4096
 	maximumTaskMetadataBytes   = 16 << 10
 	taskRecordVersion          = "1"
 )
@@ -138,6 +141,21 @@ type StoredWorkerTask struct {
 	UpdatedAt   time.Time
 	CompletedAt time.Time
 	RetainUntil time.Time
+}
+
+// WorkerActiveTask is the minimum private identity required to reconcile an
+// interrupted ACCEPTED or RUNNING task. It deliberately excludes request
+// payloads, results, runtime diagnostics, and database keys.
+type WorkerActiveTask struct {
+	Identity WorkerTaskIdentity
+	Status   edgev1.TaskStatus
+}
+
+// WorkerActiveTaskPage is one bounded startup scan page. NextCursor is an
+// opaque, private continuation token and is empty after the final page.
+type WorkerActiveTaskPage struct {
+	Tasks      []WorkerActiveTask
+	NextCursor string
 }
 
 // Identity returns the immutable callback identity for this defensive task
@@ -763,6 +781,99 @@ func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
 		return nil
 	})
 	return output, err
+}
+
+// ScanActiveTasks returns a bounded page of unexpired ACCEPTED/RUNNING task
+// identities without loading their request payloads. The cursor advances by
+// scanned database records rather than returned active tasks, so terminal
+// records cannot create an unbounded scan. Callers use this only before
+// accepting new Invoke requests; it is not a transactional executor snapshot.
+func (store *WorkerTaskStore) ScanActiveTasks(
+	cursor string,
+	limit int,
+	now time.Time,
+) (WorkerActiveTaskPage, error) {
+	if store == nil || store.db == nil || store.closed.Load() {
+		return WorkerActiveTaskPage{}, ErrTaskClosed
+	}
+	if limit <= 0 || limit > maximumWorkerActiveScan {
+		return WorkerActiveTaskPage{}, errors.New("invalid active task scan limit")
+	}
+	now, err := validateTaskStoreNow(now)
+	if err != nil {
+		return WorkerActiveTaskPage{}, err
+	}
+	resume, err := decodeActiveTaskCursor(cursor)
+	if err != nil {
+		return WorkerActiveTaskPage{}, err
+	}
+	output := WorkerActiveTaskPage{
+		Tasks: make([]WorkerActiveTask, 0, limit),
+	}
+	err = store.db.View(func(transaction *bolt.Tx) error {
+		records := transaction.Bucket(taskRecordsBucket)
+		if records == nil {
+			return ErrTaskCorrupt
+		}
+		iterator := records.Cursor()
+		key, value := iterator.First()
+		if len(resume) != 0 {
+			key, value = iterator.Seek(resume)
+			if key != nil && bytes.Equal(key, resume) {
+				key, value = iterator.Next()
+			}
+		}
+		var last []byte
+		for scanned := 0; key != nil && scanned < limit; scanned++ {
+			if len(key) != sha256.Size {
+				return fmt.Errorf("%w: invalid task record key", ErrTaskCorrupt)
+			}
+			metadata, err := store.decodeMetadata(value)
+			if err != nil {
+				return err
+			}
+			if metadata.RetainUntil.After(now) &&
+				(metadata.Status == edgev1.TaskStatus_TASK_STATUS_ACCEPTED ||
+					metadata.Status == edgev1.TaskStatus_TASK_STATUS_RUNNING) {
+				identity, err := validateWorkerTaskIdentity(WorkerTaskIdentity{
+					RequestID: metadata.RequestID, TaskID: metadata.TaskID,
+					RequestDigest: metadata.RequestDigest,
+					RetainUntil:   metadata.RetainUntil,
+				})
+				if err != nil {
+					return fmt.Errorf("%w: invalid active task identity", ErrTaskCorrupt)
+				}
+				boundKey := workerTaskKey(identity.TaskID)
+				if !bytes.Equal(boundKey[:], key) {
+					return fmt.Errorf("%w: active task key mismatch", ErrTaskCorrupt)
+				}
+				output.Tasks = append(output.Tasks, WorkerActiveTask{
+					Identity: identity, Status: metadata.Status,
+				})
+			}
+			last = append(last[:0], key...)
+			key, value = iterator.Next()
+		}
+		if key != nil {
+			output.NextCursor = base64.RawURLEncoding.EncodeToString(last)
+		}
+		return nil
+	})
+	if err != nil {
+		return WorkerActiveTaskPage{}, err
+	}
+	return output, nil
+}
+
+func decodeActiveTaskCursor(cursor string) ([]byte, error) {
+	if cursor == "" {
+		return nil, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil || len(decoded) != sha256.Size {
+		return nil, errors.New("invalid active task scan cursor")
+	}
+	return decoded, nil
 }
 
 func (store *WorkerTaskStore) loadTaskTx(

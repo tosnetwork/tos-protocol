@@ -317,6 +317,83 @@ func TestWorkerTaskStoreRecoversAfterRestartAndDeadline(t *testing.T) {
 	}
 }
 
+func TestWorkerTaskStoreScansActiveTasksWithBoundedPagination(t *testing.T) {
+	createdAt := time.Unix(1_800_000_000, 0).UTC()
+	store := openTestWorkerTaskStore(t, 10)
+	claim := func(suffix string, retainUntil time.Time) StoredWorkerTask {
+		t.Helper()
+		request := testStoredInvokeRequest(createdAt, suffix)
+		request.DeadlineUnixMillis = createdAt.Add(time.Minute).UnixMilli()
+		request.RetainUntilUnixMillis = retainUntil.UnixMilli()
+		task, disposition, err := store.ClaimTask(request, createdAt)
+		if err != nil || disposition != TaskClaimed {
+			t.Fatalf("claim %s disposition=%q err=%v", suffix, disposition, err)
+		}
+		return task
+	}
+
+	accepted := claim("scan-accepted", createdAt.Add(time.Hour))
+	running := claim("scan-running", createdAt.Add(time.Hour))
+	if _, _, err := store.MarkTaskRunning(
+		identityForStoredTask(running), createdAt.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	terminal := claim("scan-terminal", createdAt.Add(time.Hour))
+	if _, _, err := store.CompleteTaskFailure(
+		identityForStoredTask(terminal),
+		edgev1.TaskStatus_TASK_STATUS_FAILED,
+		createdAt.Add(time.Second),
+		createdAt.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	_ = claim("scan-expired", createdAt.Add(2*time.Minute))
+
+	seen := make(map[string]edgev1.TaskStatus)
+	cursor := ""
+	for pageNumber := 0; ; pageNumber++ {
+		if pageNumber > 4 {
+			t.Fatal("active task scan did not terminate")
+		}
+		page, err := store.ScanActiveTasks(
+			cursor, 1, createdAt.Add(3*time.Minute),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, task := range page.Tasks {
+			if _, duplicate := seen[task.Identity.TaskID]; duplicate {
+				t.Fatalf("duplicate active task %q", task.Identity.TaskID)
+			}
+			seen[task.Identity.TaskID] = task.Status
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		if page.NextCursor == cursor || len(page.NextCursor) > 64 {
+			t.Fatalf("invalid continuation cursor %q", page.NextCursor)
+		}
+		cursor = page.NextCursor
+	}
+	if len(seen) != 2 ||
+		seen[accepted.Request.TaskId] != edgev1.TaskStatus_TASK_STATUS_ACCEPTED ||
+		seen[running.Request.TaskId] != edgev1.TaskStatus_TASK_STATUS_RUNNING {
+		t.Fatalf("active scan=%v", seen)
+	}
+	if _, err := store.ScanActiveTasks("not-a-cursor", 1, createdAt); err == nil {
+		t.Fatal("invalid active task cursor was accepted")
+	}
+	if _, err := store.ScanActiveTasks("", 0, createdAt); err == nil {
+		t.Fatal("zero active task scan limit was accepted")
+	}
+	if _, err := store.ScanActiveTasks(
+		"", maximumWorkerActiveScan+1, createdAt,
+	); err == nil {
+		t.Fatal("excessive active task scan limit was accepted")
+	}
+}
+
 func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	path := privateWorkerTaskStorePath(t)
@@ -375,6 +452,11 @@ func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 	}
 	if _, err := store.Stats(); !errors.Is(err, ErrTaskClosed) {
 		t.Fatalf("closed stats error=%v", err)
+	}
+	if _, err := store.ScanActiveTasks(
+		"", 1, now.Add(4*time.Minute),
+	); !errors.Is(err, ErrTaskClosed) {
+		t.Fatalf("closed active scan error=%v", err)
 	}
 }
 

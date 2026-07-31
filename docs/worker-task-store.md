@@ -38,6 +38,8 @@ provides:
   limits;
 - an expiry index for bounded cleanup without a full-database scan;
 - startup auditing of records, payloads, results, expiry entries, and counts;
+- bounded, paginated startup scanning of unexpired `ACCEPTED/RUNNING`
+  identities without loading request or result payloads;
 - atomic concurrent claim and terminal replay behavior.
 
 The task database is bounded by `MaxTasks`. Each request and successful result
@@ -65,6 +67,13 @@ A Worker `Invoke` handler should follow this order:
 6. Implement WorkerService `GetTask` by delegating to the store's `GetTask`.
 7. Run bounded `Cleanup` periodically and during controlled shutdown/startup.
 
+Before opening the private RPC listener, a synchronous Worker without a
+durable executor job handle should use `ScanActiveTasks` to enumerate every
+retained `ACCEPTED/RUNNING` identity and resolve it under one explicit restart
+policy. The cursor advances by scanned records, including terminal records,
+and each page is capped. It is a private continuation token: do not persist it
+as authority, expose it through public diagnostics, or log it.
+
 The Edge and Worker configuration must agree on maximum message bytes,
 invocation duration, task retention, and allowed priorities. A more restrictive
 Worker policy is allowed but fails the request before execution.
@@ -88,6 +97,14 @@ the TOS task ID, a transactional local outbox, or a sandbox supervisor with its
 own durable job registry. It must never infer that an absent process means the
 work did not run, and it must never resubmit solely because Edge reports a
 timeout or the Worker store reports `NOT_FOUND`.
+
+For a Worker whose adapters are synchronous calls owned by the Worker process
+and expose no durable job handle, the safe reference policy is to convert each
+interrupted active identity to `FAILED/RUNTIME_FAILED` before accepting new
+RPCs. This produces a zero-charge terminal observation, does not claim that
+the remote runtime performed no work, and never resubmits it. A future durable
+sandbox supervisor replaces this policy only after it can prove and recover
+ownership by the exact TOS task ID.
 
 ## Trust boundary
 
