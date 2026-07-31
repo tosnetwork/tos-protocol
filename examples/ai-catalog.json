@@ -1,0 +1,23 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "Example TOS Operator",
+    "identifier": "did:web:edge.example"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:edge.example:tos:ai-terminal",
+      "displayName": "Example TOS AI Edge Terminal",
+      "type": "application/vnd.tos.service+json",
+      "url": "https://edge.example/.well-known/tos-service.json",
+      "description": "A local-first AI edge execution service.",
+      "tags": ["tos", "edge-ai", "local-first"],
+      "capabilities": ["inference"],
+      "representativeQueries": [
+        "find a private edge inference service",
+        "run an AI task near my physical site"
+      ],
+      "version": "0.1.0"
+    }
+  ]
+}

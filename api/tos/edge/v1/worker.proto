@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package tos.edge.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1;edgev1";
+
+// WorkerService is the private, versioned boundary between Edge Core and a
+// vertical worker. It is intended for an authenticated local transport such as
+// a mode-0600 Unix socket, not direct Internet exposure.
+service WorkerService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+  rpc Quote(QuoteRequest) returns (QuoteResponse);
+  rpc Invoke(InvokeRequest) returns (InvokeResponse);
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_EMERGENCY = 1;
+  PRIORITY_CONTROL = 2;
+  PRIORITY_REALTIME_PERCEPTION = 3;
+  PRIORITY_LOCAL_ASYNC = 4;
+  PRIORITY_EXTERNAL_SERVICE = 5;
+  PRIORITY_BACKGROUND = 6;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string version = 2;
+}
+
+message GetCapabilitiesRequest {}
+
+message Capability {
+  string service_id = 1;
+  string operation = 2;
+  string model = 3;
+  string model_digest = 4;
+  string runtime = 5;
+  string runtime_revision = 6;
+  uint64 max_input_bytes = 7;
+  uint64 max_output_bytes = 8;
+  repeated Priority accepted_priorities = 9;
+}
+
+message GetCapabilitiesResponse {
+  repeated Capability capabilities = 1;
+  string capacity_revision = 2;
+}
+
+message QuoteRequest {
+  string request_id = 1;
+  string service_id = 2;
+  string operation = 3;
+  string model = 4;
+  uint64 input_bytes = 5;
+  uint64 max_output_bytes = 6;
+  int64 deadline_unix_millis = 7;
+  Priority priority = 8;
+}
+
+message QuoteResponse {
+  string quote_id = 1;
+  string request_id = 2;
+  int64 expires_unix_millis = 3;
+  uint64 price_nano_tos = 4;
+  string capacity_revision = 5;
+  string model_revision = 6;
+  string runtime_revision = 7;
+}
+
+message InvokeRequest {
+  string request_id = 1;
+  string quote_id = 2;
+  string task_id = 3;
+  string service_id = 4;
+  string operation = 5;
+  string model = 6;
+  bytes payload = 7;
+  uint64 max_output_bytes = 8;
+  int64 deadline_unix_millis = 9;
+  Priority priority = 10;
+}
+
+message Usage {
+  uint64 input_bytes = 1;
+  uint64 output_bytes = 2;
+  uint64 input_tokens = 3;
+  uint64 output_tokens = 4;
+  uint64 execution_millis = 5;
+}
+
+message InvokeResponse {
+  string request_id = 1;
+  bytes output = 2;
+  Usage usage = 3;
+  string model_revision = 4;
+  string runtime_revision = 5;
+}
+
+message CancelRequest {
+  string request_id = 1;
+}
+
+message CancelResponse {
+  bool accepted = 1;
+}
