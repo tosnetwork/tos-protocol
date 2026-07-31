@@ -87,6 +87,14 @@ cannot exceed the configured request count. Its encoded size uses the request
 record byte limit, it inherits the immutable request retention deadline, and
 cleanup deletes the payment and index in the same transaction as the request.
 
+The payment reconciliation scanner stores one fixed-size cursor in journal
+metadata. Each page examines at most the configured cleanup/write batch
+limit, with an implementation hard cap of 4,096, counts expired entries
+toward that limit, and returns only live payments. Cursor advance is
+compare-and-swap. A crash before advance repeats the page safely; a stale
+concurrent scanner is rejected instead of skipping another scanner's
+position.
+
 Cleanup runs in bounded batches owned by Edge Core. The on-disk file may keep
 previously allocated pages for reuse, so file high-water size is not treated
 as current record count. Operators monitor logical request records, nonce

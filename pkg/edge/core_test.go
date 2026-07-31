@@ -240,6 +240,21 @@ func (r corePaymentResolver) ObservePayment(
 	return r.state, nil
 }
 
+type corePaymentMapResolver struct {
+	states map[string]chain.PaymentState
+}
+
+func (r corePaymentMapResolver) ObservePayment(
+	_ context.Context,
+	reference chain.PaymentReference,
+) (chain.PaymentState, error) {
+	state, ok := r.states[reference.Reference]
+	if !ok {
+		return chain.PaymentState{}, errors.New("unknown payment reference")
+	}
+	return state, nil
+}
+
 func (f coreSessionFixture) authorize(
 	t *testing.T,
 	requestID string,
@@ -557,15 +572,16 @@ func TestCoreAppliesOnlyVerifiedPaymentObservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	initialState := chain.PaymentState{
+		Network: material.Network, AuthorizationID: material.AuthorizationID,
+		QuoteID: material.QuoteID, RequestID: material.RequestID,
+		Reference: material.Reference, Confirmed: true, Finalized: true,
+		AmountNanoTOS: material.PriceNanoTOS,
+		Payer:         material.Payer, Payee: material.Payee,
+		ObservedMasterSeqno: 101, ObservedAt: now,
+	}
 	observer, err := payment.NewObserver(
-		corePaymentResolver{state: chain.PaymentState{
-			Network: material.Network, AuthorizationID: material.AuthorizationID,
-			QuoteID: material.QuoteID, RequestID: material.RequestID,
-			Reference: material.Reference, Confirmed: true, Finalized: true,
-			AmountNanoTOS: material.PriceNanoTOS,
-			Payer:         material.Payer, Payee: material.Payee,
-			ObservedMasterSeqno: 101, ObservedAt: now,
-		}},
+		corePaymentResolver{state: initialState},
 		payment.DefaultPolicy(),
 	)
 	if err != nil {
@@ -605,12 +621,158 @@ func TestCoreAppliesOnlyVerifiedPaymentObservation(t *testing.T) {
 	if err != nil || stored != applied {
 		t.Fatalf("stored payment=%#v err=%v", stored, err)
 	}
+	refreshedState := initialState
+	refreshedState.ObservedMasterSeqno = 102
+	reconciliationObserver, err := payment.NewObserver(
+		corePaymentResolver{state: refreshedState},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed, paymentDisposition, err := core.ReconcilePayment(
+		context.Background(), scope, reconciliationObserver,
+	)
+	if err != nil || paymentDisposition != journal.PaymentRefreshed ||
+		refreshed.Status != journal.PaymentStatusApplied ||
+		refreshed.ObservedMasterSeqno != 102 {
+		t.Fatalf(
+			"payment refresh: payment=%#v disposition=%q err=%v",
+			refreshed, paymentDisposition, err,
+		)
+	}
+	reorganizedState := refreshedState
+	reorganizedState.Confirmed = false
+	reorganizedState.Reorganized = true
+	reorganizedState.ObservedMasterSeqno = 103
+	reorganizationObserver, err := payment.NewObserver(
+		corePaymentResolver{state: reorganizedState},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reorganized, paymentDisposition, err := core.ReconcilePayment(
+		context.Background(), scope, reorganizationObserver,
+	)
+	if err != nil || paymentDisposition != journal.PaymentReorganized ||
+		reorganized.Status != journal.PaymentStatusReorganized ||
+		reorganized.ObservedMasterSeqno != 103 {
+		t.Fatalf(
+			"payment reorganization: payment=%#v disposition=%q err=%v",
+			reorganized, paymentDisposition, err,
+		)
+	}
+	if _, err := core.TransitionRequest(
+		scope, record.Revision, journal.StateRunning, "", "",
+	); !errors.Is(err, journal.ErrPaymentReorganized) {
+		t.Fatalf("reorganized dispatch error=%v", err)
+	}
 	health, err := core.Health()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if health.RequestRecords != 1 || health.PaymentRecords != 1 {
 		t.Fatalf("unexpected payment health: %#v", health)
+	}
+}
+
+func TestCoreReconcilesPaymentsInDurableBoundedBatches(t *testing.T) {
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	config.RequestJournalLimits.MaxPrunePerWrite = 2
+	now := time.Unix(1_800_000_000, 0).UTC()
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	intent := "sha256:" + strings.Repeat("9", 64)
+	reconciliationStates := make(map[string]chain.PaymentState, 2)
+	for index, requestID := range []string{
+		"payment-batch-0001",
+		"payment-batch-0002",
+	} {
+		scope, authorized := fixture.authorizePayment(t, requestID)
+		if _, disposition, err := core.AdmitAuthorizedPayment(
+			scope, intent, authorized, now.Add(30*time.Minute),
+		); err != nil || disposition != journal.BeginCreated {
+			t.Fatalf(
+				"admit batch payment %d: disposition=%q err=%v",
+				index, disposition, err,
+			)
+		}
+		material, err := authorized.ObservationMaterial(now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		initialState := chain.PaymentState{
+			Network:         material.Network,
+			AuthorizationID: material.AuthorizationID,
+			QuoteID:         material.QuoteID, RequestID: material.RequestID,
+			Reference: material.Reference, Confirmed: true, Finalized: true,
+			AmountNanoTOS: material.PriceNanoTOS,
+			Payer:         material.Payer, Payee: material.Payee,
+			ObservedMasterSeqno: 101, ObservedAt: now,
+		}
+		observer, err := payment.NewObserver(
+			corePaymentResolver{state: initialState},
+			payment.DefaultPolicy(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		verified, err := observer.Observe(
+			context.Background(), authorized, 100, now,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, disposition, err := core.ApplyVerifiedPayment(
+			scope, intent, authorized, verified, 101,
+		); err != nil || disposition != journal.PaymentApplied {
+			t.Fatalf(
+				"apply batch payment %d: disposition=%q err=%v",
+				index, disposition, err,
+			)
+		}
+		reconciledState := initialState
+		reconciledState.ObservedMasterSeqno = 102
+		if index == 1 {
+			reconciledState.Confirmed = false
+			reconciledState.Reorganized = true
+		}
+		reconciliationStates[material.Reference] = reconciledState
+	}
+	reconciliationObserver, err := payment.NewObserver(
+		corePaymentMapResolver{states: reconciliationStates},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := core.ReconcilePaymentBatch(
+		context.Background(), reconciliationObserver, 2,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Scanned != 2 || report.Eligible != 2 ||
+		report.Refreshed != 1 || report.Reorganized != 1 ||
+		report.Replayed != 0 || report.Failed != 0 ||
+		len(report.Failures) != 0 {
+		t.Fatalf("unexpected reconciliation report: %#v", report)
+	}
+	replayed, err := core.ReconcilePaymentBatch(
+		context.Background(), reconciliationObserver, 2,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !replayed.Wrapped || replayed.Scanned != 2 ||
+		replayed.Replayed != 2 || replayed.Failed != 0 {
+		t.Fatalf("unexpected wrapped reconciliation report: %#v", replayed)
 	}
 }
 

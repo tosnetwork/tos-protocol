@@ -1,8 +1,10 @@
 package edge
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,6 +46,25 @@ type CoreHealth struct {
 	LastCleanupDeleted   int
 	LastCleanupHasMore   bool
 	LastCleanupSucceeded bool
+}
+
+type PaymentReconciliationFailure struct {
+	Scope journal.Scope
+	Error string
+}
+
+// PaymentReconciliationReport is bounded by the caller's maxScan, which is
+// itself capped by the journal's configured prune/write batch limit.
+type PaymentReconciliationReport struct {
+	Scanned     int
+	Eligible    int
+	Replayed    int
+	Refreshed   int
+	Reorganized int
+	Failed      int
+	HasMore     bool
+	Wrapped     bool
+	Failures    []PaymentReconciliationFailure
 }
 
 // Core owns durable request replay state and its bounded cleanup lifecycle.
@@ -273,6 +294,191 @@ func (c *Core) Request(scope journal.Scope) (journal.Record, error) {
 
 func (c *Core) Payment(scope journal.Scope) (journal.PaymentRecord, error) {
 	return c.requests.GetPayment(scope, c.now())
+}
+
+// ReconcilePayment performs one strict post-application chain recheck and
+// applies its opaque result against the latest durable high-water mark.
+func (c *Core) ReconcilePayment(
+	ctx context.Context,
+	scope journal.Scope,
+	observer *payment.Observer,
+) (journal.PaymentRecord, journal.PaymentDisposition, error) {
+	now := c.now()
+	current, err := c.requests.GetPayment(scope, now)
+	if err != nil {
+		return journal.PaymentRecord{}, "", err
+	}
+	verified, err := observer.Reconcile(
+		ctx, paymentReconciliationBinding(current),
+		current.ObservedMasterSeqno, now,
+	)
+	if err != nil {
+		return journal.PaymentRecord{}, "", fmt.Errorf(
+			"verify payment reconciliation: %w", err,
+		)
+	}
+	return c.applyVerifiedPaymentReconciliation(scope, verified, now)
+}
+
+// ReconcilePaymentBatch advances the durable payment scan cursor only after
+// every eligible entry in the bounded page has been attempted. A process
+// crash before cursor advance merely replays idempotent reconciliation.
+func (c *Core) ReconcilePaymentBatch(
+	ctx context.Context,
+	observer *payment.Observer,
+	maxScan int,
+) (PaymentReconciliationReport, error) {
+	if ctx == nil {
+		return PaymentReconciliationReport{}, errors.New(
+			"nil payment reconciliation context",
+		)
+	}
+	if observer == nil {
+		return PaymentReconciliationReport{}, errors.New(
+			"nil payment reconciliation observer",
+		)
+	}
+	now := c.now()
+	scan, err := c.requests.ScanPayments(now, maxScan)
+	if err != nil {
+		return PaymentReconciliationReport{}, err
+	}
+	report := PaymentReconciliationReport{
+		Scanned: scan.Scanned, Eligible: len(scan.Payments),
+		HasMore: scan.HasMore, Wrapped: scan.Wrapped,
+		Failures: make(
+			[]PaymentReconciliationFailure, 0, len(scan.Payments),
+		),
+	}
+	for _, current := range scan.Payments {
+		if err := ctx.Err(); err != nil {
+			return report, err
+		}
+		binding := paymentReconciliationBinding(current)
+		verified, err := observer.Reconcile(
+			ctx, binding, current.ObservedMasterSeqno, now,
+		)
+		if err == nil {
+			_, disposition, applyErr :=
+				c.applyVerifiedPaymentReconciliation(
+					current.Scope, verified, now,
+				)
+			err = applyErr
+			switch disposition {
+			case journal.PaymentReplay:
+				report.Replayed++
+			case journal.PaymentRefreshed:
+				report.Refreshed++
+			case journal.PaymentReorganized:
+				report.Reorganized++
+			case journal.PaymentApplied:
+				err = errors.New(
+					"payment reconciliation unexpectedly created a payment",
+				)
+			case "":
+			default:
+				err = errors.New(
+					"payment reconciliation returned an unknown disposition",
+				)
+			}
+		}
+		if err != nil {
+			report.Failed++
+			report.Failures = append(
+				report.Failures,
+				PaymentReconciliationFailure{
+					Scope: current.Scope,
+					Error: boundedErrorMessage(err, 512),
+				},
+			)
+		}
+	}
+	if err := c.requests.AdvancePaymentScanCursor(
+		scan.Cursor, scan.NextCursor,
+	); err != nil {
+		return report, fmt.Errorf("advance payment reconciliation cursor: %w", err)
+	}
+	return report, nil
+}
+
+func (c *Core) applyVerifiedPaymentReconciliation(
+	scope journal.Scope,
+	verified payment.VerifiedReconciliation,
+	now time.Time,
+) (journal.PaymentRecord, journal.PaymentDisposition, error) {
+	current, err := c.requests.GetPayment(scope, now)
+	if err != nil {
+		return journal.PaymentRecord{}, "", err
+	}
+	binding := paymentReconciliationBinding(current)
+	material, err := verified.ApplicationMaterial(
+		binding, current.ObservedMasterSeqno, now,
+	)
+	if err != nil {
+		return journal.PaymentRecord{}, "", fmt.Errorf(
+			"authorize payment reconciliation application: %w", err,
+		)
+	}
+	switch material.Status {
+	case payment.ReconciliationApplied:
+		_, reconciled, disposition, err := c.requests.ApplyPayment(
+			journal.PaymentAdmission{
+				Scope: current.Scope, IntentDigest: binding.IntentDigest,
+				AuthorizationID: binding.AuthorizationID,
+				QuoteID:         binding.QuoteID, Reference: binding.Reference,
+				Payer: binding.Payer, Payee: binding.Payee,
+				AmountNanoTOS:         binding.AmountNanoTOS,
+				QuoteEnvelopeDigest:   binding.QuoteEnvelopeDigest,
+				PaymentEnvelopeDigest: binding.PaymentEnvelopeDigest,
+				ObservedMasterSeqno:   material.ObservedMasterSeqno,
+				ObservedAt:            material.ObservedAt,
+			},
+			now,
+		)
+		return reconciled, disposition, err
+	case payment.ReconciliationReorganized:
+		return c.requests.MarkPaymentReorganized(
+			journal.PaymentReorganization{
+				Scope:               current.Scope,
+				AuthorizationID:     binding.AuthorizationID,
+				QuoteID:             binding.QuoteID,
+				Reference:           binding.Reference,
+				ObservedMasterSeqno: material.ObservedMasterSeqno,
+				ObservedAt:          material.ObservedAt,
+			},
+			now,
+		)
+	default:
+		return journal.PaymentRecord{}, "", errors.New(
+			"unsupported verified payment reconciliation status",
+		)
+	}
+}
+
+func paymentReconciliationBinding(
+	record journal.PaymentRecord,
+) payment.ReconciliationBinding {
+	return payment.ReconciliationBinding{
+		Network: record.Scope.Network, ServiceID: record.Scope.ServiceID,
+		SessionID: record.Scope.SessionID, Operation: record.Scope.Operation,
+		RequestID: record.Scope.RequestID, IntentDigest: record.IntentDigest,
+		AuthorizationID: record.AuthorizationID, QuoteID: record.QuoteID,
+		Reference: record.Reference, Payer: record.Payer, Payee: record.Payee,
+		AmountNanoTOS:         record.AmountNanoTOS,
+		QuoteEnvelopeDigest:   record.QuoteEnvelopeDigest,
+		PaymentEnvelopeDigest: record.PaymentEnvelopeDigest,
+	}
+}
+
+func boundedErrorMessage(err error, maximum int) string {
+	if err == nil {
+		return ""
+	}
+	message := err.Error()
+	if len(message) <= maximum {
+		return message
+	}
+	return strings.Clone(message[:maximum])
 }
 
 func (c *Core) TransitionRequest(

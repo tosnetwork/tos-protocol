@@ -576,6 +576,116 @@ func TestPaymentStateSurvivesRestartAndExpiresWithRequest(t *testing.T) {
 	}
 }
 
+func TestPaymentScanCursorIsBoundedDurableAndCASProtected(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	limits.MaxPrunePerWrite = 2
+	now := time.Unix(1_800_000_000, 0).UTC()
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range 3 {
+		scope := testScope(fmt.Sprintf("payment-scan-%d", index))
+		admission := testPaymentAdmission(scope, now, 101)
+		admission.AuthorizationID = fmt.Sprintf("authorization-scan-%d", index)
+		admission.QuoteID = fmt.Sprintf("quote-scan-%d", index)
+		admission.Reference = fmt.Sprintf("payment-reference-scan-%d", index)
+		if _, _, err := store.Begin(
+			scope, admission.IntentDigest, now, now.Add(time.Hour),
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := store.ApplyPayment(admission, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := store.ScanPayments(now, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Cursor != "" || first.NextCursor == "" ||
+		first.Scanned != 2 || len(first.Payments) != 2 ||
+		!first.HasMore || first.Wrapped {
+		t.Fatalf("unexpected first payment scan: %#v", first)
+	}
+	replayed, err := store.ScanPayments(now, 2)
+	if err != nil || replayed.Cursor != first.Cursor ||
+		replayed.NextCursor != first.NextCursor {
+		t.Fatalf("uncommitted scan was not replayed: %#v err=%v", replayed, err)
+	}
+	if err := store.AdvancePaymentScanCursor(
+		first.Cursor, first.NextCursor,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AdvancePaymentScanCursor(
+		first.Cursor, first.NextCursor,
+	); !errors.Is(err, ErrPaymentScanCursor) {
+		t.Fatalf("stale payment cursor advance error=%v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	second, err := reopened.ScanPayments(now, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Cursor != first.NextCursor ||
+		second.NextCursor == "" || second.Scanned != 1 ||
+		len(second.Payments) != 1 || second.HasMore || second.Wrapped {
+		t.Fatalf("unexpected resumed payment scan: %#v", second)
+	}
+	if err := reopened.AdvancePaymentScanCursor(
+		second.Cursor, second.NextCursor,
+	); err != nil {
+		t.Fatal(err)
+	}
+	wrapped, err := reopened.ScanPayments(now, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !wrapped.Wrapped || wrapped.Scanned != 2 ||
+		len(wrapped.Payments) != 2 || !wrapped.HasMore {
+		t.Fatalf("unexpected wrapped payment scan: %#v", wrapped)
+	}
+}
+
+func TestPaymentScanCountsExpiredEntriesTowardBound(t *testing.T) {
+	limits := testLimits(100)
+	limits.MaxPrunePerWrite = 2
+	store, _ := openTestStore(t, limits)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	for index, retention := range []time.Duration{time.Millisecond, time.Hour} {
+		scope := testScope(fmt.Sprintf("payment-scan-expiry-%d", index))
+		admission := testPaymentAdmission(scope, now, 101)
+		admission.AuthorizationID = fmt.Sprintf("authorization-expiry-%d", index)
+		admission.QuoteID = fmt.Sprintf("quote-expiry-%d", index)
+		admission.Reference = fmt.Sprintf("payment-reference-expiry-%d", index)
+		if _, _, err := store.Begin(
+			scope, admission.IntentDigest, now, now.Add(retention),
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := store.ApplyPayment(admission, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scan, err := store.ScanPayments(now.Add(2*time.Millisecond), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scan.Scanned != 2 || len(scan.Payments) != 1 {
+		t.Fatalf("expired scan bypassed batch bound: %#v", scan)
+	}
+}
+
 func TestAdmitSessionConcurrentBudgetLimit(t *testing.T) {
 	store, _ := openTestStore(t, testLimits(100))
 	now := time.Unix(1_800_000_000, 0).UTC()
@@ -1254,6 +1364,15 @@ func TestJournalFailsClosedOnMissingNonceExpiryIndexAtOpen(t *testing.T) {
 func TestOpenAndRetentionLimits(t *testing.T) {
 	if _, err := Open("relative.db", DefaultLimits()); err == nil {
 		t.Fatal("relative journal path accepted")
+	}
+	oversizedBatch := DefaultLimits()
+	oversizedBatch.MaxRecords = maxConfiguredBatch + 1
+	oversizedBatch.MaxPrunePerWrite = maxConfiguredBatch + 1
+	if _, err := Open(
+		filepath.Join(t.TempDir(), "oversized-batch.db"),
+		oversizedBatch,
+	); err == nil {
+		t.Fatal("excessive journal batch size accepted")
 	}
 	store, _ := openTestStore(t, testLimits(100))
 	now := time.Unix(1_800_000_000, 0).UTC()

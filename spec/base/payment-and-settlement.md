@@ -43,10 +43,12 @@ client/delegation-signed authorization, exact echoed chain reference, party
 and amount checks, high-water/freshness checks, and explicit finality and
 overpayment policy. The resulting opaque observation, payment replay index,
 and pending-to-authorized request transition are persisted atomically.
-Monotonic reorganization state blocks paid dispatch. A production watcher
-with a durable scan cursor, authenticated reorganization input, bounded
-restart reconciliation, and refund handling remain required before public
-paid execution.
+Monotonic reorganization state blocks paid dispatch. Post-expiry rechecks use
+the durable immutable binding, and a count-bounded coordinator advances one
+crash-safe CAS scan cursor only after attempting its page. A concrete TOS
+contract adapter, automatic watcher scheduling/backoff, operational
+observability, and refund handling remain required before public paid
+execution.
 
 ## Reorganization and failure
 

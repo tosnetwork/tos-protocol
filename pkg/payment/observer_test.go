@@ -215,6 +215,23 @@ func newObserverFixture(t *testing.T) observerFixture {
 	}
 }
 
+func reconciliationBinding(fixture observerFixture) ReconciliationBinding {
+	return ReconciliationBinding{
+		Network: fixture.material.Network, ServiceID: fixture.material.ServiceID,
+		SessionID: fixture.material.SessionID, Operation: fixture.material.Operation,
+		RequestID:             fixture.material.RequestID,
+		IntentDigest:          fixture.material.IntentDigest,
+		AuthorizationID:       fixture.material.AuthorizationID,
+		QuoteID:               fixture.material.QuoteID,
+		Reference:             fixture.material.Reference,
+		Payer:                 fixture.material.Payer,
+		Payee:                 fixture.material.Payee,
+		AmountNanoTOS:         fixture.state.AmountNanoTOS,
+		QuoteEnvelopeDigest:   fixture.material.QuoteEnvelopeDigest,
+		PaymentEnvelopeDigest: fixture.material.PaymentEnvelopeDigest,
+	}
+}
+
 func TestObserverVerifiesExactFinalPayment(t *testing.T) {
 	fixture := newObserverFixture(t)
 	resolver := &testPaymentResolver{state: fixture.state}
@@ -273,6 +290,139 @@ func TestObserverVerifiesExactFinalPayment(t *testing.T) {
 		fixture.material.ValidUntil.Add(time.Millisecond),
 	); err == nil {
 		t.Fatal("payment observation outlived its signed authorization")
+	}
+}
+
+func TestReconcileVerifiesAppliedPaymentAfterAuthorizationExpiry(t *testing.T) {
+	fixture := newObserverFixture(t)
+	now := fixture.material.ValidUntil.Add(time.Minute)
+	state := fixture.state
+	state.ObservedMasterSeqno = 102
+	state.ObservedAt = now
+	resolver := &testPaymentResolver{state: state}
+	observer, err := NewObserver(resolver, DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := reconciliationBinding(fixture)
+	verified, err := observer.Reconcile(
+		context.Background(), binding, 101, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolver.ref != (chain.PaymentReference{
+		Network: binding.Network, AuthorizationID: binding.AuthorizationID,
+		QuoteID: binding.QuoteID, RequestID: binding.RequestID,
+		Reference: binding.Reference, MinimumMasterSeqno: 101,
+	}) {
+		t.Fatalf("reconciliation reference=%#v", resolver.ref)
+	}
+	material, err := verified.ApplicationMaterial(binding, 102, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if material.Status != ReconciliationApplied ||
+		material.ObservedMasterSeqno != 102 ||
+		!material.ObservedAt.Equal(now) {
+		t.Fatalf("unexpected reconciliation material: %#v", material)
+	}
+	changed := binding
+	changed.RequestID = "attacker-request"
+	if _, err := verified.ApplicationMaterial(
+		changed, 102, now,
+	); err == nil {
+		t.Fatal("verified reconciliation reused with another binding")
+	}
+	if _, err := verified.ApplicationMaterial(
+		binding, 103, now,
+	); err == nil {
+		t.Fatal("verified reconciliation reused below a newer high-water mark")
+	}
+	if _, err := verified.ApplicationMaterial(
+		binding, 102, now.Add(DefaultMaxObservationAge),
+	); err == nil {
+		t.Fatal("expired reconciliation accepted")
+	}
+}
+
+func TestReconcileVerifiesFinalReorganization(t *testing.T) {
+	fixture := newObserverFixture(t)
+	state := fixture.state
+	state.Confirmed = false
+	state.Reorganized = true
+	state.ObservedMasterSeqno = 102
+	state.ObservedAt = fixture.now.Add(time.Second)
+	observer, err := NewObserver(
+		&testPaymentResolver{state: state},
+		DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := reconciliationBinding(fixture)
+	verified, err := observer.Reconcile(
+		context.Background(), binding, 101, fixture.now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	material, err := verified.ApplicationMaterial(
+		binding, 101, fixture.now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if material.Status != ReconciliationReorganized {
+		t.Fatalf("reconciliation status=%q", material.Status)
+	}
+}
+
+func TestReconcileRejectsAmbiguousOrRegressedState(t *testing.T) {
+	fixture := newObserverFixture(t)
+	binding := reconciliationBinding(fixture)
+	tests := []struct {
+		name   string
+		mutate func(*chain.PaymentState)
+	}{
+		{"reference", func(s *chain.PaymentState) { s.Reference = "other-reference" }},
+		{"payer", func(s *chain.PaymentState) { s.Payer = "other-payer" }},
+		{"amount", func(s *chain.PaymentState) { s.AmountNanoTOS++ }},
+		{"rollback", func(s *chain.PaymentState) { s.ObservedMasterSeqno = 100 }},
+		{"stale", func(s *chain.PaymentState) {
+			s.ObservedAt = fixture.now.Add(-DefaultMaxObservationAge)
+		}},
+		{"future", func(s *chain.PaymentState) {
+			s.ObservedAt = fixture.now.Add(identity.MaxClockSkew + time.Millisecond)
+		}},
+		{"not-final", func(s *chain.PaymentState) { s.Finalized = false }},
+		{"unconfirmed", func(s *chain.PaymentState) { s.Confirmed = false }},
+		{"reorganized-confirmed", func(s *chain.PaymentState) {
+			s.Reorganized = true
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := fixture.state
+			test.mutate(&state)
+			observer, err := NewObserver(
+				&testPaymentResolver{state: state},
+				DefaultPolicy(),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := observer.Reconcile(
+				context.Background(), binding, 101, fixture.now,
+			); err == nil {
+				t.Fatal("invalid reconciliation state accepted")
+			}
+		})
+	}
+	if _, err := (VerifiedReconciliation{}).ApplicationMaterial(
+		binding, 101, fixture.now,
+	); err == nil {
+		t.Fatal("zero reconciliation result accepted")
 	}
 }
 

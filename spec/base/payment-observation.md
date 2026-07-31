@@ -90,10 +90,30 @@ request with that status cannot transition from `authorized` to `running`.
 This is a storage and dispatch safety primitive; callers cannot treat a raw
 RPC response as a verified reorganization.
 
+## Post-application reconciliation
+
+After application, the durable payment record is the trusted immutable query
+binding. A strict recheck can therefore run after the quote and client
+authorization have expired. It still requires the chain adapter to echo the
+network, authorization, quote, request, settlement reference, payer, payee,
+and exact applied amount at or above the record's masterchain high-water
+position.
+
+An applied result must remain confirmed and satisfy finality policy. A
+reorganization result must no longer claim confirmation and, under the
+default policy, must assert a finalized observation of the removal. Both
+results are opaque and freshness-limited before journal application.
+
+Edge Core scans these records in count-bounded pages. One fixed-size durable
+cursor advances by compare-and-swap only after every eligible record in the
+page has been attempted. A crash before cursor advance replays idempotently;
+a concurrent stale scanner cannot skip ahead. Expired records count toward
+the scan bound but are not queried, preventing an expired run from turning
+one batch into an unbounded traversal.
+
 ## Remaining integration
 
-A subsequent milestone must implement the production watcher, persist its
-scan cursor, authenticate reorganization events before calling the journal,
-and implement bounded restart reconciliation and signed completion/refund
-policy. Until those pieces and isolated execution are connected, the public
-server exposes no paid invocation route.
+A subsequent milestone must implement the concrete TOS payment contract
+adapter, automatic watcher scheduling/backoff, operator observability, and
+signed completion/refund policy. Until those pieces and isolated execution
+are connected, the public server exposes no paid invocation route.

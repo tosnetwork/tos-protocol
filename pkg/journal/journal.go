@@ -33,6 +33,7 @@ const (
 	maxConfiguredBudgets     = 60_000_000
 	maxConfiguredRecordBytes = 1 << 20
 	maxConfiguredRetention   = 365 * 24 * time.Hour
+	maxConfiguredBatch       = 4_096
 	maxAdmissionBudgets      = 6
 	maxPaymentClockSkew      = 2 * time.Minute
 	expiryPrefixBytes        = 12
@@ -51,6 +52,7 @@ var (
 	ErrPaymentReplay      = errors.New("payment authorization is already bound to another request")
 	ErrPaymentReorganized = errors.New("applied payment was reorganized")
 	ErrPaymentRollback    = errors.New("payment observation regressed below its high-water mark")
+	ErrPaymentScanCursor  = errors.New("payment scan cursor changed concurrently")
 	ErrCorrupt            = errors.New("request journal is corrupt")
 
 	recordsBucket         = []byte("records-v1")
@@ -67,6 +69,7 @@ var (
 	budgetCountKey        = []byte("budget-count")
 	paymentsBucket        = []byte("payments-v1")
 	requestPaymentsBucket = []byte("request-payments-v1")
+	paymentScanCursorKey  = []byte("payment-scan-cursor")
 
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	idPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
@@ -299,6 +302,18 @@ type Stats struct {
 	BudgetUsages uint64
 	Payments     uint64
 	FileSize     int64
+}
+
+// PaymentScan is one count-bounded journal page. Cursor and NextCursor are
+// opaque CAS tokens; callers persist progress only through
+// AdvancePaymentScanCursor after attempting the page.
+type PaymentScan struct {
+	Payments   []PaymentRecord
+	Cursor     string
+	NextCursor string
+	Scanned    int
+	HasMore    bool
+	Wrapped    bool
 }
 
 type Store struct {
@@ -773,6 +788,105 @@ func (s *Store) GetPayment(
 		return nil
 	})
 	return output, err
+}
+
+// ScanPayments reads at most maxScan payment entries after the journal's
+// durable cursor. Expired entries count toward the scan bound but are not
+// returned for reconciliation.
+func (s *Store) ScanPayments(
+	now time.Time,
+	maxScan int,
+) (PaymentScan, error) {
+	if err := validateNow(now); err != nil {
+		return PaymentScan{}, err
+	}
+	if maxScan <= 0 || maxScan > s.limits.MaxPrunePerWrite {
+		return PaymentScan{}, errors.New(
+			"payment scan batch exceeds configured limit",
+		)
+	}
+	now = now.UTC()
+	var output PaymentScan
+	err := s.db.View(func(transaction *bolt.Tx) error {
+		meta := transaction.Bucket(metaBucket)
+		storedCursor := meta.Get(paymentScanCursorKey)
+		if len(storedCursor) != 0 && len(storedCursor) != sha256.Size {
+			return fmt.Errorf("%w: invalid payment scan cursor", ErrCorrupt)
+		}
+		output.Cursor = encodePaymentScanCursor(storedCursor)
+		payments := transaction.Bucket(paymentsBucket)
+		cursor := payments.Cursor()
+		var key, encoded []byte
+		if len(storedCursor) == 0 {
+			key, encoded = cursor.First()
+		} else {
+			key, encoded = cursor.Seek(storedCursor)
+			if key != nil && bytes.Equal(key, storedCursor) {
+				key, encoded = cursor.Next()
+			}
+			if key == nil {
+				key, encoded = cursor.First()
+				output.Wrapped = true
+			}
+		}
+		for key != nil && output.Scanned < maxScan {
+			if len(key) != sha256.Size {
+				return fmt.Errorf("%w: invalid payment key", ErrCorrupt)
+			}
+			payment, err := s.decodePayment(encoded)
+			if err != nil {
+				return err
+			}
+			expectedKey := paymentKey(
+				payment.Scope.Network,
+				payment.AuthorizationID,
+				payment.Reference,
+			)
+			if !bytes.Equal(key, expectedKey[:]) {
+				return fmt.Errorf("%w: payment key mismatch", ErrCorrupt)
+			}
+			output.Scanned++
+			output.NextCursor = encodePaymentScanCursor(key)
+			if payment.RetainUntil.After(now) {
+				output.Payments = append(output.Payments, payment)
+			}
+			key, encoded = cursor.Next()
+		}
+		output.HasMore = key != nil
+		return nil
+	})
+	if err != nil {
+		return PaymentScan{}, err
+	}
+	return output, nil
+}
+
+// AdvancePaymentScanCursor commits progress with compare-and-swap semantics.
+// Reprocessing after a crash is safe because payment reconciliation is
+// idempotent; advancing a stale concurrent scan is rejected.
+func (s *Store) AdvancePaymentScanCursor(
+	expectedCursor string,
+	nextCursor string,
+) error {
+	expected, err := decodePaymentScanCursor(expectedCursor)
+	if err != nil {
+		return err
+	}
+	next, err := decodePaymentScanCursor(nextCursor)
+	if err != nil {
+		return err
+	}
+	return s.db.Update(func(transaction *bolt.Tx) error {
+		meta := transaction.Bucket(metaBucket)
+		current := meta.Get(paymentScanCursorKey)
+		if !bytes.Equal(current, expected) {
+			return ErrPaymentScanCursor
+		}
+		if len(next) == 0 {
+			return meta.Delete(paymentScanCursorKey)
+		}
+		return meta.Put(paymentScanCursorKey, next)
+	})
 }
 
 // MarkPaymentReorganized records a verified chain reorganization. It does not
@@ -1345,6 +1459,10 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 		payments.Stats().KeyN > records.Stats().KeyN {
 		return fmt.Errorf("%w: payment index count mismatch", ErrCorrupt)
 	}
+	if cursor := meta.Get(paymentScanCursorKey); len(cursor) != 0 &&
+		len(cursor) != sha256.Size {
+		return fmt.Errorf("%w: invalid payment scan cursor", ErrCorrupt)
+	}
 	return nil
 }
 
@@ -1686,6 +1804,7 @@ func (l Limits) validate() error {
 		l.MaxRecordBytes < 1_024 || l.MaxRecordBytes > maxConfiguredRecordBytes ||
 		l.MaxRetention <= 0 || l.MaxRetention > maxConfiguredRetention ||
 		l.MaxPrunePerWrite <= 0 || uint64(l.MaxPrunePerWrite) > l.MaxRecords ||
+		l.MaxPrunePerWrite > maxConfiguredBatch ||
 		l.OpenTimeout <= 0 || l.OpenTimeout > time.Minute {
 		return errors.New("invalid request journal limits")
 	}
@@ -2195,6 +2314,24 @@ func paymentKey(
 	var output [32]byte
 	copy(output[:], hasher.Sum(nil))
 	return output
+}
+
+func encodePaymentScanCursor(value []byte) string {
+	if len(value) == 0 {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(value)
+}
+
+func decodePaymentScanCursor(value string) ([]byte, error) {
+	if value == "" {
+		return nil, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil || len(decoded) != sha256.Size {
+		return nil, errors.New("invalid payment scan cursor")
+	}
+	return decoded, nil
 }
 
 func samePaymentBinding(
