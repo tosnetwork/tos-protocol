@@ -253,7 +253,7 @@ func TestWorkerTaskStoreConcurrentTerminalReplay(t *testing.T) {
 
 func TestWorkerTaskStoreRecoversAfterRestartAndDeadline(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	path := filepath.Join(t.TempDir(), "worker-tasks.db")
+	path := privateWorkerTaskStorePath(t)
 	config := DefaultWorkerTaskStoreConfig(path)
 	first, err := OpenWorkerTaskStore(config)
 	if err != nil {
@@ -319,7 +319,7 @@ func TestWorkerTaskStoreRecoversAfterRestartAndDeadline(t *testing.T) {
 
 func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	path := filepath.Join(t.TempDir(), "worker-tasks.db")
+	path := privateWorkerTaskStorePath(t)
 	config := DefaultWorkerTaskStoreConfig(path)
 	config.MaxTasks = 2
 	config.MaxPrunePerWrite = 1
@@ -368,7 +368,7 @@ func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 
 func TestWorkerTaskStoreFailsClosedOnCorruption(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	path := filepath.Join(t.TempDir(), "worker-tasks.db")
+	path := privateWorkerTaskStorePath(t)
 	config := DefaultWorkerTaskStoreConfig(path)
 	store, err := OpenWorkerTaskStore(config)
 	if err != nil {
@@ -401,7 +401,7 @@ func TestWorkerTaskStoreFailsClosedOnCorruption(t *testing.T) {
 
 func TestWorkerTaskStoreRejectsOrphansAndRestrictsFile(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
-	path := filepath.Join(t.TempDir(), "worker-tasks.db")
+	path := privateWorkerTaskStorePath(t)
 	config := DefaultWorkerTaskStoreConfig(path)
 	store, err := OpenWorkerTaskStore(config)
 	if err != nil {
@@ -434,6 +434,40 @@ func TestWorkerTaskStoreRejectsOrphansAndRestrictsFile(t *testing.T) {
 	if _, err := OpenWorkerTaskStore(config); !errors.Is(err, ErrTaskCorrupt) {
 		t.Fatalf("orphaned store reopened: %v", err)
 	}
+}
+
+func TestWorkerTaskStoreRejectsUnsafePath(t *testing.T) {
+	t.Run("directory mode", func(t *testing.T) {
+		directory := t.TempDir()
+		if err := os.Chmod(directory, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		config := DefaultWorkerTaskStoreConfig(
+			filepath.Join(directory, "worker-tasks.db"),
+		)
+		if _, err := OpenWorkerTaskStore(config); err == nil {
+			t.Fatal("task store accepted a non-private directory")
+		}
+	})
+	t.Run("file symlink", func(t *testing.T) {
+		directory := t.TempDir()
+		if err := os.Chmod(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(directory, "target.db")
+		if err := os.WriteFile(target, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(directory, "worker-tasks.db")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := OpenWorkerTaskStore(
+			DefaultWorkerTaskStoreConfig(link),
+		); err == nil {
+			t.Fatal("task store accepted a symlink")
+		}
+	})
 }
 
 func TestWorkerTaskStoreFailurePolicyAndClose(t *testing.T) {
@@ -525,9 +559,7 @@ func openTestWorkerTaskStore(
 	maxTasks int,
 ) *WorkerTaskStore {
 	t.Helper()
-	config := DefaultWorkerTaskStoreConfig(
-		filepath.Join(t.TempDir(), "worker-tasks.db"),
-	)
+	config := DefaultWorkerTaskStoreConfig(privateWorkerTaskStorePath(t))
 	config.MaxTasks = maxTasks
 	store, err := OpenWorkerTaskStore(config)
 	if err != nil {
@@ -535,6 +567,15 @@ func openTestWorkerTaskStore(
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	return store
+}
+
+func privateWorkerTaskStorePath(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(directory, "worker-tasks.db")
 }
 
 func testStoredInvokeRequest(

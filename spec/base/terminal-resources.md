@@ -73,3 +73,22 @@ bytes, context count, batch count, and execution milliseconds.
 The dimension identifier gives it meaning; the unit alone does not. A client
 must compare the exact identifier, unit, quantity, profile revision, and
 resource revision. Unknown required dimensions cause rejection.
+
+The `tos-ai` v0.1 Worker profile fixes the following identifiers and units:
+
+| Identifier | Unit |
+| --- | --- |
+| `memory.ram` | bytes |
+| `memory.vram` | bytes |
+| `memory.kv_cache` | bytes |
+| `runtime.context_tokens` | count |
+| `runtime.batch` | count |
+| `runtime.output` | bytes |
+| `runtime.execution` | milliseconds |
+
+Capability values are maximum admission profiles. Quote commitments are the
+actual profile checked for that request, including its output and remaining
+execution bounds. Requested limits, when present, are Edge-accepted upper
+bounds; the committed requirement must fit within them. They are not
+permission for a caller to override terminal policy.
+See [`docs/worker-service-v0.1-tos-ai-alignment.md`](../../docs/worker-service-v0.1-tos-ai-alignment.md).

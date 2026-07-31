@@ -23,7 +23,9 @@ paid request + exact invocation digest -> ClaimTask(request)
 
 ## Properties
 
-The store uses a separate mode-`0600` bbolt database and provides:
+The store uses a separate mode-`0600`, current-user-owned, non-symlink bbolt
+database under a mode-`0700`, current-user-owned, non-symlink directory and
+provides:
 
 - one atomic task-ID claim for the deterministic protobuf request;
 - exact replay and conflicting task-ID/request rejection;

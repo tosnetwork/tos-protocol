@@ -29,6 +29,7 @@ const (
 	maxWorkerInvocationDuration = 24 * time.Hour
 	maxWorkerMessageBytes       = 16 << 20
 	maxWorkerRecoveryClockSkew  = 5 * time.Minute
+	maxWorkerCapabilityValidity = 10 * time.Minute
 	maxWorkerRetentionRounding  = time.Millisecond
 	maxWorkerCapabilities       = 128
 	maxWorkerResources          = 128
@@ -294,7 +295,7 @@ func (c *WorkerClient) GetCapabilities(
 	if err != nil {
 		return nil, fmt.Errorf("worker GetCapabilities: %w", err)
 	}
-	if err := validateCapabilitiesResponse(response.Msg); err != nil {
+	if err := validateCapabilitiesResponse(response.Msg, c.now().UTC()); err != nil {
 		return nil, fmt.Errorf("validate worker GetCapabilities response: %w", err)
 	}
 	return proto.Clone(response.Msg).(*edgev1.GetCapabilitiesResponse), nil
@@ -897,6 +898,7 @@ func validateHealthResponse(response *edgev1.HealthResponse) error {
 
 func validateCapabilitiesResponse(
 	response *edgev1.GetCapabilitiesResponse,
+	now time.Time,
 ) error {
 	if response == nil {
 		return errors.New("empty response")
@@ -905,6 +907,20 @@ func validateCapabilitiesResponse(
 		"capacity revision", response.CapacityRevision, 1, 512,
 	); err != nil {
 		return err
+	}
+	if err := boundedWorkerString(
+		"terminal revision", response.TerminalRevision, 1, 512,
+	); err != nil {
+		return err
+	}
+	collected := time.UnixMilli(response.CollectedUnixMillis)
+	expires := time.UnixMilli(response.ExpiresUnixMillis)
+	if response.CollectedUnixMillis <= 0 ||
+		response.ExpiresUnixMillis <= response.CollectedUnixMillis ||
+		collected.After(now.Add(maxWorkerRecoveryClockSkew)) ||
+		!expires.After(now) ||
+		expires.Sub(collected) > maxWorkerCapabilityValidity {
+		return errors.New("worker capability snapshot has invalid freshness")
 	}
 	if len(response.Capabilities) > maxWorkerCapabilities ||
 		len(response.Resources) > maxWorkerResources {
@@ -980,8 +996,15 @@ func validateCapabilitiesResponse(
 				return err
 			}
 		}
+		if resource.Evidence == nil {
+			return errors.New("worker resource claim has no evidence")
+		}
 		if err := validateWorkerEvidence(resource.Evidence); err != nil {
 			return err
+		}
+		if resource.Evidence.CollectedUnixMillis > response.CollectedUnixMillis ||
+			resource.Evidence.ExpiresUnixMillis < response.ExpiresUnixMillis {
+			return errors.New("worker resource evidence does not cover capability snapshot")
 		}
 		if _, duplicate := resourceIDs[resource.Id]; duplicate {
 			return errors.New("duplicate worker resource")
@@ -1049,7 +1072,36 @@ func validateQuoteResponse(
 			return err
 		}
 	}
-	return validateWorkerResourceLimits(response.CommittedLimits)
+	if err := validateWorkerResourceLimits(response.CommittedLimits); err != nil {
+		return err
+	}
+	return validateWorkerCommittedLimits(
+		request.RequestedLimits,
+		response.CommittedLimits,
+	)
+}
+
+func validateWorkerCommittedLimits(
+	requested []*edgev1.ResourceLimit,
+	committed []*edgev1.ResourceLimit,
+) error {
+	if len(requested) == 0 {
+		return nil
+	}
+	committedByID := make(map[string]*edgev1.ResourceLimit, len(committed))
+	for _, limit := range committed {
+		committedByID[limit.Id] = limit
+	}
+	for _, upperBound := range requested {
+		actual := committedByID[upperBound.Id]
+		if actual == nil || actual.Unit != upperBound.Unit {
+			return errors.New("worker Quote omitted a requested resource dimension")
+		}
+		if actual.Quantity > upperBound.Quantity {
+			return errors.New("worker Quote exceeds a requested resource limit")
+		}
+	}
+	return nil
 }
 
 func validateInvokeResponse(

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
@@ -186,6 +187,9 @@ func OpenWorkerTaskStore(config WorkerTaskStoreConfig) (*WorkerTaskStore, error)
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
+	if err := validateWorkerTaskStorePath(config.Path); err != nil {
+		return nil, err
+	}
 	allowed, err := validateAllowedPriorities(config.AllowedPriorities)
 	if err != nil {
 		return nil, err
@@ -216,6 +220,29 @@ func OpenWorkerTaskStore(config WorkerTaskStoreConfig) (*WorkerTaskStore, error)
 		return nil, fmt.Errorf("initialize Worker task store: %w", err)
 	}
 	return store, nil
+}
+
+func validateWorkerTaskStorePath(path string) error {
+	parent, err := os.Lstat(filepath.Dir(path))
+	if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 ||
+		parent.Mode().Perm() != 0o700 || !ownedByCurrentUser(parent) {
+		return errors.New("Worker task store directory must be private and owned")
+	}
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil || !info.Mode().IsRegular() ||
+		info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o600 ||
+		!ownedByCurrentUser(info) {
+		return errors.New("Worker task store must be a private owned regular file")
+	}
+	return nil
+}
+
+func ownedByCurrentUser(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat.Uid == uint32(os.Geteuid())
 }
 
 func (store *WorkerTaskStore) Close() error {

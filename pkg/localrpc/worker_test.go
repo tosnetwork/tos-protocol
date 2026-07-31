@@ -122,7 +122,10 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 		},
 		capabilities: func(context.Context) (*edgev1.GetCapabilitiesResponse, error) {
 			return &edgev1.GetCapabilitiesResponse{
-				CapacityRevision: "capacity-v1",
+				CapacityRevision:    "capacity-v1",
+				TerminalRevision:    "terminal-v1",
+				CollectedUnixMillis: now.Add(-time.Second).UnixMilli(),
+				ExpiresUnixMillis:   now.Add(time.Minute).UnixMilli(),
 				Capabilities: []*edgev1.Capability{{
 					ServiceId: "tos.ai.mock", Operation: "generate",
 					Model:       "deterministic-echo",
