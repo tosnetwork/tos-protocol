@@ -68,6 +68,17 @@ func (w *dispatchWorker) GetTask(
 			time.Millisecond,
 		).UnixMilli()
 		response.RetainUntilUnixMillis = request.Msg.RetainUntilUnixMillis
+	case edgev1.TaskStatus_TASK_STATUS_FAILED,
+		edgev1.TaskStatus_TASK_STATUS_CANCELED:
+		if w.getStatus == edgev1.TaskStatus_TASK_STATUS_FAILED {
+			response.ErrorCode = string(protocol.ErrorRuntimeFailed)
+		} else {
+			response.ErrorCode = string(protocol.ErrorCanceled)
+		}
+		response.CompletedUnixMillis = time.Now().UTC().Truncate(
+			time.Millisecond,
+		).UnixMilli()
+		response.RetainUntilUnixMillis = request.Msg.RetainUntilUnixMillis
 	default:
 		return nil, connect.NewError(
 			connect.CodeInternal,
@@ -95,7 +106,7 @@ func dispatchInvokeResponse(
 
 func TestCoreDispatchesNewClaimAndOnlyQueriesReplay(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	core, scope, authorized, request, registry := prepareDispatchRequest(
+	core, scope, authorized, request, registry, _ := prepareDispatchRequest(
 		t, now, "dispatch-success-0001",
 	)
 	defer core.Close()
@@ -180,7 +191,7 @@ func TestCoreDispatchesNewClaimAndOnlyQueriesReplay(t *testing.T) {
 
 func TestCoreNeverRetriesAmbiguousClaimedInvocation(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	core, scope, authorized, request, registry := prepareDispatchRequest(
+	core, scope, authorized, request, registry, _ := prepareDispatchRequest(
 		t, now, "dispatch-ambiguous-0001",
 	)
 	defer core.Close()
@@ -246,7 +257,7 @@ func TestCoreNeverRetriesAmbiguousClaimedInvocation(t *testing.T) {
 
 func TestCoreTreatsRecoveredNotFoundAsObservationNotRetryPermission(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	core, scope, authorized, request, registry := prepareDispatchRequest(
+	core, scope, authorized, request, registry, _ := prepareDispatchRequest(
 		t, now, "dispatch-not-found-0001",
 	)
 	defer core.Close()
@@ -291,7 +302,7 @@ func TestCoreTreatsRecoveredNotFoundAsObservationNotRetryPermission(t *testing.T
 
 func TestCoreRetainsReplayClaimWhenRecoveryPolicyRejectsLookup(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	core, scope, authorized, request, registry := prepareDispatchRequest(
+	core, scope, authorized, request, registry, _ := prepareDispatchRequest(
 		t, now, "dispatch-policy-rejection-0001",
 	)
 	defer core.Close()
@@ -362,6 +373,7 @@ func prepareDispatchRequest(
 	authorization.AuthorizedPayment,
 	journal.Record,
 	*ProfileInvocationRegistry,
+	coreSessionFixture,
 ) {
 	t.Helper()
 	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
@@ -403,7 +415,7 @@ func prepareDispatchRequest(
 		core.Close()
 		t.Fatal(err)
 	}
-	return core, scope, authorized, request, registry
+	return core, scope, authorized, request, registry, fixture
 }
 
 func startDispatchWorkerClient(

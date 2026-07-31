@@ -133,6 +133,12 @@ uses read-only `GetTask`, including after the execution deadline while bounded
 retention remains live. RPC failure returns an explicit `uncertain` result
 that still exposes a defensive copy of the durable claim; even `NOT_FOUND`
 never authorizes automatic resubmission.
+Its resolution boundary creates no receipt for `uncertain`, `NOT_FOUND`,
+`ACCEPTED`, or `RUNNING`. Only a validated direct/recovered success or a
+validated recovered `FAILED`, `CANCELED`, or `TIMED_OUT` outcome enters the
+existing atomic receipt path. The receipt ID is derived deterministically from
+the durable execution identity, so concurrent or restarted resolution reaches
+one exact-replay-safe terminal record instead of inventing new IDs.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, failed/canceled refund/charging policy, production
 signer adapter, isolated executor, and public receipt route remain

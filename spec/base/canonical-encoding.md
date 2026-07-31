@@ -71,6 +71,7 @@ Initial labels are:
 | receipt | `tos.receipt.v1` |
 | evidence bundle | `tos.evidence.v1` |
 | private Worker task identity | `tos.private-worker-task.v1` |
+| execution receipt identity | `tos.execution-receipt-id.v1` |
 
 The profile request-intent commitment is the deterministic CBOR encoding of
 `version`, `profileId`, `profileVersion`, the sorted negotiated
@@ -87,6 +88,13 @@ profile, session, operation, request, intent, authorization, and quote IDs.
 Edge renders the resulting SHA-256 value as `task-` followed by 64 lowercase
 hex digits. This identifier is internal recovery state, not a public request
 intent or payment commitment.
+
+The execution receipt identity commits the version, network, service, request,
+private Worker task ID and request digest, payment authorization ID, and quote
+ID. Edge renders it as `receipt-` followed by 64 lowercase hexadecimal digits.
+It deliberately excludes outcome fields: an inconsistent second terminal
+observation for the same durable execution must conflict with the first rather
+than acquire a different receipt ID.
 
 ## Signed envelope
 

@@ -126,6 +126,13 @@ but cannot resubmit the operation. Error results must retain the committed
 claim identity so callers cannot accidentally treat them as pre-claim
 failures.
 
+Receipt resolution must likewise branch only on an opaque, validated dispatch
+result. `uncertain`, `NOT_FOUND`, `ACCEPTED`, and `RUNNING` must neither sign nor
+persist a terminal receipt. Derive the terminal receipt ID from the complete
+durable execution identity rather than caller input or Worker outcome. This
+makes exact retry deterministic and turns contradictory terminal observations
+into a conflict instead of two receipts.
+
 Task cancellation must repeat the request ID, task ID, and invocation digest,
 and the response must echo them. Never authorize cancellation from an
 uncorrelated request ID or an unvalidated boolean response.

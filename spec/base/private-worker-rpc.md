@@ -107,6 +107,17 @@ it permits the original execution deadline to have elapsed, but only while the
 bounded retention deadline is still live. First dispatch continues to require
 a future execution deadline.
 
+The reference resolution coordinator treats `uncertain`, `NOT_FOUND`,
+`ACCEPTED`, and `RUNNING` as explicit nonterminal observations and creates no
+receipt for them. A validated direct or recovered `SUCCEEDED` result enters the
+same successful receipt path. Validated recovered `FAILED`, `CANCELED`, and
+`TIMED_OUT` states enter the zero-charge generic failure path. The coordinator
+derives one deterministic receipt ID from the durable network, service,
+request, task, private-request digest, authorization, and quote identity. It
+does not include the observed outcome, so a contradictory terminal outcome
+under the same execution identity conflicts instead of creating another
+receipt.
+
 Cancellation uses the same request ID, task ID, and request-digest tuple; the
 Worker response must echo all three before Edge trusts its `accepted` flag. A
 request-ID-only cancellation is not sufficient because it could target a

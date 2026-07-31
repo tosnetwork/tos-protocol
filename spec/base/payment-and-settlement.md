@@ -99,6 +99,13 @@ the signed quote deadline; payment reorganization blocks every new failure
 receipt. This conservative default is not a profile's final refund or partial
 work charging policy.
 
+The dispatch-resolution boundary issues a receipt only for a validated
+terminal Worker outcome. `uncertain`, `NOT_FOUND`, `ACCEPTED`, and `RUNNING`
+remain nonterminal and do not call key custody or mutate receipt state.
+Terminal resolution derives `receipt-<sha256>` from the durable execution
+identity. Exact retry therefore replays the stored receipt, while a changed
+terminal meaning for the same execution conflicts at the journal boundary.
+
 This does not provide production key custody or public delivery. A deployment
 must supply a bounded signer adapter, keep its private key outside the Worker,
 register reviewed vertical mappers behind the generic intent-to-Worker

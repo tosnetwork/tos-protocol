@@ -173,6 +173,12 @@ performed an irreversible effect before losing or failing to expose state.
 Recovery lookup remains legal after the execution deadline only inside the
 original bounded retention window.
 
+The resolution coordinator leaves `uncertain`, `NOT_FOUND`, `ACCEPTED`, and
+`RUNNING` without a receipt or terminal journal change. Only validated terminal
+Worker outcomes reach receipt application. Their deterministic receipt ID is
+bound to the durable execution identity, not its outcome, so exact replay is
+idempotent and a contradictory terminal observation fails closed.
+
 The journal deliberately stores the private invocation digest, not prompts,
 payloads, credentials, or model input. After restart, an authenticated client
 retry or deterministic profile mapper must reproduce the exact invocation;
