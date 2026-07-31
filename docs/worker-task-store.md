@@ -45,6 +45,12 @@ is independently bounded by `MaxMessageBytes`; metadata is capped separately.
 The implementation adds no task-index mirror, waiter list, per-task goroutine,
 or per-task timer in process memory.
 
+`Stats` exposes only the O(1) logical task count, configured capacity, and
+remaining slots. It never exposes the database path, task identities,
+payloads, results, or retention timestamps. A vertical Worker uses this
+snapshot for advisory readiness and Quote routing; `ClaimTask` remains the
+only authoritative admission operation under concurrency.
+
 ## Worker integration
 
 A Worker `Invoke` handler should follow this order:

@@ -38,12 +38,18 @@ of the contract; consumers must not infer meaning from a unit alone.
 | `runtime.batch` | count | maximum batch size |
 | `runtime.output` | bytes | maximum returned payload |
 | `runtime.execution` | milliseconds | maximum execution duration |
+| `storage.task_slots` | count | one bounded durable task identity |
 
 A capability advertises its maximum admission profile. A quote commits the
 actual profile checked for that request. `runtime.output` is the requested
 output bound. `runtime.execution` is the smaller of the adapter execution
 budget and the remaining request deadline. The other dimensions come from the
 startup-reviewed adapter configuration.
+
+Every capability and quote additionally commits one `storage.task_slots`
+unit. Its capacity claim reports only configured slots and current
+availability. It is not a reservation and discloses no task identity or
+storage path; `ClaimTask` remains authoritative during Invoke.
 
 `requested_limits` is optional in v0.1. When present, each quantity is an
 upper bound accepted by Edge. Every item must use one of the identifiers and

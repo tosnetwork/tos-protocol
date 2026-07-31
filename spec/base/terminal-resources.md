@@ -85,10 +85,17 @@ The `tos-ai` v0.1 Worker profile fixes the following identifiers and units:
 | `runtime.batch` | count |
 | `runtime.output` | bytes |
 | `runtime.execution` | milliseconds |
+| `storage.task_slots` | count |
 
 Capability values are maximum admission profiles. Quote commitments are the
 actual profile checked for that request, including its output and remaining
 execution bounds. Requested limits, when present, are Edge-accepted upper
 bounds; the committed requirement must fit within them. They are not
 permission for a caller to override terminal policy.
+
+`storage.task_slots` is one durable execution identity, not a byte quota.
+Capabilities and quotes commit one slot. A terminal may advertise the
+configured maximum and current available count without exposing task IDs,
+payloads, results, paths, or retention timestamps. The snapshot is advisory;
+only the Worker's atomic durable claim grants a slot.
 See [`docs/worker-service-v0.1-tos-ai-alignment.md`](../../docs/worker-service-v0.1-tos-ai-alignment.md).

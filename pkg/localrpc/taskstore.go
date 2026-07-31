@@ -735,9 +735,12 @@ func (store *WorkerTaskStore) Cleanup(
 	return removed, hasMore, err
 }
 
-// WorkerTaskStoreStats is an O(1) logical capacity snapshot.
+// WorkerTaskStoreStats is an O(1) logical capacity snapshot. It contains no
+// database path, task identity, payload, or retention metadata.
 type WorkerTaskStoreStats struct {
-	Tasks uint64
+	Tasks     uint64
+	Capacity  uint64
+	Available uint64
 }
 
 func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
@@ -747,8 +750,17 @@ func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
 	var output WorkerTaskStoreStats
 	err := store.db.View(func(transaction *bolt.Tx) error {
 		count, err := readTaskCount(transaction)
-		output.Tasks = count
-		return err
+		if err != nil {
+			return err
+		}
+		capacity := uint64(store.config.MaxTasks)
+		if count > capacity {
+			return ErrTaskCorrupt
+		}
+		output = WorkerTaskStoreStats{
+			Tasks: count, Capacity: capacity, Available: capacity - count,
+		}
+		return nil
 	})
 	return output, err
 }

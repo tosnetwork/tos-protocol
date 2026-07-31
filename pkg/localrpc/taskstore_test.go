@@ -340,6 +340,11 @@ func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 	if _, _, err := store.ClaimTask(second, now); err != nil {
 		t.Fatal(err)
 	}
+	stats, err := store.Stats()
+	if err != nil || stats.Tasks != 2 || stats.Capacity != 2 ||
+		stats.Available != 0 {
+		t.Fatalf("saturated stats=%#v err=%v", stats, err)
+	}
 	third := testStoredInvokeRequest(now, "cleanup-third")
 	if _, _, err := store.ClaimTask(third, now); !errors.Is(err, ErrTaskCapacity) {
 		t.Fatalf("capacity error=%v", err)
@@ -352,8 +357,9 @@ func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 	if err != nil || removed != 1 || hasMore {
 		t.Fatalf("second cleanup removed=%d more=%v err=%v", removed, hasMore, err)
 	}
-	stats, err := store.Stats()
-	if err != nil || stats.Tasks != 0 {
+	stats, err = store.Stats()
+	if err != nil || stats.Tasks != 0 || stats.Capacity != 2 ||
+		stats.Available != 2 {
 		t.Fatalf("cleanup stats=%#v err=%v", stats, err)
 	}
 	third.DeadlineUnixMillis = now.Add(5 * time.Minute).UnixMilli()
@@ -363,6 +369,12 @@ func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 		now.Add(4*time.Minute),
 	); err != nil || disposition != TaskClaimed {
 		t.Fatalf("post-cleanup claim disposition=%q err=%v", disposition, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Stats(); !errors.Is(err, ErrTaskClosed) {
+		t.Fatalf("closed stats error=%v", err)
 	}
 }
 
