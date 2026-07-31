@@ -22,12 +22,14 @@ type ClientKeyReference struct {
 	MinimumMasterSeqno uint64
 }
 
-// ClientKeySnapshot is a bounded, fresh client-key result. Revocations name
-// delegations issued by this key; key revocation is represented separately.
+// ClientKeySnapshot is a bounded, fresh client-key result. Principal is the
+// authenticated client/payment identity represented by the key. Revocations
+// name delegations issued by this key; key revocation is separate.
 type ClientKeySnapshot struct {
 	Network              string
 	ServiceID            string
 	KeyID                string
+	Principal            string
 	PublicKey            ed25519.PublicKey
 	Revoked              bool
 	RevokedDelegationIDs []string
@@ -88,18 +90,19 @@ type SessionAdmissionMaterial struct {
 // admission. It is not executable authority until Edge Core has successfully
 // persisted that admission.
 type AuthorizedSessionEnvelope struct {
-	valid      bool
-	envelope   identity.Envelope
-	network    string
-	serviceID  string
-	authority  string
-	clientID   string
-	binding    AdmissionBinding
-	budgets    []UsageBudget
-	charge     uint64
-	sessionEnd time.Time
-	validUntil time.Time
-	verifiedAt time.Time
+	valid           bool
+	envelope        identity.Envelope
+	network         string
+	serviceID       string
+	authority       string
+	clientID        string
+	clientPrincipal string
+	binding         AdmissionBinding
+	budgets         []UsageBudget
+	charge          uint64
+	sessionEnd      time.Time
+	validUntil      time.Time
+	verifiedAt      time.Time
 }
 
 func (m *VerifiedManifest) VerifySessionGrant(
@@ -239,6 +242,11 @@ func (s *VerifiedSessionGrant) AuthorizeClientEnvelope(
 		MaxNanoTOS: s.grant.MaxNanoTOS,
 	}}
 	currentSigner := s.grant.Client
+	rootSigner, err := resolve(currentSigner)
+	if err != nil {
+		return AuthorizedSessionEnvelope{}, err
+	}
+	clientPrincipal := rootSigner.Principal
 	seenSigners := map[string]struct{}{currentSigner: {}}
 	seenDelegations := make(map[string]struct{}, len(delegations))
 	validUntil := s.validUntil
@@ -368,7 +376,8 @@ func (s *VerifiedSessionGrant) AuthorizeClientEnvelope(
 		valid: true, envelope: envelope,
 		network: s.network, serviceID: s.grant.ServiceID,
 		authority: currentSigner, clientID: s.grant.Client,
-		binding: binding, budgets: cloneUsageBudgets(budgets),
+		clientPrincipal: clientPrincipal,
+		binding:         binding, budgets: cloneUsageBudgets(budgets),
 		charge: chargeNanoTOS, sessionEnd: s.grant.ExpiresAt,
 		validUntil: validUntil, verifiedAt: now,
 	}, nil
@@ -412,6 +421,9 @@ func (s ClientKeySnapshot) validate(
 ) error {
 	if s.Network != network || s.ServiceID != serviceID || s.KeyID != keyID {
 		return errors.New("resolved client key does not match reference")
+	}
+	if err := bounded("client principal", s.Principal, 1, 512); err != nil {
+		return err
 	}
 	if s.Revoked {
 		return errors.New("client key is revoked")

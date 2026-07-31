@@ -7,8 +7,11 @@ import (
 )
 
 const (
-	BaseEnvelopeVersion = "0.1"
-	MaxQuoteLifetime    = 24 * time.Hour
+	BaseEnvelopeVersion        = "0.1"
+	MaxQuoteLifetime           = 24 * time.Hour
+	QuoteDomain                = "tos.quote.v1"
+	PaymentAuthorizationDomain = "tos.payment-authorization.v1"
+	ReceiptDomain              = "tos.receipt.v1"
 )
 
 type Quote struct {

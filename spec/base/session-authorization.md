@@ -29,6 +29,7 @@ session-opening exchange, or an explicitly approved local trust policy. Every
 result binds network, service, and key ID and includes:
 
 - key validity and key-revocation status
+- the authenticated client/payment principal represented by the key
 - a bounded delegation-revocation list
 - observation time and optional masterchain sequence
 
@@ -54,6 +55,10 @@ Depth is at most four, so the chain contains at most five delegations. Every
 issuer key and delegation revocation is checked. The final request envelope
 must be signed by the leaf subject and remain inside the session, leaf-key,
 and delegation validity windows.
+
+Delegation changes the signing key, not the root principal. A payment
+authorization's payer must match the root session client's authenticated
+principal unless a future explicit sponsorship capability defines otherwise.
 
 The message-specific semantic callback receives the canonical payload, exact
 request/session/operation/intent binding, and exact nano-TOS charge. Edge Core

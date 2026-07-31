@@ -41,16 +41,23 @@ type ServiceState struct {
 }
 
 type PaymentReference struct {
-	Network         string
-	AuthorizationID string
-	QuoteID         string
-	RequestID       string
-	Reference       string
+	Network            string
+	AuthorizationID    string
+	QuoteID            string
+	RequestID          string
+	Reference          string
+	MinimumMasterSeqno uint64
 }
 
 type PaymentState struct {
+	Network             string
+	AuthorizationID     string
+	QuoteID             string
+	RequestID           string
+	Reference           string
 	Confirmed           bool
 	Finalized           bool
+	Reorganized         bool
 	AmountNanoTOS       uint64
 	Payer               string
 	Payee               string

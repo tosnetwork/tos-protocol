@@ -49,6 +49,12 @@ Nonce claim, idempotent request creation, and every authority-budget increment
 must commit together. Exact replay must not charge again, while changed
 charge, grant, delegation chain, or request intent must fail.
 
+Payment RPC output must echo the complete authorization, quote, request,
+network, and settlement reference. Require fresh monotonic chain state and an
+explicit finality policy. The safe default rejects both underpayment and
+overpayment: accepting a value above the exact quote is a profile policy and
+must still remain within the client's signed maximum.
+
 ## Parsing and transport
 
 Reject unknown fields in security-sensitive typed values, duplicate JSON or

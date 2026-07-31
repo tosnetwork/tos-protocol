@@ -152,7 +152,8 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 		clientPrivate: clientPrivate,
 		resolver: edgeClientKeyResolver{snapshot: authorization.ClientKeySnapshot{
 			Network: manifest.Network, ServiceID: manifest.ServiceID,
-			KeyID: grant.Client, PublicKey: clientPublic,
+			KeyID: grant.Client, Principal: grant.Client,
+			PublicKey: clientPublic,
 			NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour),
 			ObservedMasterSeqno: 100, ObservedAt: now,
 		}},

@@ -23,6 +23,8 @@ This directory contains the draft normative base specification:
   transaction bindings
 - [payment-and-settlement.md](payment-and-settlement.md) — destination
   binding, chain observation, reorganization, refunds, and receipts
+- [payment-observation.md](payment-observation.md) — implemented signed
+  quote/client authorization and strict fresh chain-observation gate
 - [request-journal.md](request-journal.md) — atomic nonce/request admission,
   durable idempotency, request transitions, retention, and bounded crash
   recovery

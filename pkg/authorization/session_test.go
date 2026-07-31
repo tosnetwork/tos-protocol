@@ -119,7 +119,7 @@ func clientKeySnapshot(
 ) ClientKeySnapshot {
 	return ClientKeySnapshot{
 		Network: fixture.manifest.Network, ServiceID: fixture.manifest.ServiceID,
-		KeyID: keyID, PublicKey: publicKey,
+		KeyID: keyID, Principal: keyID, PublicKey: publicKey,
 		NotBefore:           fixture.now.Add(-time.Hour),
 		NotAfter:            fixture.now.Add(time.Hour),
 		ObservedMasterSeqno: 100, ObservedAt: fixture.now.Add(-time.Second),

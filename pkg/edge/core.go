@@ -181,6 +181,27 @@ func (c *Core) AdmitAuthorizedSessionEnvelope(
 	}, now)
 }
 
+// AdmitAuthorizedPayment atomically admits the client-signed payment
+// authorization request and its exact quoted charge. Chain observation and
+// the pending-to-authorized transition remain separate subsequent steps.
+func (c *Core) AdmitAuthorizedPayment(
+	scope journal.Scope,
+	intentDigest string,
+	authorized authorization.AuthorizedPayment,
+	retainUntil time.Time,
+) (journal.Record, journal.BeginDisposition, error) {
+	requestAuthorization, chargeNanoTOS, err := authorized.RequestAuthorization()
+	if err != nil {
+		return journal.Record{}, "", fmt.Errorf(
+			"extract payment request authorization: %w", err,
+		)
+	}
+	return c.AdmitAuthorizedSessionEnvelope(
+		scope, intentDigest, chargeNanoTOS,
+		requestAuthorization, retainUntil,
+	)
+}
+
 func (c *Core) admitVerifiedEnvelope(
 	scope journal.Scope,
 	intentDigest string,

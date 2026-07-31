@@ -120,3 +120,10 @@ Runtime requests such as quotes and receipts can use the opaque
 runtime-signed session grant, fresh client or delegated keys, and atomic
 cumulative usage admission. That continuation is specified in
 [session-authorization.md](session-authorization.md).
+
+Quotes and payment authorizations use a narrower typed continuation: the
+quote must be signed by a current `quote` runtime key and match the current
+manifest/session; the client authorization must bind the exact destination
+and cannot expand session/delegation budgets. A strict observer then requires
+an exact, fresh, high-water, final chain response before producing another
+opaque result. See [payment-observation.md](payment-observation.md).
