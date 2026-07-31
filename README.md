@@ -121,10 +121,12 @@ failure converge under concurrent retry.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, profile intent-to-Worker mapping, failed/canceled
 refund/charging policy, production signer adapter, isolated executor, and
-public receipt route remain intentionally disconnected. Worker task-status
-lookup and idempotent result replay are also still absent: the durable claim
-removes journal ambiguity but does not prove that a Worker accepted or
-completed an RPC interrupted by a crash. None of these
+public receipt route remain intentionally disconnected. The private RPC now
+defines a binding-preserving task-status/result lookup, and its client can
+feed a recovered successful result through the existing receipt path. A
+production Worker still needs a durable bounded task table and idempotent
+`Invoke` implementation: the Edge claim alone does not prove that a Worker
+accepted or completed an RPC interrupted by a crash. None of these
 internal boundaries enable public actions by themselves.
 
 ## Repository map

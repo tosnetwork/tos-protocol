@@ -49,6 +49,30 @@ func (w completionWorker) Invoke(
 	}), nil
 }
 
+func (w completionWorker) GetTask(
+	_ context.Context,
+	request *connect.Request[edgev1.GetTaskRequest],
+) (*connect.Response[edgev1.GetTaskResponse], error) {
+	completedAt := time.Now().UTC().Truncate(time.Millisecond)
+	return connect.NewResponse(&edgev1.GetTaskResponse{
+		RequestId: request.Msg.RequestId, TaskId: request.Msg.TaskId,
+		RequestDigest: request.Msg.RequestDigest,
+		Status:        edgev1.TaskStatus_TASK_STATUS_SUCCEEDED,
+		Result: &edgev1.InvokeResponse{
+			RequestId: request.Msg.RequestId,
+			Output:    append([]byte(nil), w.output...),
+			Usage: &edgev1.Usage{
+				InputBytes: 5, OutputBytes: uint64(len(w.output)),
+				InputTokens: 2, OutputTokens: 3, ExecutionMillis: 4,
+			},
+			ModelRevision:   "model-revision-1",
+			RuntimeRevision: "runtime-revision-1",
+		},
+		CompletedUnixMillis:   completedAt.UnixMilli(),
+		RetainUntilUnixMillis: request.Msg.RetainUntilUnixMillis,
+	}), nil
+}
+
 type edgeReceiptSigner struct {
 	privateKey ed25519.PrivateKey
 	keyID      string
@@ -113,7 +137,15 @@ func TestCoreClaimsExactPaidWorkerInvocation(t *testing.T) {
 	if _, err := core.Execution(scope); !errors.Is(err, journal.ErrNotFound) {
 		t.Fatalf("rejected claim persisted execution: %v", err)
 	}
+	wrongRetention := completionInvokeRequest(scope, now)
+	wrongRetention.RetainUntilUnixMillis++
+	if _, err := core.ClaimPaidExecution(
+		scope, request.Revision, authorized, wrongRetention,
+	); err == nil {
+		t.Fatal("Worker request with substituted retention was claimed")
+	}
 	invocation := completionInvokeRequest(scope, now)
+	invocation.RetainUntilUnixMillis = 0
 	claimed, err := core.ClaimPaidExecution(
 		scope, request.Revision, authorized, invocation,
 	)
@@ -122,8 +154,12 @@ func TestCoreClaimsExactPaidWorkerInvocation(t *testing.T) {
 	}
 	if claimed.Disposition != journal.ExecutionClaimed ||
 		claimed.State.State != journal.StateRunning ||
-		claimed.Execution.TaskID != invocation.TaskId {
+		claimed.Execution.TaskID != invocation.TaskId ||
+		claimed.Request.RequestDigest != claimed.Execution.RequestDigest {
 		t.Fatalf("unexpected execution claim: %#v", claimed)
+	}
+	if invocation.RetainUntilUnixMillis != 0 {
+		t.Fatal("execution claim mutated caller retention")
 	}
 	invocation.Payload[0] ^= 1
 	if string(claimed.Request.Payload) != "input" {
@@ -254,6 +290,81 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 		"receipt-completion-other", time.Minute,
 	); !errors.Is(err, journal.ErrConflict) || signer.calls.Load() != 1 {
 		t.Fatalf("different receipt replay err=%v calls=%d", err, signer.calls.Load())
+	}
+}
+
+func TestCoreCompletesRecoveredWorkerTask(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	clock := now
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	core, err := openCore(config, func() time.Time { return clock })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = core.Close() }()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized, running := prepareCompletionRequest(
+		t,
+		core,
+		fixture,
+		"completion-recovery-0001",
+		now,
+	)
+	if err := core.Close(); err != nil {
+		t.Fatal(err)
+	}
+	core, err = openCore(config, func() time.Time { return clock })
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedClaim, err := core.ClaimPaidExecution(
+		scope,
+		running.Revision,
+		authorized,
+		completionInvokeRequest(scope, now),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedClaim.Disposition != journal.ExecutionReplay ||
+		replayedClaim.State != running {
+		t.Fatalf("unexpected recovered claim: %#v", replayedClaim)
+	}
+	worker := startCompletionWorkerClient(t, []byte("recovered-result"))
+	recovered, err := worker.GetTask(
+		context.Background(),
+		replayedClaim.Request,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validated, err := recovered.Invocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = time.Now().UTC().Truncate(time.Millisecond)
+	completed, err := core.CompleteSuccessfulInvocation(
+		context.Background(),
+		scope,
+		running.Revision,
+		fixture.manifest,
+		authorized,
+		validated,
+		&edgeReceiptSigner{
+			privateKey: fixture.runtimePrivate,
+			keyID:      "runtime-auth-key",
+		},
+		"receipt-recovery-0001",
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completed.Request.State != journal.StateSucceeded ||
+		completed.Disposition != journal.ReceiptApplied ||
+		string(completed.Output) != "recovered-result" {
+		t.Fatalf("unexpected recovered completion: %#v", completed)
 	}
 }
 
@@ -691,16 +802,17 @@ func completionInvokeRequest(
 	now time.Time,
 ) *edgev1.InvokeRequest {
 	return &edgev1.InvokeRequest{
-		RequestId:          scope.RequestID,
-		QuoteId:            "quote-" + scope.RequestID,
-		TaskId:             "task-" + scope.RequestID,
-		ServiceId:          scope.ServiceID,
-		Operation:          scope.Operation,
-		Model:              "test-model",
-		Payload:            []byte("input"),
-		MaxOutputBytes:     2_048,
-		DeadlineUnixMillis: now.Add(5 * time.Minute).UnixMilli(),
-		Priority:           edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+		RequestId:             scope.RequestID,
+		QuoteId:               "quote-" + scope.RequestID,
+		TaskId:                "task-" + scope.RequestID,
+		ServiceId:             scope.ServiceID,
+		Operation:             scope.Operation,
+		Model:                 "test-model",
+		Payload:               []byte("input"),
+		MaxOutputBytes:        2_048,
+		DeadlineUnixMillis:    now.Add(5 * time.Minute).UnixMilli(),
+		RetainUntilUnixMillis: now.Add(30 * time.Minute).UnixMilli(),
+		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 	}
 }
 

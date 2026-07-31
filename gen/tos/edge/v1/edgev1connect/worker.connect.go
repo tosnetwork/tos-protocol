@@ -42,6 +42,8 @@ const (
 	WorkerServiceQuoteProcedure = "/tos.edge.v1.WorkerService/Quote"
 	// WorkerServiceInvokeProcedure is the fully-qualified name of the WorkerService's Invoke RPC.
 	WorkerServiceInvokeProcedure = "/tos.edge.v1.WorkerService/Invoke"
+	// WorkerServiceGetTaskProcedure is the fully-qualified name of the WorkerService's GetTask RPC.
+	WorkerServiceGetTaskProcedure = "/tos.edge.v1.WorkerService/GetTask"
 	// WorkerServiceCancelProcedure is the fully-qualified name of the WorkerService's Cancel RPC.
 	WorkerServiceCancelProcedure = "/tos.edge.v1.WorkerService/Cancel"
 )
@@ -52,6 +54,7 @@ type WorkerServiceClient interface {
 	GetCapabilities(context.Context, *connect.Request[v1.GetCapabilitiesRequest]) (*connect.Response[v1.GetCapabilitiesResponse], error)
 	Quote(context.Context, *connect.Request[v1.QuoteRequest]) (*connect.Response[v1.QuoteResponse], error)
 	Invoke(context.Context, *connect.Request[v1.InvokeRequest]) (*connect.Response[v1.InvokeResponse], error)
+	GetTask(context.Context, *connect.Request[v1.GetTaskRequest]) (*connect.Response[v1.GetTaskResponse], error)
 	Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
 }
 
@@ -90,6 +93,12 @@ func NewWorkerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(workerServiceMethods.ByName("Invoke")),
 			connect.WithClientOptions(opts...),
 		),
+		getTask: connect.NewClient[v1.GetTaskRequest, v1.GetTaskResponse](
+			httpClient,
+			baseURL+WorkerServiceGetTaskProcedure,
+			connect.WithSchema(workerServiceMethods.ByName("GetTask")),
+			connect.WithClientOptions(opts...),
+		),
 		cancel: connect.NewClient[v1.CancelRequest, v1.CancelResponse](
 			httpClient,
 			baseURL+WorkerServiceCancelProcedure,
@@ -105,6 +114,7 @@ type workerServiceClient struct {
 	getCapabilities *connect.Client[v1.GetCapabilitiesRequest, v1.GetCapabilitiesResponse]
 	quote           *connect.Client[v1.QuoteRequest, v1.QuoteResponse]
 	invoke          *connect.Client[v1.InvokeRequest, v1.InvokeResponse]
+	getTask         *connect.Client[v1.GetTaskRequest, v1.GetTaskResponse]
 	cancel          *connect.Client[v1.CancelRequest, v1.CancelResponse]
 }
 
@@ -128,6 +138,11 @@ func (c *workerServiceClient) Invoke(ctx context.Context, req *connect.Request[v
 	return c.invoke.CallUnary(ctx, req)
 }
 
+// GetTask calls tos.edge.v1.WorkerService.GetTask.
+func (c *workerServiceClient) GetTask(ctx context.Context, req *connect.Request[v1.GetTaskRequest]) (*connect.Response[v1.GetTaskResponse], error) {
+	return c.getTask.CallUnary(ctx, req)
+}
+
 // Cancel calls tos.edge.v1.WorkerService.Cancel.
 func (c *workerServiceClient) Cancel(ctx context.Context, req *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {
 	return c.cancel.CallUnary(ctx, req)
@@ -139,6 +154,7 @@ type WorkerServiceHandler interface {
 	GetCapabilities(context.Context, *connect.Request[v1.GetCapabilitiesRequest]) (*connect.Response[v1.GetCapabilitiesResponse], error)
 	Quote(context.Context, *connect.Request[v1.QuoteRequest]) (*connect.Response[v1.QuoteResponse], error)
 	Invoke(context.Context, *connect.Request[v1.InvokeRequest]) (*connect.Response[v1.InvokeResponse], error)
+	GetTask(context.Context, *connect.Request[v1.GetTaskRequest]) (*connect.Response[v1.GetTaskResponse], error)
 	Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
 }
 
@@ -173,6 +189,12 @@ func NewWorkerServiceHandler(svc WorkerServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(workerServiceMethods.ByName("Invoke")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workerServiceGetTaskHandler := connect.NewUnaryHandler(
+		WorkerServiceGetTaskProcedure,
+		svc.GetTask,
+		connect.WithSchema(workerServiceMethods.ByName("GetTask")),
+		connect.WithHandlerOptions(opts...),
+	)
 	workerServiceCancelHandler := connect.NewUnaryHandler(
 		WorkerServiceCancelProcedure,
 		svc.Cancel,
@@ -189,6 +211,8 @@ func NewWorkerServiceHandler(svc WorkerServiceHandler, opts ...connect.HandlerOp
 			workerServiceQuoteHandler.ServeHTTP(w, r)
 		case WorkerServiceInvokeProcedure:
 			workerServiceInvokeHandler.ServeHTTP(w, r)
+		case WorkerServiceGetTaskProcedure:
+			workerServiceGetTaskHandler.ServeHTTP(w, r)
 		case WorkerServiceCancelProcedure:
 			workerServiceCancelHandler.ServeHTTP(w, r)
 		default:
@@ -214,6 +238,10 @@ func (UnimplementedWorkerServiceHandler) Quote(context.Context, *connect.Request
 
 func (UnimplementedWorkerServiceHandler) Invoke(context.Context, *connect.Request[v1.InvokeRequest]) (*connect.Response[v1.InvokeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.WorkerService.Invoke is not implemented"))
+}
+
+func (UnimplementedWorkerServiceHandler) GetTask(context.Context, *connect.Request[v1.GetTaskRequest]) (*connect.Response[v1.GetTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.WorkerService.GetTask is not implemented"))
 }
 
 func (UnimplementedWorkerServiceHandler) Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {

@@ -80,7 +80,8 @@ rollback is rejected. A recorded reorganization prevents
 Paid dispatch uses a separate execution claim in that same database. One
 globally unique `network + serviceId + taskId`, one request-to-execution index,
 the exact quote and payment identifiers, a deterministic digest of the complete
-private Worker invocation, its deadline, and the request's
+private Worker invocation, its deadline and millisecond-rounded-up retention
+boundary, and the request's
 `authorized -> running` transition commit or roll back together. The payment
 must still be applied and not reorganized. Generic state transition cannot
 bypass this claim. Exact replay returns the original claim and request revision
@@ -89,6 +90,11 @@ not authorize new work. A later recorded payment reorganization blocks claim
 replay but does not erase the audit record. Changing the task, invocation
 digest, quote, deadline, or request binding is a conflict, and reusing a live
 task ID for another request is rejected.
+
+Paid Worker claims require no more than seven days of remaining request
+retention, even if a journal deployment permits longer non-execution records.
+The Worker client may configure a lower maximum; request admission and Worker
+policy must use compatible values.
 
 Receipt application also uses one transaction. A globally unique
 `network + receiptId`, its request index, the complete signed receipt
@@ -151,10 +157,20 @@ next legal transition.
 For a claimed `running` request, recovery may use only the stored task ID and
 the exact invocation whose digest matches the claim. The claim proves that
 Edge committed its dispatch decision; it does not prove that the Worker
-received, started, or completed the call. The current private RPC has no task
-status/result-replay method and performs no retry. Production recovery
-therefore remains blocked until the Worker contract can return the same outcome
-for an exact task replay and reject a changed request under the same task ID.
+received, started, or completed the call. The private RPC provides a read-only
+`GetTask` method bound to the request ID, task ID, and stored invocation digest;
+the client validates status, result, deterministic status/error mapping,
+completion time, and retention before exposing an opaque recovered result. It
+still performs no automatic retry. Production recovery requires the Worker to
+durably implement that task table, return the same outcome for an exact task
+replay, and reject a changed request under the same task ID.
+
+The journal deliberately stores the private invocation digest, not prompts,
+payloads, credentials, or model input. After restart, an authenticated client
+retry or deterministic profile mapper must reproduce the exact invocation;
+Edge replays the claim only if its digest matches. If the payload cannot be
+reproduced, Edge may inspect journal and Worker state but must not invent or
+blindly resubmit work.
 
 The bootstrap `tos-edge` binary still exposes discovery only. The journal does
 not enable public session, payment, or action routes by itself.

@@ -1198,3 +1198,15 @@ func TestCorePreservesIntentConflict(t *testing.T) {
 		t.Fatalf("conflict error = %v", err)
 	}
 }
+
+func TestCeilUnixMillisCoversJournalRetention(t *testing.T) {
+	exact := time.UnixMilli(1_800_000_000_123).UTC()
+	if got := ceilUnixMillis(exact); got != exact.UnixMilli() {
+		t.Fatalf("exact millisecond rounded to %d", got)
+	}
+	withNanos := exact.Add(time.Nanosecond)
+	got := ceilUnixMillis(withNanos)
+	if got != exact.UnixMilli()+1 || time.UnixMilli(got).Before(withNanos) {
+		t.Fatalf("ceil millisecond=%d does not cover %v", got, withNanos)
+	}
+}

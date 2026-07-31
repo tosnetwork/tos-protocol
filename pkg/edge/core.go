@@ -485,6 +485,30 @@ func (c *Core) ClaimPaidExecution(
 			"Worker invocation does not match paid request",
 		)
 	}
+	now := c.now().UTC()
+	requestState, err := c.requests.Get(scope, now)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	if requestState.RetainUntil.After(
+		now.Add(localrpc.MaximumWorkerTaskRetention),
+	) {
+		return ClaimedInvocation{}, errors.New(
+			"request retention exceeds Worker protocol maximum",
+		)
+	}
+	retainUntilUnixMillis := ceilUnixMillis(requestState.RetainUntil)
+	if request.RetainUntilUnixMillis != 0 &&
+		request.RetainUntilUnixMillis != retainUntilUnixMillis {
+		return ClaimedInvocation{}, errors.New(
+			"Worker invocation retention does not match request journal",
+		)
+	}
+	request.RetainUntilUnixMillis = retainUntilUnixMillis
+	request, requestDigest, err := localrpc.BindInvocationRequest(request)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
 	deadline := time.UnixMilli(request.DeadlineUnixMillis).UTC()
 	if uint64(len(request.Payload)) > material.MaxInputBytes ||
 		request.MaxOutputBytes == 0 ||
@@ -494,11 +518,6 @@ func (c *Core) ClaimPaidExecution(
 			"Worker invocation expands quoted limits or deadline",
 		)
 	}
-	requestDigest, err := localrpc.InvocationRequestDigest(request)
-	if err != nil {
-		return ClaimedInvocation{}, err
-	}
-	now := c.now().UTC()
 	state, execution, disposition, err := c.requests.ClaimExecution(
 		journal.ExecutionAdmission{
 			Scope: scope, IntentDigest: material.IntentDigest,
@@ -1345,4 +1364,12 @@ func validatePaymentReconciliationConfig(config CoreConfig) error {
 		return errors.New("invalid payment reconciliation configuration")
 	}
 	return nil
+}
+
+func ceilUnixMillis(value time.Time) int64 {
+	millis := value.UnixMilli()
+	if time.UnixMilli(millis).Before(value) {
+		millis++
+	}
+	return millis
 }

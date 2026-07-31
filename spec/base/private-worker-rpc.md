@@ -33,6 +33,15 @@ payload and requested output limits before serialization and applies:
 Nil contexts, expired deadlines, unknown priorities, invalid identifiers,
 duplicate resource limits, and locally excessive byte limits fail before the
 worker is called. Every invocation has a mandatory bounded task ID.
+Edge computes an internal SHA-256 request commitment with the protobuf
+`request_digest` field cleared, persists it in the execution claim, then sends
+the populated field. A supplied nonempty digest that does not match the exact
+request is rejected before RPC. The invocation also carries the request
+journal's retention deadline (rounded up to the next millisecond when needed),
+so task state and any result cannot expire before its Edge recovery record.
+Edge refuses a paid execution claim whose remaining journal retention exceeds
+the protocol's seven-day hard maximum. A deployment-specific Worker client
+limit may be lower and must be aligned with request admission policy.
 
 ## Response validation
 
@@ -66,11 +75,45 @@ must atomically bind the exact invocation digest and globally unique task ID to
 the paid request's `running` transition. This makes Edge recovery decisions
 durable, but it does not make a non-idempotent Worker safe to retry.
 
-A production recovery extension must let Edge query or replay a task by ID.
-The Worker must return the same stored outcome for the same task and exact
-request, reject a different request under that task ID, and bound result
-retention. That extension is not implemented in the current RPC, so an
-interrupted invocation remains a manual/profile-specific recovery case.
+The `GetTask` recovery method is read-only and carries the original request ID,
+task ID, request digest, and retention deadline. A response repeats the first
+three, and every retained state must exactly repeat the deadline. It returns
+exactly one of:
+
+- `NOT_FOUND`, with no result, error, completion time, or retention
+- `ACCEPTED` or `RUNNING`, with only a bounded future retention deadline
+- `SUCCEEDED`, with the original validated invocation result and completion
+  time
+- `FAILED`, `CANCELED`, or `TIMED_OUT`, with respectively `RUNTIME_FAILED`,
+  `CANCELED`, or `DEADLINE_EXCEEDED` and a completion time, but no raw
+  diagnostic or success result
+
+The reference client rejects binding substitution, unknown states, malformed
+state/result combinations, inconsistent byte accounting, early timeout,
+success after the invocation deadline, future or stale completion times, and
+retention outside its configured bound (48 hours by default, seven days hard
+maximum). A recovered success remains opaque and can enter the same Edge
+receipt path as a live invocation result. The recovery observation itself is
+also opaque: an unvalidated caller-constructed value exposes neither a status
+nor a result.
+
+Cancellation uses the same request ID, task ID, and request-digest tuple; the
+Worker response must echo all three before Edge trusts its `accepted` flag. A
+request-ID-only cancellation is not sufficient because it could target a
+different retained task.
+
+The Worker must durably return the same stored outcome for the same task and
+exact request, reject a different request under that task ID, and remove it at
+the bounded retention deadline. The protocol and validated client are present;
+the repository does not yet contain a production Worker task store. Therefore
+`NOT_FOUND` is evidence only of that Worker's current bounded store, not proof
+that a prior process never executed the task, and automatic invocation retry
+remains disabled.
+
+Edge's journal stores only the digest, not the potentially sensitive
+invocation payload. Recovery therefore starts from an authenticated replay or
+a deterministic profile mapping that reproduces the exact request. The
+persisted claim and `BindInvocationRequest` reject any changed reconstruction.
 
 For a successful paid request, Edge Core accepts only this opaque result. It
 requires the durable request to remain `running`, repeats the execution

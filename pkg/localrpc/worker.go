@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	"github.com/tosnetwork/tos-protocol/gen/tos/edge/v1/edgev1connect"
+	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,10 +22,14 @@ const (
 	DefaultWorkerControlTimeout        = 5 * time.Second
 	DefaultWorkerMaxInvocationDuration = 15 * time.Minute
 	DefaultWorkerMaxMessageBytes       = 2 << 20
+	DefaultWorkerMaxTaskRetention      = 48 * time.Hour
+	MaximumWorkerTaskRetention         = 7 * 24 * time.Hour
 
 	maxWorkerControlTimeout     = time.Minute
 	maxWorkerInvocationDuration = 24 * time.Hour
 	maxWorkerMessageBytes       = 16 << 20
+	maxWorkerRecoveryClockSkew  = 5 * time.Minute
+	maxWorkerRetentionRounding  = time.Millisecond
 	maxWorkerCapabilities       = 128
 	maxWorkerResources          = 128
 	maxWorkerReadiness          = 64
@@ -33,7 +38,10 @@ const (
 	maxWorkerPriorities         = 6
 )
 
-var workerServiceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
+var (
+	workerServiceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
+	workerDigestPattern    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+)
 
 // WorkerClientConfig is the fail-closed private boundary from Edge Core to a
 // vertical worker. Public Edge traffic should normally allow only
@@ -43,6 +51,7 @@ type WorkerClientConfig struct {
 	ControlTimeout        time.Duration
 	MaxInvocationDuration time.Duration
 	MaxMessageBytes       int
+	MaxTaskRetention      time.Duration
 	AllowedPriorities     []edgev1.Priority
 }
 
@@ -52,6 +61,7 @@ func DefaultWorkerClientConfig(socketPath string) WorkerClientConfig {
 		ControlTimeout:        DefaultWorkerControlTimeout,
 		MaxInvocationDuration: DefaultWorkerMaxInvocationDuration,
 		MaxMessageBytes:       DefaultWorkerMaxMessageBytes,
+		MaxTaskRetention:      DefaultWorkerMaxTaskRetention,
 		AllowedPriorities: []edgev1.Priority{
 			edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 		},
@@ -65,6 +75,7 @@ type WorkerClient struct {
 	controlTimeout        time.Duration
 	maxInvocationDuration time.Duration
 	maxMessageBytes       int
+	maxTaskRetention      time.Duration
 	allowedPriorities     map[edgev1.Priority]struct{}
 	now                   func() time.Time
 }
@@ -117,6 +128,60 @@ type ValidatedInvocation struct {
 	completedAt     time.Time
 }
 
+// RecoveredTask is a validated, binding-preserving Worker task observation.
+// A successful result remains opaque and can be consumed only through
+// Completion with the original public request binding.
+type RecoveredTask struct {
+	valid       bool
+	status      edgev1.TaskStatus
+	retainUntil time.Time
+	errorCode   string
+	invocation  ValidatedInvocation
+}
+
+func (r RecoveredTask) Status() (edgev1.TaskStatus, error) {
+	if !r.valid {
+		return edgev1.TaskStatus_TASK_STATUS_UNSPECIFIED, errors.New(
+			"invalid recovered Worker task",
+		)
+	}
+	return r.status, nil
+}
+
+func (r RecoveredTask) RetainUntil() (time.Time, error) {
+	if !r.valid {
+		return time.Time{}, errors.New("invalid recovered Worker task")
+	}
+	return r.retainUntil, nil
+}
+
+func (r RecoveredTask) ErrorCode() (string, error) {
+	if !r.valid {
+		return "", errors.New("invalid recovered Worker task")
+	}
+	return r.errorCode, nil
+}
+
+func (r RecoveredTask) Invocation() (ValidatedInvocation, error) {
+	if !r.valid || r.status != edgev1.TaskStatus_TASK_STATUS_SUCCEEDED ||
+		!r.invocation.valid {
+		return ValidatedInvocation{}, errors.New(
+			"recovered Worker task has no successful result",
+		)
+	}
+	return r.invocation, nil
+}
+
+func (r RecoveredTask) Completion(
+	binding InvocationBinding,
+) (InvocationCompletion, error) {
+	invocation, err := r.Invocation()
+	if err != nil {
+		return InvocationCompletion{}, err
+	}
+	return invocation.Completion(binding)
+}
+
 // Completion repeats the expected immutable binding and returns defensive
 // result bytes only after the private RPC response passed every client check.
 func (v ValidatedInvocation) Completion(
@@ -160,6 +225,8 @@ func newWorkerClient(
 		config.MaxInvocationDuration > maxWorkerInvocationDuration ||
 		config.MaxMessageBytes <= 0 ||
 		config.MaxMessageBytes > maxWorkerMessageBytes ||
+		config.MaxTaskRetention <= 0 ||
+		config.MaxTaskRetention > MaximumWorkerTaskRetention ||
 		now == nil {
 		return nil, errors.New("invalid worker client configuration")
 	}
@@ -185,6 +252,7 @@ func newWorkerClient(
 		rpc: rpc, controlTimeout: config.ControlTimeout,
 		maxInvocationDuration: config.MaxInvocationDuration,
 		maxMessageBytes:       config.MaxMessageBytes,
+		maxTaskRetention:      config.MaxTaskRetention,
 		allowedPriorities:     allowed,
 		now:                   now,
 	}, nil
@@ -270,13 +338,12 @@ func (c *WorkerClient) Invoke(
 	if c == nil {
 		return ValidatedInvocation{}, errors.New("nil worker client")
 	}
-	request = cloneInvokeRequest(request)
-	now := c.now().UTC()
-	if err := c.validateInvokeRequest(request, now); err != nil {
+	request, requestDigest, err := BindInvocationRequest(request)
+	if err != nil {
 		return ValidatedInvocation{}, err
 	}
-	requestDigest, err := InvocationRequestDigest(request)
-	if err != nil {
+	now := c.now().UTC()
+	if err := c.validateInvokeRequest(request, now); err != nil {
 		return ValidatedInvocation{}, err
 	}
 	deadline := time.UnixMilli(request.DeadlineUnixMillis)
@@ -298,38 +365,24 @@ func (c *WorkerClient) Invoke(
 			err,
 		)
 	}
-	completedAt := c.now().UTC()
-	return ValidatedInvocation{
-		valid: true,
-		binding: InvocationBinding{
-			RequestID: request.RequestId, QuoteID: request.QuoteId,
-			ServiceID: request.ServiceId, Operation: request.Operation,
-		},
-		output: append([]byte(nil), response.Msg.Output...),
-		usage: InvocationUsage{
-			InputBytes:      response.Msg.Usage.InputBytes,
-			OutputBytes:     response.Msg.Usage.OutputBytes,
-			InputTokens:     response.Msg.Usage.InputTokens,
-			OutputTokens:    response.Msg.Usage.OutputTokens,
-			ExecutionMillis: response.Msg.Usage.ExecutionMillis,
-		},
-		taskID:          request.TaskId,
-		requestDigest:   requestDigest,
-		maxOutputBytes:  request.MaxOutputBytes,
-		deadline:        deadline.UTC(),
-		modelRevision:   response.Msg.ModelRevision,
-		runtimeRevision: response.Msg.RuntimeRevision,
-		completedAt:     completedAt,
-	}, nil
+	return validatedInvocationFromResponse(
+		request,
+		response.Msg,
+		requestDigest,
+		c.now().UTC(),
+	), nil
 }
 
 // InvocationRequestDigest is the internal crash-recovery commitment to the
-// exact protobuf request sent over the private Worker RPC. It is not a public
-// protocol commitment and must not replace a profile request-intent digest.
+// exact protobuf request sent over the private Worker RPC, computed with its
+// request_digest field cleared. It is not a public protocol commitment and
+// must not replace a profile request-intent digest.
 func InvocationRequestDigest(request *edgev1.InvokeRequest) (string, error) {
 	if request == nil {
 		return "", errors.New("nil Worker invocation request")
 	}
+	request = cloneInvokeRequest(request)
+	request.RequestDigest = ""
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
 	if err != nil {
 		return "", fmt.Errorf("encode Worker invocation request: %w", err)
@@ -341,14 +394,139 @@ func InvocationRequestDigest(request *edgev1.InvokeRequest) (string, error) {
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
+// BindInvocationRequest returns a defensive clone carrying the only digest
+// accepted for its exact fields. A caller-supplied mismatched digest is never
+// silently replaced.
+func BindInvocationRequest(
+	request *edgev1.InvokeRequest,
+) (*edgev1.InvokeRequest, string, error) {
+	request = cloneInvokeRequest(request)
+	if request == nil {
+		return nil, "", errors.New("nil Worker invocation request")
+	}
+	provided := request.RequestDigest
+	digest, err := InvocationRequestDigest(request)
+	if err != nil {
+		return nil, "", err
+	}
+	if provided != "" && provided != digest {
+		return nil, "", errors.New("Worker invocation request digest mismatch")
+	}
+	request.RequestDigest = digest
+	return request, digest, nil
+}
+
+// GetTask performs a read-only lookup of the exact invocation identity. It
+// does not submit or retry work. Terminal success is returned only as an
+// opaque validated invocation result.
+func (c *WorkerClient) GetTask(
+	ctx context.Context,
+	invocation *edgev1.InvokeRequest,
+) (RecoveredTask, error) {
+	if c == nil {
+		return RecoveredTask{}, errors.New("nil worker client")
+	}
+	invocation, requestDigest, err := BindInvocationRequest(invocation)
+	if err != nil {
+		return RecoveredTask{}, err
+	}
+	now := c.now().UTC()
+	if err := c.validateTaskLookupInvocation(invocation, now); err != nil {
+		return RecoveredTask{}, err
+	}
+	request := &edgev1.GetTaskRequest{
+		RequestId: invocation.RequestId, TaskId: invocation.TaskId,
+		RequestDigest:         requestDigest,
+		RetainUntilUnixMillis: invocation.RetainUntilUnixMillis,
+	}
+	callContext, cancel, err := c.controlContext(ctx, time.Time{})
+	if err != nil {
+		return RecoveredTask{}, err
+	}
+	defer cancel()
+	response, err := c.rpc.GetTask(
+		callContext,
+		connect.NewRequest(request),
+	)
+	if err != nil {
+		return RecoveredTask{}, fmt.Errorf("worker GetTask: %w", err)
+	}
+	if err := c.validateGetTaskResponse(
+		response.Msg,
+		request,
+		invocation,
+		now,
+	); err != nil {
+		return RecoveredTask{}, fmt.Errorf(
+			"validate worker GetTask response: %w",
+			err,
+		)
+	}
+	recovered := RecoveredTask{
+		valid: true, status: response.Msg.Status,
+		errorCode: response.Msg.ErrorCode,
+	}
+	if response.Msg.RetainUntilUnixMillis != 0 {
+		recovered.retainUntil = time.UnixMilli(
+			response.Msg.RetainUntilUnixMillis,
+		).UTC()
+	}
+	if response.Msg.Status == edgev1.TaskStatus_TASK_STATUS_SUCCEEDED {
+		recovered.invocation = validatedInvocationFromResponse(
+			invocation,
+			response.Msg.Result,
+			requestDigest,
+			time.UnixMilli(response.Msg.CompletedUnixMillis).UTC(),
+		)
+	}
+	return recovered, nil
+}
+
+func validatedInvocationFromResponse(
+	request *edgev1.InvokeRequest,
+	response *edgev1.InvokeResponse,
+	requestDigest string,
+	completedAt time.Time,
+) ValidatedInvocation {
+	return ValidatedInvocation{
+		valid: true,
+		binding: InvocationBinding{
+			RequestID: request.RequestId, QuoteID: request.QuoteId,
+			ServiceID: request.ServiceId, Operation: request.Operation,
+		},
+		output: append([]byte(nil), response.Output...),
+		usage: InvocationUsage{
+			InputBytes:      response.Usage.InputBytes,
+			OutputBytes:     response.Usage.OutputBytes,
+			InputTokens:     response.Usage.InputTokens,
+			OutputTokens:    response.Usage.OutputTokens,
+			ExecutionMillis: response.Usage.ExecutionMillis,
+		},
+		taskID:          request.TaskId,
+		requestDigest:   requestDigest,
+		maxOutputBytes:  request.MaxOutputBytes,
+		deadline:        time.UnixMilli(request.DeadlineUnixMillis).UTC(),
+		modelRevision:   response.ModelRevision,
+		runtimeRevision: response.RuntimeRevision,
+		completedAt:     completedAt,
+	}
+}
+
 func (c *WorkerClient) Cancel(
 	ctx context.Context,
-	requestID string,
+	invocation *edgev1.InvokeRequest,
 ) (bool, error) {
 	if c == nil {
 		return false, errors.New("nil worker client")
 	}
-	if err := validateWorkerID("request ID", requestID); err != nil {
+	invocation, requestDigest, err := BindInvocationRequest(invocation)
+	if err != nil {
+		return false, err
+	}
+	if err := c.validateTaskLookupInvocation(
+		invocation,
+		c.now().UTC(),
+	); err != nil {
 		return false, err
 	}
 	callContext, cancel, err := c.controlContext(ctx, time.Time{})
@@ -356,15 +534,24 @@ func (c *WorkerClient) Cancel(
 		return false, err
 	}
 	defer cancel()
+	request := &edgev1.CancelRequest{
+		RequestId: invocation.RequestId, TaskId: invocation.TaskId,
+		RequestDigest: requestDigest,
+	}
 	response, err := c.rpc.Cancel(
 		callContext,
-		connect.NewRequest(&edgev1.CancelRequest{RequestId: requestID}),
+		connect.NewRequest(request),
 	)
 	if err != nil {
 		return false, fmt.Errorf("worker Cancel: %w", err)
 	}
 	if response.Msg == nil {
 		return false, errors.New("worker Cancel returned an empty response")
+	}
+	if response.Msg.RequestId != request.RequestId ||
+		response.Msg.TaskId != request.TaskId ||
+		response.Msg.RequestDigest != request.RequestDigest {
+		return false, errors.New("worker Cancel response binding mismatch")
 	}
 	return response.Msg.Accepted, nil
 }
@@ -445,6 +632,9 @@ func (c *WorkerClient) validateInvokeRequest(
 	if err := validateWorkerID("task ID", request.TaskId); err != nil {
 		return err
 	}
+	if !workerDigestPattern.MatchString(request.RequestDigest) {
+		return errors.New("invalid Worker invocation request digest")
+	}
 	if err := validateWorkerSelector(
 		request.ServiceId, request.Operation, request.Model,
 	); err != nil {
@@ -458,9 +648,152 @@ func (c *WorkerClient) validateInvokeRequest(
 	if err := c.validatePriority(request.Priority); err != nil {
 		return err
 	}
-	return validateWorkerDeadline(
+	if err := validateWorkerDeadline(
 		request.DeadlineUnixMillis, now, c.maxInvocationDuration,
-	)
+	); err != nil {
+		return err
+	}
+	return c.validateTaskRetention(request, now)
+}
+
+func (c *WorkerClient) validateTaskLookupInvocation(
+	request *edgev1.InvokeRequest,
+	now time.Time,
+) error {
+	if request == nil {
+		return errors.New("nil Worker task lookup invocation")
+	}
+	if err := validateWorkerID("request ID", request.RequestId); err != nil {
+		return err
+	}
+	if err := validateWorkerID("quote ID", request.QuoteId); err != nil {
+		return err
+	}
+	if err := validateWorkerID("task ID", request.TaskId); err != nil {
+		return err
+	}
+	if !workerDigestPattern.MatchString(request.RequestDigest) {
+		return errors.New("invalid Worker invocation request digest")
+	}
+	if err := validateWorkerSelector(
+		request.ServiceId, request.Operation, request.Model,
+	); err != nil {
+		return err
+	}
+	if len(request.Payload) > c.maxMessageBytes ||
+		request.MaxOutputBytes == 0 ||
+		request.MaxOutputBytes > uint64(c.maxMessageBytes) {
+		return errors.New("worker task lookup byte limits exceed local policy")
+	}
+	if err := c.validatePriority(request.Priority); err != nil {
+		return err
+	}
+	deadline := time.UnixMilli(request.DeadlineUnixMillis)
+	if deadline.IsZero() || deadline.Year() < 1970 || deadline.Year() > 9999 ||
+		deadline.Before(now.Add(-c.maxTaskRetention)) ||
+		deadline.After(now.Add(c.maxInvocationDuration)) {
+		return errors.New("worker task lookup deadline is invalid")
+	}
+	return c.validateTaskRetention(request, now)
+}
+
+func (c *WorkerClient) validateTaskRetention(
+	request *edgev1.InvokeRequest,
+	now time.Time,
+) error {
+	retainUntil := time.UnixMilli(request.RetainUntilUnixMillis)
+	if request.RetainUntilUnixMillis == 0 || !retainUntil.After(now) ||
+		!retainUntil.After(time.UnixMilli(request.DeadlineUnixMillis)) ||
+		retainUntil.After(
+			now.Add(c.maxTaskRetention+maxWorkerRetentionRounding),
+		) {
+		return errors.New("worker task retention is outside local policy")
+	}
+	return nil
+}
+
+func (c *WorkerClient) validateGetTaskResponse(
+	response *edgev1.GetTaskResponse,
+	request *edgev1.GetTaskRequest,
+	invocation *edgev1.InvokeRequest,
+	now time.Time,
+) error {
+	if response == nil {
+		return errors.New("empty response")
+	}
+	if response.RequestId != request.RequestId ||
+		response.TaskId != request.TaskId ||
+		response.RequestDigest != request.RequestDigest {
+		return errors.New("worker task response binding mismatch")
+	}
+	if response.Status < edgev1.TaskStatus_TASK_STATUS_NOT_FOUND ||
+		response.Status > edgev1.TaskStatus_TASK_STATUS_TIMED_OUT {
+		return errors.New("invalid worker task status")
+	}
+	if response.Status == edgev1.TaskStatus_TASK_STATUS_NOT_FOUND {
+		if response.Result != nil || response.ErrorCode != "" ||
+			response.CompletedUnixMillis != 0 ||
+			response.RetainUntilUnixMillis != 0 {
+			return errors.New("not-found worker task has retained outcome")
+		}
+		return nil
+	}
+	retainUntil := time.UnixMilli(response.RetainUntilUnixMillis)
+	if response.RetainUntilUnixMillis != request.RetainUntilUnixMillis ||
+		!retainUntil.After(now) ||
+		retainUntil.After(
+			now.Add(c.maxTaskRetention+maxWorkerRetentionRounding),
+		) {
+		return errors.New("worker task retention is outside local policy")
+	}
+	active := response.Status == edgev1.TaskStatus_TASK_STATUS_ACCEPTED ||
+		response.Status == edgev1.TaskStatus_TASK_STATUS_RUNNING
+	if active {
+		if response.Result != nil || response.ErrorCode != "" ||
+			response.CompletedUnixMillis != 0 {
+			return errors.New("active worker task has terminal outcome")
+		}
+		return nil
+	}
+	completedAt := time.UnixMilli(response.CompletedUnixMillis)
+	if response.CompletedUnixMillis == 0 ||
+		completedAt.Before(now.Add(-c.maxTaskRetention)) ||
+		completedAt.After(now.Add(maxWorkerRecoveryClockSkew)) ||
+		!retainUntil.After(completedAt) {
+		return errors.New("invalid worker task completion time")
+	}
+	if response.Status == edgev1.TaskStatus_TASK_STATUS_SUCCEEDED {
+		if response.ErrorCode != "" || response.Result == nil {
+			return errors.New("successful worker task has invalid outcome")
+		}
+		if completedAt.After(time.UnixMilli(invocation.DeadlineUnixMillis)) {
+			return errors.New("successful worker task completed after deadline")
+		}
+		return validateInvokeResponse(response.Result, invocation)
+	}
+	if response.Result != nil ||
+		response.ErrorCode != taskStatusErrorCode(response.Status) {
+		return errors.New("failed worker task has invalid outcome")
+	}
+	if response.Status == edgev1.TaskStatus_TASK_STATUS_TIMED_OUT &&
+		(now.Before(time.UnixMilli(invocation.DeadlineUnixMillis)) ||
+			completedAt.Before(time.UnixMilli(invocation.DeadlineUnixMillis))) {
+		return errors.New("worker task timed out before deadline")
+	}
+	return nil
+}
+
+func taskStatusErrorCode(status edgev1.TaskStatus) string {
+	switch status {
+	case edgev1.TaskStatus_TASK_STATUS_FAILED:
+		return string(protocol.ErrorRuntimeFailed)
+	case edgev1.TaskStatus_TASK_STATUS_CANCELED:
+		return string(protocol.ErrorCanceled)
+	case edgev1.TaskStatus_TASK_STATUS_TIMED_OUT:
+		return string(protocol.ErrorDeadlineExceeded)
+	default:
+		return ""
+	}
 }
 
 func (c *WorkerClient) validatePriority(priority edgev1.Priority) error {

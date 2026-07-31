@@ -329,6 +329,70 @@ func (ResourceUnit) EnumDescriptor() ([]byte, []int) {
 	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{4}
 }
 
+type TaskStatus int32
+
+const (
+	TaskStatus_TASK_STATUS_UNSPECIFIED TaskStatus = 0
+	TaskStatus_TASK_STATUS_NOT_FOUND   TaskStatus = 1
+	TaskStatus_TASK_STATUS_ACCEPTED    TaskStatus = 2
+	TaskStatus_TASK_STATUS_RUNNING     TaskStatus = 3
+	TaskStatus_TASK_STATUS_SUCCEEDED   TaskStatus = 4
+	TaskStatus_TASK_STATUS_FAILED      TaskStatus = 5
+	TaskStatus_TASK_STATUS_CANCELED    TaskStatus = 6
+	TaskStatus_TASK_STATUS_TIMED_OUT   TaskStatus = 7
+)
+
+// Enum value maps for TaskStatus.
+var (
+	TaskStatus_name = map[int32]string{
+		0: "TASK_STATUS_UNSPECIFIED",
+		1: "TASK_STATUS_NOT_FOUND",
+		2: "TASK_STATUS_ACCEPTED",
+		3: "TASK_STATUS_RUNNING",
+		4: "TASK_STATUS_SUCCEEDED",
+		5: "TASK_STATUS_FAILED",
+		6: "TASK_STATUS_CANCELED",
+		7: "TASK_STATUS_TIMED_OUT",
+	}
+	TaskStatus_value = map[string]int32{
+		"TASK_STATUS_UNSPECIFIED": 0,
+		"TASK_STATUS_NOT_FOUND":   1,
+		"TASK_STATUS_ACCEPTED":    2,
+		"TASK_STATUS_RUNNING":     3,
+		"TASK_STATUS_SUCCEEDED":   4,
+		"TASK_STATUS_FAILED":      5,
+		"TASK_STATUS_CANCELED":    6,
+		"TASK_STATUS_TIMED_OUT":   7,
+	}
+)
+
+func (x TaskStatus) Enum() *TaskStatus {
+	p := new(TaskStatus)
+	*p = x
+	return p
+}
+
+func (x TaskStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TaskStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_tos_edge_v1_worker_proto_enumTypes[5].Descriptor()
+}
+
+func (TaskStatus) Type() protoreflect.EnumType {
+	return &file_api_tos_edge_v1_worker_proto_enumTypes[5]
+}
+
+func (x TaskStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaskStatus.Descriptor instead.
+func (TaskStatus) EnumDescriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{5}
+}
+
 type ClaimEvidence struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Level               EvidenceLevel          `protobuf:"varint,1,opt,name=level,proto3,enum=tos.edge.v1.EvidenceLevel" json:"level,omitempty"`
@@ -1209,8 +1273,14 @@ type InvokeRequest struct {
 	MaxOutputBytes     uint64                 `protobuf:"varint,8,opt,name=max_output_bytes,json=maxOutputBytes,proto3" json:"max_output_bytes,omitempty"`
 	DeadlineUnixMillis int64                  `protobuf:"varint,9,opt,name=deadline_unix_millis,json=deadlineUnixMillis,proto3" json:"deadline_unix_millis,omitempty"`
 	Priority           Priority               `protobuf:"varint,10,opt,name=priority,proto3,enum=tos.edge.v1.Priority" json:"priority,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Edge computes this internal commitment with request_digest cleared,
+	// persists it in the execution claim, and sends the populated value.
+	RequestDigest string `protobuf:"bytes,11,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
+	// Worker task state and any terminal result must remain queryable until
+	// this Edge journal retention boundary.
+	RetainUntilUnixMillis int64 `protobuf:"varint,12,opt,name=retain_until_unix_millis,json=retainUntilUnixMillis,proto3" json:"retain_until_unix_millis,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *InvokeRequest) Reset() {
@@ -1311,6 +1381,20 @@ func (x *InvokeRequest) GetPriority() Priority {
 		return x.Priority
 	}
 	return Priority_PRIORITY_UNSPECIFIED
+}
+
+func (x *InvokeRequest) GetRequestDigest() string {
+	if x != nil {
+		return x.RequestDigest
+	}
+	return ""
+}
+
+func (x *InvokeRequest) GetRetainUntilUnixMillis() int64 {
+	if x != nil {
+		return x.RetainUntilUnixMillis
+	}
+	return 0
 }
 
 type Usage struct {
@@ -1465,16 +1549,186 @@ func (x *InvokeResponse) GetRuntimeRevision() string {
 	return ""
 }
 
+type GetTaskRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	RequestId             string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TaskId                string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	RequestDigest         string                 `protobuf:"bytes,3,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
+	RetainUntilUnixMillis int64                  `protobuf:"varint,4,opt,name=retain_until_unix_millis,json=retainUntilUnixMillis,proto3" json:"retain_until_unix_millis,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *GetTaskRequest) Reset() {
+	*x = GetTaskRequest{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTaskRequest) ProtoMessage() {}
+
+func (x *GetTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTaskRequest.ProtoReflect.Descriptor instead.
+func (*GetTaskRequest) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetTaskRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *GetTaskRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *GetTaskRequest) GetRequestDigest() string {
+	if x != nil {
+		return x.RequestDigest
+	}
+	return ""
+}
+
+func (x *GetTaskRequest) GetRetainUntilUnixMillis() int64 {
+	if x != nil {
+		return x.RetainUntilUnixMillis
+	}
+	return 0
+}
+
+type GetTaskResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	RequestId             string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TaskId                string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	RequestDigest         string                 `protobuf:"bytes,3,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
+	Status                TaskStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=tos.edge.v1.TaskStatus" json:"status,omitempty"`
+	Result                *InvokeResponse        `protobuf:"bytes,5,opt,name=result,proto3" json:"result,omitempty"`
+	ErrorCode             string                 `protobuf:"bytes,6,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	CompletedUnixMillis   int64                  `protobuf:"varint,7,opt,name=completed_unix_millis,json=completedUnixMillis,proto3" json:"completed_unix_millis,omitempty"`
+	RetainUntilUnixMillis int64                  `protobuf:"varint,8,opt,name=retain_until_unix_millis,json=retainUntilUnixMillis,proto3" json:"retain_until_unix_millis,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *GetTaskResponse) Reset() {
+	*x = GetTaskResponse{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTaskResponse) ProtoMessage() {}
+
+func (x *GetTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTaskResponse.ProtoReflect.Descriptor instead.
+func (*GetTaskResponse) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GetTaskResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *GetTaskResponse) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *GetTaskResponse) GetRequestDigest() string {
+	if x != nil {
+		return x.RequestDigest
+	}
+	return ""
+}
+
+func (x *GetTaskResponse) GetStatus() TaskStatus {
+	if x != nil {
+		return x.Status
+	}
+	return TaskStatus_TASK_STATUS_UNSPECIFIED
+}
+
+func (x *GetTaskResponse) GetResult() *InvokeResponse {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *GetTaskResponse) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *GetTaskResponse) GetCompletedUnixMillis() int64 {
+	if x != nil {
+		return x.CompletedUnixMillis
+	}
+	return 0
+}
+
+func (x *GetTaskResponse) GetRetainUntilUnixMillis() int64 {
+	if x != nil {
+		return x.RetainUntilUnixMillis
+	}
+	return 0
+}
+
 type CancelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TaskId        string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	RequestDigest string                 `protobuf:"bytes,3,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CancelRequest) Reset() {
 	*x = CancelRequest{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[14]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1486,7 +1740,7 @@ func (x *CancelRequest) String() string {
 func (*CancelRequest) ProtoMessage() {}
 
 func (x *CancelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[14]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1499,7 +1753,7 @@ func (x *CancelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRequest.ProtoReflect.Descriptor instead.
 func (*CancelRequest) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{14}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CancelRequest) GetRequestId() string {
@@ -1509,16 +1763,33 @@ func (x *CancelRequest) GetRequestId() string {
 	return ""
 }
 
+func (x *CancelRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *CancelRequest) GetRequestDigest() string {
+	if x != nil {
+		return x.RequestDigest
+	}
+	return ""
+}
+
 type CancelResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TaskId        string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	RequestDigest string                 `protobuf:"bytes,3,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
+	Accepted      bool                   `protobuf:"varint,4,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CancelResponse) Reset() {
 	*x = CancelResponse{}
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[15]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1530,7 +1801,7 @@ func (x *CancelResponse) String() string {
 func (*CancelResponse) ProtoMessage() {}
 
 func (x *CancelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[15]
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1543,7 +1814,28 @@ func (x *CancelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelResponse.ProtoReflect.Descriptor instead.
 func (*CancelResponse) Descriptor() ([]byte, []int) {
-	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{15}
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CancelResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *CancelResponse) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *CancelResponse) GetRequestDigest() string {
+	if x != nil {
+		return x.RequestDigest
+	}
+	return ""
 }
 
 func (x *CancelResponse) GetAccepted() bool {
@@ -1640,7 +1932,7 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x11capacity_revision\x18\x05 \x01(\tR\x10capacityRevision\x12%\n" +
 	"\x0emodel_revision\x18\x06 \x01(\tR\rmodelRevision\x12)\n" +
 	"\x10runtime_revision\x18\a \x01(\tR\x0fruntimeRevision\x12E\n" +
-	"\x10committed_limits\x18\b \x03(\v2\x1a.tos.edge.v1.ResourceLimitR\x0fcommittedLimits\"\xde\x02\n" +
+	"\x10committed_limits\x18\b \x03(\v2\x1a.tos.edge.v1.ResourceLimitR\x0fcommittedLimits\"\xbe\x03\n" +
 	"\rInvokeRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
@@ -1654,7 +1946,9 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x10max_output_bytes\x18\b \x01(\x04R\x0emaxOutputBytes\x120\n" +
 	"\x14deadline_unix_millis\x18\t \x01(\x03R\x12deadlineUnixMillis\x121\n" +
 	"\bpriority\x18\n" +
-	" \x01(\x0e2\x15.tos.edge.v1.PriorityR\bpriority\"\xbe\x01\n" +
+	" \x01(\x0e2\x15.tos.edge.v1.PriorityR\bpriority\x12%\n" +
+	"\x0erequest_digest\x18\v \x01(\tR\rrequestDigest\x127\n" +
+	"\x18retain_until_unix_millis\x18\f \x01(\x03R\x15retainUntilUnixMillis\"\xbe\x01\n" +
 	"\x05Usage\x12\x1f\n" +
 	"\vinput_bytes\x18\x01 \x01(\x04R\n" +
 	"inputBytes\x12!\n" +
@@ -1668,12 +1962,35 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x06output\x18\x02 \x01(\fR\x06output\x12(\n" +
 	"\x05usage\x18\x03 \x01(\v2\x12.tos.edge.v1.UsageR\x05usage\x12%\n" +
 	"\x0emodel_revision\x18\x04 \x01(\tR\rmodelRevision\x12)\n" +
-	"\x10runtime_revision\x18\x05 \x01(\tR\x0fruntimeRevision\".\n" +
+	"\x10runtime_revision\x18\x05 \x01(\tR\x0fruntimeRevision\"\xa8\x01\n" +
+	"\x0eGetTaskRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
+	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12%\n" +
+	"\x0erequest_digest\x18\x03 \x01(\tR\rrequestDigest\x127\n" +
+	"\x18retain_until_unix_millis\x18\x04 \x01(\x03R\x15retainUntilUnixMillis\"\xe2\x02\n" +
+	"\x0fGetTaskResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
+	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12%\n" +
+	"\x0erequest_digest\x18\x03 \x01(\tR\rrequestDigest\x12/\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x17.tos.edge.v1.TaskStatusR\x06status\x123\n" +
+	"\x06result\x18\x05 \x01(\v2\x1b.tos.edge.v1.InvokeResponseR\x06result\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x06 \x01(\tR\terrorCode\x122\n" +
+	"\x15completed_unix_millis\x18\a \x01(\x03R\x13completedUnixMillis\x127\n" +
+	"\x18retain_until_unix_millis\x18\b \x01(\x03R\x15retainUntilUnixMillis\"n\n" +
 	"\rCancelRequest\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\",\n" +
-	"\x0eCancelResponse\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\bR\baccepted*\xc6\x01\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
+	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12%\n" +
+	"\x0erequest_digest\x18\x03 \x01(\tR\rrequestDigest\"\x8b\x01\n" +
+	"\x0eCancelResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
+	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12%\n" +
+	"\x0erequest_digest\x18\x03 \x01(\tR\rrequestDigest\x12\x1a\n" +
+	"\baccepted\x18\x04 \x01(\bR\baccepted*\xc6\x01\n" +
 	"\bPriority\x12\x18\n" +
 	"\x14PRIORITY_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12PRIORITY_EMERGENCY\x10\x01\x12\x14\n" +
@@ -1714,12 +2031,23 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x13RESOURCE_UNIT_BYTES\x10\x02\x12\x1e\n" +
 	"\x1aRESOURCE_UNIT_MILLISECONDS\x10\x03\x12\x1c\n" +
 	"\x18RESOURCE_UNIT_MILLIWATTS\x10\x04\x12!\n" +
-	"\x1dRESOURCE_UNIT_BITS_PER_SECOND\x10\x052\xf6\x02\n" +
+	"\x1dRESOURCE_UNIT_BITS_PER_SECOND\x10\x05*\xdf\x01\n" +
+	"\n" +
+	"TaskStatus\x12\x1b\n" +
+	"\x17TASK_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15TASK_STATUS_NOT_FOUND\x10\x01\x12\x18\n" +
+	"\x14TASK_STATUS_ACCEPTED\x10\x02\x12\x17\n" +
+	"\x13TASK_STATUS_RUNNING\x10\x03\x12\x19\n" +
+	"\x15TASK_STATUS_SUCCEEDED\x10\x04\x12\x16\n" +
+	"\x12TASK_STATUS_FAILED\x10\x05\x12\x18\n" +
+	"\x14TASK_STATUS_CANCELED\x10\x06\x12\x19\n" +
+	"\x15TASK_STATUS_TIMED_OUT\x10\a2\xbc\x03\n" +
 	"\rWorkerService\x12A\n" +
 	"\x06Health\x12\x1a.tos.edge.v1.HealthRequest\x1a\x1b.tos.edge.v1.HealthResponse\x12\\\n" +
 	"\x0fGetCapabilities\x12#.tos.edge.v1.GetCapabilitiesRequest\x1a$.tos.edge.v1.GetCapabilitiesResponse\x12>\n" +
 	"\x05Quote\x12\x19.tos.edge.v1.QuoteRequest\x1a\x1a.tos.edge.v1.QuoteResponse\x12A\n" +
-	"\x06Invoke\x12\x1a.tos.edge.v1.InvokeRequest\x1a\x1b.tos.edge.v1.InvokeResponse\x12A\n" +
+	"\x06Invoke\x12\x1a.tos.edge.v1.InvokeRequest\x1a\x1b.tos.edge.v1.InvokeResponse\x12D\n" +
+	"\aGetTask\x12\x1b.tos.edge.v1.GetTaskRequest\x1a\x1c.tos.edge.v1.GetTaskResponse\x12A\n" +
 	"\x06Cancel\x12\x1a.tos.edge.v1.CancelRequest\x1a\x1b.tos.edge.v1.CancelResponseB;Z9github.com/tosnetwork/tos-protocol/gen/tos/edge/v1;edgev1b\x06proto3"
 
 var (
@@ -1734,66 +2062,73 @@ func file_api_tos_edge_v1_worker_proto_rawDescGZIP() []byte {
 	return file_api_tos_edge_v1_worker_proto_rawDescData
 }
 
-var file_api_tos_edge_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_api_tos_edge_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_api_tos_edge_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_api_tos_edge_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_api_tos_edge_v1_worker_proto_goTypes = []any{
 	(Priority)(0),                   // 0: tos.edge.v1.Priority
 	(EvidenceLevel)(0),              // 1: tos.edge.v1.EvidenceLevel
 	(ReadinessStatus)(0),            // 2: tos.edge.v1.ReadinessStatus
 	(ResourceClass)(0),              // 3: tos.edge.v1.ResourceClass
 	(ResourceUnit)(0),               // 4: tos.edge.v1.ResourceUnit
-	(*ClaimEvidence)(nil),           // 5: tos.edge.v1.ClaimEvidence
-	(*ReadinessComponent)(nil),      // 6: tos.edge.v1.ReadinessComponent
-	(*ResourceClaim)(nil),           // 7: tos.edge.v1.ResourceClaim
-	(*ResourceLimit)(nil),           // 8: tos.edge.v1.ResourceLimit
-	(*HealthRequest)(nil),           // 9: tos.edge.v1.HealthRequest
-	(*HealthResponse)(nil),          // 10: tos.edge.v1.HealthResponse
-	(*GetCapabilitiesRequest)(nil),  // 11: tos.edge.v1.GetCapabilitiesRequest
-	(*Capability)(nil),              // 12: tos.edge.v1.Capability
-	(*GetCapabilitiesResponse)(nil), // 13: tos.edge.v1.GetCapabilitiesResponse
-	(*QuoteRequest)(nil),            // 14: tos.edge.v1.QuoteRequest
-	(*QuoteResponse)(nil),           // 15: tos.edge.v1.QuoteResponse
-	(*InvokeRequest)(nil),           // 16: tos.edge.v1.InvokeRequest
-	(*Usage)(nil),                   // 17: tos.edge.v1.Usage
-	(*InvokeResponse)(nil),          // 18: tos.edge.v1.InvokeResponse
-	(*CancelRequest)(nil),           // 19: tos.edge.v1.CancelRequest
-	(*CancelResponse)(nil),          // 20: tos.edge.v1.CancelResponse
-	nil,                             // 21: tos.edge.v1.ResourceClaim.AttributesEntry
+	(TaskStatus)(0),                 // 5: tos.edge.v1.TaskStatus
+	(*ClaimEvidence)(nil),           // 6: tos.edge.v1.ClaimEvidence
+	(*ReadinessComponent)(nil),      // 7: tos.edge.v1.ReadinessComponent
+	(*ResourceClaim)(nil),           // 8: tos.edge.v1.ResourceClaim
+	(*ResourceLimit)(nil),           // 9: tos.edge.v1.ResourceLimit
+	(*HealthRequest)(nil),           // 10: tos.edge.v1.HealthRequest
+	(*HealthResponse)(nil),          // 11: tos.edge.v1.HealthResponse
+	(*GetCapabilitiesRequest)(nil),  // 12: tos.edge.v1.GetCapabilitiesRequest
+	(*Capability)(nil),              // 13: tos.edge.v1.Capability
+	(*GetCapabilitiesResponse)(nil), // 14: tos.edge.v1.GetCapabilitiesResponse
+	(*QuoteRequest)(nil),            // 15: tos.edge.v1.QuoteRequest
+	(*QuoteResponse)(nil),           // 16: tos.edge.v1.QuoteResponse
+	(*InvokeRequest)(nil),           // 17: tos.edge.v1.InvokeRequest
+	(*Usage)(nil),                   // 18: tos.edge.v1.Usage
+	(*InvokeResponse)(nil),          // 19: tos.edge.v1.InvokeResponse
+	(*GetTaskRequest)(nil),          // 20: tos.edge.v1.GetTaskRequest
+	(*GetTaskResponse)(nil),         // 21: tos.edge.v1.GetTaskResponse
+	(*CancelRequest)(nil),           // 22: tos.edge.v1.CancelRequest
+	(*CancelResponse)(nil),          // 23: tos.edge.v1.CancelResponse
+	nil,                             // 24: tos.edge.v1.ResourceClaim.AttributesEntry
 }
 var file_api_tos_edge_v1_worker_proto_depIdxs = []int32{
 	1,  // 0: tos.edge.v1.ClaimEvidence.level:type_name -> tos.edge.v1.EvidenceLevel
 	2,  // 1: tos.edge.v1.ReadinessComponent.status:type_name -> tos.edge.v1.ReadinessStatus
-	5,  // 2: tos.edge.v1.ReadinessComponent.evidence:type_name -> tos.edge.v1.ClaimEvidence
+	6,  // 2: tos.edge.v1.ReadinessComponent.evidence:type_name -> tos.edge.v1.ClaimEvidence
 	3,  // 3: tos.edge.v1.ResourceClaim.resource_class:type_name -> tos.edge.v1.ResourceClass
 	4,  // 4: tos.edge.v1.ResourceClaim.unit:type_name -> tos.edge.v1.ResourceUnit
-	5,  // 5: tos.edge.v1.ResourceClaim.evidence:type_name -> tos.edge.v1.ClaimEvidence
-	21, // 6: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
+	6,  // 5: tos.edge.v1.ResourceClaim.evidence:type_name -> tos.edge.v1.ClaimEvidence
+	24, // 6: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
 	4,  // 7: tos.edge.v1.ResourceLimit.unit:type_name -> tos.edge.v1.ResourceUnit
-	6,  // 8: tos.edge.v1.HealthResponse.readiness:type_name -> tos.edge.v1.ReadinessComponent
+	7,  // 8: tos.edge.v1.HealthResponse.readiness:type_name -> tos.edge.v1.ReadinessComponent
 	0,  // 9: tos.edge.v1.Capability.accepted_priorities:type_name -> tos.edge.v1.Priority
-	8,  // 10: tos.edge.v1.Capability.admission_limits:type_name -> tos.edge.v1.ResourceLimit
-	12, // 11: tos.edge.v1.GetCapabilitiesResponse.capabilities:type_name -> tos.edge.v1.Capability
-	7,  // 12: tos.edge.v1.GetCapabilitiesResponse.resources:type_name -> tos.edge.v1.ResourceClaim
+	9,  // 10: tos.edge.v1.Capability.admission_limits:type_name -> tos.edge.v1.ResourceLimit
+	13, // 11: tos.edge.v1.GetCapabilitiesResponse.capabilities:type_name -> tos.edge.v1.Capability
+	8,  // 12: tos.edge.v1.GetCapabilitiesResponse.resources:type_name -> tos.edge.v1.ResourceClaim
 	0,  // 13: tos.edge.v1.QuoteRequest.priority:type_name -> tos.edge.v1.Priority
-	8,  // 14: tos.edge.v1.QuoteRequest.requested_limits:type_name -> tos.edge.v1.ResourceLimit
-	8,  // 15: tos.edge.v1.QuoteResponse.committed_limits:type_name -> tos.edge.v1.ResourceLimit
+	9,  // 14: tos.edge.v1.QuoteRequest.requested_limits:type_name -> tos.edge.v1.ResourceLimit
+	9,  // 15: tos.edge.v1.QuoteResponse.committed_limits:type_name -> tos.edge.v1.ResourceLimit
 	0,  // 16: tos.edge.v1.InvokeRequest.priority:type_name -> tos.edge.v1.Priority
-	17, // 17: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
-	9,  // 18: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
-	11, // 19: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
-	14, // 20: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
-	16, // 21: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
-	19, // 22: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
-	10, // 23: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
-	13, // 24: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
-	15, // 25: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
-	18, // 26: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
-	20, // 27: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
-	23, // [23:28] is the sub-list for method output_type
-	18, // [18:23] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	18, // 17: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
+	5,  // 18: tos.edge.v1.GetTaskResponse.status:type_name -> tos.edge.v1.TaskStatus
+	19, // 19: tos.edge.v1.GetTaskResponse.result:type_name -> tos.edge.v1.InvokeResponse
+	10, // 20: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
+	12, // 21: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
+	15, // 22: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
+	17, // 23: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
+	20, // 24: tos.edge.v1.WorkerService.GetTask:input_type -> tos.edge.v1.GetTaskRequest
+	22, // 25: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
+	11, // 26: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
+	14, // 27: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
+	16, // 28: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
+	19, // 29: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
+	21, // 30: tos.edge.v1.WorkerService.GetTask:output_type -> tos.edge.v1.GetTaskResponse
+	23, // 31: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
+	26, // [26:32] is the sub-list for method output_type
+	20, // [20:26] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_api_tos_edge_v1_worker_proto_init() }
@@ -1806,8 +2141,8 @@ func file_api_tos_edge_v1_worker_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_tos_edge_v1_worker_proto_rawDesc), len(file_api_tos_edge_v1_worker_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   17,
+			NumEnums:      6,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

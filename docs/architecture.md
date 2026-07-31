@@ -52,8 +52,9 @@ the production payment adapter and watcher schedule, a reconciliation/refund
 policy, profile-specific invocation mapping, invocation isolation, production
 receipt key custody, partial-work refund/charging policy, and public receipt
 delivery before it forwards paid work. A production Worker must additionally
-support idempotent task lookup/result replay so Edge can resolve the remaining
-crash window after a claim commits but before an RPC result is received.
+implement the specified bounded task table and idempotent `Invoke` behavior so
+Edge can resolve the remaining crash window after a claim commits but before
+an RPC result is received.
 Those runtime operations remain absent from the public server, so it exposes
 no invocation route.
 
@@ -62,7 +63,7 @@ no invocation route.
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
 | Language | Go 1.24+ | implemented |
-| Local process API | ConnectRPC + Protobuf over private Unix socket | contract and opaque validated-result client implemented: owner/mode, message/deadline, response-binding, mandatory task ID, priority and no-retry controls; task-status/result-replay recovery remains |
+| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation and `GetTask` recovery contracts plus opaque validated-result client implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; durable idempotent Worker implementation remains |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, and strict stateless chain-resolver boundary implemented; live TOS contract/RPC composition remains |

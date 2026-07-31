@@ -12,6 +12,7 @@ service WorkerService {
   rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
   rpc Quote(QuoteRequest) returns (QuoteResponse);
   rpc Invoke(InvokeRequest) returns (InvokeResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
   rpc Cancel(CancelRequest) returns (CancelResponse);
 }
 
@@ -64,6 +65,17 @@ enum ResourceUnit {
   RESOURCE_UNIT_MILLISECONDS = 3;
   RESOURCE_UNIT_MILLIWATTS = 4;
   RESOURCE_UNIT_BITS_PER_SECOND = 5;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_NOT_FOUND = 1;
+  TASK_STATUS_ACCEPTED = 2;
+  TASK_STATUS_RUNNING = 3;
+  TASK_STATUS_SUCCEEDED = 4;
+  TASK_STATUS_FAILED = 5;
+  TASK_STATUS_CANCELED = 6;
+  TASK_STATUS_TIMED_OUT = 7;
 }
 
 message ClaimEvidence {
@@ -167,6 +179,12 @@ message InvokeRequest {
   uint64 max_output_bytes = 8;
   int64 deadline_unix_millis = 9;
   Priority priority = 10;
+  // Edge computes this internal commitment with request_digest cleared,
+  // persists it in the execution claim, and sends the populated value.
+  string request_digest = 11;
+  // Worker task state and any terminal result must remain queryable until
+  // this Edge journal retention boundary.
+  int64 retain_until_unix_millis = 12;
 }
 
 message Usage {
@@ -185,10 +203,33 @@ message InvokeResponse {
   string runtime_revision = 5;
 }
 
+message GetTaskRequest {
+  string request_id = 1;
+  string task_id = 2;
+  string request_digest = 3;
+  int64 retain_until_unix_millis = 4;
+}
+
+message GetTaskResponse {
+  string request_id = 1;
+  string task_id = 2;
+  string request_digest = 3;
+  TaskStatus status = 4;
+  InvokeResponse result = 5;
+  string error_code = 6;
+  int64 completed_unix_millis = 7;
+  int64 retain_until_unix_millis = 8;
+}
+
 message CancelRequest {
   string request_id = 1;
+  string task_id = 2;
+  string request_digest = 3;
 }
 
 message CancelResponse {
-  bool accepted = 1;
+  string request_id = 1;
+  string task_id = 2;
+  string request_digest = 3;
+  bool accepted = 4;
 }

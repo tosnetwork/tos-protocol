@@ -23,6 +23,7 @@ type testWorkerService struct {
 	capabilities func(context.Context) (*edgev1.GetCapabilitiesResponse, error)
 	quote        func(context.Context, *edgev1.QuoteRequest) (*edgev1.QuoteResponse, error)
 	invoke       func(context.Context, *edgev1.InvokeRequest) (*edgev1.InvokeResponse, error)
+	getTask      func(context.Context, *edgev1.GetTaskRequest) (*edgev1.GetTaskResponse, error)
 	cancel       func(context.Context, *edgev1.CancelRequest) (*edgev1.CancelResponse, error)
 }
 
@@ -82,6 +83,23 @@ func (s *testWorkerService) Invoke(
 	return connect.NewResponse(response), nil
 }
 
+func (s *testWorkerService) GetTask(
+	ctx context.Context,
+	request *connect.Request[edgev1.GetTaskRequest],
+) (*connect.Response[edgev1.GetTaskResponse], error) {
+	if s.getTask == nil {
+		return nil, connect.NewError(
+			connect.CodeUnimplemented,
+			errors.New("GetTask"),
+		)
+	}
+	response, err := s.getTask(ctx, request.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(response), nil
+}
+
 func (s *testWorkerService) Cancel(
 	ctx context.Context,
 	request *connect.Request[edgev1.CancelRequest],
@@ -133,6 +151,12 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 			_ context.Context,
 			request *edgev1.InvokeRequest,
 		) (*edgev1.InvokeResponse, error) {
+			if !workerDigestPattern.MatchString(request.RequestDigest) {
+				return nil, connect.NewError(
+					connect.CodeInvalidArgument,
+					errors.New("missing request digest"),
+				)
+			}
 			output := append([]byte("echo:"), request.Payload...)
 			return &edgev1.InvokeResponse{
 				RequestId: request.RequestId, Output: output,
@@ -142,11 +166,35 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 				ModelRevision: "sha256:" + strings.Repeat("a", 64), RuntimeRevision: "mock-v1",
 			}, nil
 		},
+		getTask: func(
+			_ context.Context,
+			request *edgev1.GetTaskRequest,
+		) (*edgev1.GetTaskResponse, error) {
+			output := []byte("echo:hello")
+			return &edgev1.GetTaskResponse{
+				RequestId: request.RequestId, TaskId: request.TaskId,
+				RequestDigest: request.RequestDigest,
+				Status:        edgev1.TaskStatus_TASK_STATUS_SUCCEEDED,
+				Result: &edgev1.InvokeResponse{
+					RequestId: request.RequestId, Output: output,
+					Usage: &edgev1.Usage{
+						InputBytes: 5, OutputBytes: uint64(len(output)),
+					},
+					ModelRevision:   "sha256:" + strings.Repeat("a", 64),
+					RuntimeRevision: "mock-v1",
+				},
+				CompletedUnixMillis:   now.UnixMilli(),
+				RetainUntilUnixMillis: request.RetainUntilUnixMillis,
+			}, nil
+		},
 		cancel: func(
-			context.Context,
-			*edgev1.CancelRequest,
+			_ context.Context,
+			request *edgev1.CancelRequest,
 		) (*edgev1.CancelResponse, error) {
-			return &edgev1.CancelResponse{Accepted: true}, nil
+			return &edgev1.CancelResponse{
+				RequestId: request.RequestId, TaskId: request.TaskId,
+				RequestDigest: request.RequestDigest, Accepted: true,
+			}, nil
 		},
 	}
 	client := startWorkerClient(t, service, DefaultWorkerMaxMessageBytes)
@@ -200,6 +248,23 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	if changedDigest == expectedRequestDigest {
 		t.Fatal("different Worker invocation produced the same digest")
 	}
+	recovered, err := client.GetTask(context.Background(), invokeRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveredCompletion, err := recovered.Completion(response.Binding)
+	recoveredStatus, statusErr := recovered.Status()
+	if err != nil || statusErr != nil ||
+		recoveredStatus != edgev1.TaskStatus_TASK_STATUS_SUCCEEDED ||
+		string(recoveredCompletion.Output) != "echo:hello" ||
+		recoveredCompletion.RequestDigest != expectedRequestDigest {
+		t.Fatalf(
+			"recovered=%#v completion=%#v err=%v",
+			recovered,
+			recoveredCompletion,
+			err,
+		)
+	}
 	response.Output[0] ^= 1
 	again, err := validated.Completion(response.Binding)
 	if err != nil || string(again.Output) != "echo:hello" {
@@ -215,9 +280,21 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	); err == nil {
 		t.Fatal("zero validated invocation accepted")
 	}
-	accepted, err := client.Cancel(context.Background(), invokeRequest.RequestId)
+	accepted, err := client.Cancel(context.Background(), invokeRequest)
 	if err != nil || !accepted {
 		t.Fatalf("cancel accepted=%v err=%v", accepted, err)
+	}
+}
+
+func TestInvocationRequestDigestVector(t *testing.T) {
+	request := validInvokeRequest(time.UnixMilli(1_800_000_000_000).UTC())
+	digest, err := InvocationRequestDigest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const expected = "sha256:f33cec8bcad2c8ca69b30de82ae3e50f2549ae02951b36cf0a179a0cfac11ff4"
+	if digest != expected {
+		t.Fatalf("invocation digest=%q", digest)
 	}
 }
 
@@ -269,6 +346,15 @@ func TestWorkerClientRejectsSubstitutedOrInconsistentResponses(t *testing.T) {
 				ModelRevision: "model-v1", RuntimeRevision: "runtime-v1",
 			}, nil
 		},
+		cancel: func(
+			_ context.Context,
+			request *edgev1.CancelRequest,
+		) (*edgev1.CancelResponse, error) {
+			return &edgev1.CancelResponse{
+				RequestId: request.RequestId, TaskId: "task-substituted",
+				RequestDigest: request.RequestDigest, Accepted: true,
+			}, nil
+		},
 	}
 	client := startWorkerClient(t, service, DefaultWorkerMaxMessageBytes)
 	if _, err := client.Quote(
@@ -280,6 +366,225 @@ func TestWorkerClientRejectsSubstitutedOrInconsistentResponses(t *testing.T) {
 		context.Background(), validInvokeRequest(now),
 	); err == nil || !strings.Contains(err.Error(), "accounting mismatch") {
 		t.Fatalf("inconsistent Invoke response accepted: %v", err)
+	}
+	if _, err := client.Cancel(
+		context.Background(), validInvokeRequest(now),
+	); err == nil || !strings.Contains(err.Error(), "binding mismatch") {
+		t.Fatalf("substituted Cancel response accepted: %v", err)
+	}
+}
+
+func TestWorkerClientValidatesTaskRecoveryStates(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	invocation := validInvokeRequest(now.Add(-3 * time.Minute))
+	var call int
+	service := &testWorkerService{
+		getTask: func(
+			_ context.Context,
+			request *edgev1.GetTaskRequest,
+		) (*edgev1.GetTaskResponse, error) {
+			call++
+			response := &edgev1.GetTaskResponse{
+				RequestId: request.RequestId, TaskId: request.TaskId,
+				RequestDigest: request.RequestDigest,
+			}
+			switch call {
+			case 1:
+				response.Status = edgev1.TaskStatus_TASK_STATUS_NOT_FOUND
+			case 2:
+				response.Status = edgev1.TaskStatus_TASK_STATUS_ACCEPTED
+				response.RetainUntilUnixMillis = request.RetainUntilUnixMillis
+			case 3:
+				response.Status = edgev1.TaskStatus_TASK_STATUS_RUNNING
+				response.RetainUntilUnixMillis = request.RetainUntilUnixMillis
+			case 4:
+				response.Status = edgev1.TaskStatus_TASK_STATUS_FAILED
+				response.ErrorCode = "RUNTIME_FAILED"
+				response.CompletedUnixMillis = now.Add(-2 * time.Minute).UnixMilli()
+				response.RetainUntilUnixMillis = request.RetainUntilUnixMillis
+			case 5:
+				response.Status = edgev1.TaskStatus_TASK_STATUS_CANCELED
+				response.ErrorCode = "CANCELED"
+				response.CompletedUnixMillis = now.Add(-time.Minute).UnixMilli()
+				response.RetainUntilUnixMillis = request.RetainUntilUnixMillis
+			case 6:
+				response.Status = edgev1.TaskStatus_TASK_STATUS_TIMED_OUT
+				response.ErrorCode = "DEADLINE_EXCEEDED"
+				response.CompletedUnixMillis = invocation.DeadlineUnixMillis
+				response.RetainUntilUnixMillis = request.RetainUntilUnixMillis
+			default:
+				return nil, errors.New("unexpected task lookup")
+			}
+			return response, nil
+		},
+	}
+	client := startWorkerClient(t, service, DefaultWorkerMaxMessageBytes)
+	for _, expected := range []edgev1.TaskStatus{
+		edgev1.TaskStatus_TASK_STATUS_NOT_FOUND,
+		edgev1.TaskStatus_TASK_STATUS_ACCEPTED,
+		edgev1.TaskStatus_TASK_STATUS_RUNNING,
+		edgev1.TaskStatus_TASK_STATUS_FAILED,
+		edgev1.TaskStatus_TASK_STATUS_CANCELED,
+		edgev1.TaskStatus_TASK_STATUS_TIMED_OUT,
+	} {
+		recovered, err := client.GetTask(context.Background(), invocation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, err := recovered.Status()
+		if err != nil || status != expected {
+			t.Fatalf("task status=%v want=%v err=%v", status, expected, err)
+		}
+		errorCode, err := recovered.ErrorCode()
+		if err != nil || errorCode != taskStatusErrorCode(expected) {
+			t.Fatalf(
+				"task error=%q want=%q err=%v",
+				errorCode,
+				taskStatusErrorCode(expected),
+				err,
+			)
+		}
+		retainUntil, err := recovered.RetainUntil()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if expected == edgev1.TaskStatus_TASK_STATUS_NOT_FOUND {
+			if !retainUntil.IsZero() {
+				t.Fatalf("not-found task retained until %v", retainUntil)
+			}
+		} else if retainUntil.UnixMilli() != invocation.RetainUntilUnixMillis {
+			t.Fatalf("task retention=%v", retainUntil)
+		}
+		if _, err := recovered.Invocation(); err == nil {
+			t.Fatalf("non-success status %v exposed an invocation", expected)
+		}
+	}
+	if call != 6 {
+		t.Fatalf("task lookups=%d", call)
+	}
+	if _, err := (RecoveredTask{}).Status(); err == nil {
+		t.Fatal("zero recovered task exposed a status")
+	}
+}
+
+func TestWorkerClientRejectsInvalidTaskRecovery(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	invocation := validInvokeRequest(now)
+	tests := []struct {
+		name     string
+		response func(*edgev1.GetTaskRequest) *edgev1.GetTaskResponse
+	}{
+		{
+			name: "binding substitution",
+			response: func(request *edgev1.GetTaskRequest) *edgev1.GetTaskResponse {
+				return &edgev1.GetTaskResponse{
+					RequestId: request.RequestId, TaskId: "task-substituted",
+					RequestDigest: request.RequestDigest,
+					Status:        edgev1.TaskStatus_TASK_STATUS_NOT_FOUND,
+				}
+			},
+		},
+		{
+			name: "success without result",
+			response: func(request *edgev1.GetTaskRequest) *edgev1.GetTaskResponse {
+				return &edgev1.GetTaskResponse{
+					RequestId: request.RequestId, TaskId: request.TaskId,
+					RequestDigest:         request.RequestDigest,
+					Status:                edgev1.TaskStatus_TASK_STATUS_SUCCEEDED,
+					CompletedUnixMillis:   now.UnixMilli(),
+					RetainUntilUnixMillis: now.Add(time.Hour).UnixMilli(),
+				}
+			},
+		},
+		{
+			name: "unbounded retention",
+			response: func(request *edgev1.GetTaskRequest) *edgev1.GetTaskResponse {
+				return &edgev1.GetTaskResponse{
+					RequestId: request.RequestId, TaskId: request.TaskId,
+					RequestDigest:         request.RequestDigest,
+					Status:                edgev1.TaskStatus_TASK_STATUS_RUNNING,
+					RetainUntilUnixMillis: now.Add(8 * 24 * time.Hour).UnixMilli(),
+				}
+			},
+		},
+		{
+			name: "shortened retention",
+			response: func(request *edgev1.GetTaskRequest) *edgev1.GetTaskResponse {
+				return &edgev1.GetTaskResponse{
+					RequestId: request.RequestId, TaskId: request.TaskId,
+					RequestDigest:         request.RequestDigest,
+					Status:                edgev1.TaskStatus_TASK_STATUS_RUNNING,
+					RetainUntilUnixMillis: now.Add(10 * time.Minute).UnixMilli(),
+				}
+			},
+		},
+		{
+			name: "early timeout",
+			response: func(request *edgev1.GetTaskRequest) *edgev1.GetTaskResponse {
+				return &edgev1.GetTaskResponse{
+					RequestId: request.RequestId, TaskId: request.TaskId,
+					RequestDigest:         request.RequestDigest,
+					Status:                edgev1.TaskStatus_TASK_STATUS_TIMED_OUT,
+					ErrorCode:             "DEADLINE_EXCEEDED",
+					CompletedUnixMillis:   now.UnixMilli(),
+					RetainUntilUnixMillis: now.Add(time.Hour).UnixMilli(),
+				}
+			},
+		},
+		{
+			name: "status error substitution",
+			response: func(request *edgev1.GetTaskRequest) *edgev1.GetTaskResponse {
+				return &edgev1.GetTaskResponse{
+					RequestId: request.RequestId, TaskId: request.TaskId,
+					RequestDigest:         request.RequestDigest,
+					Status:                edgev1.TaskStatus_TASK_STATUS_FAILED,
+					ErrorCode:             "CANCELED",
+					CompletedUnixMillis:   now.UnixMilli(),
+					RetainUntilUnixMillis: request.RetainUntilUnixMillis,
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := &testWorkerService{
+				getTask: func(
+					_ context.Context,
+					request *edgev1.GetTaskRequest,
+				) (*edgev1.GetTaskResponse, error) {
+					return test.response(request), nil
+				},
+			}
+			client := startWorkerClient(
+				t,
+				service,
+				DefaultWorkerMaxMessageBytes,
+			)
+			if _, err := client.GetTask(
+				context.Background(), invocation,
+			); err == nil {
+				t.Fatal("invalid Worker task recovery accepted")
+			}
+		})
+	}
+
+	var calls atomic.Int32
+	service := &testWorkerService{
+		getTask: func(
+			context.Context,
+			*edgev1.GetTaskRequest,
+		) (*edgev1.GetTaskResponse, error) {
+			calls.Add(1)
+			return nil, errors.New("unexpected call")
+		},
+	}
+	client := startWorkerClient(t, service, DefaultWorkerMaxMessageBytes)
+	changedDigest := validInvokeRequest(now)
+	changedDigest.RequestDigest = "sha256:" + strings.Repeat("0", 64)
+	if _, err := client.GetTask(
+		context.Background(), changedDigest,
+	); err == nil || calls.Load() != 0 {
+		t.Fatalf("changed digest err=%v calls=%d", err, calls.Load())
 	}
 }
 
@@ -294,6 +599,11 @@ func TestWorkerClientEnforcesMessageAndSocketSecurity(t *testing.T) {
 	socketPath, stop := startWorkerServer(t, service)
 	defer stop()
 	config := DefaultWorkerClientConfig(socketPath)
+	invalidRetention := config
+	invalidRetention.MaxTaskRetention = MaximumWorkerTaskRetention + time.Second
+	if _, err := NewWorkerClient(invalidRetention); err == nil {
+		t.Fatal("unbounded Worker task retention accepted")
+	}
 	config.MaxMessageBytes = 1024
 	client, err := NewWorkerClient(config)
 	if err != nil {
@@ -434,8 +744,9 @@ func validInvokeRequest(now time.Time) *edgev1.InvokeRequest {
 		TaskId:    "task-request-0001",
 		ServiceId: "tos.ai.mock", Operation: "generate",
 		Model: "deterministic-echo", Payload: []byte("hello"),
-		MaxOutputBytes:     1024,
-		DeadlineUnixMillis: now.Add(2 * time.Minute).UnixMilli(),
-		Priority:           edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+		MaxOutputBytes:        1024,
+		DeadlineUnixMillis:    now.Add(2 * time.Minute).UnixMilli(),
+		RetainUntilUnixMillis: now.Add(time.Hour).UnixMilli(),
+		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 	}
 }

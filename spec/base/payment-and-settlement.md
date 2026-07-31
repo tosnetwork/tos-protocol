@@ -102,9 +102,8 @@ work charging policy.
 This does not provide production key custody or public delivery. A deployment
 must supply a bounded signer adapter, keep its private key outside the Worker,
 define profile intent-to-Worker mapping and any partial-work refund/charging
-policy, add an idempotent Worker task-status/result-replay recovery contract,
-and expose only the stored signed envelope through an authenticated receipt
-resource.
+policy, implement the specified idempotent Worker task table, and expose only
+the stored signed envelope through an authenticated receipt resource.
 
 The initial integration should consume the released Service Actor and escrow
 interfaces through a pinned chain adapter. Contract code, ABI, deployment

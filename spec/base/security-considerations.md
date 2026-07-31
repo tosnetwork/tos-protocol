@@ -62,11 +62,12 @@ the same count, lifetime, and cleanup ownership as requests.
 
 Paid dispatch must atomically persist one globally unique Worker task ID, an
 internal digest of the exact private invocation, its quote/payment/deadline
-binding, and the `authorized -> running` transition. Generic transitions must
-not bypass the claim. Exact claim replay is read-only; a changed request or
-cross-request task reuse must fail. Replay must recheck that the persisted
-payment has not been reorganized. The execution record and both indexes must be
-size/count/lifetime bounded and deleted with their request.
+and journal-retention binding, and the `authorized -> running` transition.
+Generic transitions must not bypass the claim. Exact claim replay is read-only;
+a changed request or cross-request task reuse must fail. Replay must recheck
+that the persisted payment has not been reorganized. The execution record and
+both indexes must be size/count/lifetime bounded and deleted with their
+request.
 
 A paid request terminal state and its signed receipt must commit atomically.
 Persist the complete envelope, recompute its fingerprint, and require the
@@ -113,8 +114,14 @@ background priority merely by setting a wire enum.
 
 A durable Edge claim is not proof that the Worker observed the call. Across
 the claim/RPC crash boundary, recovery must use an idempotent task-status or
-exact-result-replay contract with bounded retention. Until that contract is
-implemented, automatic invocation retry is unsafe and must remain disabled.
+exact-result-replay contract with bounded retention. The reference client
+implements strict `GetTask` validation, but each Worker must still durably
+enforce the task binding and retention contract. Automatic invocation retry is
+unsafe and must remain disabled until that property is demonstrated.
+
+Task cancellation must repeat the request ID, task ID, and invocation digest,
+and the response must echo them. Never authorize cancellation from an
+uncorrelated request ID or an unvalidated boolean response.
 
 ## Keys and updates
 
