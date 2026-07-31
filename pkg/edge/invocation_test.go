@@ -70,7 +70,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 	})
 	wrongIntent := append([]byte(nil), intent...)
 	wrongIntent[len(wrongIntent)-1] ^= 1
-	if _, err := core.MapAndClaimPaidExecution(
+	if _, err := core.mapAndClaimPaidExecution(
 		context.Background(), scope, request.Revision,
 		authorized, wrongIntent, mapper, worker,
 	); err == nil {
@@ -82,7 +82,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 	if _, err := core.Execution(scope); !errors.Is(err, journal.ErrNotFound) {
 		t.Fatalf("rejected mapping persisted execution: %v", err)
 	}
-	claimed, err := core.MapAndClaimPaidExecution(
+	claimed, err := core.mapAndClaimPaidExecution(
 		context.Background(), scope, request.Revision,
 		authorized, intent, mapper, worker,
 	)
@@ -119,7 +119,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 	}
 	defer core.Close()
 	replayIntent := []byte(`{"model":"qwen3","prompt":"hello"}`)
-	replay, err := core.MapAndClaimPaidExecution(
+	replay, err := core.mapAndClaimPaidExecution(
 		context.Background(), scope, request.Revision, authorized,
 		replayIntent,
 		ProfileInvocationMapperFunc(func(
@@ -136,7 +136,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 		replay.Execution != claimed.Execution {
 		t.Fatalf("restart replay = %#v, err = %v", replay, err)
 	}
-	if _, err := core.MapAndClaimPaidExecution(
+	if _, err := core.mapAndClaimPaidExecution(
 		context.Background(), scope, request.Revision, authorized,
 		replayIntent,
 		ProfileInvocationMapperFunc(func(
@@ -218,7 +218,7 @@ func TestCoreRejectsInvalidProfileMapperBeforeExecutionClaim(t *testing.T) {
 				authorized,
 				now,
 			)
-			if _, err := core.MapAndClaimPaidExecution(
+			if _, err := core.mapAndClaimPaidExecution(
 				context.Background(), scope, request.Revision,
 				authorized, intent, test.mapper, worker,
 			); err == nil {

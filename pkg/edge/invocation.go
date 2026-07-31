@@ -76,11 +76,10 @@ type workerTaskCommitment struct {
 	QuoteID           string   `json:"quoteId"`
 }
 
-// MapAndClaimPaidExecution is the safe generic bridge from a committed public
-// profile intent to a private Worker request. It validates the mapper output
-// under the concrete Worker client's local policy before atomically claiming
-// execution. No RPC is performed here.
-func (c *Core) MapAndClaimPaidExecution(
+// mapAndClaimPaidExecution is the common internal bridge from a committed
+// public profile intent to a private Worker request. Public package callers
+// enter only through the exact-selector registry boundary.
+func (c *Core) mapAndClaimPaidExecution(
 	ctx context.Context,
 	scope journal.Scope,
 	expectedRevision uint64,

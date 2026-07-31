@@ -19,3 +19,12 @@ A registration MUST include:
 The `tos.ai.*` namespace is owned by the `tos-ai` repository. AI profile
 schemas and business logic are deliberately not copied into this base
 repository.
+
+Edge runtime mapper registration is a separate local deployment concern. The
+base implementation accepts only an immutable startup set of at most 128
+exact `profile ID + version + extension set + operation` registrations.
+Registration in this documentation directory never automatically loads code,
+and the runtime registry has no wildcard or version fallback. A vertical
+repository must provide, review, and explicitly configure its mapper while
+the base Edge boundary retains request, payment, limit, deadline, priority,
+task, and recovery fields.

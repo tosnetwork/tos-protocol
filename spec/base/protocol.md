@@ -72,6 +72,7 @@ The Go reference implementation enforces:
 - 10-minute maximum terminal resource snapshot lifetime
 - 32 profile versions, profile extensions, operations, usage units, or
   evidence claims where applicable
+- 128 immutable local profile mapper registrations
 - 64 quote resource limits and readiness components; 128 terminal resource
   claims
 - delegation depth no greater than four

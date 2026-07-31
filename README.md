@@ -123,8 +123,10 @@ binds exact intent bytes to the negotiated profile version, extension set and
 signed quote, lets a vertical mapper return only its model and payload,
 derives all security fields in Edge, validates the complete request against
 the concrete Worker client before changing durable state, and
-deterministically replays the same task after restart. No production vertical
-mapper is registered yet.
+deterministically replays the same task after restart. A startup-only,
+immutable registry selects at most 128 mappers by exact profile ID, version,
+extension set, and operation; it has no wildcard fallback or request-driven
+growth. No production vertical mapper is included in this repository.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, failed/canceled refund/charging policy, production
 signer adapter, isolated executor, and public receipt route remain

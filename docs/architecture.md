@@ -50,7 +50,10 @@ generic mapping boundary now recomputes the profile/version/extension-bound
 public intent commitment, gives a mapper only a defensive intent copy, derives
 all Worker security fields itself, and validates the resulting request under
 the concrete Worker client policy before the atomic claim. Exact
-reconstruction replays across restart and any mapper drift conflicts. The
+reconstruction replays across restart and any mapper drift conflicts. Mapper
+selection uses an immutable startup registry bounded to 128 exact
+profile/version/extension/operation selectors, with no wildcard fallback or
+request-driven state. The
 public process must still supply
 the TOS contract decoder/RPC composition, the production client-key resolver,
 the production payment adapter and watcher schedule, a reconciliation/refund
@@ -75,7 +78,7 @@ no invocation route.
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, and atomic cumulative budget admission implemented; production key source remains |
 | Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | manifest/session/destination/amount binding, query deadline, freshness, high-water, reorganization and explicit finality/overpayment policy implemented; post-expiry strict recheck, bounded batch coordinator, and opt-in cancelable scheduler implemented; production adapter/binary wiring, adaptive backoff, and refund reconciliation remain |
 | Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results and zero-charge failed/canceled/timed-out outcomes use a purpose-specific signer, immediate manifest re-verification and concurrency-safe application; production signer, profile refund/charging policy and public delivery remain |
-| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; reviewed vertical mapper registrations remain |
+| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; reviewed vertical mapper implementations and startup configuration remain |
 | Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment application, reorganization dispatch gate, exact paid execution claim, full signed-receipt terminal application, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded generic JSON-RPC client and interface implemented |

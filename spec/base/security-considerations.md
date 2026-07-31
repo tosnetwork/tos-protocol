@@ -130,6 +130,10 @@ payment, limit, deadline, retention, and external priority fields, then runs
 the concrete Worker client's full local-policy validation before atomically
 claiming execution. Mapper failure or panic must not leave a paid request in
 `running`; mapper output drift after restart must not create another task.
+Mapper selection must also be exact: do not fall back across profile versions,
+extension sets, or operations. The reference registry is immutable and
+capacity-bounded at construction so hostile request diversity cannot grow a
+process-global mapper cache.
 
 ## Keys and updates
 

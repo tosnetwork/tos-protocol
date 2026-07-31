@@ -129,6 +129,15 @@ Worker client's configured policy fail before the journal moves to `running`.
 An exact mapping replays the existing execution claim across restart; mapping
 drift conflicts with its stored private request digest.
 
+Production orchestration MUST select mappers from startup-reviewed static
+configuration. The reference registry contains at most 128 entries and is
+immutable after construction. Each entry matches the complete profile ID,
+canonical semantic version, canonical extension set, and operation. Duplicate
+entries, typed-nil implementations, invalid selectors, and excess capacity
+fail startup. There is no wildcard, closest-version, extension-subset, or
+default fallback. A missing exact registration fails before mapping or
+execution state changes.
+
 For a successful paid request, Edge Core accepts only this opaque result. It
 requires the durable request to remain `running`, repeats the execution
 claim's task and invocation digest and the signed quote's byte limits and
