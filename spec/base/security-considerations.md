@@ -119,6 +119,13 @@ implements strict `GetTask` validation, but each Worker must still durably
 enforce the task binding and retention contract. Automatic invocation retry is
 unsafe and must remain disabled until that property is demonstrated.
 
+Dispatch code must branch on the durable claim disposition, not on an HTTP,
+RPC, context, or process error. Only a new claim can invoke. Replay, ambiguous
+failure, and `NOT_FOUND` can query or enter profile-specific reconciliation,
+but cannot resubmit the operation. Error results must retain the committed
+claim identity so callers cannot accidentally treat them as pre-claim
+failures.
+
 Task cancellation must repeat the request ID, task ID, and invocation digest,
 and the response must echo them. Never authorize cancellation from an
 uncorrelated request ID or an unvalidated boolean response.

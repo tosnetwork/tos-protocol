@@ -436,17 +436,12 @@ func (c *WorkerClient) GetTask(
 	ctx context.Context,
 	invocation *edgev1.InvokeRequest,
 ) (RecoveredTask, error) {
-	if c == nil {
-		return RecoveredTask{}, errors.New("nil worker client")
-	}
-	invocation, requestDigest, err := BindInvocationRequest(invocation)
+	invocation, err := c.PrepareTaskLookup(invocation)
 	if err != nil {
 		return RecoveredTask{}, err
 	}
+	requestDigest := invocation.RequestDigest
 	now := c.now().UTC()
-	if err := c.validateTaskLookupInvocation(invocation, now); err != nil {
-		return RecoveredTask{}, err
-	}
 	request := &edgev1.GetTaskRequest{
 		RequestId: invocation.RequestId, TaskId: invocation.TaskId,
 		RequestDigest:         requestDigest,
@@ -495,6 +490,28 @@ func (c *WorkerClient) GetTask(
 	return recovered, nil
 }
 
+// PrepareTaskLookup applies the configured read-only recovery policy without
+// performing an RPC. Unlike PrepareInvocation, it permits an elapsed
+// execution deadline while the bounded task-retention window is still live.
+func (c *WorkerClient) PrepareTaskLookup(
+	invocation *edgev1.InvokeRequest,
+) (*edgev1.InvokeRequest, error) {
+	if c == nil {
+		return nil, errors.New("nil worker client")
+	}
+	invocation, _, err := BindInvocationRequest(invocation)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.validateTaskLookupInvocation(
+		invocation,
+		c.now().UTC(),
+	); err != nil {
+		return nil, err
+	}
+	return invocation, nil
+}
+
 func validatedInvocationFromResponse(
 	request *edgev1.InvokeRequest,
 	response *edgev1.InvokeResponse,
@@ -529,19 +546,11 @@ func (c *WorkerClient) Cancel(
 	ctx context.Context,
 	invocation *edgev1.InvokeRequest,
 ) (bool, error) {
-	if c == nil {
-		return false, errors.New("nil worker client")
-	}
-	invocation, requestDigest, err := BindInvocationRequest(invocation)
+	invocation, err := c.PrepareTaskLookup(invocation)
 	if err != nil {
 		return false, err
 	}
-	if err := c.validateTaskLookupInvocation(
-		invocation,
-		c.now().UTC(),
-	); err != nil {
-		return false, err
-	}
+	requestDigest := invocation.RequestDigest
 	callContext, cancel, err := c.controlContext(ctx, time.Time{})
 	if err != nil {
 		return false, err

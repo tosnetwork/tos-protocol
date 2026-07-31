@@ -750,3 +750,39 @@ func validInvokeRequest(now time.Time) *edgev1.InvokeRequest {
 		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 	}
 }
+
+func TestWorkerPreparationSeparatesInvokeFromRecoveryDeadline(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000).UTC()
+	config := DefaultWorkerClientConfig("/tmp/tos-worker-prepare-test.sock")
+	client, err := newWorkerClient(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validInvokeRequest(now)
+	request.DeadlineUnixMillis = now.Add(-time.Minute).UnixMilli()
+	request.RetainUntilUnixMillis = now.Add(time.Hour).UnixMilli()
+	if _, err := client.PrepareInvocation(request); err == nil {
+		t.Fatal("elapsed invocation deadline passed first-dispatch preparation")
+	}
+	prepared, err := client.PrepareTaskLookup(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.RequestDigest == "" || request.RequestDigest != "" {
+		t.Fatalf(
+			"prepared digest = %q, caller digest = %q",
+			prepared.RequestDigest,
+			request.RequestDigest,
+		)
+	}
+	prepared.Payload[0] ^= 1
+	if string(request.Payload) != "hello" {
+		t.Fatal("prepared task lookup aliases caller request")
+	}
+	tooOld := validInvokeRequest(now)
+	tooOld.DeadlineUnixMillis = now.Add(-DefaultWorkerMaxTaskRetention - time.Second).UnixMilli()
+	tooOld.RetainUntilUnixMillis = now.Add(time.Hour).UnixMilli()
+	if _, err := client.PrepareTaskLookup(tooOld); err == nil {
+		t.Fatal("task lookup accepted deadline outside retained recovery window")
+	}
+}

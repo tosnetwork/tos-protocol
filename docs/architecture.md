@@ -53,8 +53,11 @@ the concrete Worker client policy before the atomic claim. Exact
 reconstruction replays across restart and any mapper drift conflicts. Mapper
 selection uses an immutable startup registry bounded to 128 exact
 profile/version/extension/operation selectors, with no wildcard fallback or
-request-driven state. The
-public process must still supply
+request-driven state. The dispatch coordinator invokes only a newly committed
+claim. A replay performs only a binding-preserving task lookup, and an RPC
+failure produces an `uncertain` outcome that retains the claim for recovery
+rather than retrying. `NOT_FOUND` is an observation, not permission to
+resubmit. The public process must still supply
 the TOS contract decoder/RPC composition, the production client-key resolver,
 the production payment adapter and watcher schedule, a reconciliation/refund
 policy, reviewed production profile mappers, invocation isolation, production
@@ -71,7 +74,7 @@ no invocation route.
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
 | Language | Go 1.24+ | implemented |
-| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation and `GetTask` recovery contracts plus opaque validated-result client implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; durable idempotent Worker implementation remains |
+| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation and `GetTask` recovery contracts plus opaque validated-result client implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; new claims invoke once, replay only queries, and uncertain outcomes retain the durable claim; durable idempotent Worker implementation remains |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, and strict stateless chain-resolver boundary implemented; live TOS contract/RPC composition remains |

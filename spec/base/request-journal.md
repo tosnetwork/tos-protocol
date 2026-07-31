@@ -165,6 +165,14 @@ still performs no automatic retry. Production recovery requires the Worker to
 durably implement that task table, return the same outcome for an exact task
 replay, and reject a changed request under the same task ID.
 
+The reference coordinator makes this distinction executable: a fresh atomic
+claim can invoke once, whereas an exact journal replay can only query task
+state. Transport failure is reported as uncertain without dropping the claim.
+`NOT_FOUND` does not authorize resubmission because the Worker might have
+performed an irreversible effect before losing or failing to expose state.
+Recovery lookup remains legal after the execution deadline only inside the
+original bounded retention window.
+
 The journal deliberately stores the private invocation digest, not prompts,
 payloads, credentials, or model input. After restart, an authenticated client
 retry or deterministic profile mapper must reproduce the exact invocation;

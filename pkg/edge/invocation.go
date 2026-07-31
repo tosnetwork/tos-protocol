@@ -184,10 +184,30 @@ func (c *Core) mapAndClaimPaidExecution(
 		RetainUntilUnixMillis: ceilUnixMillis(state.RetainUntil),
 		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 	}
+	if state.State == journal.StateRunning {
+		claimed, err := c.ClaimPaidExecution(
+			scope,
+			expectedRevision,
+			paymentAuthorization,
+			request,
+		)
+		if err != nil {
+			return ClaimedInvocation{}, err
+		}
+		prepared, err := worker.PrepareTaskLookup(claimed.Request)
+		if err != nil {
+			return claimed, fmt.Errorf(
+				"validate mapped Worker recovery request: %w",
+				err,
+			)
+		}
+		claimed.Request = prepared
+		return claimed, nil
+	}
 	request, err = worker.PrepareInvocation(request)
 	if err != nil {
 		return ClaimedInvocation{}, fmt.Errorf(
-			"validate mapped Worker invocation: %w",
+			"validate mapped Worker invocation request: %w",
 			err,
 		)
 	}

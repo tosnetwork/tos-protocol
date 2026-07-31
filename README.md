@@ -127,6 +127,12 @@ deterministically replays the same task after restart. A startup-only,
 immutable registry selects at most 128 mappers by exact profile ID, version,
 extension set, and operation; it has no wildcard fallback or request-driven
 growth. No production vertical mapper is included in this repository.
+The internal dispatch coordinator now performs the only safe next action:
+one newly committed claim may call `Invoke` once, while every exact replay
+uses read-only `GetTask`, including after the execution deadline while bounded
+retention remains live. RPC failure returns an explicit `uncertain` result
+that still exposes a defensive copy of the durable claim; even `NOT_FOUND`
+never authorizes automatic resubmission.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, failed/canceled refund/charging policy, production
 signer adapter, isolated executor, and public receipt route remain

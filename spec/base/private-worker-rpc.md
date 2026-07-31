@@ -97,6 +97,16 @@ receipt path as a live invocation result. The recovery observation itself is
 also opaque: an unvalidated caller-constructed value exposes neither a status
 nor a result.
 
+The reference dispatch coordinator branches only on the atomic journal claim
+disposition. `claimed` permits one `Invoke`; `replay` permits only `GetTask`.
+An Invoke or lookup error returns `uncertain` together with a defensive copy of
+the already committed claim, so error handling does not erase the recovery
+identity. A valid `NOT_FOUND` response is not proof of non-execution and never
+becomes retry permission. Task lookup uses a distinct local-policy preflight:
+it permits the original execution deadline to have elapsed, but only while the
+bounded retention deadline is still live. First dispatch continues to require
+a future execution deadline.
+
 Cancellation uses the same request ID, task ID, and request-digest tuple; the
 Worker response must echo all three before Edge trusts its `accepted` flag. A
 request-ID-only cancellation is not sufficient because it could target a
