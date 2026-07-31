@@ -251,6 +251,9 @@ func TestObserverVerifiesExactFinalPayment(t *testing.T) {
 		QuoteID:            fixture.material.QuoteID,
 		RequestID:          fixture.material.RequestID,
 		Reference:          fixture.material.Reference,
+		Payer:              fixture.material.Payer,
+		Payee:              fixture.material.Payee,
+		AmountNanoTOS:      fixture.material.PriceNanoTOS,
 		MinimumMasterSeqno: 100,
 	}
 	if resolver.ref != expectedReference {
@@ -314,7 +317,8 @@ func TestReconcileVerifiesAppliedPaymentAfterAuthorizationExpiry(t *testing.T) {
 	if resolver.ref != (chain.PaymentReference{
 		Network: binding.Network, AuthorizationID: binding.AuthorizationID,
 		QuoteID: binding.QuoteID, RequestID: binding.RequestID,
-		Reference: binding.Reference, MinimumMasterSeqno: 101,
+		Reference: binding.Reference, Payer: binding.Payer, Payee: binding.Payee,
+		AmountNanoTOS: binding.AmountNanoTOS, MinimumMasterSeqno: 101,
 	}) {
 		t.Fatalf("reconciliation reference=%#v", resolver.ref)
 	}

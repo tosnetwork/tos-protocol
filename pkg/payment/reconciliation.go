@@ -90,7 +90,8 @@ func (o *Observer) Reconcile(
 	reference := chain.PaymentReference{
 		Network: binding.Network, AuthorizationID: binding.AuthorizationID,
 		QuoteID: binding.QuoteID, RequestID: binding.RequestID,
-		Reference:          binding.Reference,
+		Reference: binding.Reference, Payer: binding.Payer, Payee: binding.Payee,
+		AmountNanoTOS:      binding.AmountNanoTOS,
 		MinimumMasterSeqno: minimumMasterSeqno,
 	}
 	queryContext, cancel := context.WithTimeout(ctx, o.policy.QueryTimeout)

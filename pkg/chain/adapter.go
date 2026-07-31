@@ -41,11 +41,18 @@ type ServiceState struct {
 }
 
 type PaymentReference struct {
-	Network            string
-	AuthorizationID    string
-	QuoteID            string
-	RequestID          string
-	Reference          string
+	Network         string
+	AuthorizationID string
+	QuoteID         string
+	RequestID       string
+	Reference       string
+	// Payer, Payee, and AmountNanoTOS are the already authenticated payment
+	// expectations. Supplying them lets a stateless chain adapter return an
+	// exact negative observation without retaining an unbounded
+	// process-local transaction cache.
+	Payer              string
+	Payee              string
+	AmountNanoTOS      uint64
 	MinimumMasterSeqno uint64
 }
 

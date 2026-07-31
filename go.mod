@@ -6,6 +6,7 @@ require (
 	connectrpc.com/connect v1.19.1
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/xssnick/tonutils-go v1.16.0
 	go.etcd.io/bbolt v1.4.3
 	google.golang.org/protobuf v1.36.11
 )

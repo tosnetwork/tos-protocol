@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "network": "testnet",
+  "endpoints": [
+    "https://rpc-1.example/jsonRPC",
+    "https://rpc-2.example/jsonRPC",
+    "https://rpc-3.example/jsonRPC"
+  ],
+  "quorum": 2,
+  "queryTimeoutMillis": 5000,
+  "maxResponseBytes": 4194304,
+  "clientKeyLeaseSeconds": 300,
+  "readinessMaxAgeSeconds": 120,
+  "allowedServiceCodeHashes": [
+    "tvm-cell-sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "paymentQueryTimeoutMillis": 3000,
+  "paymentMaxObservationAgeSeconds": 300,
+  "allowOverpayment": false
+}

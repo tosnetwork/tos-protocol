@@ -15,9 +15,10 @@ Schemas, and fixed conformance vectors.
 The security boundary is intentional:
 
 - `tos-edge` is the public control-plane process. The initial binary serves
-  health and discovery documents only; public paid invocation stays disabled
-  until live TOS authority/client-key resolution, the production TOS payment
-  adapter/watcher policy, and isolated execution are wired end to end.
+  health and discovery documents only. It can fail closed against an explicitly
+  configured live TOS authority/client-key/payment runtime, but public paid
+  invocation stays disabled until reviewed profile mappers, isolated
+  execution, production signing, and receipt delivery are wired end to end.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs.
@@ -50,6 +51,11 @@ go run ./cmd/tos-ard-registry \
   -catalog ./examples/ai-catalog.json
 ```
 
+After replacing the placeholder controller, RPC URLs, and reviewed contract
+code hash, add `-tos-chain-config ./examples/tos-chain.json` to make startup
+and `/readyz` fail closed against the live TOS quorum. This does not expose an
+invocation route.
+
 Remote crawling, federation, payment forwarding, and invocation are
 deliberately not enabled in this bootstrap. They require the SSRF, provenance,
 authentication, replay, and bounded-state controls described in the
@@ -77,9 +83,13 @@ descriptor -> controller-signed manifest -> profile negotiation
 The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
 deadline. `tos-edge` still exposes discovery only until manifest-backed
-authorization is connected to the live TOS contract/RPC decoder and durable
-payment watching, production profile mappers, execution isolation, and public
-delivery are implemented.
+authorization uses the configured live TOS runtime in a public request path,
+with production profile mappers, execution isolation, signing, and public
+delivery. When both the chain runtime and request journal are configured, the
+bounded durable payment reconciliation scheduler is enabled automatically;
+consecutive chain or entry failures exponentially back off its one shared
+timer to a fixed operator limit, and a successful batch resets the base
+interval.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
@@ -144,16 +154,22 @@ execution still owns the durable `running` request before sending the
 request/task/digest tuple to the Worker. Accepted, rejected, and ambiguous
 cancellation attempts preserve the claim and never create a terminal receipt;
 only a later validated `GetTask` terminal observation can do that.
-The concrete TOS payment contract adapter, `tos-edge` binary configuration,
-adaptive retry policy, failed/canceled refund/charging policy, production
-signer adapter, isolated executor, and public receipt route remain
-intentionally disconnected. The private RPC now
+The concrete quorum TOS authority/client-key/native-payment adapters are now
+implemented, exercised against a three-node chain, and available to `tos-edge`
+through strict operator startup configuration and `/readyz`. Failed/canceled
+refund and charging policy, the production signer adapter, isolated executor,
+and public receipt route remain intentionally disconnected.
+The private RPC now
 defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A
 production Worker still needs a durable bounded task table and idempotent
 `Invoke` implementation: the Edge claim alone does not prove that a Worker
 accepted or completed an RPC interrupted by a crash. None of these
 internal boundaries enable public actions by themselves.
+
+The chain mapping, quorum rules, canonical references, startup composition,
+and local rehearsal are documented in
+[`docs/tos-chain-adapters.md`](docs/tos-chain-adapters.md).
 
 ## Repository map
 
@@ -163,6 +179,7 @@ cmd/tos-edge/         public Edge Core entry point
 cmd/tos-ard-registry/ ARD HTTP Registry entry point
 pkg/ard/              pinned ARD v0.9 data model and validation
 pkg/chain/            bounded JSON-RPC adapter
+pkg/toschain/         quorum TOS authority, client-key and payment composition
 pkg/edge/             safe public discovery server
 pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes

@@ -120,6 +120,9 @@ func (o *Observer) Observe(
 		QuoteID:            material.QuoteID,
 		RequestID:          material.RequestID,
 		Reference:          material.Reference,
+		Payer:              material.Payer,
+		Payee:              material.Payee,
+		AmountNanoTOS:      material.PriceNanoTOS,
 		MinimumMasterSeqno: minimumMasterSeqno,
 	}
 	queryContext, cancel := context.WithTimeout(ctx, o.policy.QueryTimeout)

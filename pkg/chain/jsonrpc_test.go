@@ -25,6 +25,41 @@ func TestClientPropagatesRPCError(t *testing.T) {
 	}
 }
 
+func TestClientAcceptsTOSSuccessEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"ok":true,"jsonrpc":"2.0","id":1,"result":{"height":7}}`))
+	}))
+	defer server.Close()
+
+	client, _ := NewClient(server.URL, time.Second, 1024)
+	var result struct {
+		Height uint64 `json:"height"`
+	}
+	if err := client.Call(context.Background(), "getHeight", nil, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Height != 7 {
+		t.Fatalf("height = %d", result.Height)
+	}
+}
+
+func TestClientPropagatesTOSErrorEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"ok":false,"jsonrpc":"2.0","id":1,"error":"cannot locate transaction","code":-32603}`))
+	}))
+	defer server.Close()
+
+	client, _ := NewClient(server.URL, time.Second, 1024)
+	err := client.Call(context.Background(), "getTransactions", nil, nil)
+	var rpcError *RPCError
+	if !errors.As(err, &rpcError) || rpcError.Code != -32603 ||
+		rpcError.Message != "cannot locate transaction" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestClientBoundsResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte(strings.Repeat("x", 65)))
@@ -34,6 +69,22 @@ func TestClientBoundsResponse(t *testing.T) {
 	client, _ := NewClient(server.URL, time.Second, 64)
 	if err := client.Call(context.Background(), "getSomething", nil, nil); err == nil {
 		t.Fatal("oversized response accepted")
+	}
+}
+
+func TestClientRejectsRedirect(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	defer target.Close()
+	redirect := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer redirect.Close()
+
+	client, _ := NewClient(redirect.URL, time.Second, 1024)
+	if err := client.Call(context.Background(), "getSomething", nil, nil); err == nil {
+		t.Fatal("JSON-RPC redirect accepted")
 	}
 }
 
@@ -57,6 +108,14 @@ func TestClientRejectsAmbiguousOrMismatchedResponses(t *testing.T) {
 		{
 			name: "missing result and error",
 			body: `{"jsonrpc":"2.0","id":1}`,
+		},
+		{
+			name: "false ok without error",
+			body: `{"ok":false,"jsonrpc":"2.0","id":1}`,
+		},
+		{
+			name: "string error without code",
+			body: `{"ok":false,"jsonrpc":"2.0","id":1,"error":"failed"}`,
 		},
 	}
 	for _, test := range tests {

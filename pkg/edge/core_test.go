@@ -306,6 +306,33 @@ type coreBlockingPaymentResolver struct {
 	once    sync.Once
 }
 
+type coreRecoveringPaymentResolver struct {
+	mu            sync.Mutex
+	failRemaining int
+	state         chain.PaymentState
+	calls         []time.Time
+}
+
+func (r *coreRecoveringPaymentResolver) ObservePayment(
+	_ context.Context,
+	_ chain.PaymentReference,
+) (chain.PaymentState, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, time.Now())
+	if r.failRemaining > 0 {
+		r.failRemaining--
+		return chain.PaymentState{}, errors.New("injected chain outage")
+	}
+	return r.state, nil
+}
+
+func (r *coreRecoveringPaymentResolver) callTimes() []time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]time.Time(nil), r.calls...)
+}
+
 func (r *coreBlockingPaymentResolver) ObservePayment(
 	ctx context.Context,
 	_ chain.PaymentReference,
@@ -1069,6 +1096,7 @@ func TestCorePaymentReconciliationLoopReportsHealth(t *testing.T) {
 	config.CleanupInterval = time.Hour
 	config.PaymentObserver = observer
 	config.PaymentReconciliationInterval = 10 * time.Millisecond
+	config.PaymentReconciliationMaxInterval = 40 * time.Millisecond
 	config.PaymentReconciliationTimeout = 100 * time.Millisecond
 	config.PaymentReconciliationBatch = 1
 	now := time.Unix(1_800_000_000, 0).UTC()
@@ -1093,6 +1121,123 @@ func TestCorePaymentReconciliationLoopReportsHealth(t *testing.T) {
 	t.Fatalf(
 		"payment reconciliation loop did not run: health=%#v error=%v",
 		health, healthErr,
+	)
+}
+
+func TestPaymentReconciliationBackoffBoundaries(t *testing.T) {
+	base := time.Minute
+	maximum := 8 * time.Minute
+	tests := []struct {
+		name    string
+		current time.Duration
+		failed  bool
+		want    time.Duration
+	}{
+		{name: "first failure", current: base, failed: true, want: 2 * base},
+		{name: "second failure", current: 2 * base, failed: true, want: 4 * base},
+		{name: "cap", current: 8 * base, failed: true, want: maximum},
+		{name: "non power cap", current: 5 * base, failed: true, want: maximum},
+		{name: "success resets", current: maximum, failed: false, want: base},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := nextPaymentReconciliationInterval(
+				test.current, base, maximum, test.failed,
+			); got != test.want {
+				t.Fatalf("next interval = %s, want %s", got, test.want)
+			}
+		})
+	}
+	if got := nextPaymentReconciliationInterval(0, 0, 0, true); got != 0 {
+		t.Fatalf("disabled next interval = %s, want 0s", got)
+	}
+}
+
+func TestCorePaymentReconciliationBacksOffAndRecovers(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized := fixture.authorizePayment(t, "backoff-payment-0001")
+	material, err := authorized.ObservationMaterial(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := "sha256:" + strings.Repeat("9", 64)
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := journal.DefaultLimits()
+	store, err := journal.Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.Begin(scope, intent, now, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := store.ApplyPayment(journal.PaymentAdmission{
+		Scope: scope, IntentDigest: intent,
+		AuthorizationID: material.AuthorizationID,
+		QuoteID:         material.QuoteID, Reference: material.Reference,
+		Payer: material.Payer, Payee: material.Payee,
+		AmountNanoTOS:         material.PriceNanoTOS,
+		QuoteEnvelopeDigest:   material.QuoteEnvelopeDigest,
+		PaymentEnvelopeDigest: material.PaymentEnvelopeDigest,
+		ObservedMasterSeqno:   101, ObservedAt: now,
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	resolver := &coreRecoveringPaymentResolver{
+		failRemaining: 2,
+		state: chain.PaymentState{
+			Network: material.Network, AuthorizationID: material.AuthorizationID,
+			QuoteID: material.QuoteID, RequestID: material.RequestID,
+			Reference: material.Reference, Confirmed: true, Finalized: true,
+			AmountNanoTOS: material.PriceNanoTOS,
+			Payer:         material.Payer, Payee: material.Payee,
+			ObservedMasterSeqno: 102, ObservedAt: now,
+		},
+	}
+	observer, err := payment.NewObserver(resolver, payment.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultCoreConfig(path)
+	config.CleanupInterval = time.Hour
+	config.PaymentObserver = observer
+	config.PaymentReconciliationInterval = 20 * time.Millisecond
+	config.PaymentReconciliationMaxInterval = 80 * time.Millisecond
+	config.PaymentReconciliationTimeout = 100 * time.Millisecond
+	config.PaymentReconciliationBatch = 1
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		health, healthErr := core.Health()
+		calls := resolver.callTimes()
+		if len(calls) >= 3 && healthErr == nil &&
+			health.LastPaymentReconciliationSucceeded &&
+			health.PaymentReconciliationConsecutiveFailures == 0 &&
+			health.NextPaymentReconciliationInterval ==
+				config.PaymentReconciliationInterval {
+			if gap := calls[1].Sub(calls[0]); gap < 30*time.Millisecond {
+				t.Fatalf("first backoff gap = %s, want at least 30ms", gap)
+			}
+			if gap := calls[2].Sub(calls[1]); gap < 60*time.Millisecond {
+				t.Fatalf("second backoff gap = %s, want at least 60ms", gap)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	health, healthErr := core.Health()
+	t.Fatalf(
+		"payment reconciliation did not recover: calls=%d health=%#v error=%v",
+		len(resolver.callTimes()), health, healthErr,
 	)
 }
 
@@ -1141,6 +1286,7 @@ func TestCoreCloseCancelsScheduledPaymentReconciliation(t *testing.T) {
 	config.CleanupInterval = time.Hour
 	config.PaymentObserver = observer
 	config.PaymentReconciliationInterval = 10 * time.Millisecond
+	config.PaymentReconciliationMaxInterval = 40 * time.Millisecond
 	config.PaymentReconciliationTimeout = time.Minute
 	config.PaymentReconciliationBatch = 1
 	core, err := openCore(config, func() time.Time { return now })
@@ -1173,6 +1319,11 @@ func TestCoreRejectsInvalidCleanupConfiguration(t *testing.T) {
 	if _, err := OpenCore(config); err == nil {
 		t.Fatal("payment reconciliation settings without observer accepted")
 	}
+	config = DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.PaymentReconciliationMaxInterval = time.Minute
+	if _, err := OpenCore(config); err == nil {
+		t.Fatal("payment reconciliation max interval without observer accepted")
+	}
 	observer, err := payment.NewObserver(
 		corePaymentResolver{},
 		payment.DefaultPolicy(),
@@ -1183,11 +1334,17 @@ func TestCoreRejectsInvalidCleanupConfiguration(t *testing.T) {
 	config = DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
 	config.PaymentObserver = observer
 	config.PaymentReconciliationInterval = time.Minute
+	config.PaymentReconciliationMaxInterval = 15 * time.Minute
 	config.PaymentReconciliationTimeout = time.Second
 	config.PaymentReconciliationBatch =
 		config.RequestJournalLimits.MaxPrunePerWrite + 1
 	if _, err := OpenCore(config); err == nil {
 		t.Fatal("oversized payment reconciliation batch accepted")
+	}
+	config.PaymentReconciliationBatch = 1
+	config.PaymentReconciliationMaxInterval = 30 * time.Second
+	if _, err := OpenCore(config); err == nil {
+		t.Fatal("payment reconciliation maximum below base accepted")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -37,10 +38,31 @@ func NewClient(endpoint string, timeout time.Duration, maxBody int64) (*Client, 
 	if endpoint == "" || timeout <= 0 || maxBody <= 0 {
 		return nil, errors.New("invalid JSON-RPC client configuration")
 	}
+	dialTimeout := timeout
+	if dialTimeout > 10*time.Second {
+		dialTimeout = 10 * time.Second
+	}
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   4,
+		MaxConnsPerHost:       32,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+		DisableCompression:    true,
+	}
 	return &Client{
 		endpoint: endpoint,
-		client:   &http.Client{Timeout: timeout},
-		maxBody:  maxBody,
+		client: &http.Client{
+			Timeout: timeout, Transport: transport,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		maxBody: maxBody,
 	}, nil
 }
 
@@ -85,10 +107,17 @@ func (c *Client) Call(ctx context.Context, method string, params, result interfa
 		return errors.New("JSON-RPC response exceeds byte limit")
 	}
 	var envelope struct {
-		JSONRPC string          `json:"jsonrpc"`
-		ID      uint64          `json:"id"`
-		Result  json.RawMessage `json:"result"`
-		Error   *RPCError       `json:"error"`
+		JSONRPC string `json:"jsonrpc"`
+		ID      uint64 `json:"id"`
+		// TOS JSON-RPC includes an explicit success discriminator in addition
+		// to the standard result/error members. Keep it optional so the client
+		// remains compatible with strict JSON-RPC 2.0 servers.
+		OK     *bool           `json:"ok,omitempty"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+		// TOS currently emits its numeric error code beside a string-valued
+		// error. Standard JSON-RPC servers put both fields in an error object.
+		Code *int `json:"code,omitempty"`
 	}
 	if err := jsonstrict.Decode(body, &envelope); err != nil {
 		return fmt.Errorf("decode JSON-RPC response: %w", err)
@@ -99,12 +128,19 @@ func (c *Client) Call(ctx context.Context, method string, params, result interfa
 	if envelope.ID != requestID {
 		return errors.New("JSON-RPC response ID does not match request")
 	}
+	rpcError, err := decodeRPCError(envelope.Error, envelope.Code)
+	if err != nil {
+		return err
+	}
+	if envelope.OK != nil && !*envelope.OK && rpcError == nil {
+		return errors.New("TOS JSON-RPC response reports failure without an error")
+	}
 	hasResult := len(envelope.Result) != 0
-	if envelope.Error != nil && hasResult {
+	if rpcError != nil && hasResult {
 		return errors.New("JSON-RPC response contains both result and error")
 	}
-	if envelope.Error != nil {
-		return envelope.Error
+	if rpcError != nil {
+		return rpcError
 	}
 	if !hasResult {
 		return errors.New("JSON-RPC response has no result")
@@ -116,4 +152,37 @@ func (c *Client) Call(ctx context.Context, method string, params, result interfa
 		return fmt.Errorf("decode JSON-RPC result: %w", err)
 	}
 	return nil
+}
+
+func decodeRPCError(raw json.RawMessage, tosCode *int) (*RPCError, error) {
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		if tosCode != nil {
+			return nil, errors.New("TOS JSON-RPC response has an error code without an error")
+		}
+		return nil, nil
+	}
+	if raw[0] == '"' {
+		if tosCode == nil {
+			return nil, errors.New("TOS JSON-RPC string error has no numeric code")
+		}
+		var message string
+		if err := jsonstrict.Decode(raw, &message); err != nil {
+			return nil, fmt.Errorf("decode TOS JSON-RPC error: %w", err)
+		}
+		if message == "" {
+			return nil, errors.New("TOS JSON-RPC error message is empty")
+		}
+		return &RPCError{Code: *tosCode, Message: message}, nil
+	}
+	if tosCode != nil {
+		return nil, errors.New("JSON-RPC response mixes standard and TOS error formats")
+	}
+	var rpcError RPCError
+	if err := jsonstrict.Decode(raw, &rpcError); err != nil {
+		return nil, fmt.Errorf("decode JSON-RPC error: %w", err)
+	}
+	if rpcError.Message == "" {
+		return nil, errors.New("JSON-RPC error message is empty")
+	}
+	return &rpcError, nil
 }

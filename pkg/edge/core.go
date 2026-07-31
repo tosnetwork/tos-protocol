@@ -21,27 +21,32 @@ import (
 )
 
 const (
-	DefaultCleanupInterval    = 30 * time.Second
-	minCleanupInterval        = 10 * time.Millisecond
-	maxCleanupInterval        = time.Hour
-	minReconciliationInterval = 10 * time.Millisecond
-	maxReconciliationInterval = 24 * time.Hour
-	minReconciliationTimeout  = 10 * time.Millisecond
-	maxReconciliationTimeout  = 10 * time.Minute
-	minReceiptLifetime        = time.Second
-	maxReceiptLifetime        = 10 * time.Minute
+	DefaultCleanupInterval                  = 30 * time.Second
+	DefaultPaymentReconciliationInterval    = time.Minute
+	DefaultPaymentReconciliationMaxInterval = 15 * time.Minute
+	DefaultPaymentReconciliationTimeout     = 30 * time.Second
+	DefaultPaymentReconciliationBatch       = 8
+	minCleanupInterval                      = 10 * time.Millisecond
+	maxCleanupInterval                      = time.Hour
+	minReconciliationInterval               = 10 * time.Millisecond
+	maxReconciliationInterval               = 24 * time.Hour
+	minReconciliationTimeout                = 10 * time.Millisecond
+	maxReconciliationTimeout                = 10 * time.Minute
+	minReceiptLifetime                      = time.Second
+	maxReceiptLifetime                      = 10 * time.Minute
 )
 
 // CoreConfig contains only generic Edge Core state policy. Vertical runtime,
 // wallet, and owner policy configuration remain outside this package.
 type CoreConfig struct {
-	RequestJournalPath            string
-	RequestJournalLimits          journal.Limits
-	CleanupInterval               time.Duration
-	PaymentObserver               *payment.Observer
-	PaymentReconciliationInterval time.Duration
-	PaymentReconciliationTimeout  time.Duration
-	PaymentReconciliationBatch    int
+	RequestJournalPath               string
+	RequestJournalLimits             journal.Limits
+	CleanupInterval                  time.Duration
+	PaymentObserver                  *payment.Observer
+	PaymentReconciliationInterval    time.Duration
+	PaymentReconciliationMaxInterval time.Duration
+	PaymentReconciliationTimeout     time.Duration
+	PaymentReconciliationBatch       int
 }
 
 func DefaultCoreConfig(journalPath string) CoreConfig {
@@ -53,22 +58,24 @@ func DefaultCoreConfig(journalPath string) CoreConfig {
 }
 
 type CoreHealth struct {
-	RequestRecords                     uint64
-	NonceClaims                        uint64
-	BudgetUsages                       uint64
-	PaymentRecords                     uint64
-	ReceiptRecords                     uint64
-	ExecutionRecords                   uint64
-	JournalFileBytes                   int64
-	LastCleanupAt                      time.Time
-	LastCleanupDeleted                 int
-	LastCleanupHasMore                 bool
-	LastCleanupSucceeded               bool
-	LastPaymentReconciliationAt        time.Time
-	LastPaymentReconciliationScanned   int
-	LastPaymentReconciliationFailed    int
-	LastPaymentReconciliationHasMore   bool
-	LastPaymentReconciliationSucceeded bool
+	RequestRecords                           uint64
+	NonceClaims                              uint64
+	BudgetUsages                             uint64
+	PaymentRecords                           uint64
+	ReceiptRecords                           uint64
+	ExecutionRecords                         uint64
+	JournalFileBytes                         int64
+	LastCleanupAt                            time.Time
+	LastCleanupDeleted                       int
+	LastCleanupHasMore                       bool
+	LastCleanupSucceeded                     bool
+	LastPaymentReconciliationAt              time.Time
+	LastPaymentReconciliationScanned         int
+	LastPaymentReconciliationFailed          int
+	LastPaymentReconciliationHasMore         bool
+	LastPaymentReconciliationSucceeded       bool
+	NextPaymentReconciliationInterval        time.Duration
+	PaymentReconciliationConsecutiveFailures uint32
 }
 
 type PaymentReconciliationFailure struct {
@@ -129,15 +136,16 @@ type ClaimedInvocation struct {
 // Core owns durable request replay state and its bounded cleanup lifecycle.
 // It intentionally has no public HTTP action handler yet.
 type Core struct {
-	requests                      *journal.Store
-	limits                        journal.Limits
-	now                           func() time.Time
-	paymentObserver               *payment.Observer
-	paymentReconciliationInterval time.Duration
-	paymentReconciliationTimeout  time.Duration
-	paymentReconciliationBatch    int
-	runContext                    context.Context
-	cancelRun                     context.CancelFunc
+	requests                         *journal.Store
+	limits                           journal.Limits
+	now                              func() time.Time
+	paymentObserver                  *payment.Observer
+	paymentReconciliationInterval    time.Duration
+	paymentReconciliationMaxInterval time.Duration
+	paymentReconciliationTimeout     time.Duration
+	paymentReconciliationBatch       int
+	runContext                       context.Context
+	cancelRun                        context.CancelFunc
 
 	stop      chan struct{}
 	done      chan struct{}
@@ -150,12 +158,14 @@ type Core struct {
 	lastMore      bool
 	lastError     error
 
-	paymentReconciliationSlot        chan struct{}
-	lastPaymentReconciliationAt      time.Time
-	lastPaymentReconciliationScanned int
-	lastPaymentReconciliationFailed  int
-	lastPaymentReconciliationMore    bool
-	lastPaymentReconciliationError   error
+	paymentReconciliationSlot                chan struct{}
+	lastPaymentReconciliationAt              time.Time
+	lastPaymentReconciliationScanned         int
+	lastPaymentReconciliationFailed          int
+	lastPaymentReconciliationMore            bool
+	lastPaymentReconciliationError           error
+	nextPaymentReconciliationInterval        time.Duration
+	paymentReconciliationConsecutiveFailures uint32
 }
 
 func OpenCore(config CoreConfig) (*Core, error) {
@@ -181,12 +191,14 @@ func openCore(config CoreConfig, now func() time.Time) (*Core, error) {
 	core := &Core{
 		requests: requests, limits: config.RequestJournalLimits,
 		now: now, stop: make(chan struct{}), done: make(chan struct{}),
-		paymentObserver:               config.PaymentObserver,
-		paymentReconciliationInterval: config.PaymentReconciliationInterval,
-		paymentReconciliationTimeout:  config.PaymentReconciliationTimeout,
-		paymentReconciliationBatch:    config.PaymentReconciliationBatch,
-		runContext:                    runContext, cancelRun: cancelRun,
-		paymentReconciliationSlot: make(chan struct{}, 1),
+		paymentObserver:                  config.PaymentObserver,
+		paymentReconciliationInterval:    config.PaymentReconciliationInterval,
+		paymentReconciliationMaxInterval: config.PaymentReconciliationMaxInterval,
+		paymentReconciliationTimeout:     config.PaymentReconciliationTimeout,
+		paymentReconciliationBatch:       config.PaymentReconciliationBatch,
+		runContext:                       runContext, cancelRun: cancelRun,
+		paymentReconciliationSlot:         make(chan struct{}, 1),
+		nextPaymentReconciliationInterval: config.PaymentReconciliationInterval,
 	}
 	go core.lifecycleLoop(config.CleanupInterval)
 	return core, nil
@@ -1254,7 +1266,20 @@ func (c *Core) PruneNow() (deleted int, more bool, err error) {
 	return deleted, more, err
 }
 
+// Liveness reports only local durable-state and cleanup failures. External
+// chain reconciliation failures belong to readiness and must not trigger a
+// process restart loop.
+func (c *Core) Liveness() (CoreHealth, error) {
+	return c.health(false)
+}
+
+// Health includes external payment reconciliation and is therefore suitable
+// for readiness and operator diagnostics, not process liveness.
 func (c *Core) Health() (CoreHealth, error) {
+	return c.health(true)
+}
+
+func (c *Core) health(includeReconciliation bool) (CoreHealth, error) {
 	stats, err := c.requests.Stats()
 	if err != nil {
 		return CoreHealth{}, err
@@ -1276,14 +1301,22 @@ func (c *Core) Health() (CoreHealth, error) {
 		LastPaymentReconciliationSucceeded: !c.lastPaymentReconciliationAt.IsZero() &&
 			c.lastPaymentReconciliationError == nil &&
 			c.lastPaymentReconciliationFailed == 0,
+		NextPaymentReconciliationInterval:        c.nextPaymentReconciliationInterval,
+		PaymentReconciliationConsecutiveFailures: c.paymentReconciliationConsecutiveFailures,
 	}
 	if c.lastError != nil {
 		return output, fmt.Errorf("Edge Core request cleanup: %w", c.lastError)
 	}
-	if c.lastPaymentReconciliationError != nil {
+	if includeReconciliation && c.lastPaymentReconciliationError != nil {
 		return output, fmt.Errorf(
 			"Edge Core payment reconciliation: %w",
 			c.lastPaymentReconciliationError,
+		)
+	}
+	if includeReconciliation && c.lastPaymentReconciliationFailed != 0 {
+		return output, fmt.Errorf(
+			"Edge Core payment reconciliation has %d failed entries",
+			c.lastPaymentReconciliationFailed,
 		)
 	}
 	return output, nil
@@ -1293,12 +1326,12 @@ func (c *Core) lifecycleLoop(cleanupInterval time.Duration) {
 	defer close(c.done)
 	cleanupTicker := time.NewTicker(cleanupInterval)
 	defer cleanupTicker.Stop()
-	var reconciliationTicker *time.Ticker
+	var reconciliationTimer *time.Timer
 	var reconciliationTicks <-chan time.Time
 	if c.paymentObserver != nil {
-		reconciliationTicker = time.NewTicker(c.paymentReconciliationInterval)
-		reconciliationTicks = reconciliationTicker.C
-		defer reconciliationTicker.Stop()
+		reconciliationTimer = time.NewTimer(c.paymentReconciliationInterval)
+		reconciliationTicks = reconciliationTimer.C
+		defer reconciliationTimer.Stop()
 	}
 	for {
 		select {
@@ -1314,7 +1347,8 @@ func (c *Core) lifecycleLoop(cleanupInterval time.Duration) {
 				c.paymentReconciliationBatch,
 			)
 			cancel()
-			c.recordPaymentReconciliation(report, err)
+			nextInterval := c.recordPaymentReconciliation(report, err)
+			reconciliationTimer.Reset(nextInterval)
 		case <-c.stop:
 			return
 		}
@@ -1333,7 +1367,7 @@ func (c *Core) recordCleanup(deleted int, more bool, err error) {
 func (c *Core) recordPaymentReconciliation(
 	report PaymentReconciliationReport,
 	err error,
-) {
+) time.Duration {
 	c.healthMu.Lock()
 	defer c.healthMu.Unlock()
 	c.lastPaymentReconciliationAt = c.now().UTC()
@@ -1341,11 +1375,55 @@ func (c *Core) recordPaymentReconciliation(
 	c.lastPaymentReconciliationFailed = report.Failed
 	c.lastPaymentReconciliationMore = report.HasMore
 	c.lastPaymentReconciliationError = err
+	failed := err != nil || report.Failed != 0
+	if failed {
+		if c.paymentReconciliationConsecutiveFailures < ^uint32(0) {
+			c.paymentReconciliationConsecutiveFailures++
+		}
+	} else {
+		c.paymentReconciliationConsecutiveFailures = 0
+	}
+	c.nextPaymentReconciliationInterval = nextPaymentReconciliationInterval(
+		c.nextPaymentReconciliationInterval,
+		c.paymentReconciliationInterval,
+		c.paymentReconciliationMaxInterval,
+		failed,
+	)
+	return c.nextPaymentReconciliationInterval
+}
+
+// nextPaymentReconciliationInterval implements a bounded deterministic
+// exponential backoff. The lifecycle has one timer and one in-flight slot, so
+// this calculation cannot create timers, goroutines, or waiter state per
+// failed payment or RPC request.
+func nextPaymentReconciliationInterval(
+	current time.Duration,
+	base time.Duration,
+	maximum time.Duration,
+	failed bool,
+) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	if !failed {
+		return base
+	}
+	if maximum < base {
+		maximum = base
+	}
+	if current < base {
+		current = base
+	}
+	if current >= maximum || current > maximum-current {
+		return maximum
+	}
+	return current * 2
 }
 
 func validatePaymentReconciliationConfig(config CoreConfig) error {
 	if config.PaymentObserver == nil {
 		if config.PaymentReconciliationInterval != 0 ||
+			config.PaymentReconciliationMaxInterval != 0 ||
 			config.PaymentReconciliationTimeout != 0 ||
 			config.PaymentReconciliationBatch != 0 {
 			return errors.New(
@@ -1356,6 +1434,9 @@ func validatePaymentReconciliationConfig(config CoreConfig) error {
 	}
 	if config.PaymentReconciliationInterval < minReconciliationInterval ||
 		config.PaymentReconciliationInterval > maxReconciliationInterval ||
+		config.PaymentReconciliationMaxInterval <
+			config.PaymentReconciliationInterval ||
+		config.PaymentReconciliationMaxInterval > maxReconciliationInterval ||
 		config.PaymentReconciliationTimeout < minReconciliationTimeout ||
 		config.PaymentReconciliationTimeout > maxReconciliationTimeout ||
 		config.PaymentReconciliationBatch <= 0 ||
