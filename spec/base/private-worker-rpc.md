@@ -70,6 +70,11 @@ byte limits and deadline, commits the output digest and bounded usage to a
 receipt, and sends only canonical receipt bytes to purpose-specific signing
 key custody. The Worker never receives that key.
 
+RPC failure text is not receipt material. The generic Edge failure path emits
+only a typed `failed`, `canceled`, or `timed_out` status with an empty usage
+array and zero charge. A profile that permits verified partial-work charging
+must define and test that policy separately before enabling it.
+
 ## Non-goals
 
 This client does not expose a public invocation route, authenticate an

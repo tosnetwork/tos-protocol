@@ -76,6 +76,12 @@ validity, key role, and signature. Concurrent semantically identical signing
 attempts may create more than one envelope but must resolve to exactly one
 durable receipt and request transition.
 
+Do not persist Worker, adapter, model, or signer error strings as terminal
+protocol state. Map a non-success receipt status to one deterministic bounded
+error code. The generic fallback is zero-charge with an explicit empty usage
+array and no result digest. Reject an early timeout and re-check payment
+reorganization immediately before atomic application.
+
 ## Parsing and transport
 
 Reject unknown fields in security-sensitive typed values, duplicate JSON or

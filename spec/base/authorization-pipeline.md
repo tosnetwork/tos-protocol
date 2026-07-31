@@ -143,3 +143,10 @@ output. Edge Core requires the corresponding paid request to remain running,
 constructs only payment-bound canonical receipt bytes, delegates signing to a
 purpose-specific custody interface, and immediately runs the normal manifest
 receipt verifier before persistence.
+
+The same issuer handles non-success without trusting arbitrary error objects.
+It accepts only `failed`, `canceled`, or `timed_out`, emits zero charge, an
+empty usage array and no result digest, and derives the durable error code from
+that status. Timeout is rejected before the quote deadline. This is the base
+fail-closed policy; profiles may specify a separately reviewed partial-work
+and refund policy.

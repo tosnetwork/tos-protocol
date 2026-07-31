@@ -3,8 +3,8 @@
 HTTPS is the baseline public transport for ARD interoperability and browser
 gateways. Public paid execution remains disabled until authentication,
 idempotency, production payment observation, profile-specific isolated
-invocation, production receipt key custody, failure policy, and authenticated
-delivery are wired end to end.
+invocation, production receipt key custody, profile refund/charging policy,
+and authenticated delivery are wired end to end.
 
 ## Discovery
 

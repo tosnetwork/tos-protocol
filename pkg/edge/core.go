@@ -98,6 +98,22 @@ type CompletedInvocation struct {
 	Disposition     journal.ReceiptDisposition
 }
 
+type NonSuccessStatus string
+
+const (
+	InvocationFailed   NonSuccessStatus = "failed"
+	InvocationCanceled NonSuccessStatus = "canceled"
+	InvocationTimedOut NonSuccessStatus = "timed_out"
+)
+
+// TerminatedInvocation is the durable outcome of a failed, canceled, or
+// timed-out paid request. Raw diagnostic text is intentionally excluded.
+type TerminatedInvocation struct {
+	Request     journal.Record
+	Receipt     journal.ReceiptRecord
+	Disposition journal.ReceiptDisposition
+}
+
 // Core owns durable request replay state and its bounded cleanup lifecycle.
 // It intentionally has no public HTTP action handler yet.
 type Core struct {
@@ -589,6 +605,157 @@ func (c *Core) CompleteSuccessfulInvocation(
 	}, nil
 }
 
+// CompleteInvocationFailure signs and atomically persists a zero-charge,
+// no-result receipt for a paid request that failed, was canceled, or timed
+// out. It is valid both before dispatch (authorized) and after dispatch
+// (running), but never accepts caller-supplied diagnostic text or usage.
+func (c *Core) CompleteInvocationFailure(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	manifest *authorization.VerifiedManifest,
+	paymentAuthorization authorization.AuthorizedPayment,
+	signer authorization.ReceiptSigner,
+	receiptID string,
+	status NonSuccessStatus,
+	receiptLifetime time.Duration,
+) (TerminatedInvocation, error) {
+	if ctx == nil {
+		return TerminatedInvocation{}, errors.New(
+			"nil invocation failure context",
+		)
+	}
+	if expectedRevision == 0 {
+		return TerminatedInvocation{}, errors.New(
+			"expected revision must be positive",
+		)
+	}
+	if receiptLifetime < minReceiptLifetime ||
+		receiptLifetime > maxReceiptLifetime {
+		return TerminatedInvocation{}, errors.New(
+			"invalid receipt envelope lifetime",
+		)
+	}
+	terminalState, errorCode, err := receiptTerminalState(string(status))
+	if err != nil || terminalState == journal.StateSucceeded {
+		return TerminatedInvocation{}, errors.New(
+			"unsupported invocation failure status",
+		)
+	}
+	material, err := paymentAuthorization.ReceiptInvocationMaterial()
+	if err != nil {
+		return TerminatedInvocation{}, fmt.Errorf(
+			"extract receipt invocation binding: %w",
+			err,
+		)
+	}
+	if scope.Network != material.Network ||
+		scope.ServiceID != material.ServiceID ||
+		scope.SessionID != material.SessionID ||
+		scope.Operation != material.Operation ||
+		scope.RequestID != material.RequestID {
+		return TerminatedInvocation{}, errors.New(
+			"receipt invocation scope mismatch",
+		)
+	}
+	now := c.now().UTC()
+	if existing, lookupErr := c.requests.GetReceipt(scope, now); lookupErr == nil {
+		return c.replayFailedInvocation(
+			scope,
+			existing,
+			material,
+			receiptID,
+			terminalState,
+			errorCode,
+			now,
+		)
+	} else if !errors.Is(lookupErr, journal.ErrNotFound) {
+		return TerminatedInvocation{}, lookupErr
+	}
+	if status == InvocationTimedOut && now.Before(material.Deadline) {
+		return TerminatedInvocation{}, errors.New(
+			"invocation deadline has not elapsed",
+		)
+	}
+	request, err := c.requests.Get(scope, now)
+	if err != nil {
+		return TerminatedInvocation{}, err
+	}
+	if request.IntentDigest != material.IntentDigest {
+		return TerminatedInvocation{}, journal.ErrConflict
+	}
+	if request.Revision != expectedRevision {
+		return TerminatedInvocation{}, journal.ErrRevision
+	}
+	if request.State != journal.StateAuthorized &&
+		request.State != journal.StateRunning {
+		return TerminatedInvocation{}, journal.ErrTransition
+	}
+	appliedPayment, err := c.requests.GetPayment(scope, now)
+	if err != nil {
+		return TerminatedInvocation{}, err
+	}
+	if appliedPayment.AuthorizationID != material.AuthorizationID ||
+		appliedPayment.QuoteID != material.QuoteID ||
+		appliedPayment.IntentDigest != material.IntentDigest {
+		return TerminatedInvocation{}, journal.ErrConflict
+	}
+	if appliedPayment.Status == journal.PaymentStatusReorganized {
+		return TerminatedInvocation{}, journal.ErrPaymentReorganized
+	}
+	if appliedPayment.Status != journal.PaymentStatusApplied {
+		return TerminatedInvocation{}, errors.New(
+			"receipt request has no applied payment",
+		)
+	}
+	completedAt := now
+	if status == InvocationTimedOut && material.Deadline.Before(completedAt) {
+		completedAt = material.Deadline
+	}
+	verified, err := manifest.IssueReceipt(
+		ctx,
+		paymentAuthorization,
+		authorization.ReceiptDraft{
+			ReceiptID: receiptID, Status: string(status),
+			Usage: []protocol.UsageItem{}, ChargedNanoTOS: 0,
+			CompletedAt: completedAt,
+		},
+		signer,
+		now,
+		now.Add(receiptLifetime),
+	)
+	if err != nil {
+		return TerminatedInvocation{}, fmt.Errorf("issue receipt: %w", err)
+	}
+	terminal, receipt, disposition, err := c.ApplyVerifiedReceipt(
+		scope,
+		expectedRevision,
+		verified,
+	)
+	if err != nil {
+		if errors.Is(err, journal.ErrConflict) ||
+			errors.Is(err, journal.ErrRevision) ||
+			errors.Is(err, journal.ErrTransition) {
+			existing, lookupErr := c.requests.GetReceipt(scope, now)
+			if lookupErr == nil {
+				return c.replayFailedInvocation(
+					scope,
+					existing,
+					material,
+					receiptID,
+					terminalState,
+					errorCode,
+					now,
+				)
+			}
+		}
+		return TerminatedInvocation{}, err
+	}
+	return TerminatedInvocation{
+		Request: terminal, Receipt: receipt, Disposition: disposition,
+	}, nil
+}
+
 // ReconcilePayment performs one strict post-application chain recheck and
 // applies its opaque result against the latest durable high-water mark.
 func (c *Core) ReconcilePayment(
@@ -868,6 +1035,47 @@ func sameSuccessfulCompletionReceipt(
 		}
 	}
 	return true
+}
+
+func (c *Core) replayFailedInvocation(
+	scope journal.Scope,
+	receipt journal.ReceiptRecord,
+	material authorization.ReceiptInvocationMaterial,
+	receiptID string,
+	terminalState journal.State,
+	errorCode string,
+	now time.Time,
+) (TerminatedInvocation, error) {
+	if receipt.Scope != scope ||
+		receipt.IntentDigest != material.IntentDigest ||
+		receipt.ReceiptID != receiptID ||
+		receipt.AuthorizationID != material.AuthorizationID ||
+		receipt.QuoteID != material.QuoteID ||
+		receipt.Status != terminalState ||
+		receipt.ChargedNanoTOS != 0 ||
+		receipt.ResultDigest != "" ||
+		receipt.ErrorCode != errorCode ||
+		receipt.ServiceRevision != material.ServiceRevision ||
+		receipt.ResourceRevision != material.ResourceRevision ||
+		len(receipt.Usage) != 0 {
+		return TerminatedInvocation{}, journal.ErrConflict
+	}
+	request, err := c.requests.Get(scope, now)
+	if err != nil {
+		return TerminatedInvocation{}, err
+	}
+	if request.State != terminalState ||
+		request.ResultDigest != "" ||
+		request.ErrorCode != errorCode {
+		return TerminatedInvocation{}, fmt.Errorf(
+			"%w: stored failure receipt does not match request",
+			journal.ErrCorrupt,
+		)
+	}
+	return TerminatedInvocation{
+		Request: request, Receipt: receipt,
+		Disposition: journal.ReceiptReplay,
+	}, nil
 }
 
 func completionReceiptUsage(

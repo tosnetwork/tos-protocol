@@ -260,7 +260,299 @@ func TestCoreConcurrentCompletionHasOneDurableReceipt(t *testing.T) {
 	}
 }
 
+func TestCoreCompletesZeroChargeFailureReceipts(t *testing.T) {
+	tests := []struct {
+		name              string
+		status            NonSuccessStatus
+		dispatch          bool
+		advanceToDeadline bool
+		state             journal.State
+		errorCode         string
+	}{
+		{
+			name: "failed-running", status: InvocationFailed,
+			dispatch: true, state: journal.StateFailed,
+			errorCode: string(protocol.ErrorRuntimeFailed),
+		},
+		{
+			name: "canceled-before-dispatch", status: InvocationCanceled,
+			state:     journal.StateCanceled,
+			errorCode: string(protocol.ErrorCanceled),
+		},
+		{
+			name: "timed-out-running", status: InvocationTimedOut,
+			dispatch: true, advanceToDeadline: true,
+			state:     journal.StateTimedOut,
+			errorCode: string(protocol.ErrorDeadlineExceeded),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			now := time.Now().UTC().Truncate(time.Millisecond)
+			clock := now
+			config := DefaultCoreConfig(
+				filepath.Join(t.TempDir(), "requests.db"),
+			)
+			config.CleanupInterval = time.Hour
+			core, err := openCore(config, func() time.Time { return clock })
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer core.Close()
+			fixture := newCoreSessionFixture(t, now)
+			var scope journal.Scope
+			var authorized authorization.AuthorizedPayment
+			var request journal.Record
+			if test.dispatch {
+				scope, authorized, request = prepareCompletionRequest(
+					t,
+					core,
+					fixture,
+					"failure-request-0001",
+					now,
+				)
+			} else {
+				scope, authorized, request = prepareAuthorizedCompletionRequest(
+					t,
+					core,
+					fixture,
+					"failure-request-0001",
+					now,
+				)
+			}
+			if test.advanceToDeadline {
+				clock = now.Add(5 * time.Minute)
+			}
+			manifest := fixture.manifest
+			if test.advanceToDeadline {
+				manifest = fixture.refreshManifest(t, clock)
+			}
+			signer := &edgeReceiptSigner{
+				privateKey: fixture.runtimePrivate,
+				keyID:      "runtime-auth-key",
+			}
+			terminated, err := core.CompleteInvocationFailure(
+				context.Background(), scope, request.Revision,
+				manifest, authorized, signer,
+				"receipt-failure-0001", test.status, time.Minute,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if terminated.Disposition != journal.ReceiptApplied ||
+				terminated.Request.State != test.state ||
+				terminated.Request.ErrorCode != test.errorCode ||
+				terminated.Receipt.ErrorCode != test.errorCode ||
+				terminated.Receipt.ChargedNanoTOS != 0 ||
+				terminated.Receipt.ResultDigest != "" ||
+				terminated.Receipt.Usage == nil ||
+				len(terminated.Receipt.Usage) != 0 ||
+				signer.calls.Load() != 1 {
+				t.Fatalf("unexpected failure completion: %#v", terminated)
+			}
+			clock = clock.Add(time.Second)
+			replayed, err := core.CompleteInvocationFailure(
+				context.Background(), scope, request.Revision,
+				manifest, authorized, signer,
+				"receipt-failure-0001", test.status, time.Minute,
+			)
+			if err != nil || replayed.Disposition != journal.ReceiptReplay ||
+				signer.calls.Load() != 1 {
+				t.Fatalf(
+					"failure replay=%#v calls=%d err=%v",
+					replayed,
+					signer.calls.Load(),
+					err,
+				)
+			}
+			otherStatus := InvocationFailed
+			if test.status == InvocationFailed {
+				otherStatus = InvocationCanceled
+			}
+			if _, err := core.CompleteInvocationFailure(
+				context.Background(), scope, request.Revision,
+				manifest, authorized, signer,
+				"receipt-failure-0001", otherStatus, time.Minute,
+			); !errors.Is(err, journal.ErrConflict) || signer.calls.Load() != 1 {
+				t.Fatalf(
+					"changed failure status err=%v calls=%d",
+					err,
+					signer.calls.Load(),
+				)
+			}
+		})
+	}
+}
+
+func TestCoreRejectsEarlyTimeoutAndReorganizedFailure(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	clock := now
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	core, err := openCore(config, func() time.Time { return clock })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized, request := prepareAuthorizedCompletionRequest(
+		t,
+		core,
+		fixture,
+		"failure-reorganized-0001",
+		now,
+	)
+	signer := &edgeReceiptSigner{
+		privateKey: fixture.runtimePrivate,
+		keyID:      "runtime-auth-key",
+	}
+	if _, err := core.CompleteInvocationFailure(
+		context.Background(), scope, request.Revision,
+		fixture.manifest, authorized, signer,
+		"receipt-failure-reorganized", InvocationTimedOut, time.Minute,
+	); err == nil || signer.calls.Load() != 0 {
+		t.Fatalf("early timeout err=%v calls=%d", err, signer.calls.Load())
+	}
+	material, err := authorized.ObservationMaterial(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reorganizationObserver, err := payment.NewObserver(
+		corePaymentResolver{state: chain.PaymentState{
+			Network: material.Network, AuthorizationID: material.AuthorizationID,
+			QuoteID: material.QuoteID, RequestID: material.RequestID,
+			Reference: material.Reference, Reorganized: true, Finalized: true,
+			AmountNanoTOS: material.PriceNanoTOS,
+			Payer:         material.Payer, Payee: material.Payee,
+			ObservedMasterSeqno: 102, ObservedAt: now.Add(time.Second),
+		}},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = now.Add(time.Second)
+	if _, _, err := core.ReconcilePayment(
+		context.Background(), scope, reorganizationObserver,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.CompleteInvocationFailure(
+		context.Background(), scope, request.Revision,
+		fixture.manifest, authorized, signer,
+		"receipt-failure-reorganized", InvocationCanceled, time.Minute,
+	); !errors.Is(err, journal.ErrPaymentReorganized) || signer.calls.Load() != 0 {
+		t.Fatalf(
+			"reorganized failure err=%v calls=%d",
+			err,
+			signer.calls.Load(),
+		)
+	}
+}
+
+func TestCoreConcurrentFailureHasOneDurableReceipt(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized, request := prepareCompletionRequest(
+		t,
+		core,
+		fixture,
+		"failure-concurrent-0001",
+		now,
+	)
+	const attempts = 16
+	release := make(chan struct{})
+	signer := &edgeReceiptSigner{
+		privateKey: fixture.runtimePrivate,
+		keyID:      "runtime-auth-key",
+		beforeSign: func(call int32) {
+			if call == attempts {
+				close(release)
+			}
+			<-release
+		},
+	}
+	var applied atomic.Int32
+	var replayed atomic.Int32
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, attempts)
+	for range attempts {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			result, err := core.CompleteInvocationFailure(
+				context.Background(), scope, request.Revision,
+				fixture.manifest, authorized, signer,
+				"receipt-failure-concurrent", InvocationFailed, time.Minute,
+			)
+			if err != nil {
+				errorsSeen <- err
+				return
+			}
+			switch result.Disposition {
+			case journal.ReceiptApplied:
+				applied.Add(1)
+			case journal.ReceiptReplay:
+				replayed.Add(1)
+			default:
+				errorsSeen <- errors.New("unexpected receipt disposition")
+			}
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		t.Error(err)
+	}
+	health, err := core.Health()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.Load() != 1 || replayed.Load() != attempts-1 ||
+		signer.calls.Load() != attempts || health.ReceiptRecords != 1 {
+		t.Fatalf(
+			"applied=%d replayed=%d signed=%d health=%#v",
+			applied.Load(), replayed.Load(), signer.calls.Load(), health,
+		)
+	}
+}
+
 func prepareCompletionRequest(
+	t *testing.T,
+	core *Core,
+	fixture coreSessionFixture,
+	requestID string,
+	now time.Time,
+) (journal.Scope, authorization.AuthorizedPayment, journal.Record) {
+	t.Helper()
+	scope, authorized, request := prepareAuthorizedCompletionRequest(
+		t,
+		core,
+		fixture,
+		requestID,
+		now,
+	)
+	running, err := core.TransitionRequest(
+		scope,
+		request.Revision,
+		journal.StateRunning,
+		"",
+		"",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scope, authorized, running
+}
+
+func prepareAuthorizedCompletionRequest(
 	t *testing.T,
 	core *Core,
 	fixture coreSessionFixture,
@@ -311,17 +603,7 @@ func prepareCompletionRequest(
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := core.TransitionRequest(
-		scope,
-		request.Revision,
-		journal.StateRunning,
-		"",
-		"",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return scope, authorized, running
+	return scope, authorized, request
 }
 
 func completionInvokeRequest(

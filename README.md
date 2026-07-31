@@ -107,11 +107,16 @@ Edge Core can correlate its retained limits, deadline, byte accounting, and
 output digest to the exact paid running request, delegate only canonical
 receipt bytes to purpose-specific key custody, re-verify the signature against
 the current manifest, and commit one success receipt under concurrent retry.
+Failed, canceled, and timed-out paid requests use the same signer and atomic
+path with an empty usage array, no result or diagnostic payload, deterministic
+bounded error code, and zero charge; timeout cannot be declared before the
+signed quote deadline. Both pre-dispatch cancellation and post-dispatch
+failure converge under concurrent retry.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, profile intent-to-Worker mapping, failed/canceled
-completion policy, production signer adapter, isolated executor, and public
-receipt route remain intentionally disconnected, so none of these internal
-boundaries enable public actions by themselves.
+refund/charging policy, production signer adapter, isolated executor, and
+public receipt route remain intentionally disconnected, so none of these
+internal boundaries enable public actions by themselves.
 
 ## Repository map
 

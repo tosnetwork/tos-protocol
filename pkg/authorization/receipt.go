@@ -142,7 +142,13 @@ func (r VerifiedReceipt) ApplicationMaterial(
 			"verified receipt is no longer current",
 		)
 	}
-	usage := append([]protocol.UsageItem(nil), r.receipt.Usage...)
+	var usage []protocol.UsageItem
+	if r.receipt.Usage != nil {
+		usage = append(
+			make([]protocol.UsageItem, 0, len(r.receipt.Usage)),
+			r.receipt.Usage...,
+		)
+	}
 	return ReceiptApplicationMaterial{
 		Binding: binding, ReceiptID: r.receipt.ReceiptID,
 		RuntimeKeyID: r.runtimeKeyID, Status: r.receipt.Status,

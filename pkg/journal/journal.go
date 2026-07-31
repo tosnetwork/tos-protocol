@@ -3057,7 +3057,7 @@ func cloneReceiptUsage(usage []ReceiptUsage) []ReceiptUsage {
 	if usage == nil {
 		return nil
 	}
-	return append([]ReceiptUsage(nil), usage...)
+	return append(make([]ReceiptUsage, 0, len(usage)), usage...)
 }
 
 func cloneReceiptEnvelope(envelope identity.Envelope) identity.Envelope {

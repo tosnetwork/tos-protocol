@@ -88,10 +88,19 @@ to a purpose-specific signer. It rejects payload, validity, key, role, or
 signature substitution before atomic persistence. Concurrent equivalent
 signatures resolve to the one durable semantic receipt.
 
+The generic fail-closed non-success policy is also implemented internally.
+`failed`, `canceled`, and `timed_out` receipts contain an empty usage array,
+zero charge, no result digest, and no raw diagnostic text. Edge derives the
+only persisted error code from the status. A timeout cannot be issued before
+the signed quote deadline; payment reorganization blocks every new failure
+receipt. This conservative default is not a profile's final refund or partial
+work charging policy.
+
 This does not provide production key custody or public delivery. A deployment
 must supply a bounded signer adapter, keep its private key outside the Worker,
-define profile intent-to-Worker mapping and failure/refund policy, and expose
-only the stored signed envelope through an authenticated receipt resource.
+define profile intent-to-Worker mapping and any partial-work refund/charging
+policy, and expose only the stored signed envelope through an authenticated
+receipt resource.
 
 The initial integration should consume the released Service Actor and escrow
 interfaces through a pinned chain adapter. Contract code, ABI, deployment

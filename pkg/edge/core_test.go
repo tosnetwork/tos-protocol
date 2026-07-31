@@ -55,16 +55,18 @@ func (r edgeClientKeyResolver) ResolveClientKey(
 }
 
 type coreSessionFixture struct {
-	now            time.Time
-	network        string
-	serviceID      string
-	sessionID      string
-	clientID       string
-	runtimePrivate ed25519.PrivateKey
-	clientPrivate  ed25519.PrivateKey
-	resolver       edgeClientKeyResolver
-	manifest       *authorization.VerifiedManifest
-	session        *authorization.VerifiedSessionGrant
+	now              time.Time
+	network          string
+	serviceID        string
+	sessionID        string
+	clientID         string
+	runtimePrivate   ed25519.PrivateKey
+	clientPrivate    ed25519.PrivateKey
+	resolver         edgeClientKeyResolver
+	snapshot         authorization.AuthoritySnapshot
+	manifestEnvelope identity.Envelope
+	manifest         *authorization.VerifiedManifest
+	session          *authorization.VerifiedSessionGrant
 }
 
 func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
@@ -159,6 +161,13 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 		sessionID: grant.SessionID, clientID: grant.Client,
 		runtimePrivate: runtimePrivate,
 		clientPrivate:  clientPrivate,
+		snapshot: authorization.AuthoritySnapshot{
+			Active: true, Network: manifest.Network, ServiceID: manifest.ServiceID,
+			Controller: manifest.Controller, ControllerPublicKey: controllerPublic,
+			ManifestDigest: manifestDigest, ObservedMasterSeqno: 100,
+			ObservedAt: now,
+		},
+		manifestEnvelope: manifestEnvelope,
 		resolver: edgeClientKeyResolver{snapshot: authorization.ClientKeySnapshot{
 			Network: manifest.Network, ServiceID: manifest.ServiceID,
 			KeyID: grant.Client, Principal: grant.Client,
@@ -169,6 +178,29 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 		manifest: verifiedManifest,
 		session:  verifiedSession,
 	}
+}
+
+func (f coreSessionFixture) refreshManifest(
+	t *testing.T,
+	now time.Time,
+) *authorization.VerifiedManifest {
+	t.Helper()
+	snapshot := f.snapshot
+	snapshot.ObservedAt = now
+	snapshot.ObservedMasterSeqno++
+	verifier, err := authorization.NewVerifier(authorization.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := verifier.VerifyManifest(
+		snapshot,
+		f.manifestEnvelope,
+		now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manifest
 }
 
 func (f coreSessionFixture) authorizePayment(
