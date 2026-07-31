@@ -134,11 +134,15 @@ validated `GetTask` observation.
 
 The Worker must durably return the same stored outcome for the same task and
 exact request, reject a different request under that task ID, and remove it at
-the bounded retention deadline. The protocol and validated client are present;
-the repository does not yet contain a production Worker task store. Therefore
-`NOT_FOUND` is evidence only of that Worker's current bounded store, not proof
-that a prior process never executed the task, and automatic invocation retry
-remains disabled.
+the bounded retention deadline. The Go reference now provides a reusable,
+bbolt-backed `WorkerTaskStore` with atomic claim/replay, active and terminal
+transitions, exact `GetTask`, capacity backpressure, expiry-index cleanup, and
+startup corruption auditing. It does not start or recover model execution.
+`tos-ai` must reconcile retained `ACCEPTED/RUNNING` records with an idempotent
+runtime job or durable supervisor. Therefore `NOT_FOUND` remains evidence only
+of that Worker's current bounded store, not proof that a prior process never
+executed the task, and automatic invocation retry remains disabled. See
+[`docs/worker-task-store.md`](../../docs/worker-task-store.md).
 
 Edge's journal stores only the digest, not the potentially sensitive
 invocation payload. Recovery therefore starts from an authenticated replay or

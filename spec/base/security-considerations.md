@@ -115,9 +115,19 @@ background priority merely by setting a wire enum.
 A durable Edge claim is not proof that the Worker observed the call. Across
 the claim/RPC crash boundary, recovery must use an idempotent task-status or
 exact-result-replay contract with bounded retention. The reference client
-implements strict `GetTask` validation, but each Worker must still durably
-enforce the task binding and retention contract. Automatic invocation retry is
-unsafe and must remain disabled until that property is demonstrated.
+implements strict `GetTask` validation, and the reference Worker task store
+durably enforces exact task binding, state, result, capacity, and retention.
+The vertical Worker must still reconcile `ACCEPTED/RUNNING` records with its
+actual executor; a database row cannot prove whether an external process ran.
+Automatic invocation retry is unsafe and must remain disabled until the
+executor demonstrates idempotent recovery.
+
+The Worker task store necessarily retains the private invocation payload and a
+successful result until the agreed recovery deadline. Keep its database on
+owner-controlled storage, restrict it to the Worker identity, include it in
+the deployment's encryption-at-rest and secure-deletion policy, and select the
+shortest retention compatible with Edge recovery. Never copy these payloads
+into logs, metrics, ARD, receipts, or unbounded in-memory indexes.
 
 Dispatch code must branch on the durable claim disposition, not on an HTTP,
 RPC, context, or process error. Only a new claim can invoke. Replay, ambiguous

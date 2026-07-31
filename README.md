@@ -171,14 +171,19 @@ and public receipt route remain intentionally disconnected.
 The private RPC now
 defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A
-production Worker still needs a durable bounded task table and idempotent
-`Invoke` implementation: the Edge claim alone does not prove that a Worker
-accepted or completed an RPC interrupted by a crash. None of these
-internal boundaries enable public actions by themselves.
+reusable bbolt Worker task store now provides atomic claim/replay, exact
+`GetTask`, bounded terminal persistence, capacity backpressure, expiry cleanup,
+and startup corruption auditing. A production Worker must still reconcile its
+durable `ACCEPTED/RUNNING` records with an idempotent runtime job or sandbox
+supervisor: neither the Edge claim nor the task table alone proves that an
+external executor accepted or completed an RPC interrupted by a crash. None
+of these internal boundaries enable public actions by themselves.
 
 The chain mapping, quorum rules, canonical references, startup composition,
 and local rehearsal are documented in
 [`docs/tos-chain-adapters.md`](docs/tos-chain-adapters.md).
+Worker-side persistence and `tos-ai` integration are documented in
+[`docs/worker-task-store.md`](docs/worker-task-store.md).
 
 ## Repository map
 
@@ -194,7 +199,7 @@ pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
 pkg/journal/          durable bounded request, payment, execution and receipt state
-pkg/localrpc/         validated private Unix-socket Worker RPC client
+pkg/localrpc/         validated private Worker RPC client and durable bounded task store
 pkg/payment/          strict signed quote/payment chain observation
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts
 pkg/registry/         bounded ARD index and HTTP API

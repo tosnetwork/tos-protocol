@@ -14,6 +14,7 @@ tos-edge ------------------> TOS chain adapter
    v
 vertical worker (for example tos-ai-worker)
    |
+   +--> durable bounded task store
    +--> bounded scheduler
    +--> approved runtime adapter
    +--> isolated executor (next milestone)
@@ -72,9 +73,10 @@ polling. The public process must still supply a reconciliation/refund policy,
 reviewed production profile mappers, invocation isolation, production
 receipt key custody, partial-work refund/charging policy, and public receipt
 delivery before it forwards paid work. A production Worker must additionally
-implement the specified bounded task table and idempotent `Invoke` behavior so
-Edge can resolve the remaining crash window after a claim commits but before
-an RPC result is received.
+wire the reusable bounded task table to an idempotent runtime job or durable
+sandbox supervisor. The table provides atomic claim/replay, exact lookup,
+terminal persistence, capacity backpressure, and cleanup, but cannot infer
+whether an external executor ran before a process crash.
 Those runtime operations remain absent from the public server, so it exposes
 no invocation route.
 
@@ -83,7 +85,7 @@ no invocation route.
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
 | Language | Go 1.24+ | implemented |
-| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; new claims invoke once, replay only queries, cancellation acceptance is nonterminal, uncertain/active/missing outcomes create no receipt, and validated terminal outcomes enter one deterministic atomic receipt path; durable idempotent Worker implementation remains |
+| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, terminal persistence, lookup, cleanup and startup audit; production executor/supervisor reconciliation remains |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
