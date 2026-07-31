@@ -34,6 +34,8 @@ type AuthorizedPayment struct {
 	paymentEnvelopeDigest string
 	network               string
 	serviceID             string
+	profileVersion        string
+	profileExtensions     []string
 	requestAuthorization  AuthorizedSessionEnvelope
 	validUntil            time.Time
 	verifiedAt            time.Time
@@ -188,6 +190,8 @@ func (q *VerifiedQuote) AuthorizePayment(
 		valid: true, quote: q.quote, authorization: paymentAuthorization,
 		quoteEnvelopeDigest: q.envelopeDigest, paymentEnvelopeDigest: paymentDigest,
 		network: q.network, serviceID: q.serviceID,
+		profileVersion:       session.grant.ProfileVersion,
+		profileExtensions:    append([]string(nil), session.grant.ProfileExtensions...),
 		requestAuthorization: authorized,
 		validUntil: earliest(
 			q.validUntil, authorized.validUntil,

@@ -115,6 +115,20 @@ invocation payload. Recovery therefore starts from an authenticated replay or
 a deterministic profile mapping that reproduces the exact request. The
 persisted claim and `BindInvocationRequest` reject any changed reconstruction.
 
+The generic Edge mapping boundary is deterministic and fail closed. It first
+recomputes `tos.request-intent.v1` over the negotiated profile ID, version and
+extension set, operation, and exact intent bytes, then compares it with the
+signed quote.
+Only after that check does the selected profile mapper receive a defensive
+copy. The mapper may return only a model selector and Worker payload. Edge
+itself supplies the paid request, quote, service and operation IDs, quoted
+output limit and deadline, external-service priority, journal retention, and
+a deterministic task ID bound to the complete payment scope. Mapper errors,
+panics, cancellation, invalid selectors, or output outside the concrete
+Worker client's configured policy fail before the journal moves to `running`.
+An exact mapping replays the existing execution claim across restart; mapping
+drift conflicts with its stored private request digest.
+
 For a successful paid request, Edge Core accepts only this opaque result. It
 requires the durable request to remain `running`, repeats the execution
 claim's task and invocation digest and the signed quote's byte limits and
@@ -130,6 +144,6 @@ must define and test that policy separately before enabling it.
 ## Non-goals
 
 This client does not expose a public invocation route, authenticate an
-Internet caller, authorize payment, define profile intent-to-protobuf mapping,
+Internet caller, authorize payment, supply any vertical profile mapper,
 attest worker code, or prove executor isolation. Those checks remain
 independently mandatory.

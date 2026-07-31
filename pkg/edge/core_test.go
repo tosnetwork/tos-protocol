@@ -208,6 +208,19 @@ func (f coreSessionFixture) authorizePayment(
 	requestID string,
 ) (journal.Scope, authorization.AuthorizedPayment) {
 	t.Helper()
+	return f.authorizePaymentWithIntentDigest(
+		t,
+		requestID,
+		"sha256:"+strings.Repeat("9", 64),
+	)
+}
+
+func (f coreSessionFixture) authorizePaymentWithIntentDigest(
+	t *testing.T,
+	requestID string,
+	intentDigest string,
+) (journal.Scope, authorization.AuthorizedPayment) {
+	t.Helper()
 	scope := journal.Scope{
 		Network: f.network, Authority: f.clientID, ServiceID: f.serviceID,
 		SessionID: f.sessionID, Operation: "invoke", RequestID: requestID,
@@ -217,7 +230,7 @@ func (f coreSessionFixture) authorizePayment(
 		QuoteID: "quote-" + requestID, RequestID: requestID,
 		SessionID: f.sessionID, ServiceID: f.serviceID,
 		ProfileID: "tos.ai.inference", Operation: scope.Operation,
-		IntentDigest:     "sha256:" + strings.Repeat("9", 64),
+		IntentDigest:     intentDigest,
 		ServiceRevision:  "manifest-revision-1",
 		ResourceRevision: "resource-revision-1",
 		Network:          f.network, Payee: "service-wallet",

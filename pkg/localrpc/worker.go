@@ -335,17 +335,11 @@ func (c *WorkerClient) Invoke(
 	ctx context.Context,
 	request *edgev1.InvokeRequest,
 ) (ValidatedInvocation, error) {
-	if c == nil {
-		return ValidatedInvocation{}, errors.New("nil worker client")
-	}
-	request, requestDigest, err := BindInvocationRequest(request)
+	request, err := c.PrepareInvocation(request)
 	if err != nil {
 		return ValidatedInvocation{}, err
 	}
-	now := c.now().UTC()
-	if err := c.validateInvokeRequest(request, now); err != nil {
-		return ValidatedInvocation{}, err
-	}
+	requestDigest := request.RequestDigest
 	deadline := time.UnixMilli(request.DeadlineUnixMillis)
 	callContext, cancel, err := boundedContext(ctx, deadline)
 	if err != nil {
@@ -371,6 +365,25 @@ func (c *WorkerClient) Invoke(
 		requestDigest,
 		c.now().UTC(),
 	), nil
+}
+
+// PrepareInvocation applies the exact configured Worker policy without
+// performing an RPC. Edge Core uses it before durably moving a paid request
+// to running, so a locally invalid request cannot strand that state.
+func (c *WorkerClient) PrepareInvocation(
+	request *edgev1.InvokeRequest,
+) (*edgev1.InvokeRequest, error) {
+	if c == nil {
+		return nil, errors.New("nil worker client")
+	}
+	request, _, err := BindInvocationRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.validateInvokeRequest(request, c.now().UTC()); err != nil {
+		return nil, err
+	}
+	return request, nil
 }
 
 // InvocationRequestDigest is the internal crash-recovery commitment to the

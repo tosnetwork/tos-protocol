@@ -17,6 +17,19 @@
       "digest": "sha256:74c567e7386f394c61d21b382a5711c1c2011620d72bc362285c99a22067fac5"
     },
     {
+      "name": "profile-request-intent",
+      "domain": "tos.request-intent.v1",
+      "value": {
+        "version": "0.1",
+        "profileId": "tos.ai.inference",
+        "profileVersion": "0.1.0",
+        "operation": "invoke",
+        "payload": "eyJtb2RlbCI6InF3ZW4zIiwicHJvbXB0IjoiaGVsbG8ifQ=="
+      },
+      "canonicalCborHex": "a5677061796c6f6164783065794a746232526c62434936496e46335a57347a4969776963484a7662584230496a6f69614756736247386966513d3d6776657273696f6e63302e31696f7065726174696f6e66696e766f6b656970726f66696c65496470746f732e61692e696e666572656e63656e70726f66696c6556657273696f6e65302e312e30",
+      "digest": "sha256:39762bf77aec64e6a7a8a0872487f9b6ecff552b161ac65a087b45fee48b2c5b"
+    },
+    {
       "name": "quote",
       "domain": "tos.quote.v1",
       "value": {

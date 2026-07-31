@@ -123,6 +123,14 @@ Task cancellation must repeat the request ID, task ID, and invocation digest,
 and the response must echo them. Never authorize cancellation from an
 uncorrelated request ID or an unvalidated boolean response.
 
+A vertical mapper never owns security fields in the private Worker request.
+Before calling it, Edge recomputes the profile/version/operation-bound public
+intent commitment. After it returns, Edge derives task identity, correlation,
+payment, limit, deadline, retention, and external priority fields, then runs
+the concrete Worker client's full local-policy validation before atomically
+claiming execution. Mapper failure or panic must not leave a paid request in
+`running`; mapper output drift after restart must not create another task.
+
 ## Keys and updates
 
 Runtime and update keys are distinct. Rotation must overlap safely, honor

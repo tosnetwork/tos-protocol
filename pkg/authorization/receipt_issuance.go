@@ -16,20 +16,23 @@ import (
 // Core to correlate a validated private Worker result. It remains available
 // after payment authorization expiry because execution may finish later.
 type ReceiptInvocationMaterial struct {
-	Network          string
-	ServiceID        string
-	SessionID        string
-	Operation        string
-	RequestID        string
-	IntentDigest     string
-	AuthorizationID  string
-	QuoteID          string
-	PriceNanoTOS     uint64
-	MaxInputBytes    uint64
-	MaxOutputBytes   uint64
-	Deadline         time.Time
-	ServiceRevision  string
-	ResourceRevision string
+	Network           string
+	ServiceID         string
+	ProfileID         string
+	ProfileVersion    string
+	ProfileExtensions []string
+	SessionID         string
+	Operation         string
+	RequestID         string
+	IntentDigest      string
+	AuthorizationID   string
+	QuoteID           string
+	PriceNanoTOS      uint64
+	MaxInputBytes     uint64
+	MaxOutputBytes    uint64
+	Deadline          time.Time
+	ServiceRevision   string
+	ResourceRevision  string
 }
 
 // ReceiptDraft contains only execution outcome fields. All authority,
@@ -66,7 +69,9 @@ func (a AuthorizedPayment) ReceiptInvocationMaterial() (
 	}
 	return ReceiptInvocationMaterial{
 		Network: a.network, ServiceID: a.serviceID,
-		SessionID: a.quote.SessionID, Operation: a.quote.Operation,
+		ProfileID: a.quote.ProfileID, ProfileVersion: a.profileVersion,
+		ProfileExtensions: append([]string(nil), a.profileExtensions...),
+		SessionID:         a.quote.SessionID, Operation: a.quote.Operation,
 		RequestID: a.quote.RequestID, IntentDigest: a.quote.IntentDigest,
 		AuthorizationID:  a.authorization.AuthorizationID,
 		QuoteID:          a.quote.QuoteID,

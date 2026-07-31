@@ -78,8 +78,8 @@ The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
 deadline. `tos-edge` still exposes discovery only until manifest-backed
 authorization is connected to the live TOS contract/RPC decoder and durable
-payment watching, execution isolation, profile-specific invocation mapping,
-and public delivery are implemented.
+payment watching, production profile mappers, execution isolation, and public
+delivery are implemented.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
@@ -118,10 +118,17 @@ path with an empty usage array, no result or diagnostic payload, deterministic
 bounded error code, and zero charge; timeout cannot be declared before the
 signed quote deadline. Both pre-dispatch cancellation and post-dispatch
 failure converge under concurrent retry.
+The generic profile intent-to-Worker boundary is implemented internally. It
+binds exact intent bytes to the negotiated profile version, extension set and
+signed quote, lets a vertical mapper return only its model and payload,
+derives all security fields in Edge, validates the complete request against
+the concrete Worker client before changing durable state, and
+deterministically replays the same task after restart. No production vertical
+mapper is registered yet.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
-adaptive retry policy, profile intent-to-Worker mapping, failed/canceled
-refund/charging policy, production signer adapter, isolated executor, and
-public receipt route remain intentionally disconnected. The private RPC now
+adaptive retry policy, failed/canceled refund/charging policy, production
+signer adapter, isolated executor, and public receipt route remain
+intentionally disconnected. The private RPC now
 defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A
 production Worker still needs a durable bounded task table and idempotent

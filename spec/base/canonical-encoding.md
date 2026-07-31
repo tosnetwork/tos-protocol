@@ -65,10 +65,28 @@ Initial labels are:
 | terminal manifest | `tos.terminal-manifest.v1` |
 | session grant | `tos.session.v1` |
 | delegation | `tos.delegation.v1` |
+| profile request intent | `tos.request-intent.v1` |
 | quote | `tos.quote.v1` |
 | payment authorization | `tos.payment-authorization.v1` |
 | receipt | `tos.receipt.v1` |
 | evidence bundle | `tos.evidence.v1` |
+| private Worker task identity | `tos.private-worker-task.v1` |
+
+The profile request-intent commitment is the deterministic CBOR encoding of
+`version`, `profileId`, `profileVersion`, the sorted negotiated
+`profileExtensions`, `operation`, and the exact opaque `payload` bytes. The
+profile ID comes from the quote, while the negotiated version and extensions
+come from its runtime-signed session. A quote MUST use this digest for an
+execution path that uses the generic Edge mapping boundary. This prevents the
+same bytes from being replayed under another profile version, extension set,
+or operation. The vertical profile still owns canonical decoding and semantic
+validation of its opaque payload.
+
+The private Worker task identity additionally commits the network, service,
+profile, session, operation, request, intent, authorization, and quote IDs.
+Edge renders the resulting SHA-256 value as `task-` followed by 64 lowercase
+hex digits. This identifier is internal recovery state, not a public request
+intent or payment commitment.
 
 ## Signed envelope
 
