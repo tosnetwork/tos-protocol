@@ -179,6 +179,12 @@ Worker outcomes reach receipt application. Their deterministic receipt ID is
 bound to the durable execution identity, not its outcome, so exact replay is
 idempotent and a contradictory terminal observation fails closed.
 
+Cancellation is likewise nonterminal. Before contacting the Worker, Edge
+requires the dispatch's exact execution record and revision to still own the
+`running` request. The Worker's accepted/rejected response or a transport error
+does not mutate the journal and cannot substitute for a later validated
+terminal lookup and receipt.
+
 The journal deliberately stores the private invocation digest, not prompts,
 payloads, credentials, or model input. After restart, an authenticated client
 retry or deterministic profile mapper must reproduce the exact invocation;

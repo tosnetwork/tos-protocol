@@ -24,7 +24,10 @@ type dispatchWorker struct {
 	edgev1connect.UnimplementedWorkerServiceHandler
 	invokeCalls atomic.Int32
 	getCalls    atomic.Int32
+	cancelCalls atomic.Int32
 	invokeError bool
+	cancelError bool
+	cancel      bool
 	getStatus   edgev1.TaskStatus
 	output      []byte
 }
@@ -86,6 +89,23 @@ func (w *dispatchWorker) GetTask(
 		)
 	}
 	return connect.NewResponse(response), nil
+}
+
+func (w *dispatchWorker) Cancel(
+	_ context.Context,
+	request *connect.Request[edgev1.CancelRequest],
+) (*connect.Response[edgev1.CancelResponse], error) {
+	w.cancelCalls.Add(1)
+	if w.cancelError {
+		return nil, connect.NewError(
+			connect.CodeUnavailable,
+			errors.New("ambiguous cancellation failure"),
+		)
+	}
+	return connect.NewResponse(&edgev1.CancelResponse{
+		RequestId: request.Msg.RequestId, TaskId: request.Msg.TaskId,
+		RequestDigest: request.Msg.RequestDigest, Accepted: w.cancel,
+	}), nil
 }
 
 func dispatchInvokeResponse(

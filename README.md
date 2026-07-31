@@ -139,6 +139,11 @@ validated recovered `FAILED`, `CANCELED`, or `TIMED_OUT` outcome enters the
 existing atomic receipt path. The receipt ID is derived deterministically from
 the durable execution identity, so concurrent or restarted resolution reaches
 one exact-replay-safe terminal record instead of inventing new IDs.
+Explicit cancellation is also claim-bound: Edge rechecks that the exact
+execution still owns the durable `running` request before sending the
+request/task/digest tuple to the Worker. Accepted, rejected, and ambiguous
+cancellation attempts preserve the claim and never create a terminal receipt;
+only a later validated `GetTask` terminal observation can do that.
 The concrete TOS payment contract adapter, `tos-edge` binary configuration,
 adaptive retry policy, failed/canceled refund/charging policy, production
 signer adapter, isolated executor, and public receipt route remain

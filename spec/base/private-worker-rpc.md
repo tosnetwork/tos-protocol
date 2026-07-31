@@ -123,6 +123,15 @@ Worker response must echo all three before Edge trusts its `accepted` flag. A
 request-ID-only cancellation is not sufficient because it could target a
 different retained task.
 
+Before sending cancellation, the reference Edge coordinator re-reads the
+journal and requires the same execution record and request revision to remain
+`running`. It accepts cancellation only for an uncertain dispatch or a
+validated `NOT_FOUND`, `ACCEPTED`, or `RUNNING` recovery observation. A direct
+success or recovered terminal result must be resolved instead. Worker
+acceptance is not terminal proof: accepted, rejected, and ambiguous attempts
+all preserve the durable claim, write no receipt, and require a later
+validated `GetTask` observation.
+
 The Worker must durably return the same stored outcome for the same task and
 exact request, reject a different request under that task ID, and remove it at
 the bounded retention deadline. The protocol and validated client are present;

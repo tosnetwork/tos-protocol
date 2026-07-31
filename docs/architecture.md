@@ -74,7 +74,7 @@ no invocation route.
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
 | Language | Go 1.24+ | implemented |
-| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation and `GetTask` recovery contracts plus opaque validated-result client implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; new claims invoke once, replay only queries, uncertain/active/missing outcomes create no receipt, and validated terminal outcomes enter one deterministic atomic receipt path; durable idempotent Worker implementation remains |
+| Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; new claims invoke once, replay only queries, cancellation acceptance is nonterminal, uncertain/active/missing outcomes create no receipt, and validated terminal outcomes enter one deterministic atomic receipt path; durable idempotent Worker implementation remains |
 | Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, and strict stateless chain-resolver boundary implemented; live TOS contract/RPC composition remains |

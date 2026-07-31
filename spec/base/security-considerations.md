@@ -136,6 +136,10 @@ into a conflict instead of two receipts.
 Task cancellation must repeat the request ID, task ID, and invocation digest,
 and the response must echo them. Never authorize cancellation from an
 uncorrelated request ID or an unvalidated boolean response.
+Re-read the durable request and execution claim before cancellation; refuse a
+stale or terminal dispatch. Treat `accepted` only as acknowledgement of the
+exact cancellation request, not proof that execution stopped. Do not write a
+canceled receipt until a validated task lookup reports the terminal state.
 
 A vertical mapper never owns security fields in the private Worker request.
 Before calling it, Edge recomputes the profile/version/operation-bound public
