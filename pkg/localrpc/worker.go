@@ -67,6 +67,77 @@ type WorkerClient struct {
 	now                   func() time.Time
 }
 
+// InvocationBinding is the immutable public request/quote scope repeated by
+// Edge Core before it consumes a private Worker result.
+type InvocationBinding struct {
+	RequestID string
+	QuoteID   string
+	ServiceID string
+	Operation string
+}
+
+type InvocationUsage struct {
+	InputBytes      uint64
+	OutputBytes     uint64
+	InputTokens     uint64
+	OutputTokens    uint64
+	ExecutionMillis uint64
+}
+
+// InvocationCompletion is a defensive copy of a result that crossed the
+// validated private Worker RPC boundary.
+type InvocationCompletion struct {
+	Binding         InvocationBinding
+	Output          []byte
+	Usage           InvocationUsage
+	MaxOutputBytes  uint64
+	Deadline        time.Time
+	ModelRevision   string
+	RuntimeRevision string
+	CompletedAt     time.Time
+}
+
+// ValidatedInvocation is opaque so an unvalidated protobuf response cannot be
+// substituted into receipt issuance.
+type ValidatedInvocation struct {
+	valid           bool
+	binding         InvocationBinding
+	output          []byte
+	usage           InvocationUsage
+	maxOutputBytes  uint64
+	deadline        time.Time
+	modelRevision   string
+	runtimeRevision string
+	completedAt     time.Time
+}
+
+// Completion repeats the expected immutable binding and returns defensive
+// result bytes only after the private RPC response passed every client check.
+func (v ValidatedInvocation) Completion(
+	binding InvocationBinding,
+) (InvocationCompletion, error) {
+	if !v.valid {
+		return InvocationCompletion{}, errors.New(
+			"invalid validated Worker invocation",
+		)
+	}
+	if binding != v.binding {
+		return InvocationCompletion{}, errors.New(
+			"validated Worker invocation binding mismatch",
+		)
+	}
+	return InvocationCompletion{
+		Binding:         binding,
+		Output:          append([]byte(nil), v.output...),
+		Usage:           v.usage,
+		MaxOutputBytes:  v.maxOutputBytes,
+		Deadline:        v.deadline,
+		ModelRevision:   v.modelRevision,
+		RuntimeRevision: v.runtimeRevision,
+		CompletedAt:     v.completedAt,
+	}, nil
+}
+
 func NewWorkerClient(config WorkerClientConfig) (*WorkerClient, error) {
 	return newWorkerClient(config, time.Now)
 }
@@ -187,19 +258,19 @@ func (c *WorkerClient) Quote(
 func (c *WorkerClient) Invoke(
 	ctx context.Context,
 	request *edgev1.InvokeRequest,
-) (*edgev1.InvokeResponse, error) {
+) (ValidatedInvocation, error) {
 	if c == nil {
-		return nil, errors.New("nil worker client")
+		return ValidatedInvocation{}, errors.New("nil worker client")
 	}
 	request = cloneInvokeRequest(request)
 	now := c.now().UTC()
 	if err := c.validateInvokeRequest(request, now); err != nil {
-		return nil, err
+		return ValidatedInvocation{}, err
 	}
 	deadline := time.UnixMilli(request.DeadlineUnixMillis)
 	callContext, cancel, err := boundedContext(ctx, deadline)
 	if err != nil {
-		return nil, err
+		return ValidatedInvocation{}, err
 	}
 	defer cancel()
 	response, err := c.rpc.Invoke(
@@ -207,12 +278,35 @@ func (c *WorkerClient) Invoke(
 		connect.NewRequest(request),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("worker Invoke: %w", err)
+		return ValidatedInvocation{}, fmt.Errorf("worker Invoke: %w", err)
 	}
 	if err := validateInvokeResponse(response.Msg, request); err != nil {
-		return nil, fmt.Errorf("validate worker Invoke response: %w", err)
+		return ValidatedInvocation{}, fmt.Errorf(
+			"validate worker Invoke response: %w",
+			err,
+		)
 	}
-	return proto.Clone(response.Msg).(*edgev1.InvokeResponse), nil
+	completedAt := c.now().UTC()
+	return ValidatedInvocation{
+		valid: true,
+		binding: InvocationBinding{
+			RequestID: request.RequestId, QuoteID: request.QuoteId,
+			ServiceID: request.ServiceId, Operation: request.Operation,
+		},
+		output: append([]byte(nil), response.Msg.Output...),
+		usage: InvocationUsage{
+			InputBytes:      response.Msg.Usage.InputBytes,
+			OutputBytes:     response.Msg.Usage.OutputBytes,
+			InputTokens:     response.Msg.Usage.InputTokens,
+			OutputTokens:    response.Msg.Usage.OutputTokens,
+			ExecutionMillis: response.Msg.Usage.ExecutionMillis,
+		},
+		maxOutputBytes:  request.MaxOutputBytes,
+		deadline:        deadline.UTC(),
+		modelRevision:   response.Msg.ModelRevision,
+		runtimeRevision: response.Msg.RuntimeRevision,
+		completedAt:     completedAt,
+	}, nil
 }
 
 func (c *WorkerClient) Cancel(

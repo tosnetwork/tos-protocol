@@ -46,7 +46,12 @@ Transport success is not semantic success. Edge rejects:
 - oversized or duplicate capability, readiness, resource, attribute, and
   resource-limit collections
 
-Returned protobuf objects are defensively cloned across the boundary.
+Control and quote protobuf objects are defensively cloned across the boundary.
+An invocation response is instead returned as an opaque validated result. To
+consume it, Edge Core must repeat the request, quote, service, and operation
+binding. The opaque result retains the requested output limit, absolute
+deadline, completion time, byte/token usage, output, and worker revisions so
+later receipt issuance cannot substitute a less restrictive request.
 
 ## Priority and retries
 
@@ -59,8 +64,15 @@ The client performs no automatic RPC retries. Edge Core and its durable
 request journal own idempotency and recovery; retrying below that layer could
 execute a non-idempotent action twice.
 
+For a successful paid request, Edge Core accepts only this opaque result. It
+requires the durable request to remain `running`, repeats the signed quote's
+byte limits and deadline, commits the output digest and bounded usage to a
+receipt, and sends only canonical receipt bytes to purpose-specific signing
+key custody. The Worker never receives that key.
+
 ## Non-goals
 
 This client does not expose a public invocation route, authenticate an
-Internet caller, authorize payment, attest worker code, or prove executor
-isolation. Those checks remain independently mandatory.
+Internet caller, authorize payment, define profile intent-to-protobuf mapping,
+attest worker code, or prove executor isolation. Those checks remain
+independently mandatory.

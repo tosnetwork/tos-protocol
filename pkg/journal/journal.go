@@ -1114,10 +1114,30 @@ func (s *Store) ApplyReceipt(
 			return nil
 		}
 		if indexedReceiptKey != nil {
-			return fmt.Errorf(
-				"%w: request receipt index references missing receipt",
-				ErrCorrupt,
-			)
+			if len(indexedReceiptKey) != sha256.Size {
+				return fmt.Errorf(
+					"%w: invalid request receipt index",
+					ErrCorrupt,
+				)
+			}
+			indexedReceiptBytes := receipts.Get(indexedReceiptKey)
+			if indexedReceiptBytes == nil {
+				return fmt.Errorf(
+					"%w: request receipt index references missing receipt",
+					ErrCorrupt,
+				)
+			}
+			indexedReceipt, err := s.decodeReceipt(indexedReceiptBytes)
+			if err != nil {
+				return err
+			}
+			if scopeKey(indexedReceipt.Scope) != requestKey {
+				return fmt.Errorf(
+					"%w: request receipt index scope mismatch",
+					ErrCorrupt,
+				)
+			}
+			return ErrConflict
 		}
 		if record.Revision != expectedRevision {
 			return ErrRevision

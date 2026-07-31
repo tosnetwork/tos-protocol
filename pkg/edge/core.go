@@ -2,6 +2,8 @@ package edge
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
+	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/payment"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
@@ -23,6 +26,8 @@ const (
 	maxReconciliationInterval = 24 * time.Hour
 	minReconciliationTimeout  = 10 * time.Millisecond
 	maxReconciliationTimeout  = 10 * time.Minute
+	minReceiptLifetime        = time.Second
+	maxReceiptLifetime        = 10 * time.Minute
 )
 
 // CoreConfig contains only generic Edge Core state policy. Vertical runtime,
@@ -80,6 +85,17 @@ type PaymentReconciliationReport struct {
 	HasMore     bool
 	Wrapped     bool
 	Failures    []PaymentReconciliationFailure
+}
+
+// CompletedInvocation contains only a defensively copied Worker output and
+// the durable receipt/request state committed for it.
+type CompletedInvocation struct {
+	Output          []byte
+	ModelRevision   string
+	RuntimeRevision string
+	Request         journal.Record
+	Receipt         journal.ReceiptRecord
+	Disposition     journal.ReceiptDisposition
 }
 
 // Core owns durable request replay state and its bounded cleanup lifecycle.
@@ -404,6 +420,175 @@ func (c *Core) Receipt(scope journal.Scope) (journal.ReceiptRecord, error) {
 	return c.requests.GetReceipt(scope, c.now())
 }
 
+// CompleteSuccessfulInvocation is the only generic bridge from an opaque,
+// validated private Worker result to a signed success receipt. It requires the
+// exact request to remain paid and running, keeps receipt signing outside the
+// Worker, and atomically applies the verified envelope through the journal.
+func (c *Core) CompleteSuccessfulInvocation(
+	ctx context.Context,
+	scope journal.Scope,
+	expectedRevision uint64,
+	manifest *authorization.VerifiedManifest,
+	paymentAuthorization authorization.AuthorizedPayment,
+	invocation localrpc.ValidatedInvocation,
+	signer authorization.ReceiptSigner,
+	receiptID string,
+	receiptLifetime time.Duration,
+) (CompletedInvocation, error) {
+	if ctx == nil {
+		return CompletedInvocation{}, errors.New(
+			"nil invocation completion context",
+		)
+	}
+	if expectedRevision == 0 {
+		return CompletedInvocation{}, errors.New(
+			"expected revision must be positive",
+		)
+	}
+	if receiptLifetime < minReceiptLifetime ||
+		receiptLifetime > maxReceiptLifetime {
+		return CompletedInvocation{}, errors.New(
+			"invalid receipt envelope lifetime",
+		)
+	}
+	material, err := paymentAuthorization.ReceiptInvocationMaterial()
+	if err != nil {
+		return CompletedInvocation{}, fmt.Errorf(
+			"extract receipt invocation binding: %w",
+			err,
+		)
+	}
+	if scope.Network != material.Network ||
+		scope.ServiceID != material.ServiceID ||
+		scope.SessionID != material.SessionID ||
+		scope.Operation != material.Operation ||
+		scope.RequestID != material.RequestID {
+		return CompletedInvocation{}, errors.New(
+			"receipt invocation scope mismatch",
+		)
+	}
+	completion, err := invocation.Completion(localrpc.InvocationBinding{
+		RequestID: material.RequestID, QuoteID: material.QuoteID,
+		ServiceID: material.ServiceID, Operation: material.Operation,
+	})
+	if err != nil {
+		return CompletedInvocation{}, fmt.Errorf(
+			"consume validated Worker invocation: %w",
+			err,
+		)
+	}
+	if completion.Usage.InputBytes > material.MaxInputBytes ||
+		completion.Usage.OutputBytes > material.MaxOutputBytes ||
+		completion.MaxOutputBytes > material.MaxOutputBytes ||
+		completion.Deadline.After(material.Deadline) {
+		return CompletedInvocation{}, errors.New(
+			"Worker invocation expands quoted limits or deadline",
+		)
+	}
+	now := c.now().UTC()
+	if completion.CompletedAt.IsZero() ||
+		completion.CompletedAt.After(now.Add(identity.MaxClockSkew)) {
+		return CompletedInvocation{}, errors.New(
+			"invalid Worker completion time",
+		)
+	}
+	usage := completionReceiptUsage(completion.Usage)
+	resultDigest := digestInvocationOutput(completion.Output)
+
+	if existing, lookupErr := c.requests.GetReceipt(scope, now); lookupErr == nil {
+		return c.replayCompletedInvocation(
+			scope,
+			existing,
+			material,
+			receiptID,
+			usage,
+			resultDigest,
+			completion,
+			now,
+		)
+	} else if !errors.Is(lookupErr, journal.ErrNotFound) {
+		return CompletedInvocation{}, lookupErr
+	}
+
+	request, err := c.requests.Get(scope, now)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
+	if request.IntentDigest != material.IntentDigest {
+		return CompletedInvocation{}, journal.ErrConflict
+	}
+	if request.Revision != expectedRevision {
+		return CompletedInvocation{}, journal.ErrRevision
+	}
+	if request.State != journal.StateRunning {
+		return CompletedInvocation{}, journal.ErrTransition
+	}
+	appliedPayment, err := c.requests.GetPayment(scope, now)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
+	if appliedPayment.AuthorizationID != material.AuthorizationID ||
+		appliedPayment.QuoteID != material.QuoteID ||
+		appliedPayment.IntentDigest != material.IntentDigest {
+		return CompletedInvocation{}, journal.ErrConflict
+	}
+	if appliedPayment.Status == journal.PaymentStatusReorganized {
+		return CompletedInvocation{}, journal.ErrPaymentReorganized
+	}
+	if appliedPayment.Status != journal.PaymentStatusApplied ||
+		appliedPayment.AmountNanoTOS < material.PriceNanoTOS {
+		return CompletedInvocation{}, errors.New(
+			"receipt request has insufficient applied payment",
+		)
+	}
+	verified, err := manifest.IssueReceipt(
+		ctx,
+		paymentAuthorization,
+		authorization.ReceiptDraft{
+			ReceiptID: receiptID, Status: "succeeded",
+			Usage: usage, ChargedNanoTOS: material.PriceNanoTOS,
+			ResultDigest: resultDigest, CompletedAt: completion.CompletedAt,
+		},
+		signer,
+		now,
+		now.Add(receiptLifetime),
+	)
+	if err != nil {
+		return CompletedInvocation{}, fmt.Errorf("issue receipt: %w", err)
+	}
+	terminal, receipt, disposition, err := c.ApplyVerifiedReceipt(
+		scope,
+		expectedRevision,
+		verified,
+	)
+	if err != nil {
+		if errors.Is(err, journal.ErrConflict) ||
+			errors.Is(err, journal.ErrRevision) ||
+			errors.Is(err, journal.ErrTransition) {
+			existing, lookupErr := c.requests.GetReceipt(scope, now)
+			if lookupErr == nil {
+				return c.replayCompletedInvocation(
+					scope,
+					existing,
+					material,
+					receiptID,
+					usage,
+					resultDigest,
+					completion,
+					now,
+				)
+			}
+		}
+		return CompletedInvocation{}, err
+	}
+	return CompletedInvocation{
+		Output:          append([]byte(nil), completion.Output...),
+		ModelRevision:   completion.ModelRevision,
+		RuntimeRevision: completion.RuntimeRevision,
+		Request:         terminal, Receipt: receipt, Disposition: disposition,
+	}, nil
+}
+
 // ReconcilePayment performs one strict post-application chain recheck and
 // applies its opaque result against the latest durable high-water mark.
 func (c *Core) ReconcilePayment(
@@ -608,6 +793,98 @@ func receiptTerminalState(status string) (journal.State, string, error) {
 	default:
 		return "", "", errors.New("unsupported verified receipt status")
 	}
+}
+
+func (c *Core) replayCompletedInvocation(
+	scope journal.Scope,
+	receipt journal.ReceiptRecord,
+	material authorization.ReceiptInvocationMaterial,
+	receiptID string,
+	usage []protocol.UsageItem,
+	resultDigest string,
+	completion localrpc.InvocationCompletion,
+	now time.Time,
+) (CompletedInvocation, error) {
+	if !sameSuccessfulCompletionReceipt(
+		receipt,
+		scope,
+		material,
+		receiptID,
+		usage,
+		resultDigest,
+		completion.CompletedAt,
+	) {
+		return CompletedInvocation{}, journal.ErrConflict
+	}
+	request, err := c.requests.Get(scope, now)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
+	if request.State != journal.StateSucceeded ||
+		request.ResultDigest != resultDigest ||
+		request.ErrorCode != "" {
+		return CompletedInvocation{}, fmt.Errorf(
+			"%w: stored completion does not match request",
+			journal.ErrCorrupt,
+		)
+	}
+	return CompletedInvocation{
+		Output:          append([]byte(nil), completion.Output...),
+		ModelRevision:   completion.ModelRevision,
+		RuntimeRevision: completion.RuntimeRevision,
+		Request:         request, Receipt: receipt,
+		Disposition: journal.ReceiptReplay,
+	}, nil
+}
+
+func sameSuccessfulCompletionReceipt(
+	receipt journal.ReceiptRecord,
+	scope journal.Scope,
+	material authorization.ReceiptInvocationMaterial,
+	receiptID string,
+	usage []protocol.UsageItem,
+	resultDigest string,
+	completedAt time.Time,
+) bool {
+	if receipt.Scope != scope ||
+		receipt.IntentDigest != material.IntentDigest ||
+		receipt.ReceiptID != receiptID ||
+		receipt.AuthorizationID != material.AuthorizationID ||
+		receipt.QuoteID != material.QuoteID ||
+		receipt.Status != journal.StateSucceeded ||
+		receipt.ChargedNanoTOS != material.PriceNanoTOS ||
+		receipt.ResultDigest != resultDigest ||
+		receipt.ErrorCode != "" ||
+		receipt.ServiceRevision != material.ServiceRevision ||
+		receipt.ResourceRevision != material.ResourceRevision ||
+		!receipt.CompletedAt.Equal(completedAt.UTC()) ||
+		len(receipt.Usage) != len(usage) {
+		return false
+	}
+	for index, item := range usage {
+		if receipt.Usage[index].Unit != item.Unit ||
+			receipt.Usage[index].Quantity != item.Quantity {
+			return false
+		}
+	}
+	return true
+}
+
+func completionReceiptUsage(
+	usage localrpc.InvocationUsage,
+) []protocol.UsageItem {
+	return []protocol.UsageItem{
+		{Unit: "input_bytes", Quantity: usage.InputBytes},
+		{Unit: "output_bytes", Quantity: usage.OutputBytes},
+		{Unit: "input_tokens", Quantity: usage.InputTokens},
+		{Unit: "output_tokens", Quantity: usage.OutputTokens},
+		{Unit: "execution_millis", Quantity: usage.ExecutionMillis},
+	}
+}
+
+func digestInvocationOutput(output []byte) string {
+	digest := sha256.Sum256(output)
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 func (c *Core) TransitionRequest(

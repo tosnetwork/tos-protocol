@@ -67,6 +67,15 @@ charge, result commitment, and completion time. Workers never receive the
 receipt private key. Receipt IDs and request indexes are bounded and unique;
 exact retry must not create a second terminal effect.
 
+Do not accept a raw Worker protobuf as receipt evidence. Preserve an opaque
+validated result containing its immutable request binding, requested output
+limit, deadline, completion time, byte accounting, usage, and output. Before
+signing, repeat these against the exact paid running request and quote. Give
+key custody only canonical receipt bytes, then re-verify its returned payload,
+validity, key role, and signature. Concurrent semantically identical signing
+attempts may create more than one envelope but must resolve to exactly one
+durable receipt and request transition.
+
 ## Parsing and transport
 
 Reject unknown fields in security-sensitive typed values, duplicate JSON or

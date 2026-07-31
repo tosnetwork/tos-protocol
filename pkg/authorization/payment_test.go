@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,22 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
+
+type receiptSignerFunc func(
+	context.Context,
+	[]byte,
+	time.Time,
+	time.Time,
+) (identity.Envelope, error)
+
+func (f receiptSignerFunc) SignReceipt(
+	ctx context.Context,
+	payload []byte,
+	issuedAt time.Time,
+	expiresAt time.Time,
+) (identity.Envelope, error) {
+	return f(ctx, payload, issuedAt, expiresAt)
+}
 
 func TestQuoteAndPaymentAuthorizationBinding(t *testing.T) {
 	fixture := newSessionAuthFixture(t)
@@ -416,5 +433,179 @@ func TestReceiptAuthorizationRejectsSubstitutionAndWrongRole(t *testing.T) {
 		envelope, fixture.authorized, receiptNow,
 	); err == nil {
 		t.Fatal("receipt signed by a key without receipt role accepted")
+	}
+}
+
+func TestReceiptIssuanceBindsDraftAndExternalSigner(t *testing.T) {
+	fixture := newReceiptAuthorizationFixture(t)
+	receiptNow := fixture.session.now.Add(2 * time.Minute)
+	signerCalls := 0
+	signer := receiptSignerFunc(func(
+		ctx context.Context,
+		payload []byte,
+		issuedAt time.Time,
+		expiresAt time.Time,
+	) (identity.Envelope, error) {
+		signerCalls++
+		if err := ctx.Err(); err != nil {
+			return identity.Envelope{}, err
+		}
+		return identity.Sign(
+			fixture.session.runtimePrivate,
+			protocol.ReceiptDomain,
+			fixture.session.manifest.RuntimeKeys[0].KeyID,
+			payload,
+			issuedAt,
+			expiresAt,
+		)
+	})
+	draft := ReceiptDraft{
+		ReceiptID: "receipt-issued-0001", Status: "succeeded",
+		Usage: []protocol.UsageItem{
+			{Unit: "output_tokens", Quantity: 10},
+		},
+		ChargedNanoTOS: fixture.quote.PriceNanoTOS,
+		ResultDigest:   "sha256:" + strings.Repeat("c", 64),
+		CompletedAt:    receiptNow,
+	}
+	verified, err := fixture.manifest.IssueReceipt(
+		context.Background(),
+		fixture.authorized,
+		draft,
+		signer,
+		receiptNow,
+		receiptNow.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocation, err := fixture.authorized.ReceiptInvocationMaterial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	material, err := verified.ApplicationMaterial(ReceiptBinding{
+		Network: invocation.Network, ServiceID: invocation.ServiceID,
+		SessionID: invocation.SessionID, Operation: invocation.Operation,
+		RequestID: invocation.RequestID, IntentDigest: invocation.IntentDigest,
+		AuthorizationID: invocation.AuthorizationID,
+		QuoteID:         invocation.QuoteID,
+	}, receiptNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signerCalls != 1 || material.ReceiptID != draft.ReceiptID ||
+		material.ChargedNanoTOS != draft.ChargedNanoTOS ||
+		material.ServiceRevision != fixture.quote.ServiceRevision ||
+		material.ResourceRevision != fixture.quote.ResourceRevision {
+		t.Fatalf(
+			"calls=%d material=%#v",
+			signerCalls,
+			material,
+		)
+	}
+
+	draft.Usage[0].Quantity = 999
+	if material.Usage[0].Quantity != 10 {
+		t.Fatal("issued receipt aliased caller usage")
+	}
+}
+
+func TestReceiptIssuanceRejectsSignerDeviationAndCancellation(t *testing.T) {
+	fixture := newReceiptAuthorizationFixture(t)
+	receiptNow := fixture.session.now.Add(2 * time.Minute)
+	draft := ReceiptDraft{
+		ReceiptID: "receipt-issued-0002", Status: "succeeded",
+		Usage:          []protocol.UsageItem{},
+		ChargedNanoTOS: fixture.quote.PriceNanoTOS,
+		ResultDigest:   "sha256:" + strings.Repeat("d", 64),
+		CompletedAt:    receiptNow,
+	}
+	mutatingSigner := receiptSignerFunc(func(
+		_ context.Context,
+		payload []byte,
+		issuedAt time.Time,
+		expiresAt time.Time,
+	) (identity.Envelope, error) {
+		payload = append([]byte(nil), payload...)
+		payload[0] ^= 1
+		return identity.Sign(
+			fixture.session.runtimePrivate,
+			protocol.ReceiptDomain,
+			fixture.session.manifest.RuntimeKeys[0].KeyID,
+			payload,
+			issuedAt,
+			expiresAt,
+		)
+	})
+	if _, err := fixture.manifest.IssueReceipt(
+		context.Background(),
+		fixture.authorized,
+		draft,
+		mutatingSigner,
+		receiptNow,
+		receiptNow.Add(time.Minute),
+	); err == nil || !strings.Contains(err.Error(), "changed payload") {
+		t.Fatalf("mutating receipt signer error=%v", err)
+	}
+
+	wrongKeySigner := receiptSignerFunc(func(
+		_ context.Context,
+		payload []byte,
+		issuedAt time.Time,
+		expiresAt time.Time,
+	) (identity.Envelope, error) {
+		return identity.Sign(
+			fixture.session.runtimePrivate,
+			protocol.ReceiptDomain,
+			"runtime-wrong-key",
+			payload,
+			issuedAt,
+			expiresAt,
+		)
+	})
+	if _, err := fixture.manifest.IssueReceipt(
+		context.Background(),
+		fixture.authorized,
+		draft,
+		wrongKeySigner,
+		receiptNow,
+		receiptNow.Add(time.Minute),
+	); err == nil {
+		t.Fatal("receipt signer outside current manifest accepted")
+	}
+
+	called := false
+	canceledSigner := receiptSignerFunc(func(
+		context.Context,
+		[]byte,
+		time.Time,
+		time.Time,
+	) (identity.Envelope, error) {
+		called = true
+		return identity.Envelope{}, errors.New("unexpected signer call")
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := fixture.manifest.IssueReceipt(
+		ctx,
+		fixture.authorized,
+		draft,
+		canceledSigner,
+		receiptNow,
+		receiptNow.Add(time.Minute),
+	); !errors.Is(err, context.Canceled) || called {
+		t.Fatalf("canceled issue err=%v called=%v", err, called)
+	}
+
+	draft.ChargedNanoTOS = fixture.quote.PriceNanoTOS + 1
+	if _, err := fixture.manifest.IssueReceipt(
+		context.Background(),
+		fixture.authorized,
+		draft,
+		wrongKeySigner,
+		receiptNow,
+		receiptNow.Add(time.Minute),
+	); err == nil || !strings.Contains(err.Error(), "quoted price") {
+		t.Fatalf("excess receipt charge error=%v", err)
 	}
 }

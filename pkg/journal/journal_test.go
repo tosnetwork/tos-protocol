@@ -1051,6 +1051,35 @@ func TestApplyReceiptRejectsReplayChargeAndReorganization(t *testing.T) {
 	}
 }
 
+func TestApplyReceiptRejectsSecondReceiptIDAsConflict(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("receipt-second-id-request")
+	running, _ := preparePaidRunningRequest(t, store, scope, now)
+	first := testReceiptAdmission(
+		scope,
+		now.Add(time.Second),
+		StateSucceeded,
+	)
+	if _, _, _, err := store.ApplyReceipt(
+		first,
+		running.Revision,
+		now.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.ReceiptID = "receipt-0002"
+	refreshReceiptEnvelope(&second, now.Add(time.Second))
+	if _, _, _, err := store.ApplyReceipt(
+		second,
+		running.Revision,
+		now.Add(2*time.Second),
+	); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second receipt ID error=%v", err)
+	}
+}
+
 func TestApplyReceiptAllowsAuthorizedTerminalFailure(t *testing.T) {
 	store, _ := openTestStore(t, testLimits(100))
 	now := time.Unix(1_800_000_000, 0).UTC()

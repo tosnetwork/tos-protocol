@@ -84,7 +84,9 @@ roll back together. The journal recomputes the envelope fingerprint and
 requires its canonical payload to match every persisted receipt field.
 Exact replay returns the existing terminal record. A receipt cannot move a
 different request, exceed the applied payment, or complete a reorganized
-payment.
+payment. Once a request has a receipt, a different receipt ID or semantic
+outcome is a conflict; an index that references no stored receipt is journal
+corruption and fails closed.
 
 Paid `authorized` and `running` requests cannot use the generic terminal
 transition. Success requires a receipt from `running`; failed, canceled, and

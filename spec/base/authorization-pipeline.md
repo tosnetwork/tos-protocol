@@ -113,8 +113,9 @@ revocation, payment, and local policy before continuing.
 This library does not by itself enable a public session or invocation route.
 The bootstrap server still exposes discovery only. A production route must
 wire a real authority resolver, typed payload policy, the concrete TOS payment
-adapter and watcher schedule, execution isolation, receipt generation/key
-custody, and authenticated receipt delivery.
+adapter and watcher schedule, profile-specific Worker mapping, execution
+isolation, production receipt key custody, failure policy, and authenticated
+receipt delivery.
 
 Runtime requests such as quotes and receipts can use the opaque
 `AuthorizedEnvelope` path directly. Client actions additionally require a
@@ -134,3 +135,11 @@ the `receipt` role, and the canonical signed receipt must validate against the
 original opaque quote/payment authorization. The opaque result repeats the
 complete request, quote, authorization, revisions, charge, usage, and signed
 envelope binding immediately before atomic terminal persistence.
+
+For successful private Worker calls, the reference continues this boundary
+without exposing raw response objects: an opaque validated result retains its
+request binding, limits, deadline, usage, revisions, completion time, and
+output. Edge Core requires the corresponding paid request to remain running,
+constructs only payment-bound canonical receipt bytes, delegates signing to a
+purpose-specific custody interface, and immediately runs the normal manifest
+receipt verifier before persistence.

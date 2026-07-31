@@ -78,8 +78,8 @@ The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
 deadline. `tos-edge` still exposes discovery only until manifest-backed
 authorization is connected to the live TOS contract/RPC decoder and durable
-payment watching, execution isolation, receipt generation, and public
-delivery are implemented.
+payment watching, execution isolation, profile-specific invocation mapping,
+and public delivery are implemented.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
@@ -101,11 +101,17 @@ ownership, and health counters; it is disabled unless an observer and all
 bounds are explicitly configured. A current manifest `receipt` key can also
 produce an opaque verified receipt; its full signed envelope, intent/payment
 binding, bounded usage, charge, and terminal request transition persist in
-one exact-replay-safe transaction. The concrete TOS payment contract adapter,
-`tos-edge` binary configuration, adaptive retry policy, worker-result receipt
-generation/key custody, refund/completion policy, isolated executor, and
-public receipt route remain intentionally disconnected, so none of these
-internal boundaries enable public actions by themselves.
+one exact-replay-safe transaction. The private Worker client now returns an
+opaque validated invocation result rather than a caller-mutable protobuf.
+Edge Core can correlate its retained limits, deadline, byte accounting, and
+output digest to the exact paid running request, delegate only canonical
+receipt bytes to purpose-specific key custody, re-verify the signature against
+the current manifest, and commit one success receipt under concurrent retry.
+The concrete TOS payment contract adapter, `tos-edge` binary configuration,
+adaptive retry policy, profile intent-to-Worker mapping, failed/canceled
+completion policy, production signer adapter, isolated executor, and public
+receipt route remain intentionally disconnected, so none of these internal
+boundaries enable public actions by themselves.
 
 ## Repository map
 

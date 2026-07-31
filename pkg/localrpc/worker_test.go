@@ -163,12 +163,35 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	}
 	invokeRequest := validInvokeRequest(now)
 	invokeRequest.QuoteId = quote.QuoteId
-	response, err := client.Invoke(context.Background(), invokeRequest)
+	validated, err := client.Invoke(context.Background(), invokeRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(response.Output) != "echo:hello" {
-		t.Fatalf("unexpected output %q", response.Output)
+	response, err := validated.Completion(InvocationBinding{
+		RequestID: invokeRequest.RequestId, QuoteID: invokeRequest.QuoteId,
+		ServiceID: invokeRequest.ServiceId, Operation: invokeRequest.Operation,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(response.Output) != "echo:hello" ||
+		response.Usage.OutputBytes != uint64(len(response.Output)) {
+		t.Fatalf("unexpected completion %#v", response)
+	}
+	response.Output[0] ^= 1
+	again, err := validated.Completion(response.Binding)
+	if err != nil || string(again.Output) != "echo:hello" {
+		t.Fatalf("validated result was not defensive: %#v err=%v", again, err)
+	}
+	changed := response.Binding
+	changed.RequestID = "request-other"
+	if _, err := validated.Completion(changed); err == nil {
+		t.Fatal("validated invocation reused for another request")
+	}
+	if _, err := (ValidatedInvocation{}).Completion(
+		response.Binding,
+	); err == nil {
+		t.Fatal("zero validated invocation accepted")
 	}
 	accepted, err := client.Cancel(context.Background(), invokeRequest.RequestId)
 	if err != nil || !accepted {

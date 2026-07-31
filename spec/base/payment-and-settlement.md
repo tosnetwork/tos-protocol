@@ -80,11 +80,18 @@ with a plain terminal journal transition. Receipt IDs are globally unique per
 network, exact replay has no second effect, and a charge above the applied
 payment or a reorganized payment is rejected.
 
-This is verification and durable evidence storage, not receipt generation.
-The production Edge composition must keep the receipt private key outside the
-worker, construct the receipt from a correlated and metered worker result,
-and expose only the stored signed envelope through the authenticated receipt
-resource.
+The Go reference also implements the internal successful-result issuance
+boundary. The private Worker client returns an opaque validated response; Edge
+Core repeats the paid running request and quote limits, derives the output
+digest and fixed bounded usage fields, and gives only canonical receipt bytes
+to a purpose-specific signer. It rejects payload, validity, key, role, or
+signature substitution before atomic persistence. Concurrent equivalent
+signatures resolve to the one durable semantic receipt.
+
+This does not provide production key custody or public delivery. A deployment
+must supply a bounded signer adapter, keep its private key outside the Worker,
+define profile intent-to-Worker mapping and failure/refund policy, and expose
+only the stored signed envelope through an authenticated receipt resource.
 
 The initial integration should consume the released Service Actor and escrow
 interfaces through a pinned chain adapter. Contract code, ABI, deployment
