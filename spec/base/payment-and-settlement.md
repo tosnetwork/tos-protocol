@@ -36,13 +36,17 @@ effect. Watchers persist the block/reference cursor and enough request state
 before acknowledging payment. They bound pending entries, retries,
 reconciliation scans, block history, logs, and tombstones.
 
-The Go reference currently implements the strict pre-persistence observation
-boundary described in
+The Go reference implements the strict observation and exact-once local
+application boundary described in
 [payment-observation.md](payment-observation.md): runtime-signed quote,
 client/delegation-signed authorization, exact echoed chain reference, party
 and amount checks, high-water/freshness checks, and explicit finality and
-overpayment policy. Durable application and reorganization reconciliation
-remain required before public paid execution.
+overpayment policy. The resulting opaque observation, payment replay index,
+and pending-to-authorized request transition are persisted atomically.
+Monotonic reorganization state blocks paid dispatch. A production watcher
+with a durable scan cursor, authenticated reorganization input, bounded
+restart reconciliation, and refund handling remain required before public
+paid execution.
 
 ## Reorganization and failure
 

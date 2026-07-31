@@ -69,6 +69,27 @@ func testSessionAdmission(
 	}
 }
 
+func testPaymentAdmission(
+	scope Scope,
+	now time.Time,
+	observedMasterSeqno uint64,
+) PaymentAdmission {
+	return PaymentAdmission{
+		Scope:                 scope,
+		IntentDigest:          "sha256:" + strings.Repeat("a", 64),
+		AuthorizationID:       "authorization-0001",
+		QuoteID:               "quote-0001",
+		Reference:             "payment-reference-0001",
+		Payer:                 "payer-wallet",
+		Payee:                 "service-wallet",
+		AmountNanoTOS:         5,
+		QuoteEnvelopeDigest:   "sha256:" + strings.Repeat("e", 64),
+		PaymentEnvelopeDigest: "sha256:" + strings.Repeat("f", 64),
+		ObservedMasterSeqno:   observedMasterSeqno,
+		ObservedAt:            now,
+	}
+}
+
 func testNonceClaim(scope Scope, nonce string, expiresAt time.Time) NonceClaim {
 	return NonceClaim{
 		Network: scope.Network, Authority: scope.Authority,
@@ -247,6 +268,311 @@ func TestAdmitSessionAtomicallyConsumesBudgetsOnce(t *testing.T) {
 	}
 	if stats.Records != 2 || stats.Nonces != 3 || stats.BudgetUsages != 2 {
 		t.Fatalf("unexpected session stats: %#v", stats)
+	}
+}
+
+func TestApplyPaymentAtomicallyAuthorizesAndReplays(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("payment-request-1")
+	admission := testSessionAdmission(scope, testNonce(40), now, 5)
+	if _, disposition, err := store.AdmitSession(admission, now); err != nil ||
+		disposition != BeginCreated {
+		t.Fatalf("admit payment request: disposition=%q err=%v", disposition, err)
+	}
+	paymentAdmission := testPaymentAdmission(scope, now, 101)
+	record, payment, disposition, err := store.ApplyPayment(paymentAdmission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != PaymentApplied ||
+		record.State != StateAuthorized || record.Revision != 2 ||
+		payment.Status != PaymentStatusApplied || payment.Revision != 1 {
+		t.Fatalf(
+			"unexpected payment application: record=%#v payment=%#v disposition=%q",
+			record, payment, disposition,
+		)
+	}
+
+	replayedRecord, replayedPayment, disposition, err := store.ApplyPayment(
+		paymentAdmission, now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != PaymentReplay ||
+		replayedRecord != record || replayedPayment != payment {
+		t.Fatalf(
+			"payment replay changed state: record=%#v payment=%#v disposition=%q",
+			replayedRecord, replayedPayment, disposition,
+		)
+	}
+	stored, err := store.GetPayment(scope, now)
+	if err != nil || stored != payment {
+		t.Fatalf("stored payment=%#v err=%v", stored, err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 1 || stats.Payments != 1 {
+		t.Fatalf("unexpected payment stats: %#v", stats)
+	}
+	running, err := store.Transition(
+		scope, record.Revision, StateRunning, "", "", now.Add(2*time.Second),
+	)
+	if err != nil || running.State != StateRunning {
+		t.Fatalf("run paid request: record=%#v err=%v", running, err)
+	}
+}
+
+func TestApplyPaymentRefreshRejectsRollbackAndConflict(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("payment-refresh")
+	if _, _, err := store.AdmitSession(
+		testSessionAdmission(scope, testNonce(41), now, 5), now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	record, _, _, err := store.ApplyPayment(admission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refreshed := admission
+	refreshed.ObservedMasterSeqno = 102
+	refreshed.ObservedAt = now.Add(time.Second)
+	refreshedRecord, payment, disposition, err := store.ApplyPayment(
+		refreshed, now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != PaymentRefreshed ||
+		refreshedRecord != record || payment.Revision != 2 ||
+		payment.ObservedMasterSeqno != 102 {
+		t.Fatalf(
+			"unexpected refresh: record=%#v payment=%#v disposition=%q",
+			refreshedRecord, payment, disposition,
+		)
+	}
+	rollback := admission
+	rollback.ObservedMasterSeqno = 100
+	if _, _, _, err := store.ApplyPayment(
+		rollback, now.Add(2*time.Second),
+	); !errors.Is(err, ErrPaymentRollback) {
+		t.Fatalf("payment rollback error=%v", err)
+	}
+	conflict := refreshed
+	conflict.ObservedAt = now.Add(2 * time.Second)
+	if _, _, _, err := store.ApplyPayment(
+		conflict, now.Add(2*time.Second),
+	); !errors.Is(err, ErrConflict) {
+		t.Fatalf("same-position conflict error=%v", err)
+	}
+}
+
+func TestApplyPaymentRejectsCrossRequestReplay(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	firstScope := testScope("payment-first-request")
+	secondScope := testScope("payment-second-request")
+	for index, scope := range []Scope{firstScope, secondScope} {
+		if _, _, err := store.AdmitSession(
+			testSessionAdmission(scope, testNonce(byte(42+index)), now, 5), now,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paymentAdmission := testPaymentAdmission(firstScope, now, 101)
+	if _, _, _, err := store.ApplyPayment(paymentAdmission, now); err != nil {
+		t.Fatal(err)
+	}
+	paymentAdmission.Scope = secondScope
+	if _, _, _, err := store.ApplyPayment(
+		paymentAdmission, now,
+	); !errors.Is(err, ErrPaymentReplay) {
+		t.Fatalf("cross-request payment replay error=%v", err)
+	}
+	second, err := store.Get(secondScope, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.State != StatePending || second.Revision != 1 {
+		t.Fatalf("cross-request replay mutated request: %#v", second)
+	}
+}
+
+func TestApplyPaymentConcurrentReplayHasOneWinner(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("payment-concurrent")
+	if _, _, err := store.AdmitSession(
+		testSessionAdmission(scope, testNonce(44), now, 5), now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	const attempts = 32
+	var applied atomic.Int32
+	var replayed atomic.Int32
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, attempts)
+	for range attempts {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, _, disposition, err := store.ApplyPayment(admission, now)
+			switch {
+			case err != nil:
+				errorsSeen <- err
+			case disposition == PaymentApplied:
+				applied.Add(1)
+			case disposition == PaymentReplay:
+				replayed.Add(1)
+			default:
+				errorsSeen <- fmt.Errorf("unexpected disposition %q", disposition)
+			}
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		t.Error(err)
+	}
+	record, err := store.Get(scope, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.Load() != 1 || replayed.Load() != attempts-1 ||
+		record.State != StateAuthorized || record.Revision != 2 ||
+		stats.Payments != 1 {
+		t.Fatalf(
+			"applied=%d replayed=%d record=%#v stats=%#v",
+			applied.Load(), replayed.Load(), record, stats,
+		)
+	}
+}
+
+func TestPaymentReorganizationBlocksPaidDispatch(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("payment-reorganized")
+	if _, _, err := store.AdmitSession(
+		testSessionAdmission(scope, testNonce(45), now, 5), now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	record, _, _, err := store.ApplyPayment(admission, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reorganization := PaymentReorganization{
+		Scope: scope, AuthorizationID: admission.AuthorizationID,
+		QuoteID: admission.QuoteID, Reference: admission.Reference,
+		ObservedMasterSeqno: 102, ObservedAt: now.Add(time.Second),
+	}
+	payment, disposition, err := store.MarkPaymentReorganized(
+		reorganization, now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != PaymentReorganized ||
+		payment.Status != PaymentStatusReorganized || payment.Revision != 2 {
+		t.Fatalf("unexpected reorganization: %#v, %q", payment, disposition)
+	}
+	replayed, disposition, err := store.MarkPaymentReorganized(
+		reorganization, now.Add(2*time.Second),
+	)
+	if err != nil || disposition != PaymentReplay || replayed != payment {
+		t.Fatalf(
+			"reorganization replay: payment=%#v disposition=%q err=%v",
+			replayed, disposition, err,
+		)
+	}
+	if _, _, _, err := store.ApplyPayment(
+		admission, now.Add(2*time.Second),
+	); !errors.Is(err, ErrPaymentReorganized) {
+		t.Fatalf("reorganized payment application error=%v", err)
+	}
+	if _, err := store.Transition(
+		scope, record.Revision, StateRunning, "", "", now.Add(2*time.Second),
+	); !errors.Is(err, ErrPaymentReorganized) {
+		t.Fatalf("reorganized paid dispatch error=%v", err)
+	}
+	rollback := reorganization
+	rollback.ObservedMasterSeqno = 101
+	rollback.ObservedAt = now
+	if _, _, err := store.MarkPaymentReorganized(
+		rollback, now.Add(2*time.Second),
+	); !errors.Is(err, ErrPaymentRollback) {
+		t.Fatalf("reorganization rollback error=%v", err)
+	}
+}
+
+func TestPaymentStateSurvivesRestartAndExpiresWithRequest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requests.db")
+	limits := testLimits(100)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	scope := testScope("payment-restart")
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := testPaymentAdmission(scope, now, 101)
+	if _, _, err := store.Begin(
+		scope, admission.IntentDigest, now, now.Add(time.Millisecond),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := store.ApplyPayment(admission, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	record, payment, disposition, err := reopened.ApplyPayment(
+		admission, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition != PaymentReplay ||
+		record.State != StateAuthorized || payment.Status != PaymentStatusApplied {
+		t.Fatalf(
+			"restarted payment: record=%#v payment=%#v disposition=%q",
+			record, payment, disposition,
+		)
+	}
+	deleted, more, err := reopened.PruneExpired(now.Add(2*time.Millisecond), 1)
+	if err != nil || deleted != 1 || more {
+		t.Fatalf("prune payment request: deleted=%d more=%v err=%v", deleted, more, err)
+	}
+	stats, err := reopened.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 0 || stats.Payments != 0 {
+		t.Fatalf("expired payment was retained: %#v", stats)
+	}
+	if _, err := reopened.GetPayment(
+		scope, now.Add(2*time.Millisecond),
+	); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired payment lookup error=%v", err)
 	}
 }
 

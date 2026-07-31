@@ -34,33 +34,39 @@ const (
 	maxConfiguredRecordBytes = 1 << 20
 	maxConfiguredRetention   = 365 * 24 * time.Hour
 	maxAdmissionBudgets      = 6
+	maxPaymentClockSkew      = 2 * time.Minute
 	expiryPrefixBytes        = 12
 	expiryKeyBytes           = expiryPrefixBytes + sha256.Size
 )
 
 var (
-	ErrConflict    = errors.New("request ID is already bound to different intent")
-	ErrCapacity    = errors.New("request journal is at capacity")
-	ErrNotFound    = errors.New("request journal record not found")
-	ErrExpired     = errors.New("request journal record expired")
-	ErrRevision    = errors.New("request journal revision mismatch")
-	ErrTransition  = errors.New("illegal request journal transition")
-	ErrNonceReplay = errors.New("signed envelope nonce was already used")
-	ErrBudgetLimit = errors.New("session or delegation budget exhausted")
-	ErrCorrupt     = errors.New("request journal is corrupt")
+	ErrConflict           = errors.New("request ID is already bound to different intent")
+	ErrCapacity           = errors.New("request journal is at capacity")
+	ErrNotFound           = errors.New("request journal record not found")
+	ErrExpired            = errors.New("request journal record expired")
+	ErrRevision           = errors.New("request journal revision mismatch")
+	ErrTransition         = errors.New("illegal request journal transition")
+	ErrNonceReplay        = errors.New("signed envelope nonce was already used")
+	ErrBudgetLimit        = errors.New("session or delegation budget exhausted")
+	ErrPaymentReplay      = errors.New("payment authorization is already bound to another request")
+	ErrPaymentReorganized = errors.New("applied payment was reorganized")
+	ErrPaymentRollback    = errors.New("payment observation regressed below its high-water mark")
+	ErrCorrupt            = errors.New("request journal is corrupt")
 
-	recordsBucket      = []byte("records-v1")
-	expiryBucket       = []byte("expiry-v1")
-	metaBucket         = []byte("meta-v1")
-	countKey           = []byte("record-count")
-	expiryMarker       = []byte{1}
-	noncesBucket       = []byte("nonces-v1")
-	nonceExpiryBucket  = []byte("nonce-expiry-v1")
-	nonceCountKey      = []byte("nonce-count")
-	budgetsBucket      = []byte("budgets-v1")
-	budgetExpiryBucket = []byte("budget-expiry-v1")
-	budgetClaimsBucket = []byte("budget-claims-v1")
-	budgetCountKey     = []byte("budget-count")
+	recordsBucket         = []byte("records-v1")
+	expiryBucket          = []byte("expiry-v1")
+	metaBucket            = []byte("meta-v1")
+	countKey              = []byte("record-count")
+	expiryMarker          = []byte{1}
+	noncesBucket          = []byte("nonces-v1")
+	nonceExpiryBucket     = []byte("nonce-expiry-v1")
+	nonceCountKey         = []byte("nonce-count")
+	budgetsBucket         = []byte("budgets-v1")
+	budgetExpiryBucket    = []byte("budget-expiry-v1")
+	budgetClaimsBucket    = []byte("budget-claims-v1")
+	budgetCountKey        = []byte("budget-count")
+	paymentsBucket        = []byte("payments-v1")
+	requestPaymentsBucket = []byte("request-payments-v1")
 
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	idPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
@@ -210,11 +216,74 @@ type NonceClaim struct {
 	ExpiresAt      time.Time `json:"expiresAt"`
 }
 
+type PaymentStatus string
+
+const (
+	PaymentStatusApplied     PaymentStatus = "applied"
+	PaymentStatusReorganized PaymentStatus = "reorganized"
+)
+
+// PaymentAdmission is material from a fresh opaque chain observation. The
+// request must already exist in pending state with the same intent.
+type PaymentAdmission struct {
+	Scope                 Scope
+	IntentDigest          string
+	AuthorizationID       string
+	QuoteID               string
+	Reference             string
+	Payer                 string
+	Payee                 string
+	AmountNanoTOS         uint64
+	QuoteEnvelopeDigest   string
+	PaymentEnvelopeDigest string
+	ObservedMasterSeqno   uint64
+	ObservedAt            time.Time
+}
+
+type PaymentReorganization struct {
+	Scope               Scope
+	AuthorizationID     string
+	QuoteID             string
+	Reference           string
+	ObservedMasterSeqno uint64
+	ObservedAt          time.Time
+}
+
+type PaymentRecord struct {
+	Version               string        `json:"version"`
+	Scope                 Scope         `json:"scope"`
+	IntentDigest          string        `json:"intentDigest"`
+	AuthorizationID       string        `json:"authorizationId"`
+	QuoteID               string        `json:"quoteId"`
+	Reference             string        `json:"reference"`
+	Payer                 string        `json:"payer"`
+	Payee                 string        `json:"payee"`
+	AmountNanoTOS         uint64        `json:"amountNanoTos"`
+	QuoteEnvelopeDigest   string        `json:"quoteEnvelopeDigest"`
+	PaymentEnvelopeDigest string        `json:"paymentEnvelopeDigest"`
+	Status                PaymentStatus `json:"status"`
+	Revision              uint64        `json:"revision"`
+	ObservedMasterSeqno   uint64        `json:"observedMasterSeqno"`
+	ObservedAt            time.Time     `json:"observedAt"`
+	AppliedAt             time.Time     `json:"appliedAt"`
+	ReorganizedAt         time.Time     `json:"reorganizedAt,omitempty"`
+	RetainUntil           time.Time     `json:"retainUntil"`
+}
+
 type BeginDisposition string
 
 const (
 	BeginCreated BeginDisposition = "created"
 	BeginReplay  BeginDisposition = "replay"
+)
+
+type PaymentDisposition string
+
+const (
+	PaymentApplied     PaymentDisposition = "applied"
+	PaymentReplay      PaymentDisposition = "replay"
+	PaymentRefreshed   PaymentDisposition = "refreshed"
+	PaymentReorganized PaymentDisposition = "reorganized"
 )
 
 type nonceDisposition uint8
@@ -228,6 +297,7 @@ type Stats struct {
 	Records      uint64
 	Nonces       uint64
 	BudgetUsages uint64
+	Payments     uint64
 	FileSize     int64
 }
 
@@ -524,6 +594,267 @@ func (s *Store) Get(scope Scope, now time.Time) (Record, error) {
 	return output, err
 }
 
+// ApplyPayment binds one globally unique payment authorization to one pending
+// request and transitions that request to authorized in the same transaction.
+// Exact replay never advances the request revision a second time.
+func (s *Store) ApplyPayment(
+	admission PaymentAdmission,
+	now time.Time,
+) (Record, PaymentRecord, PaymentDisposition, error) {
+	now, err := admission.validate(now)
+	if err != nil {
+		return Record{}, PaymentRecord{}, "", err
+	}
+	requestKey := scopeKey(admission.Scope)
+	paymentKeyValue := paymentKey(
+		admission.Scope.Network,
+		admission.AuthorizationID,
+		admission.Reference,
+	)
+	var output Record
+	var paymentOutput PaymentRecord
+	var disposition PaymentDisposition
+	err = s.db.Update(func(transaction *bolt.Tx) error {
+		records := transaction.Bucket(recordsBucket)
+		encodedRequest := records.Get(requestKey[:])
+		if encodedRequest == nil {
+			return ErrNotFound
+		}
+		record, err := s.decodeRecord(encodedRequest)
+		if err != nil {
+			return err
+		}
+		if record.Scope != admission.Scope {
+			return fmt.Errorf("%w: request key collision", ErrCorrupt)
+		}
+		if !record.RetainUntil.After(now) {
+			return ErrExpired
+		}
+		if record.IntentDigest != admission.IntentDigest {
+			return ErrConflict
+		}
+
+		payments := transaction.Bucket(paymentsBucket)
+		requestPayments := transaction.Bucket(requestPaymentsBucket)
+		indexedPaymentKey := requestPayments.Get(requestKey[:])
+		if encodedPayment := payments.Get(paymentKeyValue[:]); encodedPayment != nil {
+			existing, err := s.decodePayment(encodedPayment)
+			if err != nil {
+				return err
+			}
+			if !samePaymentBinding(existing, admission) {
+				if existing.Scope != admission.Scope {
+					return ErrPaymentReplay
+				}
+				return ErrConflict
+			}
+			if len(indexedPaymentKey) != sha256.Size ||
+				!bytes.Equal(indexedPaymentKey, paymentKeyValue[:]) {
+				return fmt.Errorf("%w: missing or mismatched request payment index", ErrCorrupt)
+			}
+			if record.State == StatePending {
+				return fmt.Errorf("%w: applied payment has pending request", ErrCorrupt)
+			}
+			if existing.Status == PaymentStatusReorganized {
+				return ErrPaymentReorganized
+			}
+			if admission.ObservedMasterSeqno < existing.ObservedMasterSeqno {
+				return ErrPaymentRollback
+			}
+			if admission.ObservedMasterSeqno == existing.ObservedMasterSeqno {
+				if !admission.ObservedAt.Equal(existing.ObservedAt) {
+					return ErrConflict
+				}
+				output, paymentOutput, disposition = record, existing, PaymentReplay
+				return nil
+			}
+			if admission.ObservedAt.Before(existing.ObservedAt) {
+				return ErrPaymentRollback
+			}
+			existing.ObservedMasterSeqno = admission.ObservedMasterSeqno
+			existing.ObservedAt = admission.ObservedAt.UTC()
+			existing.Revision++
+			updated, err := s.encodePayment(existing)
+			if err != nil {
+				return err
+			}
+			if err := payments.Put(paymentKeyValue[:], updated); err != nil {
+				return err
+			}
+			output, paymentOutput, disposition = record, existing, PaymentRefreshed
+			return nil
+		}
+		if indexedPaymentKey != nil {
+			return fmt.Errorf("%w: request payment index references missing payment", ErrCorrupt)
+		}
+		if record.State != StatePending {
+			return ErrTransition
+		}
+		payment := PaymentRecord{
+			Version: "1", Scope: admission.Scope,
+			IntentDigest:    admission.IntentDigest,
+			AuthorizationID: admission.AuthorizationID,
+			QuoteID:         admission.QuoteID, Reference: admission.Reference,
+			Payer: admission.Payer, Payee: admission.Payee,
+			AmountNanoTOS:         admission.AmountNanoTOS,
+			QuoteEnvelopeDigest:   admission.QuoteEnvelopeDigest,
+			PaymentEnvelopeDigest: admission.PaymentEnvelopeDigest,
+			Status:                PaymentStatusApplied, Revision: 1,
+			ObservedMasterSeqno: admission.ObservedMasterSeqno,
+			ObservedAt:          admission.ObservedAt.UTC(),
+			AppliedAt:           now, RetainUntil: record.RetainUntil,
+		}
+		encodedPayment, err := s.encodePayment(payment)
+		if err != nil {
+			return err
+		}
+		if err := payments.Put(paymentKeyValue[:], encodedPayment); err != nil {
+			return err
+		}
+		if err := requestPayments.Put(requestKey[:], paymentKeyValue[:]); err != nil {
+			return err
+		}
+		record.State = StateAuthorized
+		record.Revision++
+		if now.After(record.UpdatedAt) {
+			record.UpdatedAt = now
+		}
+		encodedRequest, err = s.encodeRecord(record)
+		if err != nil {
+			return err
+		}
+		if err := records.Put(requestKey[:], encodedRequest); err != nil {
+			return err
+		}
+		output, paymentOutput, disposition = record, payment, PaymentApplied
+		return nil
+	})
+	if err != nil {
+		return Record{}, PaymentRecord{}, "", err
+	}
+	return output, paymentOutput, disposition, nil
+}
+
+func (s *Store) GetPayment(
+	scope Scope,
+	now time.Time,
+) (PaymentRecord, error) {
+	if err := scope.Validate(); err != nil {
+		return PaymentRecord{}, err
+	}
+	if err := validateNow(now); err != nil {
+		return PaymentRecord{}, err
+	}
+	requestKey := scopeKey(scope)
+	var output PaymentRecord
+	err := s.db.View(func(transaction *bolt.Tx) error {
+		paymentKeyBytes := transaction.Bucket(requestPaymentsBucket).Get(requestKey[:])
+		if paymentKeyBytes == nil {
+			return ErrNotFound
+		}
+		if len(paymentKeyBytes) != sha256.Size {
+			return fmt.Errorf("%w: invalid request payment index", ErrCorrupt)
+		}
+		encoded := transaction.Bucket(paymentsBucket).Get(paymentKeyBytes)
+		if encoded == nil {
+			return fmt.Errorf("%w: request payment is missing", ErrCorrupt)
+		}
+		payment, err := s.decodePayment(encoded)
+		if err != nil {
+			return err
+		}
+		if payment.Scope != scope {
+			return fmt.Errorf("%w: request payment scope mismatch", ErrCorrupt)
+		}
+		if !payment.RetainUntil.After(now.UTC()) {
+			return ErrExpired
+		}
+		output = payment
+		return nil
+	})
+	return output, err
+}
+
+// MarkPaymentReorganized records a verified chain reorganization. It does not
+// guess refund or completion policy, but subsequent paid dispatch is blocked.
+func (s *Store) MarkPaymentReorganized(
+	reorganization PaymentReorganization,
+	now time.Time,
+) (PaymentRecord, PaymentDisposition, error) {
+	now, err := reorganization.validate(now)
+	if err != nil {
+		return PaymentRecord{}, "", err
+	}
+	requestKey := scopeKey(reorganization.Scope)
+	paymentKeyValue := paymentKey(
+		reorganization.Scope.Network,
+		reorganization.AuthorizationID,
+		reorganization.Reference,
+	)
+	var output PaymentRecord
+	var disposition PaymentDisposition
+	err = s.db.Update(func(transaction *bolt.Tx) error {
+		indexedPaymentKey := transaction.Bucket(requestPaymentsBucket).Get(requestKey[:])
+		if len(indexedPaymentKey) != sha256.Size ||
+			!bytes.Equal(indexedPaymentKey, paymentKeyValue[:]) {
+			return ErrNotFound
+		}
+		payments := transaction.Bucket(paymentsBucket)
+		encoded := payments.Get(paymentKeyValue[:])
+		if encoded == nil {
+			return fmt.Errorf("%w: indexed payment is missing", ErrCorrupt)
+		}
+		payment, err := s.decodePayment(encoded)
+		if err != nil {
+			return err
+		}
+		if payment.Scope != reorganization.Scope ||
+			payment.AuthorizationID != reorganization.AuthorizationID ||
+			payment.QuoteID != reorganization.QuoteID ||
+			payment.Reference != reorganization.Reference {
+			return ErrConflict
+		}
+		if !payment.RetainUntil.After(now) {
+			return ErrExpired
+		}
+		if reorganization.ObservedMasterSeqno < payment.ObservedMasterSeqno ||
+			reorganization.ObservedAt.Before(payment.ObservedAt) {
+			return ErrPaymentRollback
+		}
+		if payment.Status == PaymentStatusReorganized {
+			if reorganization.ObservedMasterSeqno == payment.ObservedMasterSeqno &&
+				reorganization.ObservedAt.Equal(payment.ObservedAt) {
+				output, disposition = payment, PaymentReplay
+				return nil
+			}
+			payment.ObservedMasterSeqno = reorganization.ObservedMasterSeqno
+			payment.ObservedAt = reorganization.ObservedAt.UTC()
+			payment.Revision++
+			disposition = PaymentRefreshed
+		} else {
+			payment.Status = PaymentStatusReorganized
+			payment.ObservedMasterSeqno = reorganization.ObservedMasterSeqno
+			payment.ObservedAt = reorganization.ObservedAt.UTC()
+			payment.ReorganizedAt = now
+			payment.Revision++
+			disposition = PaymentReorganized
+		}
+		updated, err := s.encodePayment(payment)
+		if err != nil {
+			return err
+		}
+		if err := payments.Put(paymentKeyValue[:], updated); err != nil {
+			return err
+		}
+		output = payment
+		return nil
+	})
+	if err != nil {
+		return PaymentRecord{}, "", err
+	}
+	return output, disposition, nil
+}
+
 func (s *Store) Transition(
 	scope Scope,
 	expectedRevision uint64,
@@ -568,6 +899,11 @@ func (s *Store) Transition(
 		if !canTransition(record.State, next) {
 			return ErrTransition
 		}
+		if record.State == StateAuthorized && next == StateRunning {
+			if err := s.ensurePaymentRunnableTx(transaction, key); err != nil {
+				return err
+			}
+		}
 		record.State = next
 		record.Revision++
 		if now.After(record.UpdatedAt) {
@@ -586,6 +922,34 @@ func (s *Store) Transition(
 		return nil
 	})
 	return output, err
+}
+
+func (s *Store) ensurePaymentRunnableTx(
+	transaction *bolt.Tx,
+	requestKey [32]byte,
+) error {
+	paymentKeyBytes := transaction.Bucket(requestPaymentsBucket).Get(requestKey[:])
+	if paymentKeyBytes == nil {
+		return nil
+	}
+	if len(paymentKeyBytes) != sha256.Size {
+		return fmt.Errorf("%w: invalid request payment index", ErrCorrupt)
+	}
+	encoded := transaction.Bucket(paymentsBucket).Get(paymentKeyBytes)
+	if encoded == nil {
+		return fmt.Errorf("%w: request payment is missing", ErrCorrupt)
+	}
+	payment, err := s.decodePayment(encoded)
+	if err != nil {
+		return err
+	}
+	if payment.Status == PaymentStatusReorganized {
+		return ErrPaymentReorganized
+	}
+	if payment.Status != PaymentStatusApplied {
+		return fmt.Errorf("%w: invalid request payment status", ErrCorrupt)
+	}
+	return nil
 }
 
 func (s *Store) beginTx(
@@ -614,6 +978,9 @@ func (s *Store) beginTx(
 				return Record{}, "", err
 			}
 			if err := records.Delete(key[:]); err != nil {
+				return Record{}, "", err
+			}
+			if err := s.deletePaymentForRequestTx(transaction, key); err != nil {
 				return Record{}, "", err
 			}
 			if err := transaction.Bucket(budgetClaimsBucket).Delete(key[:]); err != nil {
@@ -664,6 +1031,36 @@ func (s *Store) beginTx(
 		return Record{}, "", err
 	}
 	return record, BeginCreated, nil
+}
+
+func (s *Store) deletePaymentForRequestTx(
+	transaction *bolt.Tx,
+	requestKey [32]byte,
+) error {
+	requestPayments := transaction.Bucket(requestPaymentsBucket)
+	paymentKeyBytes := requestPayments.Get(requestKey[:])
+	if paymentKeyBytes == nil {
+		return nil
+	}
+	if len(paymentKeyBytes) != sha256.Size {
+		return fmt.Errorf("%w: invalid request payment index", ErrCorrupt)
+	}
+	payments := transaction.Bucket(paymentsBucket)
+	encoded := payments.Get(paymentKeyBytes)
+	if encoded == nil {
+		return fmt.Errorf("%w: request payment index references missing payment", ErrCorrupt)
+	}
+	payment, err := s.decodePayment(encoded)
+	if err != nil {
+		return err
+	}
+	if scopeKey(payment.Scope) != requestKey {
+		return fmt.Errorf("%w: request payment index scope mismatch", ErrCorrupt)
+	}
+	if err := payments.Delete(paymentKeyBytes); err != nil {
+		return err
+	}
+	return requestPayments.Delete(requestKey[:])
 }
 
 func (s *Store) claimNonceTx(
@@ -872,6 +1269,7 @@ func (s *Store) Stats() (Stats, error) {
 			return err
 		}
 		output.BudgetUsages = budgetCount
+		output.Payments = uint64(transaction.Bucket(paymentsBucket).Stats().KeyN)
 		return nil
 	})
 	if err != nil {
@@ -913,6 +1311,14 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	if _, err := transaction.CreateBucketIfNotExists(budgetClaimsBucket); err != nil {
 		return err
 	}
+	payments, err := transaction.CreateBucketIfNotExists(paymentsBucket)
+	if err != nil {
+		return err
+	}
+	requestPayments, err := transaction.CreateBucketIfNotExists(requestPaymentsBucket)
+	if err != nil {
+		return err
+	}
 	meta, err := transaction.CreateBucketIfNotExists(metaBucket)
 	if err != nil {
 		return err
@@ -934,6 +1340,10 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	}
 	if budgetExpiries.Stats().KeyN != budgets.Stats().KeyN {
 		return fmt.Errorf("%w: budget expiry index count mismatch", ErrCorrupt)
+	}
+	if payments.Stats().KeyN != requestPayments.Stats().KeyN ||
+		payments.Stats().KeyN > records.Stats().KeyN {
+		return fmt.Errorf("%w: payment index count mismatch", ErrCorrupt)
 	}
 	return nil
 }
@@ -975,6 +1385,11 @@ func (s *Store) pruneExpiredTx(
 			return deleted, false, fmt.Errorf("%w: expiry index mismatch", ErrCorrupt)
 		}
 		if err := records.Delete(recordKey); err != nil {
+			return deleted, false, err
+		}
+		if err := s.deletePaymentForRequestTx(
+			transaction, array32(recordKey),
+		); err != nil {
 			return deleted, false, err
 		}
 		if err := transaction.Bucket(budgetClaimsBucket).Delete(recordKey); err != nil {
@@ -1236,6 +1651,34 @@ func (s *Store) decodeBudgetClaim(encoded []byte) (BudgetClaim, error) {
 	return claim, nil
 }
 
+func (s *Store) encodePayment(payment PaymentRecord) ([]byte, error) {
+	if err := payment.validateStored(s.limits); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	encoded, err := json.Marshal(payment)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > s.limits.MaxRecordBytes {
+		return nil, errors.New("payment record exceeds byte limit")
+	}
+	return encoded, nil
+}
+
+func (s *Store) decodePayment(encoded []byte) (PaymentRecord, error) {
+	if len(encoded) == 0 || len(encoded) > s.limits.MaxRecordBytes {
+		return PaymentRecord{}, fmt.Errorf("%w: invalid payment record size", ErrCorrupt)
+	}
+	var payment PaymentRecord
+	if err := jsonstrict.Decode(encoded, &payment); err != nil {
+		return PaymentRecord{}, fmt.Errorf("%w: decode payment record: %v", ErrCorrupt, err)
+	}
+	if err := payment.validateStored(s.limits); err != nil {
+		return PaymentRecord{}, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	return payment, nil
+}
+
 func (l Limits) validate() error {
 	if l.MaxRecords == 0 || l.MaxRecords > maxConfiguredRecords ||
 		l.MaxNonces == 0 || l.MaxNonces > maxConfiguredRecords ||
@@ -1313,6 +1756,126 @@ func (a SessionAdmission) validate(limits Limits, now time.Time) (time.Time, err
 		}
 	}
 	return now, nil
+}
+
+func (a PaymentAdmission) validate(now time.Time) (time.Time, error) {
+	if err := validateNow(now); err != nil {
+		return time.Time{}, err
+	}
+	now = now.UTC()
+	if err := validatePaymentBinding(
+		a.Scope, a.IntentDigest, a.AuthorizationID, a.QuoteID,
+		a.Reference, a.Payer, a.Payee, a.QuoteEnvelopeDigest,
+		a.PaymentEnvelopeDigest, a.ObservedMasterSeqno, a.ObservedAt,
+	); err != nil {
+		return time.Time{}, err
+	}
+	if a.ObservedAt.UTC().After(now.Add(maxPaymentClockSkew)) {
+		return time.Time{}, errors.New("payment observation is excessively future-dated")
+	}
+	return now, nil
+}
+
+func (r PaymentReorganization) validate(now time.Time) (time.Time, error) {
+	if err := validateNow(now); err != nil {
+		return time.Time{}, err
+	}
+	now = now.UTC()
+	if err := r.Scope.Validate(); err != nil {
+		return time.Time{}, err
+	}
+	if err := validatePaymentReference(
+		r.AuthorizationID, r.QuoteID, r.Reference,
+		r.ObservedMasterSeqno, r.ObservedAt,
+	); err != nil {
+		return time.Time{}, err
+	}
+	if r.ObservedAt.UTC().After(now.Add(maxPaymentClockSkew)) {
+		return time.Time{}, errors.New("payment reorganization is excessively future-dated")
+	}
+	return now, nil
+}
+
+func validatePaymentBinding(
+	scope Scope,
+	intentDigest, authorizationID, quoteID, reference, payer, payee string,
+	quoteEnvelopeDigest, paymentEnvelopeDigest string,
+	observedMasterSeqno uint64,
+	observedAt time.Time,
+) error {
+	if err := scope.Validate(); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(intentDigest) ||
+		!digestPattern.MatchString(quoteEnvelopeDigest) ||
+		!digestPattern.MatchString(paymentEnvelopeDigest) {
+		return errors.New("invalid payment binding digest")
+	}
+	if err := validatePaymentReference(
+		authorizationID, quoteID, reference,
+		observedMasterSeqno, observedAt,
+	); err != nil {
+		return err
+	}
+	if err := bounded("payment payer", payer, 1, 512); err != nil {
+		return err
+	}
+	return bounded("payment payee", payee, 1, 512)
+}
+
+func validatePaymentReference(
+	authorizationID, quoteID, reference string,
+	observedMasterSeqno uint64,
+	observedAt time.Time,
+) error {
+	if err := bounded("payment authorization ID", authorizationID, 8, 128); err != nil {
+		return err
+	}
+	if err := bounded("payment quote ID", quoteID, 8, 128); err != nil {
+		return err
+	}
+	if err := bounded("payment reference", reference, 1, 512); err != nil {
+		return err
+	}
+	if observedMasterSeqno == 0 || observedAt.IsZero() ||
+		observedAt.Year() < 1970 || observedAt.Year() > 9999 {
+		return errors.New("invalid payment observation position")
+	}
+	return nil
+}
+
+func (p PaymentRecord) validateStored(limits Limits) error {
+	if p.Version != "1" {
+		return errors.New("unsupported payment record version")
+	}
+	if err := validatePaymentBinding(
+		p.Scope, p.IntentDigest, p.AuthorizationID, p.QuoteID,
+		p.Reference, p.Payer, p.Payee, p.QuoteEnvelopeDigest,
+		p.PaymentEnvelopeDigest, p.ObservedMasterSeqno, p.ObservedAt,
+	); err != nil {
+		return err
+	}
+	if p.Revision == 0 || p.AppliedAt.IsZero() || p.RetainUntil.IsZero() ||
+		!p.RetainUntil.After(p.AppliedAt) ||
+		!p.RetainUntil.After(p.ObservedAt) ||
+		p.RetainUntil.Sub(p.AppliedAt) > limits.MaxRetention {
+		return errors.New("invalid payment record time or revision")
+	}
+	switch p.Status {
+	case PaymentStatusApplied:
+		if !p.ReorganizedAt.IsZero() {
+			return errors.New("applied payment has a reorganization timestamp")
+		}
+	case PaymentStatusReorganized:
+		if p.ReorganizedAt.IsZero() ||
+			p.ReorganizedAt.Before(p.AppliedAt) ||
+			!p.RetainUntil.After(p.ReorganizedAt) {
+			return errors.New("invalid payment reorganization time")
+		}
+	default:
+		return errors.New("invalid payment status")
+	}
+	return nil
 }
 
 func (b UsageBudget) validate() error {
@@ -1616,6 +2179,38 @@ func sameNonceBinding(left, right NonceClaim) bool {
 		left.Domain == right.Domain &&
 		left.EnvelopeDigest == right.EnvelopeDigest &&
 		left.ExpiresAt.Equal(right.ExpiresAt)
+}
+
+func paymentKey(
+	network, authorizationID, reference string,
+) [32]byte {
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-EDGE-JOURNAL-PAYMENT-V1"))
+	for _, value := range []string{network, authorizationID, reference} {
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(len(value)))
+		hasher.Write(length[:])
+		hasher.Write([]byte(value))
+	}
+	var output [32]byte
+	copy(output[:], hasher.Sum(nil))
+	return output
+}
+
+func samePaymentBinding(
+	record PaymentRecord,
+	admission PaymentAdmission,
+) bool {
+	return record.Scope == admission.Scope &&
+		record.IntentDigest == admission.IntentDigest &&
+		record.AuthorizationID == admission.AuthorizationID &&
+		record.QuoteID == admission.QuoteID &&
+		record.Reference == admission.Reference &&
+		record.Payer == admission.Payer &&
+		record.Payee == admission.Payee &&
+		record.AmountNanoTOS == admission.AmountNanoTOS &&
+		record.QuoteEnvelopeDigest == admission.QuoteEnvelopeDigest &&
+		record.PaymentEnvelopeDigest == admission.PaymentEnvelopeDigest
 }
 
 func budgetKey(

@@ -53,7 +53,12 @@ Payment RPC output must echo the complete authorization, quote, request,
 network, and settlement reference. Require fresh monotonic chain state and an
 explicit finality policy. The safe default rejects both underpayment and
 overpayment: accepting a value above the exact quote is a profile policy and
-must still remain within the client's signed maximum.
+must still remain within the client's signed maximum. Applying payment must
+atomically bind its globally unique authorization/reference to one pending
+request; exact replay has no second effect. A recorded reorganization must
+block new paid dispatch until an authenticated reconciliation policy resolves
+it. Payment records, watcher cursors, retry history, and tombstones require
+the same count, lifetime, and cleanup ownership as requests.
 
 ## Parsing and transport
 

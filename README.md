@@ -16,8 +16,8 @@ The security boundary is intentional:
 
 - `tos-edge` is the public control-plane process. The initial binary serves
   health and discovery documents only; public paid invocation stays disabled
-  until live TOS authority/client-key resolution, durable payment
-  application/reconciliation, and isolated execution are wired end to end.
+  until live TOS authority/client-key resolution, a production payment
+  watcher/reconciliation policy, and isolated execution are wired end to end.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs.
@@ -78,8 +78,8 @@ The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
 deadline. `tos-edge` still exposes discovery only until manifest-backed
 authorization is connected to the live TOS contract/RPC decoder and durable
-payment application/reconciliation, execution isolation, and receipt
-persistence are implemented.
+payment watching/reconciliation, execution isolation, and receipt persistence
+are implemented.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
@@ -90,9 +90,13 @@ delegation chains, and cumulative session/delegation budgets are verified and
 atomically admitted without double-charging replay. Runtime-signed quotes and
 client-signed payment authorizations can also be matched to a fresh, exact,
 final-by-default chain observation through the bounded payment observer.
-Durable payment application/reorganization handling remains intentionally
-disconnected, so none of these internal boundaries enable public actions by
-themselves.
+Edge Core can apply that opaque observation exactly once: the payment record,
+global replay index, and pending-to-authorized request transition commit in
+one bounded journal transaction and survive restart. The journal can also
+record a monotonic reorganization and block paid dispatch. A production chain
+watcher, durable scan cursor, restart reconciliation, refund policy, and
+isolated executor remain intentionally disconnected, so none of these
+internal boundaries enable public actions by themselves.
 
 ## Repository map
 
@@ -106,7 +110,7 @@ pkg/edge/             safe public discovery server
 pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes
 pkg/codec/            deterministic bounded CBOR and commitment hashing
-pkg/journal/          durable bounded replay and idempotency state
+pkg/journal/          durable bounded replay, payment and idempotency state
 pkg/localrpc/         validated private Unix-socket Worker RPC client
 pkg/payment/          strict signed quote/payment chain observation
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts

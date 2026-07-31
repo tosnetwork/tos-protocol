@@ -9,6 +9,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
+	"github.com/tosnetwork/tos-protocol/pkg/payment"
 )
 
 const (
@@ -37,6 +38,7 @@ type CoreHealth struct {
 	RequestRecords       uint64
 	NonceClaims          uint64
 	BudgetUsages         uint64
+	PaymentRecords       uint64
 	JournalFileBytes     int64
 	LastCleanupAt        time.Time
 	LastCleanupDeleted   int
@@ -202,6 +204,47 @@ func (c *Core) AdmitAuthorizedPayment(
 	)
 }
 
+// ApplyVerifiedPayment consumes only opaque output from the strict chain
+// observer. The payment binding and pending-to-authorized request transition
+// are committed atomically, so process restart or concurrent replay cannot
+// authorize the request twice.
+func (c *Core) ApplyVerifiedPayment(
+	scope journal.Scope,
+	intentDigest string,
+	authorized authorization.AuthorizedPayment,
+	verified payment.VerifiedObservation,
+	minimumMasterSeqno uint64,
+) (journal.Record, journal.PaymentRecord, journal.PaymentDisposition, error) {
+	now := c.now()
+	binding, err := authorized.ObservationMaterial(now)
+	if err != nil {
+		return journal.Record{}, journal.PaymentRecord{}, "", fmt.Errorf(
+			"extract authorized payment binding: %w", err,
+		)
+	}
+	material, err := verified.ApplicationMaterial(
+		scope.Network, scope.ServiceID, scope.SessionID, scope.Operation,
+		scope.RequestID, intentDigest, binding.AuthorizationID,
+		binding.QuoteID, binding.Reference, minimumMasterSeqno, now,
+	)
+	if err != nil {
+		return journal.Record{}, journal.PaymentRecord{}, "", fmt.Errorf(
+			"authorize payment application: %w", err,
+		)
+	}
+	return c.requests.ApplyPayment(journal.PaymentAdmission{
+		Scope: scope, IntentDigest: material.IntentDigest,
+		AuthorizationID: material.AuthorizationID,
+		QuoteID:         material.QuoteID, Reference: material.Reference,
+		Payer: material.Payer, Payee: material.Payee,
+		AmountNanoTOS:         material.AmountNanoTOS,
+		QuoteEnvelopeDigest:   material.QuoteEnvelopeDigest,
+		PaymentEnvelopeDigest: material.PaymentEnvelopeDigest,
+		ObservedMasterSeqno:   material.ObservedMasterSeqno,
+		ObservedAt:            material.ObservedAt,
+	}, now)
+}
+
 func (c *Core) admitVerifiedEnvelope(
 	scope journal.Scope,
 	intentDigest string,
@@ -226,6 +269,10 @@ func (c *Core) admitVerifiedEnvelope(
 
 func (c *Core) Request(scope journal.Scope) (journal.Record, error) {
 	return c.requests.Get(scope, c.now())
+}
+
+func (c *Core) Payment(scope journal.Scope) (journal.PaymentRecord, error) {
+	return c.requests.GetPayment(scope, c.now())
 }
 
 func (c *Core) TransitionRequest(
@@ -272,7 +319,7 @@ func (c *Core) Health() (CoreHealth, error) {
 	defer c.healthMu.RUnlock()
 	output := CoreHealth{
 		RequestRecords: stats.Records, NonceClaims: stats.Nonces,
-		BudgetUsages:     stats.BudgetUsages,
+		BudgetUsages: stats.BudgetUsages, PaymentRecords: stats.Payments,
 		JournalFileBytes: stats.FileSize,
 		LastCleanupAt:    c.lastCleanupAt, LastCleanupDeleted: c.lastDeleted,
 		LastCleanupHasMore:   c.lastMore,

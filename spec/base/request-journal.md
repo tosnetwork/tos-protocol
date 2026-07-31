@@ -69,17 +69,30 @@ transaction commits. Restarting Edge Core therefore recovers either the prior
 state or the complete new state, not a nonce without its request or a request
 without its nonce.
 
+Payment application uses the same database and transaction boundary. One
+globally unique `network + authorizationId + settlement reference` record,
+one request-to-payment index, and the request's `pending -> authorized`
+transition commit or roll back together. Exact replay does not advance the
+request revision. A newer observation may advance only monotonically; a
+rollback is rejected. A recorded reorganization prevents
+`authorized -> running` for the paid request.
+
 The store has explicit limits for request count, nonce count, encoded record
 bytes, retention, cleanup batch size, and file-open time. When capacity is
 full it removes only entries whose retention deadline has passed. If no safely
 evictable entry remains, new admission fails with backpressure.
 
+There is at most one payment record and index per request, so payment state
+cannot exceed the configured request count. Its encoded size uses the request
+record byte limit, it inherits the immutable request retention deadline, and
+cleanup deletes the payment and index in the same transaction as the request.
+
 Cleanup runs in bounded batches owned by Edge Core. The on-disk file may keep
 previously allocated pages for reuse, so file high-water size is not treated
 as current record count. Operators monitor logical request records, nonce
-claims, and file bytes. The database file is mode `0600`; its parent
-directory, backup, filesystem encryption, and offline compaction remain
-deployment policy.
+claims, budget usage, payment records, and file bytes. The database file is
+mode `0600`; its parent directory, backup, filesystem encryption, and offline
+compaction remain deployment policy.
 
 The reference store is local file-backed state. It does not put request state
 on chain and does not create unbounded anonymous heap retention.

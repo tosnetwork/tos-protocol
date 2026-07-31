@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
+	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
+	"github.com/tosnetwork/tos-protocol/pkg/payment"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
 
@@ -53,14 +55,16 @@ func (r edgeClientKeyResolver) ResolveClientKey(
 }
 
 type coreSessionFixture struct {
-	now           time.Time
-	network       string
-	serviceID     string
-	sessionID     string
-	clientID      string
-	clientPrivate ed25519.PrivateKey
-	resolver      edgeClientKeyResolver
-	session       *authorization.VerifiedSessionGrant
+	now            time.Time
+	network        string
+	serviceID      string
+	sessionID      string
+	clientID       string
+	runtimePrivate ed25519.PrivateKey
+	clientPrivate  ed25519.PrivateKey
+	resolver       edgeClientKeyResolver
+	manifest       *authorization.VerifiedManifest
+	session        *authorization.VerifiedSessionGrant
 }
 
 func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
@@ -85,7 +89,10 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 		RuntimeKeys: []protocol.RuntimeKey{{
 			KeyID: "runtime-auth-key", Algorithm: "Ed25519",
 			PublicKey: base64.RawURLEncoding.EncodeToString(runtimePublic),
-			Roles:     []string{protocol.RuntimeRoleAuthenticate},
+			Roles: []string{
+				protocol.RuntimeRoleAuthenticate,
+				protocol.RuntimeRoleQuote,
+			},
 			NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
 		}},
 		Endpoints: []protocol.ServiceEndpoint{{
@@ -149,7 +156,8 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 	return coreSessionFixture{
 		now: now, network: manifest.Network, serviceID: manifest.ServiceID,
 		sessionID: grant.SessionID, clientID: grant.Client,
-		clientPrivate: clientPrivate,
+		runtimePrivate: runtimePrivate,
+		clientPrivate:  clientPrivate,
 		resolver: edgeClientKeyResolver{snapshot: authorization.ClientKeySnapshot{
 			Network: manifest.Network, ServiceID: manifest.ServiceID,
 			KeyID: grant.Client, Principal: grant.Client,
@@ -157,8 +165,79 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 			NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour),
 			ObservedMasterSeqno: 100, ObservedAt: now,
 		}},
-		session: verifiedSession,
+		manifest: verifiedManifest,
+		session:  verifiedSession,
 	}
+}
+
+func (f coreSessionFixture) authorizePayment(
+	t *testing.T,
+	requestID string,
+) (journal.Scope, authorization.AuthorizedPayment) {
+	t.Helper()
+	scope := journal.Scope{
+		Network: f.network, Authority: f.clientID, ServiceID: f.serviceID,
+		SessionID: f.sessionID, Operation: "invoke", RequestID: requestID,
+	}
+	quote := protocol.Quote{
+		Version: protocol.BaseEnvelopeVersion,
+		QuoteID: "quote-" + requestID, RequestID: requestID,
+		SessionID: f.sessionID, ServiceID: f.serviceID,
+		ProfileID: "tos.ai.inference", Operation: scope.Operation,
+		IntentDigest:     "sha256:" + strings.Repeat("9", 64),
+		ServiceRevision:  "manifest-revision-1",
+		ResourceRevision: "resource-revision-1",
+		Network:          f.network, Payee: "service-wallet",
+		Settlement:   "payment-reference-" + requestID,
+		PriceNanoTOS: 5, MaxInputBytes: 1_024, MaxOutputBytes: 2_048,
+		IssuedAt: f.now, Deadline: f.now.Add(5 * time.Minute),
+		ExpiresAt: f.now.Add(time.Minute),
+	}
+	quoteEnvelope, err := identity.SignCanonical(
+		f.runtimePrivate, protocol.QuoteDomain, "runtime-auth-key",
+		quote, quote.IssuedAt, quote.ExpiresAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedQuote, err := f.manifest.VerifyQuote(quoteEnvelope, f.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paymentAuthorization := protocol.PaymentAuthorization{
+		Version:         protocol.BaseEnvelopeVersion,
+		AuthorizationID: "authorization-" + requestID,
+		QuoteID:         quote.QuoteID, RequestID: requestID,
+		Network: f.network, Payer: f.clientID, Payee: quote.Payee,
+		MaxNanoTOS: 5, Reference: quote.Settlement,
+		ExpiresAt: quote.ExpiresAt,
+	}
+	paymentEnvelope, err := identity.SignCanonical(
+		f.clientPrivate, protocol.PaymentAuthorizationDomain, f.clientID,
+		paymentAuthorization, f.now, paymentAuthorization.ExpiresAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorized, err := verifiedQuote.AuthorizePayment(
+		context.Background(), f.session, f.resolver, 100, nil,
+		paymentEnvelope, "", f.now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scope, authorized
+}
+
+type corePaymentResolver struct {
+	state chain.PaymentState
+}
+
+func (r corePaymentResolver) ObservePayment(
+	_ context.Context,
+	_ chain.PaymentReference,
+) (chain.PaymentState, error) {
+	return r.state, nil
 }
 
 func (f coreSessionFixture) authorize(
@@ -444,6 +523,94 @@ func TestCoreAtomicallyAdmitsSessionBudgets(t *testing.T) {
 	if health.RequestRecords != 2 || health.NonceClaims != 2 ||
 		health.BudgetUsages != 1 {
 		t.Fatalf("unexpected session health: %#v", health)
+	}
+}
+
+func TestCoreAppliesOnlyVerifiedPaymentObservation(t *testing.T) {
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	now := time.Unix(1_800_000_000, 0).UTC()
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	scope, authorized := fixture.authorizePayment(t, "payment-request-0001")
+	intent := "sha256:" + strings.Repeat("9", 64)
+	pending, disposition, err := core.AdmitAuthorizedPayment(
+		scope, intent, authorized, now.Add(30*time.Minute),
+	)
+	if err != nil || disposition != journal.BeginCreated ||
+		pending.State != journal.StatePending {
+		t.Fatalf(
+			"payment admission: record=%#v disposition=%q err=%v",
+			pending, disposition, err,
+		)
+	}
+	if _, _, _, err := core.ApplyVerifiedPayment(
+		scope, intent, authorized, payment.VerifiedObservation{}, 100,
+	); err == nil {
+		t.Fatal("unverified payment observation accepted")
+	}
+	material, err := authorized.ObservationMaterial(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer, err := payment.NewObserver(
+		corePaymentResolver{state: chain.PaymentState{
+			Network: material.Network, AuthorizationID: material.AuthorizationID,
+			QuoteID: material.QuoteID, RequestID: material.RequestID,
+			Reference: material.Reference, Confirmed: true, Finalized: true,
+			AmountNanoTOS: material.PriceNanoTOS,
+			Payer:         material.Payer, Payee: material.Payee,
+			ObservedMasterSeqno: 101, ObservedAt: now,
+		}},
+		payment.DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := observer.Observe(
+		context.Background(), authorized, 100, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, applied, paymentDisposition, err := core.ApplyVerifiedPayment(
+		scope, intent, authorized, verified, 101,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paymentDisposition != journal.PaymentApplied ||
+		record.State != journal.StateAuthorized || record.Revision != 2 ||
+		applied.Status != journal.PaymentStatusApplied {
+		t.Fatalf(
+			"applied payment: record=%#v payment=%#v disposition=%q",
+			record, applied, paymentDisposition,
+		)
+	}
+	replayedRecord, replayedPayment, paymentDisposition, err :=
+		core.ApplyVerifiedPayment(scope, intent, authorized, verified, 101)
+	if err != nil ||
+		paymentDisposition != journal.PaymentReplay ||
+		replayedRecord != record || replayedPayment != applied {
+		t.Fatalf(
+			"payment replay: record=%#v payment=%#v disposition=%q err=%v",
+			replayedRecord, replayedPayment, paymentDisposition, err,
+		)
+	}
+	stored, err := core.Payment(scope)
+	if err != nil || stored != applied {
+		t.Fatalf("stored payment=%#v err=%v", stored, err)
+	}
+	health, err := core.Health()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if health.RequestRecords != 1 || health.PaymentRecords != 1 {
+		t.Fatalf("unexpected payment health: %#v", health)
 	}
 }
 
