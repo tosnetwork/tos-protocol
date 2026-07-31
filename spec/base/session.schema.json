@@ -9,6 +9,7 @@
     "sessionId",
     "serviceId",
     "profileId",
+    "profileVersion",
     "client",
     "runtimeKeyId",
     "manifestRevision",
@@ -23,6 +24,22 @@
     "sessionId": {"$ref": "common.schema.json#/$defs/correlationId"},
     "serviceId": {"$ref": "common.schema.json#/$defs/serviceId"},
     "profileId": {"$ref": "common.schema.json#/$defs/serviceId"},
+    "profileVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "maxLength": 32
+    },
+    "profileExtensions": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 256,
+        "pattern": "^\\S+$"
+      }
+    },
     "client": {"$ref": "common.schema.json#/$defs/boundedString"},
     "runtimeKeyId": {"$ref": "common.schema.json#/$defs/boundedString"},
     "manifestRevision": {"$ref": "common.schema.json#/$defs/boundedString"},

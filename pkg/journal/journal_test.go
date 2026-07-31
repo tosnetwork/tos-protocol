@@ -42,6 +42,33 @@ func testAdmission(scope Scope, nonce string, now time.Time) Admission {
 	}
 }
 
+func testSessionAdmission(
+	scope Scope,
+	nonce string,
+	now time.Time,
+	charge uint64,
+) SessionAdmission {
+	admission := testAdmission(scope, nonce, now)
+	admission.RetainUntil = now.Add(time.Hour)
+	return SessionAdmission{
+		Admission: admission,
+		ClientID:  "client-key-1", SessionExpiresAt: now.Add(time.Hour),
+		ChargeNanoTOS: charge,
+		Budgets: []UsageBudget{
+			{
+				Kind: "session", ID: scope.SessionID,
+				GrantDigest: "sha256:" + strings.Repeat("c", 64),
+				MaxActions:  2, MaxNanoTOS: 10,
+			},
+			{
+				Kind: "delegation", ID: "delegation-0001",
+				GrantDigest: "sha256:" + strings.Repeat("d", 64),
+				MaxActions:  2, MaxNanoTOS: 10,
+			},
+		},
+	}
+}
+
 func testNonceClaim(scope Scope, nonce string, expiresAt time.Time) NonceClaim {
 	return NonceClaim{
 		Network: scope.Network, Authority: scope.Authority,
@@ -168,6 +195,171 @@ func TestAdmitAtomicallyBindsNonceAndIdempotentRequest(t *testing.T) {
 	}
 	if stats.Records != 1 || stats.Nonces != 2 {
 		t.Fatalf("unexpected admission stats: %#v", stats)
+	}
+}
+
+func TestAdmitSessionAtomicallyConsumesBudgetsOnce(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	first := testSessionAdmission(
+		testScope("session-request-1"), testNonce(20), now, 4,
+	)
+	record, disposition, err := store.AdmitSession(first, now)
+	if err != nil || disposition != BeginCreated {
+		t.Fatalf("first session admission: record=%#v disposition=%q err=%v", record, disposition, err)
+	}
+	replayed, disposition, err := store.AdmitSession(first, now.Add(time.Second))
+	if err != nil || disposition != BeginReplay || replayed != record {
+		t.Fatalf("exact session replay: record=%#v disposition=%q err=%v", replayed, disposition, err)
+	}
+	freshNonceReplay := first
+	freshNonceReplay.Nonce = testNonce(21)
+	if _, disposition, err := store.AdmitSession(
+		freshNonceReplay, now.Add(2*time.Second),
+	); err != nil || disposition != BeginReplay {
+		t.Fatalf("fresh-nonce replay: disposition=%q err=%v", disposition, err)
+	}
+	if _, _, err := store.Admit(
+		first.Admission, now.Add(2*time.Second),
+	); !errors.Is(err, ErrConflict) {
+		t.Fatalf("session admission downgraded to unbudgeted admission: %v", err)
+	}
+
+	second := testSessionAdmission(
+		testScope("session-request-2"), testNonce(22), now, 6,
+	)
+	if _, disposition, err := store.AdmitSession(
+		second, now.Add(3*time.Second),
+	); err != nil || disposition != BeginCreated {
+		t.Fatalf("second session admission: disposition=%q err=%v", disposition, err)
+	}
+	exhausted := testSessionAdmission(
+		testScope("session-request-3"), testNonce(23), now, 0,
+	)
+	if _, _, err := store.AdmitSession(
+		exhausted, now.Add(4*time.Second),
+	); !errors.Is(err, ErrBudgetLimit) {
+		t.Fatalf("exhausted session error = %v", err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 2 || stats.Nonces != 3 || stats.BudgetUsages != 2 {
+		t.Fatalf("unexpected session stats: %#v", stats)
+	}
+}
+
+func TestAdmitSessionConcurrentBudgetLimit(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	const attempts = 32
+	var admitted atomic.Int32
+	var rejected atomic.Int32
+	var wait sync.WaitGroup
+	for index := 0; index < attempts; index++ {
+		wait.Add(1)
+		go func(index int) {
+			defer wait.Done()
+			admission := testSessionAdmission(
+				testScope(fmt.Sprintf("session-concurrent-%02d", index)),
+				testNonce(byte(50+index)), now, 1,
+			)
+			for budgetIndex := range admission.Budgets {
+				admission.Budgets[budgetIndex].MaxActions = 10
+				admission.Budgets[budgetIndex].MaxNanoTOS = 10
+			}
+			_, _, err := store.AdmitSession(admission, now)
+			switch {
+			case err == nil:
+				admitted.Add(1)
+			case errors.Is(err, ErrBudgetLimit):
+				rejected.Add(1)
+			default:
+				t.Errorf("admission %d: %v", index, err)
+			}
+		}(index)
+	}
+	wait.Wait()
+	if admitted.Load() != 10 || rejected.Load() != attempts-10 {
+		t.Fatalf("admitted=%d rejected=%d", admitted.Load(), rejected.Load())
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 10 || stats.Nonces != 10 || stats.BudgetUsages != 2 {
+		t.Fatalf("unexpected concurrent session stats: %#v", stats)
+	}
+}
+
+func TestSessionBudgetsPruneWithRetainedRequests(t *testing.T) {
+	store, _ := openTestStore(t, testLimits(100))
+	now := time.Unix(1_800_000_000, 0).UTC()
+	admission := testSessionAdmission(
+		testScope("session-prune-1"), testNonce(90), now, 1,
+	)
+	if _, _, err := store.AdmitSession(admission, now); err != nil {
+		t.Fatal(err)
+	}
+	pruneAt := admission.SessionExpiresAt.Add(time.Nanosecond)
+	if _, _, err := store.PruneExpired(pruneAt, 16); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.PruneNonces(pruneAt, 16); err != nil {
+		t.Fatal(err)
+	}
+	if deleted, more, err := store.PruneBudgets(
+		pruneAt, 16,
+	); err != nil || deleted != 2 || more {
+		t.Fatalf("budget prune deleted=%d more=%v err=%v", deleted, more, err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 0 || stats.Nonces != 0 || stats.BudgetUsages != 0 {
+		t.Fatalf("session state survived expiry: %#v", stats)
+	}
+}
+
+func TestSessionBudgetSurvivesRestart(t *testing.T) {
+	limits := testLimits(100)
+	path := filepath.Join(t.TempDir(), "session-restart.db")
+	store, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	first := testSessionAdmission(
+		testScope("session-restart-1"), testNonce(100), now, 5,
+	)
+	for index := range first.Budgets {
+		first.Budgets[index].MaxActions = 1
+		first.Budgets[index].MaxNanoTOS = 5
+	}
+	if _, _, err := store.AdmitSession(first, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	second := testSessionAdmission(
+		testScope("session-restart-2"), testNonce(101), now, 0,
+	)
+	for index := range second.Budgets {
+		second.Budgets[index].MaxActions = 1
+		second.Budgets[index].MaxNanoTOS = 5
+	}
+	if _, _, err := store.AdmitSession(
+		second, now.Add(time.Second),
+	); !errors.Is(err, ErrBudgetLimit) {
+		t.Fatalf("restart lost cumulative budget: %v", err)
 	}
 }
 

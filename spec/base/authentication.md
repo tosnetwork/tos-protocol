@@ -61,6 +61,7 @@ records whose replay window has ended.
 A child delegation MUST:
 
 - identify its parent and be signed by the parent's subject
+- bind the same session ID as its parent and the runtime-issued session grant
 - increase depth by exactly one and never exceed depth four
 - keep the same audience
 - select only parent scopes
@@ -73,3 +74,17 @@ and cumulative use before authorizing work.
 Session grants and delegations authorize bounded protocol access. Neither is
 a payment, proof of capacity, permission to bypass local safety policy, or
 permission to expose raw sensors or actuators.
+
+The reference implementation verifies a session grant under the current
+manifest `authenticate` runtime key. The grant binds the exact profile ID and
+version, negotiated extensions, manifest revision, client key identifier,
+operations, lifetime, cumulative request count, and cumulative nano-TOS
+limit. Client and delegated keys are re-resolved through a fresh authoritative
+resolver with cancellation and masterchain high-water propagation.
+
+Every delegation envelope is canonical, signed by its named issuer, checked
+for issuer-to-subject continuity, root depth, parent ID, audience, required
+scope, monotonic lifetime/action/payment attenuation, key and delegation
+revocation, and maximum depth. Edge Core then consumes the session budget and
+every delegation budget atomically with nonce/request admission. See
+[session-authorization.md](session-authorization.md).

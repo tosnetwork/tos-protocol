@@ -16,8 +16,8 @@ The security boundary is intentional:
 
 - `tos-edge` is the public control-plane process. The initial binary serves
   health and discovery documents only; public paid invocation stays disabled
-  until chain authority resolution, client/session policy, payment
-  authorization, and isolated execution are wired end to end.
+  until live TOS authority/client-key resolution, payment authorization,
+  and isolated execution are wired end to end.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs.
@@ -84,8 +84,10 @@ atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
 client also enforces Unix-socket ownership, message limits, response
 correlation, byte accounting, deadlines, and an external-service priority
-allowlist. None of these internal boundaries enable public actions by
-themselves.
+allowlist. Runtime-signed session grants, fresh client keys, complete bounded
+delegation chains, and cumulative session/delegation budgets are verified and
+atomically admitted without double-charging replay. None of these internal
+boundaries enable public actions by themselves.
 
 ## Repository map
 

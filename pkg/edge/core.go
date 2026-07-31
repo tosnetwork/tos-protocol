@@ -36,6 +36,7 @@ func DefaultCoreConfig(journalPath string) CoreConfig {
 type CoreHealth struct {
 	RequestRecords       uint64
 	NonceClaims          uint64
+	BudgetUsages         uint64
 	JournalFileBytes     int64
 	LastCleanupAt        time.Time
 	LastCleanupDeleted   int
@@ -127,6 +128,59 @@ func (c *Core) AdmitAuthorizedEnvelope(
 	)
 }
 
+// AdmitAuthorizedSessionEnvelope atomically binds a verified client envelope
+// and consumes every cumulative session/delegation budget. A successful replay
+// returns the existing request without charging those budgets again.
+func (c *Core) AdmitAuthorizedSessionEnvelope(
+	scope journal.Scope,
+	intentDigest string,
+	chargeNanoTOS uint64,
+	authorized authorization.AuthorizedSessionEnvelope,
+	retainUntil time.Time,
+) (journal.Record, journal.BeginDisposition, error) {
+	now := c.now()
+	binding := authorization.AdmissionBinding{
+		SessionID: scope.SessionID, Operation: scope.Operation,
+		RequestID: scope.RequestID, IntentDigest: intentDigest,
+	}
+	material, err := authorized.AdmissionMaterial(
+		scope.Network, scope.ServiceID, scope.Authority,
+		binding, chargeNanoTOS, now,
+	)
+	if err != nil {
+		return journal.Record{}, "", fmt.Errorf(
+			"authorize session Edge Core admission: %w", err,
+		)
+	}
+	envelopeDigest, err := material.Envelope.Fingerprint()
+	if err != nil {
+		return journal.Record{}, "", fmt.Errorf(
+			"fingerprint authorized session envelope: %w", err,
+		)
+	}
+	budgets := make([]journal.UsageBudget, len(material.Budgets))
+	for index, budget := range material.Budgets {
+		budgets[index] = journal.UsageBudget{
+			Kind: budget.Kind, ID: budget.ID,
+			GrantDigest: budget.GrantDigest,
+			MaxActions:  budget.MaxActions, MaxNanoTOS: budget.MaxNanoTOS,
+		}
+	}
+	return c.requests.AdmitSession(journal.SessionAdmission{
+		Admission: journal.Admission{
+			Scope: scope, IntentDigest: intentDigest,
+			EnvelopeDigest: envelopeDigest,
+			Domain:         material.Envelope.Domain, Nonce: material.Envelope.Nonce,
+			EnvelopeExpiresAt: time.UnixMilli(material.Envelope.ExpiresAt),
+			RetainUntil:       retainUntil,
+		},
+		ClientID:         material.ClientID,
+		SessionExpiresAt: material.SessionExpiresAt,
+		ChargeNanoTOS:    material.ChargeNanoTOS,
+		Budgets:          budgets,
+	}, now)
+}
+
 func (c *Core) admitVerifiedEnvelope(
 	scope journal.Scope,
 	intentDigest string,
@@ -165,18 +219,24 @@ func (c *Core) TransitionRequest(
 }
 
 func (c *Core) PruneNow() (deleted int, more bool, err error) {
+	now := c.now()
 	requestDeleted, requestMore, requestErr := c.requests.PruneExpired(
-		c.now(), c.limits.MaxPrunePerWrite,
+		now, c.limits.MaxPrunePerWrite,
 	)
 	nonceDeleted, nonceMore, nonceErr := c.requests.PruneNonces(
-		c.now(), c.limits.MaxPrunePerWrite,
+		now, c.limits.MaxPrunePerWrite,
 	)
-	deleted = requestDeleted + nonceDeleted
-	more = requestMore || nonceMore
+	budgetDeleted, budgetMore, budgetErr := c.requests.PruneBudgets(
+		now, c.limits.MaxPrunePerWrite,
+	)
+	deleted = requestDeleted + nonceDeleted + budgetDeleted
+	more = requestMore || nonceMore || budgetMore
 	if requestErr != nil {
 		err = requestErr
-	} else {
+	} else if nonceErr != nil {
 		err = nonceErr
+	} else {
+		err = budgetErr
 	}
 	c.recordCleanup(deleted, more, err)
 	return deleted, more, err
@@ -191,6 +251,7 @@ func (c *Core) Health() (CoreHealth, error) {
 	defer c.healthMu.RUnlock()
 	output := CoreHealth{
 		RequestRecords: stats.Records, NonceClaims: stats.Nonces,
+		BudgetUsages:     stats.BudgetUsages,
 		JournalFileBytes: stats.FileSize,
 		LastCleanupAt:    c.lastCleanupAt, LastCleanupDeleted: c.lastDeleted,
 		LastCleanupHasMore:   c.lastMore,

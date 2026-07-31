@@ -7,6 +7,7 @@
   "required": [
     "version",
     "delegationId",
+    "sessionId",
     "issuer",
     "subject",
     "audience",
@@ -20,6 +21,7 @@
   "properties": {
     "version": {"$ref": "common.schema.json#/$defs/protocolVersion"},
     "delegationId": {"$ref": "common.schema.json#/$defs/correlationId"},
+    "sessionId": {"$ref": "common.schema.json#/$defs/correlationId"},
     "issuer": {"$ref": "common.schema.json#/$defs/boundedString"},
     "subject": {"$ref": "common.schema.json#/$defs/boundedString"},
     "audience": {"$ref": "common.schema.json#/$defs/boundedString"},

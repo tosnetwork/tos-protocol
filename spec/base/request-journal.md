@@ -94,3 +94,28 @@ next legal transition.
 
 The bootstrap `tos-edge` binary still exposes discovery only. The journal does
 not enable public session, payment, or action routes by itself.
+
+## Session and delegation budgets
+
+An authenticated client request carries one session budget and zero to five
+delegation budgets. Each budget binds the exact signed-grant fingerprint,
+identifier, maximum cumulative actions, maximum cumulative nano-TOS, and the
+session retention boundary.
+
+Edge Core performs one bbolt transaction that:
+
+1. claims or verifies the signed request nonce
+2. creates or recovers the idempotent request
+3. creates or verifies the request-to-budget claim
+4. increments the session and every delegation budget
+
+An exact request replay, including one re-signed with a fresh nonce, recovers
+the existing budget claim and does not increment usage again. Reusing a
+request with different charge, grant fingerprint, limits, client, or budget
+chain fails. A session-managed request cannot be replayed through the
+unbudgeted admission method.
+
+Budget records and their expiry index are count-bounded independently of
+requests and nonces. They remain until session expiry and are pruned in
+bounded batches; request budget-claim entries are removed with their request
+records.

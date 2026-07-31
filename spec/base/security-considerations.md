@@ -33,14 +33,21 @@ binding says so.
 ## Bounded state
 
 Every connection, parser, redirect, lookup, federation edge, session, nonce,
-idempotency record, quote, watcher, queue, stream, journal, artifact, log, and
-cache needs a size, count, lifetime, and cleanup owner. Backpressure MUST occur
+delegation budget, idempotency record, quote, watcher, queue, stream, journal,
+artifact, log, and cache needs a size, count, lifetime, and cleanup owner.
+Backpressure MUST occur
 before expensive allocation or runtime dispatch. Failure, timeout,
 cancellation, payment rejection, and restart paths MUST release RAM, disk,
 accelerator memory, file descriptors, reservations, and watchers.
 
 Do not allocate using a remote uint64 limit without checking it against a
 smaller local policy and the host integer range.
+
+Session and delegation limits are cumulative, not per-request hints.
+Signature verification without atomic usage accounting is insufficient.
+Nonce claim, idempotent request creation, and every authority-budget increment
+must commit together. Exact replay must not charge again, while changed
+charge, grant, delegation chain, or request intent must fail.
 
 ## Parsing and transport
 

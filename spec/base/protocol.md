@@ -43,7 +43,8 @@ quote/payment/receipt correlation, or revocation state.
 2. `DESCRIBE`: fetch the descriptor and a fresh service manifest; verify
    identity, signature, expiry, endpoint, and revision bindings.
 3. `OPEN`: negotiate one exact profile version and supported critical
-   extensions, then request a bounded session grant.
+   extensions, then request a bounded session grant that repeats the selected
+   profile ID, version, and extensions.
 4. `QUOTE`: send an idempotent request intent and receive current admission,
    price, byte limits, resource revision, deadline, and expiry.
 5. `AUTHORIZE`: bind a payer-approved maximum to the exact quote and request.

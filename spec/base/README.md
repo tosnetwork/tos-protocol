@@ -11,6 +11,9 @@ This directory contains the draft normative base specification:
 - [authorization-pipeline.md](authorization-pipeline.md) — fresh authority
   resolution, controller manifest verification, runtime roles, revocation,
   semantic validation, and Edge Core admission
+- [session-authorization.md](session-authorization.md) — exact profile session
+  grants, client-key resolution, signed delegation chains, and atomic
+  cumulative budget admission
 - [terminal-resources.md](terminal-resources.md) — privacy-preserving
   readiness, capacity, owner reservations, evidence, and quote limits
 - [ard-handoff.md](ard-handoff.md) — ARD publisher provenance and safe

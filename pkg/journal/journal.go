@@ -24,13 +24,16 @@ import (
 const (
 	DefaultMaxRecords       = 100_000
 	DefaultMaxNonces        = 200_000
+	DefaultMaxBudgets       = 600_000
 	DefaultMaxRecordBytes   = 32 << 10
 	DefaultMaxRetention     = 48 * time.Hour
 	DefaultMaxPrunePerWrite = 1_024
 
 	maxConfiguredRecords     = 10_000_000
+	maxConfiguredBudgets     = 60_000_000
 	maxConfiguredRecordBytes = 1 << 20
 	maxConfiguredRetention   = 365 * 24 * time.Hour
+	maxAdmissionBudgets      = 6
 	expiryPrefixBytes        = 12
 	expiryKeyBytes           = expiryPrefixBytes + sha256.Size
 )
@@ -43,16 +46,21 @@ var (
 	ErrRevision    = errors.New("request journal revision mismatch")
 	ErrTransition  = errors.New("illegal request journal transition")
 	ErrNonceReplay = errors.New("signed envelope nonce was already used")
+	ErrBudgetLimit = errors.New("session or delegation budget exhausted")
 	ErrCorrupt     = errors.New("request journal is corrupt")
 
-	recordsBucket     = []byte("records-v1")
-	expiryBucket      = []byte("expiry-v1")
-	metaBucket        = []byte("meta-v1")
-	countKey          = []byte("record-count")
-	expiryMarker      = []byte{1}
-	noncesBucket      = []byte("nonces-v1")
-	nonceExpiryBucket = []byte("nonce-expiry-v1")
-	nonceCountKey     = []byte("nonce-count")
+	recordsBucket      = []byte("records-v1")
+	expiryBucket       = []byte("expiry-v1")
+	metaBucket         = []byte("meta-v1")
+	countKey           = []byte("record-count")
+	expiryMarker       = []byte{1}
+	noncesBucket       = []byte("nonces-v1")
+	nonceExpiryBucket  = []byte("nonce-expiry-v1")
+	nonceCountKey      = []byte("nonce-count")
+	budgetsBucket      = []byte("budgets-v1")
+	budgetExpiryBucket = []byte("budget-expiry-v1")
+	budgetClaimsBucket = []byte("budget-claims-v1")
+	budgetCountKey     = []byte("budget-count")
 
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	idPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{2,127}$`)
@@ -62,6 +70,7 @@ var (
 type Limits struct {
 	MaxRecords       uint64
 	MaxNonces        uint64
+	MaxBudgets       uint64
 	MaxRecordBytes   int
 	MaxRetention     time.Duration
 	MaxPrunePerWrite int
@@ -72,6 +81,7 @@ func DefaultLimits() Limits {
 	return Limits{
 		MaxRecords:       DefaultMaxRecords,
 		MaxNonces:        DefaultMaxNonces,
+		MaxBudgets:       DefaultMaxBudgets,
 		MaxRecordBytes:   DefaultMaxRecordBytes,
 		MaxRetention:     DefaultMaxRetention,
 		MaxPrunePerWrite: DefaultMaxPrunePerWrite,
@@ -136,6 +146,55 @@ type Admission struct {
 	RetainUntil       time.Time
 }
 
+// UsageBudget is one cumulative session or delegation authority limit.
+type UsageBudget struct {
+	Kind        string `json:"kind"`
+	ID          string `json:"id"`
+	GrantDigest string `json:"grantDigest"`
+	MaxActions  uint64 `json:"maxActions"`
+	MaxNanoTOS  uint64 `json:"maxNanoTos"`
+}
+
+// SessionAdmission extends a verified envelope admission with every
+// cumulative authority budget in its session/delegation chain.
+type SessionAdmission struct {
+	Admission
+	ClientID         string
+	SessionExpiresAt time.Time
+	ChargeNanoTOS    uint64
+	Budgets          []UsageBudget
+}
+
+type BudgetUsage struct {
+	Version     string    `json:"version"`
+	Network     string    `json:"network"`
+	ServiceID   string    `json:"serviceId"`
+	SessionID   string    `json:"sessionId"`
+	ClientID    string    `json:"clientId"`
+	Kind        string    `json:"kind"`
+	ID          string    `json:"id"`
+	GrantDigest string    `json:"grantDigest"`
+	MaxActions  uint64    `json:"maxActions"`
+	MaxNanoTOS  uint64    `json:"maxNanoTos"`
+	UsedActions uint64    `json:"usedActions"`
+	UsedNanoTOS uint64    `json:"usedNanoTos"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	RetainUntil time.Time `json:"retainUntil"`
+}
+
+type BudgetClaim struct {
+	Version       string        `json:"version"`
+	Network       string        `json:"network"`
+	ServiceID     string        `json:"serviceId"`
+	SessionID     string        `json:"sessionId"`
+	RequestID     string        `json:"requestId"`
+	ClientID      string        `json:"clientId"`
+	ChargeNanoTOS uint64        `json:"chargeNanoTos"`
+	Budgets       []UsageBudget `json:"budgets"`
+	RetainUntil   time.Time     `json:"retainUntil"`
+}
+
 type NonceClaim struct {
 	Version        string    `json:"version"`
 	Network        string    `json:"network"`
@@ -166,9 +225,10 @@ const (
 )
 
 type Stats struct {
-	Records  uint64
-	Nonces   uint64
-	FileSize int64
+	Records      uint64
+	Nonces       uint64
+	BudgetUsages uint64
+	FileSize     int64
 }
 
 type Store struct {
@@ -288,10 +348,114 @@ func (s *Store) Admit(
 		if beginErr != nil {
 			return beginErr
 		}
+		if transaction.Bucket(budgetClaimsBucket).Get(requestKey[:]) != nil {
+			return ErrConflict
+		}
 		if nonceDisposition == nonceReplay && disposition == BeginCreated {
 			return ErrNonceReplay
 		}
 		return nil
+	})
+	if err != nil {
+		return Record{}, "", err
+	}
+	return output, disposition, nil
+}
+
+// AdmitSession atomically claims the verified envelope nonce, creates or
+// replays the request, and consumes every cumulative session/delegation
+// budget. Exact request replay does not consume the budgets again.
+func (s *Store) AdmitSession(
+	admission SessionAdmission,
+	now time.Time,
+) (Record, BeginDisposition, error) {
+	now, err := admission.validate(s.limits, now)
+	if err != nil {
+		return Record{}, "", err
+	}
+	requestKey := scopeKey(admission.Scope)
+	claim := NonceClaim{
+		Version: "1", Network: admission.Scope.Network,
+		Authority: admission.Scope.Authority, ServiceID: admission.Scope.ServiceID,
+		SessionID: admission.Scope.SessionID, Operation: admission.Scope.Operation,
+		RequestID: admission.Scope.RequestID, Domain: admission.Domain,
+		Nonce: admission.Nonce, EnvelopeDigest: admission.EnvelopeDigest,
+		ClaimedAt: now, ExpiresAt: admission.EnvelopeExpiresAt.UTC(),
+	}
+	budgetClaim := BudgetClaim{
+		Version: "1", Network: admission.Scope.Network,
+		ServiceID: admission.Scope.ServiceID, SessionID: admission.Scope.SessionID,
+		RequestID: admission.Scope.RequestID, ClientID: admission.ClientID,
+		ChargeNanoTOS: admission.ChargeNanoTOS,
+		Budgets:       append([]UsageBudget(nil), admission.Budgets...),
+		RetainUntil:   admission.SessionExpiresAt.UTC(),
+	}
+	var output Record
+	var disposition BeginDisposition
+	err = s.db.Update(func(transaction *bolt.Tx) error {
+		if _, _, pruneErr := s.pruneExpiredTx(
+			transaction, now, s.limits.MaxPrunePerWrite,
+		); pruneErr != nil {
+			return pruneErr
+		}
+		if _, _, pruneErr := s.pruneNoncesTx(
+			transaction, now, s.limits.MaxPrunePerWrite,
+		); pruneErr != nil {
+			return pruneErr
+		}
+		if _, _, pruneErr := s.pruneBudgetsTx(
+			transaction, now, s.limits.MaxPrunePerWrite,
+		); pruneErr != nil {
+			return pruneErr
+		}
+		nonceDisposition, claimErr := s.claimNonceTx(transaction, claim, now)
+		if claimErr != nil {
+			return claimErr
+		}
+		var beginErr error
+		output, disposition, beginErr = s.beginTx(
+			transaction, requestKey, admission.Scope, admission.IntentDigest,
+			now, admission.RetainUntil.UTC(),
+		)
+		if beginErr != nil {
+			return beginErr
+		}
+		if nonceDisposition == nonceReplay && disposition == BeginCreated {
+			return ErrNonceReplay
+		}
+		switch disposition {
+		case BeginCreated:
+			if transaction.Bucket(budgetClaimsBucket).Get(requestKey[:]) != nil {
+				return fmt.Errorf("%w: stale request budget claim", ErrCorrupt)
+			}
+			for _, budget := range admission.Budgets {
+				if err := s.consumeBudgetTx(
+					transaction, admission, budget, now,
+				); err != nil {
+					return err
+				}
+			}
+			encoded, err := s.encodeBudgetClaim(budgetClaim)
+			if err != nil {
+				return err
+			}
+			return transaction.Bucket(budgetClaimsBucket).Put(requestKey[:], encoded)
+		case BeginReplay:
+			encoded := transaction.Bucket(budgetClaimsBucket).Get(requestKey[:])
+			if encoded == nil {
+				return ErrConflict
+			}
+			existing, err := s.decodeBudgetClaim(encoded)
+			if err != nil {
+				return err
+			}
+			if !sameBudgetClaim(existing, budgetClaim) {
+				return ErrConflict
+			}
+			return nil
+		default:
+			return fmt.Errorf("%w: invalid begin disposition", ErrCorrupt)
+		}
 	})
 	if err != nil {
 		return Record{}, "", err
@@ -452,6 +616,9 @@ func (s *Store) beginTx(
 			if err := records.Delete(key[:]); err != nil {
 				return Record{}, "", err
 			}
+			if err := transaction.Bucket(budgetClaimsBucket).Delete(key[:]); err != nil {
+				return Record{}, "", err
+			}
 			count, err := readCount(transaction)
 			if err != nil {
 				return Record{}, "", err
@@ -568,6 +735,75 @@ func (s *Store) claimNonceTx(
 	return nonceCreated, nil
 }
 
+func (s *Store) consumeBudgetTx(
+	transaction *bolt.Tx,
+	admission SessionAdmission,
+	budget UsageBudget,
+	now time.Time,
+) error {
+	key := budgetKey(
+		admission.Scope.Network, admission.Scope.ServiceID,
+		admission.Scope.SessionID, budget.Kind, budget.ID,
+	)
+	budgets := transaction.Bucket(budgetsBucket)
+	if encoded := budgets.Get(key[:]); encoded != nil {
+		usage, err := s.decodeBudgetUsage(encoded)
+		if err != nil {
+			return err
+		}
+		if !sameBudgetAuthority(usage, admission, budget) {
+			return ErrConflict
+		}
+		if usage.UsedActions >= usage.MaxActions ||
+			admission.ChargeNanoTOS > usage.MaxNanoTOS-usage.UsedNanoTOS {
+			return ErrBudgetLimit
+		}
+		usage.UsedActions++
+		usage.UsedNanoTOS += admission.ChargeNanoTOS
+		if now.After(usage.UpdatedAt) {
+			usage.UpdatedAt = now
+		}
+		updated, err := s.encodeBudgetUsage(usage)
+		if err != nil {
+			return err
+		}
+		return budgets.Put(key[:], updated)
+	}
+	count, err := readBudgetCount(transaction)
+	if err != nil {
+		return err
+	}
+	if count >= s.limits.MaxBudgets {
+		return ErrCapacity
+	}
+	if admission.ChargeNanoTOS > budget.MaxNanoTOS {
+		return ErrBudgetLimit
+	}
+	usage := BudgetUsage{
+		Version: "1", Network: admission.Scope.Network,
+		ServiceID: admission.Scope.ServiceID, SessionID: admission.Scope.SessionID,
+		ClientID: admission.ClientID, Kind: budget.Kind, ID: budget.ID,
+		GrantDigest: budget.GrantDigest,
+		MaxActions:  budget.MaxActions, MaxNanoTOS: budget.MaxNanoTOS,
+		UsedActions: 1, UsedNanoTOS: admission.ChargeNanoTOS,
+		CreatedAt: now, UpdatedAt: now,
+		RetainUntil: admission.SessionExpiresAt.UTC(),
+	}
+	encoded, err := s.encodeBudgetUsage(usage)
+	if err != nil {
+		return err
+	}
+	if err := budgets.Put(key[:], encoded); err != nil {
+		return err
+	}
+	if err := transaction.Bucket(budgetExpiryBucket).Put(
+		expiryKey(usage.RetainUntil, key), expiryMarker,
+	); err != nil {
+		return err
+	}
+	return writeBudgetCount(transaction, count+1)
+}
+
 // PruneExpired removes at most maxDelete records. more reports whether the
 // oldest remaining expiry is already due, allowing a caller to continue in
 // bounded batches.
@@ -601,6 +837,23 @@ func (s *Store) PruneNonces(now time.Time, maxDelete int) (deleted int, more boo
 	return deleted, more, err
 }
 
+func (s *Store) PruneBudgets(now time.Time, maxDelete int) (deleted int, more bool, err error) {
+	if err := validateNow(now); err != nil {
+		return 0, false, err
+	}
+	if maxDelete <= 0 || maxDelete > s.limits.MaxPrunePerWrite {
+		return 0, false, errors.New("budget prune batch exceeds configured limit")
+	}
+	err = s.db.Update(func(transaction *bolt.Tx) error {
+		var pruneErr error
+		deleted, more, pruneErr = s.pruneBudgetsTx(
+			transaction, now.UTC(), maxDelete,
+		)
+		return pruneErr
+	})
+	return deleted, more, err
+}
+
 func (s *Store) Stats() (Stats, error) {
 	var output Stats
 	err := s.db.View(func(transaction *bolt.Tx) error {
@@ -614,6 +867,11 @@ func (s *Store) Stats() (Stats, error) {
 			return err
 		}
 		output.Nonces = nonceCount
+		budgetCount, err := readBudgetCount(transaction)
+		if err != nil {
+			return err
+		}
+		output.BudgetUsages = budgetCount
 		return nil
 	})
 	if err != nil {
@@ -644,6 +902,17 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	if err != nil {
 		return err
 	}
+	budgets, err := transaction.CreateBucketIfNotExists(budgetsBucket)
+	if err != nil {
+		return err
+	}
+	budgetExpiries, err := transaction.CreateBucketIfNotExists(budgetExpiryBucket)
+	if err != nil {
+		return err
+	}
+	if _, err := transaction.CreateBucketIfNotExists(budgetClaimsBucket); err != nil {
+		return err
+	}
 	meta, err := transaction.CreateBucketIfNotExists(metaBucket)
 	if err != nil {
 		return err
@@ -659,6 +928,12 @@ func (s *Store) initialize(transaction *bolt.Tx) error {
 	}
 	if nonceExpiries.Stats().KeyN != nonces.Stats().KeyN {
 		return fmt.Errorf("%w: nonce expiry index count mismatch", ErrCorrupt)
+	}
+	if err := initializeCount(meta, budgetCountKey, uint64(budgets.Stats().KeyN), "budget"); err != nil {
+		return err
+	}
+	if budgetExpiries.Stats().KeyN != budgets.Stats().KeyN {
+		return fmt.Errorf("%w: budget expiry index count mismatch", ErrCorrupt)
 	}
 	return nil
 }
@@ -700,6 +975,9 @@ func (s *Store) pruneExpiredTx(
 			return deleted, false, fmt.Errorf("%w: expiry index mismatch", ErrCorrupt)
 		}
 		if err := records.Delete(recordKey); err != nil {
+			return deleted, false, err
+		}
+		if err := transaction.Bucket(budgetClaimsBucket).Delete(recordKey); err != nil {
 			return deleted, false, err
 		}
 		if err := cursor.Delete(); err != nil {
@@ -781,6 +1059,65 @@ func (s *Store) pruneNoncesTx(
 	return deleted, more, nil
 }
 
+func (s *Store) pruneBudgetsTx(
+	transaction *bolt.Tx,
+	now time.Time,
+	maxDelete int,
+) (deleted int, more bool, err error) {
+	budgets := transaction.Bucket(budgetsBucket)
+	expiries := transaction.Bucket(budgetExpiryBucket)
+	cursor := expiries.Cursor()
+	cutoff := expiryPrefix(now)
+	for key, marker := cursor.First(); key != nil; key, marker = cursor.Next() {
+		if len(key) != expiryKeyBytes {
+			return deleted, false, fmt.Errorf("%w: invalid budget expiry key", ErrCorrupt)
+		}
+		if !bytes.Equal(marker, expiryMarker) {
+			return deleted, false, fmt.Errorf("%w: invalid budget expiry marker", ErrCorrupt)
+		}
+		if bytes.Compare(key[:expiryPrefixBytes], cutoff[:]) > 0 {
+			break
+		}
+		if deleted >= maxDelete {
+			more = true
+			break
+		}
+		budgetKeyBytes := key[expiryPrefixBytes:]
+		encoded := budgets.Get(budgetKeyBytes)
+		if encoded == nil {
+			return deleted, false, fmt.Errorf("%w: expiry references missing budget", ErrCorrupt)
+		}
+		usage, err := s.decodeBudgetUsage(encoded)
+		if err != nil {
+			return deleted, false, err
+		}
+		expectedKey := expiryKey(usage.RetainUntil, array32(budgetKeyBytes))
+		if !bytes.Equal(expectedKey, key) || usage.RetainUntil.After(now) {
+			return deleted, false, fmt.Errorf("%w: budget expiry index mismatch", ErrCorrupt)
+		}
+		if err := budgets.Delete(budgetKeyBytes); err != nil {
+			return deleted, false, err
+		}
+		if err := cursor.Delete(); err != nil {
+			return deleted, false, err
+		}
+		deleted++
+	}
+	if deleted != 0 {
+		count, err := readBudgetCount(transaction)
+		if err != nil {
+			return deleted, false, err
+		}
+		if uint64(deleted) > count {
+			return deleted, false, fmt.Errorf("%w: budget count underflow", ErrCorrupt)
+		}
+		if err := writeBudgetCount(transaction, count-uint64(deleted)); err != nil {
+			return deleted, false, err
+		}
+	}
+	return deleted, more, nil
+}
+
 func (s *Store) encodeRecord(record Record) ([]byte, error) {
 	if err := record.validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
@@ -843,9 +1180,66 @@ func (s *Store) decodeNonce(encoded []byte) (NonceClaim, error) {
 	return claim, nil
 }
 
+func (s *Store) encodeBudgetUsage(usage BudgetUsage) ([]byte, error) {
+	if err := usage.validateStored(s.limits); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	encoded, err := json.Marshal(usage)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > s.limits.MaxRecordBytes {
+		return nil, errors.New("budget usage exceeds byte limit")
+	}
+	return encoded, nil
+}
+
+func (s *Store) decodeBudgetUsage(encoded []byte) (BudgetUsage, error) {
+	if len(encoded) == 0 || len(encoded) > s.limits.MaxRecordBytes {
+		return BudgetUsage{}, fmt.Errorf("%w: invalid budget usage size", ErrCorrupt)
+	}
+	var usage BudgetUsage
+	if err := jsonstrict.Decode(encoded, &usage); err != nil {
+		return BudgetUsage{}, fmt.Errorf("%w: decode budget usage: %v", ErrCorrupt, err)
+	}
+	if err := usage.validateStored(s.limits); err != nil {
+		return BudgetUsage{}, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	return usage, nil
+}
+
+func (s *Store) encodeBudgetClaim(claim BudgetClaim) ([]byte, error) {
+	if err := claim.validateStored(); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	encoded, err := json.Marshal(claim)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > s.limits.MaxRecordBytes {
+		return nil, errors.New("budget claim exceeds byte limit")
+	}
+	return encoded, nil
+}
+
+func (s *Store) decodeBudgetClaim(encoded []byte) (BudgetClaim, error) {
+	if len(encoded) == 0 || len(encoded) > s.limits.MaxRecordBytes {
+		return BudgetClaim{}, fmt.Errorf("%w: invalid budget claim size", ErrCorrupt)
+	}
+	var claim BudgetClaim
+	if err := jsonstrict.Decode(encoded, &claim); err != nil {
+		return BudgetClaim{}, fmt.Errorf("%w: decode budget claim: %v", ErrCorrupt, err)
+	}
+	if err := claim.validateStored(); err != nil {
+		return BudgetClaim{}, fmt.Errorf("%w: %v", ErrCorrupt, err)
+	}
+	return claim, nil
+}
+
 func (l Limits) validate() error {
 	if l.MaxRecords == 0 || l.MaxRecords > maxConfiguredRecords ||
 		l.MaxNonces == 0 || l.MaxNonces > maxConfiguredRecords ||
+		l.MaxBudgets == 0 || l.MaxBudgets > maxConfiguredBudgets ||
 		l.MaxRecordBytes < 1_024 || l.MaxRecordBytes > maxConfiguredRecordBytes ||
 		l.MaxRetention <= 0 || l.MaxRetention > maxConfiguredRetention ||
 		l.MaxPrunePerWrite <= 0 || uint64(l.MaxPrunePerWrite) > l.MaxRecords ||
@@ -882,6 +1276,126 @@ func (a Admission) validate(limits Limits, now time.Time) (time.Time, error) {
 		return time.Time{}, errors.New("request retention must cover the envelope nonce")
 	}
 	return now, nil
+}
+
+func (a SessionAdmission) validate(limits Limits, now time.Time) (time.Time, error) {
+	now, err := a.Admission.validate(limits, now)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if err := bounded("client ID", a.ClientID, 1, 512); err != nil {
+		return time.Time{}, err
+	}
+	sessionExpiresAt := a.SessionExpiresAt.UTC()
+	if !sessionExpiresAt.After(now) ||
+		sessionExpiresAt.Sub(now) > limits.MaxRetention ||
+		a.RetainUntil.UTC().Before(sessionExpiresAt) {
+		return time.Time{}, errors.New("request retention must cover the session budget")
+	}
+	if len(a.Budgets) == 0 || len(a.Budgets) > maxAdmissionBudgets {
+		return time.Time{}, errors.New("session admission budgets are not bounded")
+	}
+	seen := make(map[string]struct{}, len(a.Budgets))
+	for index, budget := range a.Budgets {
+		if err := budget.validate(); err != nil {
+			return time.Time{}, fmt.Errorf("budgets[%d]: %w", index, err)
+		}
+		if index == 0 && (budget.Kind != "session" || budget.ID != a.Scope.SessionID) {
+			return time.Time{}, errors.New("first admission budget must bind the session")
+		}
+		key := budget.Kind + "\x00" + budget.ID
+		if _, duplicate := seen[key]; duplicate {
+			return time.Time{}, errors.New("duplicate session admission budget")
+		}
+		seen[key] = struct{}{}
+		if a.ChargeNanoTOS > budget.MaxNanoTOS {
+			return time.Time{}, ErrBudgetLimit
+		}
+	}
+	return now, nil
+}
+
+func (b UsageBudget) validate() error {
+	switch b.Kind {
+	case "session", "delegation":
+	default:
+		return errors.New("invalid budget kind")
+	}
+	if err := bounded("budget ID", b.ID, 8, 128); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(b.GrantDigest) {
+		return errors.New("invalid budget grant digest")
+	}
+	if b.MaxActions == 0 {
+		return errors.New("budget maxActions must be nonzero")
+	}
+	return nil
+}
+
+func (u BudgetUsage) validateStored(limits Limits) error {
+	if u.Version != "1" {
+		return errors.New("unsupported budget usage version")
+	}
+	if err := (Scope{
+		Network: u.Network, Authority: u.ClientID, ServiceID: u.ServiceID,
+		SessionID: u.SessionID, Operation: "budget", RequestID: "budget-usage",
+	}).Validate(); err != nil {
+		return err
+	}
+	if err := (UsageBudget{
+		Kind: u.Kind, ID: u.ID, GrantDigest: u.GrantDigest,
+		MaxActions: u.MaxActions, MaxNanoTOS: u.MaxNanoTOS,
+	}).validate(); err != nil {
+		return err
+	}
+	if u.UsedActions == 0 || u.UsedActions > u.MaxActions ||
+		u.UsedNanoTOS > u.MaxNanoTOS {
+		return errors.New("invalid cumulative budget usage")
+	}
+	if u.CreatedAt.IsZero() || u.UpdatedAt.IsZero() || u.RetainUntil.IsZero() ||
+		u.UpdatedAt.Before(u.CreatedAt) ||
+		!u.RetainUntil.After(u.UpdatedAt) ||
+		u.RetainUntil.Sub(u.CreatedAt) > limits.MaxRetention {
+		return errors.New("invalid budget usage time ordering")
+	}
+	return nil
+}
+
+func (c BudgetClaim) validateStored() error {
+	if c.Version != "1" {
+		return errors.New("unsupported budget claim version")
+	}
+	if err := (Scope{
+		Network: c.Network, Authority: c.ClientID, ServiceID: c.ServiceID,
+		SessionID: c.SessionID, Operation: "budget", RequestID: c.RequestID,
+	}).Validate(); err != nil {
+		return err
+	}
+	if c.RetainUntil.IsZero() {
+		return errors.New("invalid budget claim retention")
+	}
+	if c.RetainUntil.Year() < 1970 || c.RetainUntil.Year() > 9999 {
+		return errors.New("invalid budget claim retention year")
+	}
+	if len(c.Budgets) == 0 || len(c.Budgets) > maxAdmissionBudgets {
+		return errors.New("invalid budget claim list")
+	}
+	seen := make(map[string]struct{}, len(c.Budgets))
+	for _, budget := range c.Budgets {
+		if err := budget.validate(); err != nil {
+			return err
+		}
+		if c.ChargeNanoTOS > budget.MaxNanoTOS {
+			return errors.New("budget claim exceeds authority")
+		}
+		key := budget.Kind + "\x00" + budget.ID
+		if _, duplicate := seen[key]; duplicate {
+			return errors.New("duplicate budget claim authority")
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 func (n NonceClaim) validate(limits Limits, now time.Time) error {
@@ -1104,6 +1618,61 @@ func sameNonceBinding(left, right NonceClaim) bool {
 		left.ExpiresAt.Equal(right.ExpiresAt)
 }
 
+func budgetKey(
+	network, serviceID, sessionID, kind, id string,
+) [32]byte {
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-EDGE-JOURNAL-BUDGET-V1"))
+	for _, value := range []string{
+		network, serviceID, sessionID, kind, id,
+	} {
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(len(value)))
+		hasher.Write(length[:])
+		hasher.Write([]byte(value))
+	}
+	var output [32]byte
+	copy(output[:], hasher.Sum(nil))
+	return output
+}
+
+func sameBudgetAuthority(
+	usage BudgetUsage,
+	admission SessionAdmission,
+	budget UsageBudget,
+) bool {
+	return usage.Network == admission.Scope.Network &&
+		usage.ServiceID == admission.Scope.ServiceID &&
+		usage.SessionID == admission.Scope.SessionID &&
+		usage.ClientID == admission.ClientID &&
+		usage.Kind == budget.Kind &&
+		usage.ID == budget.ID &&
+		usage.GrantDigest == budget.GrantDigest &&
+		usage.MaxActions == budget.MaxActions &&
+		usage.MaxNanoTOS == budget.MaxNanoTOS &&
+		usage.RetainUntil.Equal(admission.SessionExpiresAt.UTC())
+}
+
+func sameBudgetClaim(left, right BudgetClaim) bool {
+	if left.Version != right.Version ||
+		left.Network != right.Network ||
+		left.ServiceID != right.ServiceID ||
+		left.SessionID != right.SessionID ||
+		left.RequestID != right.RequestID ||
+		left.ClientID != right.ClientID ||
+		left.ChargeNanoTOS != right.ChargeNanoTOS ||
+		!left.RetainUntil.Equal(right.RetainUntil) ||
+		len(left.Budgets) != len(right.Budgets) {
+		return false
+	}
+	for index := range left.Budgets {
+		if left.Budgets[index] != right.Budgets[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func expiryPrefix(value time.Time) [expiryPrefixBytes]byte {
 	var output [expiryPrefixBytes]byte
 	value = value.UTC()
@@ -1140,6 +1709,14 @@ func readNonceCount(transaction *bolt.Tx) (uint64, error) {
 
 func writeNonceCount(transaction *bolt.Tx, count uint64) error {
 	return writeNamedCount(transaction, nonceCountKey, count)
+}
+
+func readBudgetCount(transaction *bolt.Tx) (uint64, error) {
+	return readNamedCount(transaction, budgetCountKey, "budget")
+}
+
+func writeBudgetCount(transaction *bolt.Tx, count uint64) error {
+	return writeNamedCount(transaction, budgetCountKey, count)
 }
 
 func readNamedCount(transaction *bolt.Tx, key []byte, name string) (uint64, error) {

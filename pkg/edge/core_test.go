@@ -1,6 +1,7 @@
 package edge
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -30,6 +31,189 @@ type corePayload struct {
 	RequestID string `json:"requestId"`
 	SessionID string `json:"sessionId"`
 	Operation string `json:"operation"`
+}
+
+type edgeClientKeyResolver struct {
+	snapshot authorization.ClientKeySnapshot
+}
+
+func (r edgeClientKeyResolver) ResolveClientKey(
+	_ context.Context,
+	reference authorization.ClientKeyReference,
+) (authorization.ClientKeySnapshot, error) {
+	if reference.Network != r.snapshot.Network ||
+		reference.ServiceID != r.snapshot.ServiceID ||
+		reference.KeyID != r.snapshot.KeyID ||
+		reference.MinimumMasterSeqno > r.snapshot.ObservedMasterSeqno {
+		return authorization.ClientKeySnapshot{}, errors.New("client key reference mismatch")
+	}
+	output := r.snapshot
+	output.PublicKey = append(ed25519.PublicKey(nil), output.PublicKey...)
+	return output, nil
+}
+
+type coreSessionFixture struct {
+	now           time.Time
+	network       string
+	serviceID     string
+	sessionID     string
+	clientID      string
+	clientPrivate ed25519.PrivateKey
+	resolver      edgeClientKeyResolver
+	session       *authorization.VerifiedSessionGrant
+}
+
+func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
+	t.Helper()
+	controllerPublic, controllerPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimePublic, runtimePrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientPublic, clientPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := protocol.ServiceManifest{
+		Version: protocol.ManifestVersion, ManifestID: "manifest-session-1",
+		ServiceID: "edge.example.ai", Controller: "tos:test:controller",
+		Network: "testnet", Revision: "manifest-revision-1",
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour),
+		RuntimeKeys: []protocol.RuntimeKey{{
+			KeyID: "runtime-auth-key", Algorithm: "Ed25519",
+			PublicKey: base64.RawURLEncoding.EncodeToString(runtimePublic),
+			Roles:     []string{protocol.RuntimeRoleAuthenticate},
+			NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
+		}},
+		Endpoints: []protocol.ServiceEndpoint{{
+			Transport: "https", Audience: "authenticated",
+			URL: "https://edge.example/v1",
+		}},
+		Profiles: []protocol.ProfileReference{{
+			ID: "tos.ai.inference", Version: "0.1.0",
+			MediaType: "application/vnd.tos.ai-inference+json",
+			URL:       "https://edge.example/profile.json",
+			Digest:    "sha256:" + strings.Repeat("a", 64),
+		}},
+	}
+	manifestEnvelope, err := identity.SignCanonical(
+		controllerPrivate, protocol.ServiceManifestDomain,
+		manifest.Controller, manifest, manifest.IssuedAt, manifest.ExpiresAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestDigest, err := codec.Digest(protocol.ServiceManifestDomain, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := authorization.NewVerifier(authorization.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedManifest, err := verifier.VerifyManifest(
+		authorization.AuthoritySnapshot{
+			Active: true, Network: manifest.Network, ServiceID: manifest.ServiceID,
+			Controller: manifest.Controller, ControllerPublicKey: controllerPublic,
+			ManifestDigest: manifestDigest, ObservedMasterSeqno: 100,
+			ObservedAt: now,
+		},
+		manifestEnvelope, now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant := protocol.SessionGrant{
+		Version: protocol.BaseEnvelopeVersion, SessionID: "session-0001",
+		ServiceID: manifest.ServiceID, ProfileID: manifest.Profiles[0].ID,
+		ProfileVersion: manifest.Profiles[0].Version,
+		Client:         "client-key-1", RuntimeKeyID: manifest.RuntimeKeys[0].KeyID,
+		ManifestRevision: manifest.Revision, Operations: []string{"invoke"},
+		MaxRequests: 2, MaxNanoTOS: 10,
+		IssuedAt: now.Add(-time.Second), ExpiresAt: now.Add(30 * time.Minute),
+	}
+	grantEnvelope, err := identity.SignCanonical(
+		runtimePrivate, protocol.SessionGrantDomain, grant.RuntimeKeyID,
+		grant, grant.IssuedAt, grant.ExpiresAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedSession, err := verifiedManifest.VerifySessionGrant(grantEnvelope, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return coreSessionFixture{
+		now: now, network: manifest.Network, serviceID: manifest.ServiceID,
+		sessionID: grant.SessionID, clientID: grant.Client,
+		clientPrivate: clientPrivate,
+		resolver: edgeClientKeyResolver{snapshot: authorization.ClientKeySnapshot{
+			Network: manifest.Network, ServiceID: manifest.ServiceID,
+			KeyID: grant.Client, PublicKey: clientPublic,
+			NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour),
+			ObservedMasterSeqno: 100, ObservedAt: now,
+		}},
+		session: verifiedSession,
+	}
+}
+
+func (f coreSessionFixture) authorize(
+	t *testing.T,
+	requestID string,
+	charge uint64,
+) (journal.Scope, authorization.AuthorizedSessionEnvelope) {
+	t.Helper()
+	scope := journal.Scope{
+		Network: f.network, Authority: f.clientID, ServiceID: f.serviceID,
+		SessionID: f.sessionID, Operation: "invoke", RequestID: requestID,
+	}
+	payload := corePayload{
+		RequestID: requestID, SessionID: scope.SessionID,
+		Operation: scope.Operation,
+	}
+	envelope, err := identity.SignCanonical(
+		f.clientPrivate, "tos.invoke.v1", f.clientID, payload,
+		f.now, f.now.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorized, err := f.session.AuthorizeClientEnvelope(
+		context.Background(), f.resolver, 100, nil,
+		envelope, "tos.invoke.v1", "", f.now,
+		authorization.AdmissionBinding{
+			SessionID: scope.SessionID, Operation: scope.Operation,
+			RequestID:    requestID,
+			IntentDigest: "sha256:" + strings.Repeat("9", 64),
+		},
+		charge,
+		func(
+			encoded []byte,
+			binding authorization.AdmissionBinding,
+			validatedCharge uint64,
+		) error {
+			if binding.SessionID != scope.SessionID ||
+				binding.RequestID != requestID ||
+				validatedCharge != charge {
+				return errors.New("client session admission binding mismatch")
+			}
+			var decoded corePayload
+			if err := codec.Unmarshal(encoded, &decoded); err != nil {
+				return err
+			}
+			if decoded != payload {
+				return errors.New("client session payload mismatch")
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scope, authorized
 }
 
 func authorizedCoreEnvelope(
@@ -208,6 +392,57 @@ func TestCoreAdmitsAuthorizedEnvelopeAtomically(t *testing.T) {
 	}
 	if health.RequestRecords != 1 || health.NonceClaims != 1 {
 		t.Fatalf("unexpected health after admission: %#v", health)
+	}
+}
+
+func TestCoreAtomicallyAdmitsSessionBudgets(t *testing.T) {
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
+	config.CleanupInterval = time.Hour
+	now := time.Unix(1_800_000_000, 0).UTC()
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	fixture := newCoreSessionFixture(t, now)
+	intent := "sha256:" + strings.Repeat("9", 64)
+
+	firstScope, first := fixture.authorize(t, "session-request-1", 4)
+	if _, _, err := core.AdmitAuthorizedSessionEnvelope(
+		firstScope, intent, 5, first, fixture.now.Add(30*time.Minute),
+	); err == nil {
+		t.Fatal("mismatched session charge accepted")
+	}
+	record, disposition, err := core.AdmitAuthorizedSessionEnvelope(
+		firstScope, intent, 4, first, fixture.now.Add(30*time.Minute),
+	)
+	if err != nil || disposition != journal.BeginCreated {
+		t.Fatalf("first session admission: %#v %q %v", record, disposition, err)
+	}
+	if replay, replayDisposition, err := core.AdmitAuthorizedSessionEnvelope(
+		firstScope, intent, 4, first, fixture.now.Add(30*time.Minute),
+	); err != nil || replayDisposition != journal.BeginReplay || replay != record {
+		t.Fatalf("session replay: %#v %q %v", replay, replayDisposition, err)
+	}
+	secondScope, second := fixture.authorize(t, "session-request-2", 6)
+	if _, disposition, err := core.AdmitAuthorizedSessionEnvelope(
+		secondScope, intent, 6, second, fixture.now.Add(30*time.Minute),
+	); err != nil || disposition != journal.BeginCreated {
+		t.Fatalf("second session admission: %q %v", disposition, err)
+	}
+	thirdScope, third := fixture.authorize(t, "session-request-3", 0)
+	if _, _, err := core.AdmitAuthorizedSessionEnvelope(
+		thirdScope, intent, 0, third, fixture.now.Add(30*time.Minute),
+	); !errors.Is(err, journal.ErrBudgetLimit) {
+		t.Fatalf("exhausted session error = %v", err)
+	}
+	health, err := core.Health()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if health.RequestRecords != 2 || health.NonceClaims != 2 ||
+		health.BudgetUsages != 1 {
+		t.Fatalf("unexpected session health: %#v", health)
 	}
 }
 

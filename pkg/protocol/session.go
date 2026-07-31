@@ -11,23 +11,28 @@ const (
 	MaxSessionOperations = 32
 	MaxDelegationScopes  = 32
 	MaxDelegationDepth   = 4
+
+	SessionGrantDomain = "tos.session.v1"
+	DelegationDomain   = "tos.delegation.v1"
 )
 
 // SessionGrant is a signed, bounded authorization to use one service profile.
 // It is not a payment authorization and does not prove current capacity.
 type SessionGrant struct {
-	Version          string    `json:"version"`
-	SessionID        string    `json:"sessionId"`
-	ServiceID        string    `json:"serviceId"`
-	ProfileID        string    `json:"profileId"`
-	Client           string    `json:"client"`
-	RuntimeKeyID     string    `json:"runtimeKeyId"`
-	ManifestRevision string    `json:"manifestRevision"`
-	Operations       []string  `json:"operations"`
-	MaxRequests      uint64    `json:"maxRequests"`
-	MaxNanoTOS       uint64    `json:"maxNanoTos"`
-	IssuedAt         time.Time `json:"issuedAt"`
-	ExpiresAt        time.Time `json:"expiresAt"`
+	Version           string    `json:"version"`
+	SessionID         string    `json:"sessionId"`
+	ServiceID         string    `json:"serviceId"`
+	ProfileID         string    `json:"profileId"`
+	ProfileVersion    string    `json:"profileVersion"`
+	ProfileExtensions []string  `json:"profileExtensions,omitempty"`
+	Client            string    `json:"client"`
+	RuntimeKeyID      string    `json:"runtimeKeyId"`
+	ManifestRevision  string    `json:"manifestRevision"`
+	Operations        []string  `json:"operations"`
+	MaxRequests       uint64    `json:"maxRequests"`
+	MaxNanoTOS        uint64    `json:"maxNanoTos"`
+	IssuedAt          time.Time `json:"issuedAt"`
+	ExpiresAt         time.Time `json:"expiresAt"`
 }
 
 func (s SessionGrant) Validate(now time.Time) error {
@@ -39,6 +44,12 @@ func (s SessionGrant) Validate(now time.Time) error {
 	}
 	if !serviceIDPattern.MatchString(s.ServiceID) || !serviceIDPattern.MatchString(s.ProfileID) {
 		return errors.New("invalid session service or profile")
+	}
+	if _, err := parseVersionSet([]string{s.ProfileVersion}); err != nil {
+		return fmt.Errorf("invalid session profile version: %w", err)
+	}
+	if _, err := parseExtensionSet(s.ProfileExtensions); err != nil {
+		return fmt.Errorf("invalid session profile extensions: %w", err)
 	}
 	for name, value := range map[string]string{
 		"client": s.Client, "runtimeKeyId": s.RuntimeKeyID, "manifestRevision": s.ManifestRevision,
@@ -77,6 +88,7 @@ func (s SessionGrant) Validate(now time.Time) error {
 type Delegation struct {
 	Version      string    `json:"version"`
 	DelegationID string    `json:"delegationId"`
+	SessionID    string    `json:"sessionId"`
 	Issuer       string    `json:"issuer"`
 	Subject      string    `json:"subject"`
 	Audience     string    `json:"audience"`
@@ -94,6 +106,9 @@ func (d Delegation) Validate(now time.Time) error {
 		return errors.New("unsupported delegation version")
 	}
 	if err := validateCorrelationIDs(d.DelegationID); err != nil {
+		return err
+	}
+	if err := validateCorrelationIDs(d.SessionID); err != nil {
 		return err
 	}
 	for name, value := range map[string]string{
@@ -151,7 +166,8 @@ func (d Delegation) ValidateChildOf(parent Delegation, now time.Time) error {
 		return errors.New("parent delegation cannot have another child")
 	}
 	if d.ParentID != parent.DelegationID || d.Issuer != parent.Subject ||
-		d.Audience != parent.Audience || d.Depth != parent.Depth+1 {
+		d.SessionID != parent.SessionID || d.Audience != parent.Audience ||
+		d.Depth != parent.Depth+1 {
 		return errors.New("delegation parent binding mismatch")
 	}
 	if d.NotBefore.Before(parent.NotBefore) || d.ExpiresAt.After(parent.ExpiresAt) ||

@@ -114,3 +114,9 @@ This library does not by itself enable a public session or invocation route.
 The bootstrap server still exposes discovery only. A production route must
 wire a real authority resolver, typed payload policy, payment observation,
 execution isolation, and receipt persistence.
+
+Runtime requests such as quotes and receipts can use the opaque
+`AuthorizedEnvelope` path directly. Client actions additionally require a
+runtime-signed session grant, fresh client or delegated keys, and atomic
+cumulative usage admission. That continuation is specified in
+[session-authorization.md](session-authorization.md).

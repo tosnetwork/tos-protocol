@@ -93,6 +93,8 @@ type VerifiedManifest struct {
 	runtimeKeys      map[string]protocol.RuntimeKey
 	revoked          map[string]struct{}
 	authorityFreshTo time.Time
+	maxKeyAge        time.Duration
+	maxRevocations   int
 }
 
 // PayloadValidator performs message-specific semantic checks after the
@@ -220,6 +222,8 @@ func (v *Verifier) VerifyManifest(
 		runtimeKeys:      runtimeKeys,
 		revoked:          revoked,
 		authorityFreshTo: snapshot.ObservedAt.Add(v.policy.MaxAuthorityAge).UTC(),
+		maxKeyAge:        v.policy.MaxAuthorityAge,
+		maxRevocations:   v.policy.MaxRevokedRuntimeKeys,
 	}, nil
 }
 
@@ -239,59 +243,85 @@ func (m *VerifiedManifest) AuthorizeRuntimeEnvelope(
 	if err := binding.validate(); err != nil {
 		return AuthorizedEnvelope{}, err
 	}
-	now, err := validateNow(now)
+	verified, err := m.verifyRuntimeEnvelope(
+		envelope, expectedDomain, requiredRole, now,
+	)
 	if err != nil {
 		return AuthorizedEnvelope{}, err
 	}
+	if err := validatePayload(
+		append([]byte(nil), verified.envelope.Payload...),
+	); err != nil {
+		return AuthorizedEnvelope{}, fmt.Errorf("validate runtime payload: %w", err)
+	}
+	return AuthorizedEnvelope{
+		valid: true, envelope: verified.envelope,
+		network: m.manifest.Network, serviceID: m.manifest.ServiceID,
+		authority: verified.key.KeyID, binding: binding,
+		validUntil: verified.validUntil, verifiedAt: verified.verifiedAt,
+	}, nil
+}
+
+type runtimeVerification struct {
+	envelope   identity.Envelope
+	key        protocol.RuntimeKey
+	verifiedAt time.Time
+	validUntil time.Time
+}
+
+func (m *VerifiedManifest) verifyRuntimeEnvelope(
+	envelope identity.Envelope,
+	expectedDomain, requiredRole string,
+	now time.Time,
+) (runtimeVerification, error) {
+	if m == nil || m.runtimeKeys == nil {
+		return runtimeVerification{}, errors.New("invalid verified manifest")
+	}
+	now, err := validateNow(now)
+	if err != nil {
+		return runtimeVerification{}, err
+	}
 	if !m.manifest.ExpiresAt.After(now) ||
 		!m.authorityFreshTo.After(now) {
-		return AuthorizedEnvelope{}, errors.New("verified authority is no longer current")
+		return runtimeVerification{}, errors.New("verified authority is no longer current")
 	}
 	envelope = cloneEnvelope(envelope)
 	key, ok := m.runtimeKeys[envelope.KeyID]
 	if !ok {
-		return AuthorizedEnvelope{}, errors.New("runtime key is absent from current manifest")
+		return runtimeVerification{}, errors.New("runtime key is absent from current manifest")
 	}
 	if _, isRevoked := m.revoked[key.KeyID]; isRevoked {
-		return AuthorizedEnvelope{}, errors.New("runtime key is revoked")
+		return runtimeVerification{}, errors.New("runtime key is revoked")
 	}
 	if !hasRole(key.Roles, requiredRole) {
-		return AuthorizedEnvelope{}, errors.New("runtime key lacks required role")
+		return runtimeVerification{}, errors.New("runtime key lacks required role")
 	}
 	publicKeyBytes, err := base64.RawURLEncoding.DecodeString(key.PublicKey)
 	if err != nil || len(publicKeyBytes) != ed25519.PublicKeySize {
-		return AuthorizedEnvelope{}, errors.New("invalid runtime public key")
+		return runtimeVerification{}, errors.New("invalid runtime public key")
 	}
 	if err := envelope.Verify(
 		ed25519.PublicKey(publicKeyBytes), expectedDomain, now,
 	); err != nil {
-		return AuthorizedEnvelope{}, fmt.Errorf("verify runtime envelope: %w", err)
+		return runtimeVerification{}, fmt.Errorf("verify runtime envelope: %w", err)
 	}
 	envelopeIssuedAt := time.UnixMilli(envelope.IssuedAt)
 	envelopeExpiresAt := time.UnixMilli(envelope.ExpiresAt)
 	if now.Before(key.NotBefore) || !key.NotAfter.After(now) ||
 		envelopeIssuedAt.Before(envelopeTime(key.NotBefore)) ||
 		envelopeExpiresAt.After(envelopeTime(key.NotAfter)) {
-		return AuthorizedEnvelope{}, errors.New("runtime envelope is outside key validity")
+		return runtimeVerification{}, errors.New("runtime envelope is outside key validity")
 	}
 	var canonicalPayload interface{}
 	if err := codec.Unmarshal(envelope.Payload, &canonicalPayload); err != nil {
-		return AuthorizedEnvelope{}, fmt.Errorf("decode canonical runtime payload: %w", err)
+		return runtimeVerification{}, fmt.Errorf("decode canonical runtime payload: %w", err)
 	}
-	if err := validatePayload(append([]byte(nil), envelope.Payload...)); err != nil {
-		return AuthorizedEnvelope{}, fmt.Errorf("validate runtime payload: %w", err)
-	}
-	validUntil := earliest(
-		envelopeExpiresAt,
-		key.NotAfter,
-		m.manifest.ExpiresAt,
-		m.authorityFreshTo,
-	)
-	return AuthorizedEnvelope{
-		valid: true, envelope: envelope,
-		network: m.manifest.Network, serviceID: m.manifest.ServiceID,
-		authority: key.KeyID, binding: binding,
-		validUntil: validUntil, verifiedAt: now,
+	return runtimeVerification{
+		envelope: envelope, key: key, verifiedAt: now,
+		validUntil: earliest(
+			envelopeExpiresAt, key.NotAfter,
+			m.manifest.ExpiresAt, m.authorityFreshTo,
+		),
 	}, nil
 }
 
