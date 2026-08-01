@@ -95,13 +95,40 @@ type executionReceiptIdentity struct {
 }
 
 // ResolveExecutionDispatch converts only validated terminal Worker outcomes
-// into the existing atomic receipt paths. Active, missing, and uncertain
-// outcomes remain explicit no-op resolutions.
+// into the atomic receipt paths and requires the immutable exact-profile plan
+// that authorized dispatch. Active, missing, and uncertain outcomes remain
+// explicit no-op resolutions. Non-success outcomes retain zero charge.
 func (c *Core) ResolveExecutionDispatch(
 	ctx context.Context,
 	dispatch ExecutionDispatch,
 	manifest *authorization.VerifiedManifest,
 	paymentAuthorization authorization.AuthorizedPayment,
+	plan *ProfileInvocationPlan,
+	signer authorization.ReceiptSigner,
+	receiptLifetime time.Duration,
+) (ExecutionResolution, error) {
+	if plan == nil {
+		return ExecutionResolution{}, errors.New(
+			"nil profile invocation plan",
+		)
+	}
+	return c.resolveExecutionDispatch(
+		ctx,
+		dispatch,
+		manifest,
+		paymentAuthorization,
+		plan,
+		signer,
+		receiptLifetime,
+	)
+}
+
+func (c *Core) resolveExecutionDispatch(
+	ctx context.Context,
+	dispatch ExecutionDispatch,
+	manifest *authorization.VerifiedManifest,
+	paymentAuthorization authorization.AuthorizedPayment,
+	plan *ProfileInvocationPlan,
 	signer authorization.ReceiptSigner,
 	receiptLifetime time.Duration,
 ) (ExecutionResolution, error) {
@@ -132,6 +159,7 @@ func (c *Core) ResolveExecutionDispatch(
 			dispatch.invocation,
 			manifest,
 			paymentAuthorization,
+			plan,
 			signer,
 			receiptLifetime,
 		)
@@ -172,6 +200,7 @@ func (c *Core) ResolveExecutionDispatch(
 			invocation,
 			manifest,
 			paymentAuthorization,
+			plan,
 			signer,
 			receiptLifetime,
 		)
@@ -215,14 +244,37 @@ func (c *Core) ResolveExecutionDispatch(
 	}
 }
 
-// ResolveRecoveredExecutionDispatch converts a validated Worker recovery
-// result into a receipt using only the execution authorization committed with
-// the durable payment. It is the restart-safe counterpart of
-// ResolveExecutionDispatch.
+// ResolveRecoveredExecutionDispatch is the restart-safe counterpart of
+// ResolveExecutionDispatch. It derives the selector and quote from durable
+// payment state before applying the same required immutable success policy.
 func (c *Core) ResolveRecoveredExecutionDispatch(
 	ctx context.Context,
 	dispatch ExecutionDispatch,
 	manifest *authorization.VerifiedManifest,
+	plan *ProfileInvocationPlan,
+	signer authorization.ReceiptSigner,
+	receiptLifetime time.Duration,
+) (ExecutionResolution, error) {
+	if plan == nil {
+		return ExecutionResolution{}, errors.New(
+			"nil profile invocation plan",
+		)
+	}
+	return c.resolveRecoveredExecutionDispatch(
+		ctx,
+		dispatch,
+		manifest,
+		plan,
+		signer,
+		receiptLifetime,
+	)
+}
+
+func (c *Core) resolveRecoveredExecutionDispatch(
+	ctx context.Context,
+	dispatch ExecutionDispatch,
+	manifest *authorization.VerifiedManifest,
+	plan *ProfileInvocationPlan,
 	signer authorization.ReceiptSigner,
 	receiptLifetime time.Duration,
 ) (ExecutionResolution, error) {
@@ -255,6 +307,7 @@ func (c *Core) ResolveRecoveredExecutionDispatch(
 			base.claim.State.Revision,
 			manifest,
 			invocation,
+			plan,
 			signer,
 			receiptID,
 			receiptLifetime,
@@ -355,6 +408,7 @@ func (c *Core) resolveSuccessfulExecution(
 	invocation localrpc.ValidatedInvocation,
 	manifest *authorization.VerifiedManifest,
 	paymentAuthorization authorization.AuthorizedPayment,
+	plan *ProfileInvocationPlan,
 	signer authorization.ReceiptSigner,
 	receiptLifetime time.Duration,
 ) (ExecutionResolution, error) {
@@ -369,6 +423,7 @@ func (c *Core) resolveSuccessfulExecution(
 		manifest,
 		paymentAuthorization,
 		invocation,
+		plan,
 		signer,
 		receiptID,
 		receiptLifetime,

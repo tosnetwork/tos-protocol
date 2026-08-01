@@ -588,6 +588,7 @@ func (c *Core) CompleteSuccessfulInvocation(
 	manifest *authorization.VerifiedManifest,
 	paymentAuthorization authorization.AuthorizedPayment,
 	invocation localrpc.ValidatedInvocation,
+	plan *ProfileInvocationPlan,
 	signer authorization.ReceiptSigner,
 	receiptID string,
 	receiptLifetime time.Duration,
@@ -608,6 +609,11 @@ func (c *Core) CompleteSuccessfulInvocation(
 			"invalid receipt envelope lifetime",
 		)
 	}
+	if plan == nil {
+		return CompletedInvocation{}, errors.New(
+			"nil profile invocation plan",
+		)
+	}
 	material, err := paymentAuthorization.ReceiptInvocationMaterial()
 	if err != nil {
 		return CompletedInvocation{}, fmt.Errorf(
@@ -615,11 +621,16 @@ func (c *Core) CompleteSuccessfulInvocation(
 			err,
 		)
 	}
+	policy, err := plan.resolveSuccessfulReceiptPolicy(material)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
 	return c.completeSuccessfulInvocation(
 		ctx,
 		scope,
 		expectedRevision,
 		material,
+		policy,
 		invocation,
 		receiptID,
 		receiptLifetime,
@@ -651,11 +662,21 @@ func (c *Core) CompleteRecoveredSuccessfulInvocation(
 	expectedRevision uint64,
 	manifest *authorization.VerifiedManifest,
 	invocation localrpc.ValidatedInvocation,
+	plan *ProfileInvocationPlan,
 	signer authorization.ReceiptSigner,
 	receiptID string,
 	receiptLifetime time.Duration,
 ) (CompletedInvocation, error) {
+	if plan == nil {
+		return CompletedInvocation{}, errors.New(
+			"nil profile invocation plan",
+		)
+	}
 	durable, material, _, err := c.recoveredExecutionAuthorization(scope)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
+	policy, err := plan.resolveSuccessfulReceiptPolicy(material)
 	if err != nil {
 		return CompletedInvocation{}, err
 	}
@@ -664,6 +685,7 @@ func (c *Core) CompleteRecoveredSuccessfulInvocation(
 		scope,
 		expectedRevision,
 		material,
+		policy,
 		invocation,
 		receiptID,
 		receiptLifetime,
@@ -690,6 +712,7 @@ func (c *Core) completeSuccessfulInvocation(
 	scope journal.Scope,
 	expectedRevision uint64,
 	material authorization.ReceiptInvocationMaterial,
+	policy SuccessfulReceiptPolicy,
 	invocation localrpc.ValidatedInvocation,
 	receiptID string,
 	receiptLifetime time.Duration,
@@ -752,9 +775,14 @@ func (c *Core) completeSuccessfulInvocation(
 	if err != nil {
 		return CompletedInvocation{}, err
 	}
+	expectedTaskID, err := profileWorkerTaskID(material, policy)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
 	if execution.IntentDigest != material.IntentDigest ||
 		execution.AuthorizationID != material.AuthorizationID ||
 		execution.QuoteID != material.QuoteID ||
+		execution.TaskID != expectedTaskID ||
 		execution.TaskID != completion.TaskID ||
 		execution.RequestDigest != completion.RequestDigest ||
 		!execution.Deadline.Equal(completion.Deadline) {
@@ -762,6 +790,10 @@ func (c *Core) completeSuccessfulInvocation(
 	}
 	usage := completionReceiptUsage(completion.Usage)
 	resultDigest := digestInvocationOutput(completion.Output)
+	chargedNanoTOS, err := policy.chargedNanoTOS(material.PriceNanoTOS)
+	if err != nil {
+		return CompletedInvocation{}, err
+	}
 
 	if existing, lookupErr := c.requests.GetReceipt(scope, now); lookupErr == nil {
 		return c.replayCompletedInvocation(
@@ -771,6 +803,7 @@ func (c *Core) completeSuccessfulInvocation(
 			receiptID,
 			usage,
 			resultDigest,
+			chargedNanoTOS,
 			completion,
 			now,
 		)
@@ -813,7 +846,7 @@ func (c *Core) completeSuccessfulInvocation(
 		ctx,
 		authorization.ReceiptDraft{
 			ReceiptID: receiptID, Status: "succeeded",
-			Usage: usage, ChargedNanoTOS: material.PriceNanoTOS,
+			Usage: usage, ChargedNanoTOS: chargedNanoTOS,
 			ResultDigest: resultDigest, CompletedAt: completion.CompletedAt,
 		},
 		now,
@@ -840,6 +873,7 @@ func (c *Core) completeSuccessfulInvocation(
 					receiptID,
 					usage,
 					resultDigest,
+					chargedNanoTOS,
 					completion,
 					now,
 				)
@@ -1430,6 +1464,7 @@ func (c *Core) replayCompletedInvocation(
 	receiptID string,
 	usage []protocol.UsageItem,
 	resultDigest string,
+	chargedNanoTOS uint64,
 	completion localrpc.InvocationCompletion,
 	now time.Time,
 ) (CompletedInvocation, error) {
@@ -1440,6 +1475,7 @@ func (c *Core) replayCompletedInvocation(
 		receiptID,
 		usage,
 		resultDigest,
+		chargedNanoTOS,
 		completion.CompletedAt,
 	) {
 		return CompletedInvocation{}, journal.ErrConflict
@@ -1472,6 +1508,7 @@ func sameSuccessfulCompletionReceipt(
 	receiptID string,
 	usage []protocol.UsageItem,
 	resultDigest string,
+	chargedNanoTOS uint64,
 	completedAt time.Time,
 ) bool {
 	if receipt.Scope != scope ||
@@ -1480,7 +1517,7 @@ func sameSuccessfulCompletionReceipt(
 		receipt.AuthorizationID != material.AuthorizationID ||
 		receipt.QuoteID != material.QuoteID ||
 		receipt.Status != journal.StateSucceeded ||
-		receipt.ChargedNanoTOS != material.PriceNanoTOS ||
+		receipt.ChargedNanoTOS != chargedNanoTOS ||
 		receipt.ResultDigest != resultDigest ||
 		receipt.ErrorCode != "" ||
 		receipt.ServiceRevision != material.ServiceRevision ||

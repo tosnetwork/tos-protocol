@@ -158,6 +158,13 @@ digest, retained limits, deadline, byte accounting, and output digest to the
 exact durable execution claim, delegates only canonical receipt bytes to
 purpose-specific key custody, re-verifies the signature against the current
 manifest, and commits one success receipt under concurrent retry.
+An immutable exact-profile deployment plan may additionally select a
+declarative 0..10,000 basis-point fraction of the quoted price for successful
+receipts. The absent policy preserves full charge. Edge uses overflow-safe
+integer round-down semantics in live and recovered completion, never accepts a
+Worker-supplied charge, requires the plan on every successful completion, and
+commits non-default policy into the durable task ID so pre-receipt recovery and
+receipt replay both reject drift.
 Failed, canceled, and timed-out paid requests use the same signer and atomic
 path with an empty usage array, no result or diagnostic payload, deterministic
 bounded error code, and zero charge; timeout cannot be declared before the
@@ -207,9 +214,10 @@ cancellation attempts preserve the claim and never create a terminal receipt;
 only a later validated `GetTask` terminal observation can do that.
 The concrete quorum TOS authority/client-key/native-payment adapters are now
 implemented, exercised against a three-node chain, and available to `tos-edge`
-through strict operator startup configuration and `/readyz`. Failed/canceled
-refund and charging policy, the production signer adapter, isolated executor,
-and public receipt route remain intentionally disconnected.
+through strict operator startup configuration and `/readyz`. Refund
+reconciliation, usage-dependent or failed partial-work charging, the
+production signer adapter, isolated executor, and public receipt route remain
+intentionally disconnected.
 The private RPC now
 defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A

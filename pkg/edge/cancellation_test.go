@@ -147,7 +147,7 @@ func TestCoreRejectsCancellationOfTerminalOrStaleDispatch(t *testing.T) {
 	}
 	if _, err := core.ResolveExecutionDispatch(
 		context.Background(), dispatch, fixture.manifest, authorized,
-		signer, time.Minute,
+		registry, signer, time.Minute,
 	); err != nil {
 		t.Fatal(err)
 	}

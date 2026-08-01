@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -227,6 +228,14 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 		privateKey: fixture.runtimePrivate,
 		keyID:      "runtime-auth-key",
 	}
+	plan := successfulReceiptTestPlan(t, 10_000)
+	if _, err := core.CompleteSuccessfulInvocation(
+		context.Background(), scope, running.Revision,
+		fixture.manifest, authorized, validated, nil, signer,
+		"receipt-completion-0001", time.Minute,
+	); err == nil || signer.calls.Load() != 0 {
+		t.Fatalf("nil plan completion err=%v calls=%d", err, signer.calls.Load())
+	}
 	expandedRequest := completionInvokeRequest(scope, now)
 	expandedRequest.MaxOutputBytes++
 	expanded, err := worker.Invoke(context.Background(), expandedRequest)
@@ -236,7 +245,7 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 	clock = time.Now().UTC().Truncate(time.Millisecond)
 	if _, err := core.CompleteSuccessfulInvocation(
 		context.Background(), scope, running.Revision,
-		fixture.manifest, authorized, expanded, signer,
+		fixture.manifest, authorized, expanded, plan, signer,
 		"receipt-completion-0001", time.Minute,
 	); err == nil || signer.calls.Load() != 0 {
 		t.Fatalf(
@@ -248,13 +257,13 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 	if _, err := core.CompleteSuccessfulInvocation(
 		context.Background(), scope, running.Revision,
 		fixture.manifest, authorized, localrpc.ValidatedInvocation{},
-		signer, "receipt-completion-0001", time.Minute,
+		plan, signer, "receipt-completion-0001", time.Minute,
 	); err == nil {
 		t.Fatal("zero validated Worker result accepted")
 	}
 	completed, err := core.CompleteSuccessfulInvocation(
 		context.Background(), scope, running.Revision,
-		fixture.manifest, authorized, validated, signer,
+		fixture.manifest, authorized, validated, plan, signer,
 		"receipt-completion-0001", time.Minute,
 	)
 	if err != nil {
@@ -262,6 +271,7 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 	}
 	if completed.Disposition != journal.ReceiptApplied ||
 		completed.Request.State != journal.StateSucceeded ||
+		completed.Receipt.ChargedNanoTOS != 5 ||
 		completed.Receipt.ResultDigest != digestInvocationOutput(
 			[]byte("worker-result"),
 		) ||
@@ -272,7 +282,7 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 	completed.Output[0] ^= 1
 	replayed, err := core.CompleteSuccessfulInvocation(
 		context.Background(), scope, running.Revision,
-		fixture.manifest, authorized, validated, signer,
+		fixture.manifest, authorized, validated, plan, signer,
 		"receipt-completion-0001", time.Minute,
 	)
 	if err != nil || replayed.Disposition != journal.ReceiptReplay ||
@@ -286,7 +296,7 @@ func TestCoreCompletesValidatedWorkerInvocationAndReplays(t *testing.T) {
 	}
 	if _, err := core.CompleteSuccessfulInvocation(
 		context.Background(), scope, running.Revision,
-		fixture.manifest, authorized, validated, signer,
+		fixture.manifest, authorized, validated, plan, signer,
 		"receipt-completion-other", time.Minute,
 	); !errors.Is(err, journal.ErrConflict) || signer.calls.Load() != 1 {
 		t.Fatalf("different receipt replay err=%v calls=%d", err, signer.calls.Load())
@@ -351,6 +361,7 @@ func TestCoreCompletesRecoveredWorkerTask(t *testing.T) {
 		fixture.manifest,
 		authorized,
 		validated,
+		successfulReceiptTestPlan(t, 10_000),
 		&edgeReceiptSigner{
 			privateKey: fixture.runtimePrivate,
 			keyID:      "runtime-auth-key",
@@ -407,6 +418,7 @@ func TestCoreConcurrentCompletionHasOneDurableReceipt(t *testing.T) {
 			<-release
 		},
 	}
+	plan := successfulReceiptTestPlan(t, 10_000)
 	var applied atomic.Int32
 	var replayed atomic.Int32
 	var wait sync.WaitGroup
@@ -417,7 +429,7 @@ func TestCoreConcurrentCompletionHasOneDurableReceipt(t *testing.T) {
 			defer wait.Done()
 			result, err := core.CompleteSuccessfulInvocation(
 				context.Background(), scope, running.Revision,
-				fixture.manifest, authorized, validated, signer,
+				fixture.manifest, authorized, validated, plan, signer,
 				"receipt-concurrent-0001", time.Minute,
 			)
 			if err != nil {
@@ -801,10 +813,25 @@ func completionInvokeRequest(
 	scope journal.Scope,
 	now time.Time,
 ) *edgev1.InvokeRequest {
+	taskID, err := profileWorkerTaskID(
+		authorization.ReceiptInvocationMaterial{
+			Network: scope.Network, ServiceID: scope.ServiceID,
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+			SessionID: scope.SessionID, Operation: scope.Operation,
+			RequestID:       scope.RequestID,
+			IntentDigest:    "sha256:" + strings.Repeat("9", 64),
+			AuthorizationID: "authorization-" + scope.RequestID,
+			QuoteID:         "quote-" + scope.RequestID,
+		},
+		FullSuccessfulReceiptPolicy(),
+	)
+	if err != nil {
+		panic(err)
+	}
 	return &edgev1.InvokeRequest{
 		RequestId:             scope.RequestID,
 		QuoteId:               "quote-" + scope.RequestID,
-		TaskId:                "task-" + scope.RequestID,
+		TaskId:                taskID,
 		ServiceId:             scope.ServiceID,
 		Operation:             scope.Operation,
 		Model:                 "test-model",

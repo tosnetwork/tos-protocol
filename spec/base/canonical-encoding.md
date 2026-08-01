@@ -71,6 +71,7 @@ Initial labels are:
 | receipt | `tos.receipt.v1` |
 | evidence bundle | `tos.evidence.v1` |
 | private Worker task identity | `tos.private-worker-task.v1` |
+| partial-charge Worker task identity | `tos.private-worker-task-policy.v1` |
 | execution receipt identity | `tos.execution-receipt-id.v1` |
 
 The profile request-intent commitment is the deterministic CBOR encoding of
@@ -88,6 +89,15 @@ profile, session, operation, request, intent, authorization, and quote IDs.
 Edge renders the resulting SHA-256 value as `task-` followed by 64 lowercase
 hex digits. This identifier is internal recovery state, not a public request
 intent or payment commitment.
+
+The compatible full-success-charge policy keeps that original domain and task
+format. Any other successful-charge fraction wraps the same task commitment
+with `successfulChargeBasisPoints`, hashes it under
+`tos.private-worker-task-policy.v1`, and renders `task-policy-` followed by 64
+lowercase hexadecimal digits. Thus rebuilding an equivalent immutable plan
+after restart produces the same task ID, while changing the policy before the
+first receipt conflicts with the durable execution claim rather than silently
+changing settlement.
 
 The execution receipt identity commits the version, network, service, request,
 private Worker task ID and request digest, payment authorization ID, and quote

@@ -72,7 +72,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 	wrongIntent[len(wrongIntent)-1] ^= 1
 	if _, err := core.mapAndClaimPaidExecution(
 		context.Background(), scope, request.Revision,
-		authorized, wrongIntent, mapper, worker,
+		authorized, wrongIntent, mapper, FullSuccessfulReceiptPolicy(), worker,
 	); err == nil {
 		t.Fatal("changed public intent was claimed")
 	}
@@ -84,7 +84,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 	}
 	claimed, err := core.mapAndClaimPaidExecution(
 		context.Background(), scope, request.Revision,
-		authorized, intent, mapper, worker,
+		authorized, intent, mapper, FullSuccessfulReceiptPolicy(), worker,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +92,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 	if claimed.Disposition != journal.ExecutionClaimed ||
 		claimed.State.State != journal.StateRunning ||
 		!strings.HasPrefix(claimed.Request.TaskId, "task-") ||
+		strings.HasPrefix(claimed.Request.TaskId, "task-policy-") ||
 		len(claimed.Request.TaskId) != len("task-")+64 ||
 		claimed.Request.RequestId != scope.RequestID ||
 		claimed.Request.QuoteId != "quote-"+scope.RequestID ||
@@ -130,6 +131,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 				Model: "qwen3-8b-int4", Payload: []byte("worker-input"),
 			}, nil
 		}),
+		FullSuccessfulReceiptPolicy(),
 		worker,
 	)
 	if err != nil || replay.Disposition != journal.ExecutionReplay ||
@@ -147,6 +149,7 @@ func TestCoreMapsPaidProfileIntentDeterministicallyAcrossRestart(t *testing.T) {
 				Model: "changed-model", Payload: []byte("worker-input"),
 			}, nil
 		}),
+		FullSuccessfulReceiptPolicy(),
 		worker,
 	); !errors.Is(err, journal.ErrConflict) {
 		t.Fatalf("changed restart mapping error = %v", err)
@@ -220,7 +223,8 @@ func TestCoreRejectsInvalidProfileMapperBeforeExecutionClaim(t *testing.T) {
 			)
 			if _, err := core.mapAndClaimPaidExecution(
 				context.Background(), scope, request.Revision,
-				authorized, intent, test.mapper, worker,
+				authorized, intent, test.mapper,
+				FullSuccessfulReceiptPolicy(), worker,
 			); err == nil {
 				t.Fatal("invalid mapper was claimed")
 			}

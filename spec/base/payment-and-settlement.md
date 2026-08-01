@@ -101,8 +101,21 @@ The generic fail-closed non-success policy is also implemented internally.
 zero charge, no result digest, and no raw diagnostic text. Edge derives the
 only persisted error code from the status. A timeout cannot be issued before
 the signed quote deadline; payment reorganization blocks every new failure
-receipt. This conservative default is not a profile's final refund or partial
-work charging policy.
+receipt. This conservative default cannot be changed by a successful-receipt
+policy.
+
+A reviewed exact-profile registration may select a declarative successful
+charge fraction from 0 through 10,000 basis points. An absent policy preserves
+the compatible full quoted price. Edge calculates the result from the quoted
+price using overflow-safe integer arithmetic rounded down to whole nano-TOS.
+All successful completion and resolution paths require the same immutable plan
+and durable negotiated selector. A non-default fraction is committed into the
+private Worker task ID, so rebuilding an equivalent plan after restart is
+deterministic and changed policy conflicts before task lookup or receipt
+issuance. Receipt replay also compares the exact computed charge and fails
+closed on drift. The policy is data-only, has no Worker callback, and creates
+no per-request process state. Usage-dependent charging and charging failed work
+remain outside this v0.1 rule.
 
 The dispatch-resolution boundary issues a receipt only for a validated
 terminal Worker outcome. `uncertain`, `NOT_FOUND`, `ACCEPTED`, and `RUNNING`
@@ -125,7 +138,8 @@ current `receipt` role; persisted recovery context is never signing authority.
 This does not provide production key custody or public delivery. A deployment
 must supply a bounded signer adapter, keep its private key outside the Worker,
 register reviewed vertical mappers behind the generic intent-to-Worker
-boundary, define any partial-work refund/charging policy, implement the
+boundary, define any refund reconciliation or unsupported usage-dependent
+charging policy, implement the
 specified idempotent Worker task table, and expose only the stored signed
 envelope through an authenticated receipt resource.
 

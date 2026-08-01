@@ -76,6 +76,11 @@ type workerTaskCommitment struct {
 	QuoteID           string   `json:"quoteId"`
 }
 
+type workerTaskPolicyCommitment struct {
+	Task                        workerTaskCommitment `json:"task"`
+	SuccessfulChargeBasisPoints uint16               `json:"successfulChargeBasisPoints"`
+}
+
 // mapAndClaimPaidExecution is the common internal bridge from a committed
 // public profile intent to a private Worker request. Public package callers
 // enter only through the exact-selector registry boundary.
@@ -86,6 +91,7 @@ func (c *Core) mapAndClaimPaidExecution(
 	paymentAuthorization authorization.AuthorizedPayment,
 	intent []byte,
 	mapper ProfileInvocationMapper,
+	policy SuccessfulReceiptPolicy,
 	worker *localrpc.WorkerClient,
 ) (ClaimedInvocation, error) {
 	if ctx == nil {
@@ -114,6 +120,7 @@ func (c *Core) mapAndClaimPaidExecution(
 		material,
 		intent,
 		mapper,
+		policy,
 		worker,
 	)
 }
@@ -125,6 +132,7 @@ func (c *Core) mapAndClaimPaidExecutionMaterial(
 	material authorization.ReceiptInvocationMaterial,
 	intent []byte,
 	mapper ProfileInvocationMapper,
+	policy SuccessfulReceiptPolicy,
 	worker *localrpc.WorkerClient,
 ) (ClaimedInvocation, error) {
 	if ctx == nil {
@@ -137,6 +145,9 @@ func (c *Core) mapAndClaimPaidExecutionMaterial(
 		return ClaimedInvocation{}, errors.New("nil Worker client")
 	}
 	if err := ctx.Err(); err != nil {
+		return ClaimedInvocation{}, err
+	}
+	if _, err := policy.chargedNanoTOS(0); err != nil {
 		return ClaimedInvocation{}, err
 	}
 	if scope.Network != material.Network ||
@@ -202,7 +213,7 @@ func (c *Core) mapAndClaimPaidExecutionMaterial(
 	if err != nil {
 		return ClaimedInvocation{}, err
 	}
-	taskID, err := profileWorkerTaskID(material)
+	taskID, err := profileWorkerTaskID(material, policy)
 	if err != nil {
 		return ClaimedInvocation{}, err
 	}
@@ -278,8 +289,9 @@ func callProfileInvocationMapper(
 
 func profileWorkerTaskID(
 	material authorization.ReceiptInvocationMaterial,
+	policy SuccessfulReceiptPolicy,
 ) (string, error) {
-	digest, err := codec.Digest("tos.private-worker-task.v1", workerTaskCommitment{
+	commitment := workerTaskCommitment{
 		Version: protocol.BaseEnvelopeVersion,
 		Network: material.Network, ServiceID: material.ServiceID,
 		ProfileID: material.ProfileID, ProfileVersion: material.ProfileVersion,
@@ -287,9 +299,24 @@ func profileWorkerTaskID(
 		SessionID:         material.SessionID, Operation: material.Operation,
 		RequestID: material.RequestID, IntentDigest: material.IntentDigest,
 		AuthorizationID: material.AuthorizationID, QuoteID: material.QuoteID,
-	})
+	}
+	if _, err := policy.chargedNanoTOS(0); err != nil {
+		return "", err
+	}
+	domain := "tos.private-worker-task.v1"
+	prefix := "task-"
+	value := any(commitment)
+	if policy.chargeBasisPoints != SuccessfulChargeBasisPoints {
+		domain = "tos.private-worker-task-policy.v1"
+		prefix = "task-policy-"
+		value = workerTaskPolicyCommitment{
+			Task:                        commitment,
+			SuccessfulChargeBasisPoints: policy.chargeBasisPoints,
+		}
+	}
+	digest, err := codec.Digest(domain, value)
 	if err != nil {
 		return "", fmt.Errorf("commit private Worker task identity: %w", err)
 	}
-	return "task-" + strings.TrimPrefix(digest, "sha256:"), nil
+	return prefix + strings.TrimPrefix(digest, "sha256:"), nil
 }

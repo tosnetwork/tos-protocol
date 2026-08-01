@@ -36,7 +36,7 @@ func TestCoreResolvesDirectSuccessWithDeterministicReceipt(t *testing.T) {
 	}
 	resolved, err := core.ResolveExecutionDispatch(
 		context.Background(), dispatch, fixture.manifest, authorized,
-		signer, time.Minute,
+		registry, signer, time.Minute,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestCoreResolvesDirectSuccessWithDeterministicReceipt(t *testing.T) {
 	}
 	replayed, err := core.ResolveExecutionDispatch(
 		context.Background(), dispatch, fixture.manifest, authorized,
-		signer, time.Minute,
+		registry, signer, time.Minute,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +96,151 @@ func TestCoreResolvesDirectSuccessWithDeterministicReceipt(t *testing.T) {
 			err,
 		)
 	}
+}
+
+func TestCoreResolvesPlannedSuccessWithProportionalCharge(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	core, scope, authorized, request, _, fixture := prepareDispatchRequest(
+		t, now, "resolution-policy-0001",
+	)
+	defer core.Close()
+	plan := successfulReceiptTestPlan(t, 5_000)
+	worker := startDispatchWorkerClient(t, &dispatchWorker{
+		output: []byte("policy-output"),
+	})
+	dispatch, err := core.DispatchRegisteredPaidExecution(
+		context.Background(), scope, request.Revision, authorized,
+		[]byte("dispatch-intent"), plan, worker,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := &edgeReceiptSigner{
+		privateKey: fixture.runtimePrivate,
+		keyID:      "runtime-auth-key",
+	}
+	resolved, err := core.ResolveExecutionDispatch(
+		context.Background(), dispatch, fixture.manifest, authorized,
+		plan, signer, time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := resolved.CompletedInvocation()
+	if err != nil || completed.Receipt.ChargedNanoTOS != 2 ||
+		completed.Disposition != journal.ReceiptApplied {
+		t.Fatalf("planned completion = %#v, err = %v", completed, err)
+	}
+	replayed, err := core.ResolveExecutionDispatch(
+		context.Background(), dispatch, fixture.manifest, authorized,
+		plan, signer, time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedCompletion, err := replayed.CompletedInvocation()
+	if err != nil || replayedCompletion.Disposition != journal.ReceiptReplay ||
+		replayedCompletion.Receipt.ChargedNanoTOS != 2 ||
+		signer.calls.Load() != 1 {
+		t.Fatalf(
+			"planned replay = %#v, calls = %d, err = %v",
+			replayedCompletion, signer.calls.Load(), err,
+		)
+	}
+	if _, err := core.ResolveExecutionDispatch(
+		context.Background(), dispatch, fixture.manifest, authorized,
+		successfulReceiptTestPlan(t, 10_000), signer, time.Minute,
+	); !errors.Is(err, journal.ErrConflict) {
+		t.Fatalf("changed policy replay error = %v", err)
+	}
+}
+
+func TestCoreResolvesRecoveredPolicySuccessDeterministically(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	core, scope, authorized, request, _, fixture := prepareDispatchRequest(
+		t, now, "resolution-recovered-policy-0001",
+	)
+	defer core.Close()
+	plan := successfulReceiptTestPlan(t, 5_000)
+	claimed, err := core.MapAndClaimRegisteredPaidExecution(
+		context.Background(), scope, request.Revision, authorized,
+		[]byte("dispatch-intent"), plan, mappingWorkerClient(t, now),
+	)
+	if err != nil || claimed.Disposition != journal.ExecutionClaimed {
+		t.Fatalf("initial claim = %#v, err = %v", claimed, err)
+	}
+	if !strings.HasPrefix(claimed.Execution.TaskID, "task-policy-") {
+		t.Fatalf("partial policy task ID = %q", claimed.Execution.TaskID)
+	}
+	if _, err := core.MapAndClaimRecoveredPaidExecution(
+		context.Background(), scope, []byte("dispatch-intent"),
+		successfulReceiptTestPlan(t, 10_000), mappingWorkerClient(t, now),
+	); !errors.Is(err, journal.ErrConflict) {
+		t.Fatalf("pre-receipt policy drift error = %v", err)
+	}
+	dispatch, err := core.DispatchRecoveredPaidExecution(
+		context.Background(), scope, []byte("dispatch-intent"),
+		successfulReceiptTestPlan(t, 5_000),
+		startDispatchWorkerClient(t, &dispatchWorker{
+			getStatus: edgev1.TaskStatus_TASK_STATUS_SUCCEEDED,
+			output:    []byte("recovered-policy-output"),
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := core.ResolveRecoveredExecutionDispatch(
+		context.Background(), dispatch, fixture.manifest,
+		successfulReceiptTestPlan(t, 5_000),
+		&edgeReceiptSigner{
+			privateKey: fixture.runtimePrivate,
+			keyID:      "runtime-auth-key",
+		},
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := resolved.CompletedInvocation()
+	if err != nil || completed.Disposition != journal.ReceiptApplied ||
+		completed.Receipt.ChargedNanoTOS != 2 ||
+		string(completed.Output) != "recovered-policy-output" {
+		t.Fatalf("recovered planned completion = %#v, err = %v", completed, err)
+	}
+}
+
+func successfulReceiptTestPlan(
+	t *testing.T,
+	basisPoints uint16,
+) *ProfileInvocationPlan {
+	t.Helper()
+	policy, err := NewProportionalSuccessfulReceiptPolicy(basisPoints)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := NewProfileInvocationPlan(
+		[]ProfileInvocationRegistration{{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+			Operation: "invoke",
+			Mapper: ProfileInvocationMapperFunc(func(
+				context.Context,
+				ProfileInvocationInput,
+			) (ProfileInvocationOutput, error) {
+				return ProfileInvocationOutput{
+					Model: "dispatch-model", Payload: []byte("input"),
+				}, nil
+			}),
+			SuccessfulReceiptPolicy: policy,
+		}},
+		[]ProfileInvocationRequirement{{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+			Operation: "invoke",
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
 
 func TestCoreResolvesRecoveredSuccessWithoutReinvocation(t *testing.T) {
@@ -135,7 +280,7 @@ func TestCoreResolvesRecoveredSuccessWithoutReinvocation(t *testing.T) {
 	}
 	resolved, err := core.ResolveExecutionDispatch(
 		context.Background(), dispatch, fixture.manifest, authorized,
-		signer, time.Minute,
+		registry, signer, time.Minute,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -177,20 +322,21 @@ func TestCoreResolvesRecoveredFailureAndCancellation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			now := time.Now().UTC().Truncate(time.Millisecond)
-			core, scope, authorized, request, registry, fixture := prepareDispatchRequest(
+			core, scope, authorized, request, _, fixture := prepareDispatchRequest(
 				t, now, "resolution-"+test.name+"-0001",
 			)
 			defer core.Close()
+			plan := successfulReceiptTestPlan(t, 5_000)
 			claimed, err := core.MapAndClaimRegisteredPaidExecution(
 				context.Background(), scope, request.Revision, authorized,
-				[]byte("dispatch-intent"), registry, mappingWorkerClient(t, now),
+				[]byte("dispatch-intent"), plan, mappingWorkerClient(t, now),
 			)
 			if err != nil || claimed.Disposition != journal.ExecutionClaimed {
 				t.Fatalf("pre-crash claim = %#v, err = %v", claimed, err)
 			}
 			dispatch, err := core.DispatchRegisteredPaidExecution(
 				context.Background(), scope, request.Revision, authorized,
-				[]byte("dispatch-intent"), registry,
+				[]byte("dispatch-intent"), plan,
 				startDispatchWorkerClient(t, &dispatchWorker{getStatus: test.worker}),
 			)
 			if err != nil {
@@ -202,7 +348,7 @@ func TestCoreResolvesRecoveredFailureAndCancellation(t *testing.T) {
 			}
 			resolved, err := core.ResolveExecutionDispatch(
 				context.Background(), dispatch, fixture.manifest, authorized,
-				signer, time.Minute,
+				plan, signer, time.Minute,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -228,7 +374,7 @@ func TestCoreResolvesRecoveredFailureAndCancellation(t *testing.T) {
 			}
 			replayed, err := core.ResolveExecutionDispatch(
 				context.Background(), dispatch, fixture.manifest, authorized,
-				signer, time.Minute,
+				plan, signer, time.Minute,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -308,7 +454,7 @@ func TestCoreLeavesNonterminalDispatchWithoutReceipt(t *testing.T) {
 				}
 			}
 			resolved, err := core.ResolveExecutionDispatch(
-				context.Background(), dispatch, nil, authorized, nil, 0,
+				context.Background(), dispatch, nil, authorized, registry, nil, 0,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -346,14 +492,14 @@ func TestInvalidExecutionResolutionExposesNothing(t *testing.T) {
 	}
 	if _, err := (&Core{}).ResolveExecutionDispatch(
 		context.Background(), ExecutionDispatch{}, nil,
-		authorization.AuthorizedPayment{}, nil, 0,
+		authorization.AuthorizedPayment{}, nil, nil, 0,
 	); err == nil {
 		t.Fatal("invalid dispatch was resolved")
 	}
 	var core *Core
 	if _, err := core.ResolveExecutionDispatch(
 		context.Background(), ExecutionDispatch{}, nil,
-		authorization.AuthorizedPayment{}, nil, 0,
+		authorization.AuthorizedPayment{}, nil, nil, 0,
 	); err == nil {
 		t.Fatal("nil Core resolved a dispatch")
 	}

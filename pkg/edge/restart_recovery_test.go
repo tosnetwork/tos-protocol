@@ -125,6 +125,7 @@ func TestPaidExecutionRecoversAfterRestartAndQuoteExpiry(t *testing.T) {
 		context.Background(),
 		dispatch,
 		manifest,
+		registry,
 		signer,
 		time.Minute,
 	)
@@ -157,6 +158,7 @@ func TestPaidExecutionRecoversAfterRestartAndQuoteExpiry(t *testing.T) {
 		context.Background(),
 		dispatch,
 		manifest,
+		registry,
 		signer,
 		time.Minute,
 	)

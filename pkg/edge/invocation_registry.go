@@ -27,6 +27,11 @@ type ProfileInvocationRegistration struct {
 	ProfileExtensions []string
 	Operation         string
 	Mapper            ProfileInvocationMapper
+	// SuccessfulReceiptPolicy is optional. Its zero value preserves the
+	// compatible full-quoted-price success charge. Explicit proportional
+	// policies must be constructed with
+	// NewProportionalSuccessfulReceiptPolicy.
+	SuccessfulReceiptPolicy SuccessfulReceiptPolicy
 }
 
 // ProfileInvocationRequirement is one exact profile selector that a local
@@ -50,7 +55,8 @@ type profileInvocationSelector struct {
 // lookups cannot grow its state; mapper implementations themselves must be
 // safe for the concurrency admitted by their deployment.
 type ProfileInvocationRegistry struct {
-	mappers map[string]ProfileInvocationMapper
+	mappers         map[string]ProfileInvocationMapper
+	successPolicies map[string]SuccessfulReceiptPolicy
 }
 
 // ProfileInvocationPlan is an immutable, fail-closed deployment binding. It
@@ -73,6 +79,10 @@ func NewProfileInvocationRegistry(
 		)
 	}
 	mappers := make(map[string]ProfileInvocationMapper, len(registrations))
+	successPolicies := make(
+		map[string]SuccessfulReceiptPolicy,
+		len(registrations),
+	)
 	for index, registration := range registrations {
 		if nilProfileInvocationMapper(registration.Mapper) {
 			return nil, fmt.Errorf(
@@ -101,9 +111,23 @@ func NewProfileInvocationRegistry(
 				selector.Operation,
 			)
 		}
+		policy := registration.SuccessfulReceiptPolicy
+		if !policy.valid {
+			policy = FullSuccessfulReceiptPolicy()
+		}
+		if _, err := policy.chargedNanoTOS(0); err != nil {
+			return nil, fmt.Errorf(
+				"profile invocation registration %d has an invalid successful receipt policy: %w",
+				index,
+				err,
+			)
+		}
 		mappers[key] = registration.Mapper
+		successPolicies[key] = policy
 	}
-	return &ProfileInvocationRegistry{mappers: mappers}, nil
+	return &ProfileInvocationRegistry{
+		mappers: mappers, successPolicies: successPolicies,
+	}, nil
 }
 
 func (r *ProfileInvocationRegistry) Len() int {
@@ -269,6 +293,40 @@ func (p *ProfileInvocationPlan) resolve(
 	return p.registry.resolve(material)
 }
 
+func (p *ProfileInvocationPlan) resolveSuccessfulReceiptPolicy(
+	material authorization.ReceiptInvocationMaterial,
+) (SuccessfulReceiptPolicy, error) {
+	if p == nil || p.registry == nil || len(p.enabled) == 0 {
+		return SuccessfulReceiptPolicy{}, errors.New(
+			"invalid profile invocation plan",
+		)
+	}
+	_, key, err := canonicalProfileInvocationSelector(
+		material.ProfileID,
+		material.ProfileVersion,
+		material.ProfileExtensions,
+		material.Operation,
+	)
+	if err != nil {
+		return SuccessfulReceiptPolicy{}, fmt.Errorf(
+			"resolve planned successful receipt policy: %w",
+			err,
+		)
+	}
+	if _, allowed := p.enabled[key]; !allowed {
+		return SuccessfulReceiptPolicy{}, errors.New(
+			"profile invocation selector is not enabled by the deployment plan",
+		)
+	}
+	policy, ok := p.registry.successPolicies[key]
+	if !ok {
+		return SuccessfulReceiptPolicy{}, errors.New(
+			"profile invocation selector has no successful receipt policy",
+		)
+	}
+	return policy, nil
+}
+
 func (r *ProfileInvocationRegistry) resolve(
 	material authorization.ReceiptInvocationMaterial,
 ) (ProfileInvocationMapper, error) {
@@ -319,6 +377,10 @@ func (c *Core) MapAndClaimRegisteredPaidExecution(
 	if err != nil {
 		return ClaimedInvocation{}, err
 	}
+	policy, err := plan.resolveSuccessfulReceiptPolicy(material)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
 	return c.mapAndClaimPaidExecution(
 		ctx,
 		scope,
@@ -326,6 +388,7 @@ func (c *Core) MapAndClaimRegisteredPaidExecution(
 		paymentAuthorization,
 		intent,
 		mapper,
+		policy,
 		worker,
 	)
 }
@@ -357,6 +420,10 @@ func (c *Core) MapAndClaimRecoveredPaidExecution(
 	if err != nil {
 		return ClaimedInvocation{}, err
 	}
+	policy, err := plan.resolveSuccessfulReceiptPolicy(material)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
 	return c.mapAndClaimPaidExecutionMaterial(
 		ctx,
 		scope,
@@ -364,6 +431,7 @@ func (c *Core) MapAndClaimRecoveredPaidExecution(
 		material,
 		intent,
 		mapper,
+		policy,
 		worker,
 	)
 }

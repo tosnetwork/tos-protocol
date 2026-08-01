@@ -190,8 +190,16 @@ Worker never receives that key.
 
 RPC failure text is not receipt material. The generic Edge failure path emits
 only a typed `failed`, `canceled`, or `timed_out` status with an empty usage
-array and zero charge. A profile that permits verified partial-work charging
-must define and test that policy separately before enabling it.
+array and zero charge. For validated successful results, an exact-selector
+deployment plan may declare a bounded 0..10,000 basis-point fraction of the
+quoted price. The absent policy remains full charge. Edge computes the charge
+with overflow-safe integer arithmetic and deterministic round-down semantics
+for both live and durable recovered completion. Every successful completion
+and resolution API requires the exact-selector plan. A non-default fraction is
+also committed into the private Worker task identity, so recovery with changed
+policy conflicts before task lookup; exact receipt replay repeats the charge
+check. This v0.1 policy does not authorize partial charging for failed work or
+arbitrary usage-dependent callbacks.
 
 ## Non-goals
 

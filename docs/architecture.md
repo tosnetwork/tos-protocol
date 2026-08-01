@@ -75,8 +75,15 @@ bounded payment reconciliation schedule starts automatically. It uses one
 exponentially backed-off timer so a chain outage cannot sustain base-rate
 polling. The public process must still supply a reconciliation/refund policy,
 explicitly installed reviewed profile mappers, invocation isolation, production
-receipt key custody, partial-work refund/charging policy, and public receipt
-delivery before it forwards paid work. A production Worker must additionally
+receipt key custody, and public receipt delivery before it forwards paid work.
+Edge Core now supports an immutable exact-profile successful-charge fraction
+with full-charge compatibility, deterministic recovered evaluation, and
+fail-closed replay. Every successful completion/resolution requires the plan,
+and non-default policy is committed into the durable task ID so recovery drift
+fails before Worker lookup; failed, canceled, and timed-out work remains
+zero-charge.
+Usage-dependent or failed partial-work charging remains outside v0.1. A
+production Worker must additionally
 wire the reusable bounded task table to an idempotent runtime job or durable
 sandbox supervisor. The table provides atomic claim/replay, exact lookup,
 terminal persistence, capacity backpressure, and cleanup, but cannot infer
@@ -95,7 +102,7 @@ no invocation route.
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
 | Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, atomic bounded recovery context, post-expiry recheck, bounded batch coordinator, adaptive scheduler and binary runtime composition implemented; refund reconciliation remains |
-| Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results and zero-charge failed/canceled/timed-out outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; production signer, profile refund/charging policy and public delivery remain |
+| Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results support a bounded immutable exact-profile quoted-price fraction (default full charge), deterministic live/recovered evaluation and fail-closed replay, while failed/canceled/timed-out outcomes remain zero-charge; all terminal outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; production signer, refund reconciliation, usage-dependent charging and public delivery remain |
 | Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, constructor-validated deployment plan required by every paid claim/recovery/dispatch path, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; `tos-ai` owns the first reviewed text-generation mapper candidate and constructs its plan from a private runtime capability snapshot, while public ingress remains disabled |
 | Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment plus bounded execution-authorization persistence, reorganization dispatch gate, exact paid execution claim, quote-expiry-safe Worker recovery, full signed-receipt terminal application/replay, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |

@@ -321,6 +321,25 @@ func TestProfileInvocationPlanEnablesOnlyDeclaredSelectors(t *testing.T) {
 				Operation: "generate",
 			}); err != nil {
 				failures <- err
+				return
+			}
+			policy, err := plan.resolveSuccessfulReceiptPolicy(
+				authorization.ReceiptInvocationMaterial{
+					ProfileID:      "tos.ai.text-generation",
+					ProfileVersion: "0.1.0",
+					Operation:      "generate",
+				},
+			)
+			if err != nil {
+				failures <- err
+				return
+			}
+			if charged, err := policy.chargedNanoTOS(7); err != nil || charged != 7 {
+				failures <- fmt.Errorf(
+					"concurrent success policy charge = %d, err = %v",
+					charged,
+					err,
+				)
 			}
 		}()
 	}

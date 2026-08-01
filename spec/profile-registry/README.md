@@ -30,13 +30,17 @@ This table reserves the identifier and records where its normative schema,
 vectors, limits, privacy rules, and mapper live. It does not import vertical
 business logic into this module or cause an Edge process to load the mapper.
 An operator must still install the exact reviewed mapper registration at
-startup. Production composition should use `NewProfileInvocationPlan`, which
-constructs the registry and validates one bounded unique startup selector set
-in a single operation. The plan exposes only selectors that are both installed
-and declared, and rejects invalid, duplicate, or missing selectors without
-version or extension fallback. `ProfileInvocationRegistry.Supports` and
-`ValidateRequirements` remain available for registry inspection and tooling;
-they do not replace the deployment plan at a paid execution boundary.
+startup. A registration may also carry one declarative successful-receipt
+charge fraction. Its absent value preserves the compatible full quoted price;
+an explicit value is limited to 0..10,000 basis points and rounds down to whole
+nano-TOS without overflow. Production composition should use
+`NewProfileInvocationPlan`, which constructs the registry and validates one
+bounded unique startup selector set in a single operation. The plan exposes
+only selectors that are both installed and declared, and rejects invalid,
+duplicate, or missing selectors without version or extension fallback.
+`ProfileInvocationRegistry.Supports` and `ValidateRequirements` remain
+available for registry inspection and tooling; they do not replace the
+deployment plan at a paid execution or receipt boundary.
 
 Edge runtime mapper registration is a separate local deployment concern. The
 base implementation accepts only an immutable startup set of at most 128
@@ -46,3 +50,15 @@ and the runtime registry has no wildcard or version fallback. A vertical
 repository must provide, review, and explicitly configure its mapper while
 the base Edge boundary retains request, payment, limit, deadline, priority,
 task, and recovery fields.
+
+Successful charging is deliberately data-only in v0.1. Edge evaluates the
+registered fraction from the immutable exact-selector plan against the quoted
+price for both live completion and durable restart recovery. It does not call
+profile code, retain per-request policy state, or accept a Worker-supplied
+charge. All successful completion and resolution APIs require the plan; there
+is no unregistered full-charge bypass. A non-default policy is committed into
+the durable Worker task identity, so drift before a receipt conflicts during
+recovery. Existing terminal receipts additionally replay only when their exact
+charge, usage, result commitment, and completion time still match. Failed,
+canceled, and timed-out outcomes always retain the base zero-charge,
+empty-usage policy and cannot be changed by a success policy.
