@@ -86,7 +86,7 @@ no invocation route.
 |---|---|---|
 | Language | Go 1.24+ | implemented |
 | Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, owner-local slot reserve, priority-aware capacity, terminal persistence, lookup, cleanup, startup audit and payload-free active-task pagination; synchronous workers can fail interrupted tasks closed, while durable executor/supervisor recovery remains |
-| Public discovery | ARD v0.9 Draft | structural model, bounded Registry, and deterministic privacy-minimized projection of fresh external Worker capabilities implemented |
+| Public discovery | ARD v0.9 Draft | structural model, bounded Registry, deterministic privacy-minimized projection of fresh external Worker capabilities, strict known-extension validation, bounded model/operation/runtime lexical and exact-filter indexing, and fail-closed atomic local-catalog reload implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
@@ -110,6 +110,27 @@ identifiers are omitted. Generation is not publication authority and does not
 open a listener. The optional local file handoff is atomic, mode 0600, and
 rejects symlink or non-regular targets before an operator explicitly loads it
 into `tos-edge` or the Registry.
+When the Registry loads a valid TOS Worker extension, it builds a separate
+lowercase search/filter projection capped at 16 KiB per entry. Model,
+operation, runtime, digest, and Worker service ID become discoverable without
+indexing live capacity or hardware evidence. Exact `x-tos.*` filters are
+case-insensitive, and filters on different Worker fields must match the same
+capability selector. The extension is parsed only at catalog admission, not
+repeatedly for every query; filter terms are compiled once per request and
+the per-entry projection is scanned without splitting or copying it.
+Configured Registry catalogs can be replaced only through the local filesystem
+and an explicit `SIGHUP`. The reader rejects symlinks, non-regular files,
+group/other-writable inputs, and a file identity that changes during reading.
+All configured catalogs are decoded and projected before one locked index
+replacement. A malformed file, cross-source identifier collision, publisher
+quota, entry limit, or projection limit rejects the complete reload and leaves
+the previous generation intact. There is one fixed signal goroutine, no file
+watcher, polling loop, historical generation cache, or remote mutation API.
+Search and list execution share a fixed 64-request non-queuing admission gate.
+Over-capacity requests receive a retryable 503 before catalog candidate/result
+allocation; health checks do not consume a slot. This bounds concurrent index
+work inside the process, while deployment-level connection and traffic limits
+remain the responsibility of the front proxy or service manager.
 Remote crawling is withheld until DNS rebinding, redirect, IP range,
 decompression, recursion, federation, retry, and per-publisher limits are all
 enforced.

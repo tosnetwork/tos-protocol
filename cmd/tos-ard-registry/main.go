@@ -4,7 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
 
 	"github.com/tosnetwork/tos-protocol/internal/serve"
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
@@ -32,26 +36,57 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, path := range catalogPaths {
-		file, err := os.Open(path)
-		if err != nil {
-			log.Fatal(err)
-		}
-		catalog, decodeErr := ard.DecodeCatalog(file, ard.DefaultLimits())
-		file.Close()
-		if decodeErr != nil {
-			log.Fatalf("%s: %v", path, decodeErr)
-		}
-		if err := index.AddCatalog("file://"+path, catalog); err != nil {
-			log.Fatalf("%s: %v", path, err)
-		}
+	if err := reloadCatalogs(index, catalogPaths); err != nil {
+		log.Fatal(err)
 	}
 	handler, err := registry.NewHandler(index, publicURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("tos-ard-registry listener: %s (%d catalogs)", listenAddress, len(catalogPaths))
-	if err := serve.HTTP(registry.NewHTTPServer(listenAddress, handler.Routes())); err != nil {
+	reloadSignals := make(chan os.Signal, 1)
+	signal.Notify(reloadSignals, syscall.SIGHUP)
+	stopReload := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-reloadSignals:
+				if err := reloadCatalogs(index, catalogPaths); err != nil {
+					log.Printf("catalog reload rejected; retaining previous generation: %v", err)
+					continue
+				}
+				log.Printf("catalog reload committed (%d catalogs)", len(catalogPaths))
+			case <-stopReload:
+				return
+			}
+		}
+	}()
+	err = serve.HTTP(registry.NewHTTPServer(listenAddress, handler.Routes()))
+	signal.Stop(reloadSignals)
+	close(stopReload)
+	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func reloadCatalogs(index *registry.Index, paths []string) error {
+	inputs := make([]registry.CatalogInput, 0, len(paths))
+	for _, path := range paths {
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("resolve catalog path %q: %w", path, err)
+		}
+		catalog, err := ard.ReadCatalogFile(absolute, ard.DefaultLimits())
+		if err != nil {
+			return fmt.Errorf("load catalog %q: %w", path, err)
+		}
+		inputs = append(inputs, registry.CatalogInput{
+			Source:  (&url.URL{Scheme: "file", Path: absolute}).String(),
+			Catalog: catalog,
+		})
+	}
+	if err := index.ReplaceCatalogs(inputs); err != nil {
+		return fmt.Errorf("replace Registry catalog set: %w", err)
+	}
+	return nil
 }

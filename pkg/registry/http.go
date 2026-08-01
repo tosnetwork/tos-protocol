@@ -16,6 +16,7 @@ const maxSearchBodyBytes = 64 << 10
 type Handler struct {
 	index          *Index
 	registrySource string
+	requests       chan struct{}
 }
 
 func NewHandler(index *Index, registrySource string) (*Handler, error) {
@@ -25,17 +26,36 @@ func NewHandler(index *Index, registrySource string) (*Handler, error) {
 	if registrySource == "" {
 		return nil, errors.New("registry source URL is required")
 	}
-	return &Handler{index: index, registrySource: registrySource}, nil
+	return &Handler{
+		index: index, registrySource: registrySource,
+		requests: make(chan struct{}, index.limits.MaxConcurrentRequests),
+	}, nil
 }
 
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /search", h.search)
-	mux.HandleFunc("GET /agents", h.list)
+	mux.Handle("POST /search", h.limit(http.HandlerFunc(h.search)))
+	mux.Handle("GET /agents", h.limit(http.HandlerFunc(h.list)))
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	return securityHeaders(mux)
+}
+
+func (h *Handler) limit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		select {
+		case h.requests <- struct{}{}:
+			defer func() { <-h.requests }()
+			next.ServeHTTP(writer, request)
+		default:
+			writer.Header().Set("Retry-After", "1")
+			writeError(
+				writer, http.StatusServiceUnavailable, "RESOURCE_EXHAUSTED",
+				"Registry request capacity exhausted",
+			)
+		}
+	})
 }
 
 func (h *Handler) search(writer http.ResponseWriter, request *http.Request) {

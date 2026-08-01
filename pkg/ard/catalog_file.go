@@ -8,6 +8,59 @@ import (
 	"path/filepath"
 )
 
+// ReadCatalogFile reads one operator-approved catalog without following a
+// symlink, accepting a group/other-writable file, or accepting a target that
+// changes identity during the read. An atomic writer may legitimately replace
+// the file concurrently; the caller should retain its last valid catalog and
+// retry a later explicit reload.
+func ReadCatalogFile(path string, limits Limits) (Catalog, error) {
+	if path == "" {
+		return Catalog{}, errors.New("empty ARD catalog input path")
+	}
+	before, err := os.Lstat(path)
+	if err != nil {
+		return Catalog{}, fmt.Errorf("inspect ARD catalog input: %w", err)
+	}
+	if err := validateCatalogInputInfo(before); err != nil {
+		return Catalog{}, err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return Catalog{}, fmt.Errorf("open ARD catalog input: %w", err)
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil {
+		return Catalog{}, fmt.Errorf("inspect opened ARD catalog input: %w", err)
+	}
+	if err := validateCatalogInputInfo(opened); err != nil {
+		return Catalog{}, err
+	}
+	if !os.SameFile(before, opened) {
+		return Catalog{}, errors.New("ARD catalog input changed before open")
+	}
+	catalog, err := DecodeCatalog(file, limits)
+	if err != nil {
+		return Catalog{}, err
+	}
+	after, err := os.Lstat(path)
+	if err != nil || validateCatalogInputInfo(after) != nil ||
+		!os.SameFile(opened, after) {
+		return Catalog{}, errors.New("ARD catalog input changed during read")
+	}
+	return catalog, nil
+}
+
+func validateCatalogInputInfo(info os.FileInfo) error {
+	if !info.Mode().IsRegular() {
+		return errors.New("ARD catalog input is not a regular file")
+	}
+	if info.Mode().Perm()&0o022 != 0 {
+		return errors.New("ARD catalog input is writable by group or other")
+	}
+	return nil
+}
+
 // WriteCatalogFile atomically replaces one operator-owned local catalog file.
 // The resulting file is mode 0600. It does not publish, upload, or register the
 // catalog, and it refuses to replace symlinks or non-regular files.

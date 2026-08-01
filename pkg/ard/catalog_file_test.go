@@ -69,3 +69,39 @@ func TestWriteCatalogFileRejectsSymlinkAndInvalidCatalog(t *testing.T) {
 		t.Fatalf("invalid catalog left output behind: %v", err)
 	}
 }
+
+func TestReadCatalogFileRejectsSymlink(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	catalog, err := BuildWorkerCatalog(
+		testWorkerCatalogConfig(), testWorkerCatalogResponse(now), now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	target := filepath.Join(directory, "target.json")
+	if err := WriteCatalogFile(target, catalog, DefaultLimits()); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(directory, "catalog.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadCatalogFile(link, DefaultLimits()); err == nil {
+		t.Fatal("catalog reader followed a symlink")
+	}
+	if err := os.Chmod(target, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadCatalogFile(target, DefaultLimits()); err == nil {
+		t.Fatal("catalog reader accepted a group/other-writable file")
+	}
+	if err := os.Chmod(target, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := ReadCatalogFile(target, DefaultLimits())
+	if err != nil || len(decoded.Entries) != 1 ||
+		decoded.Entries[0].Identifier != catalog.Entries[0].Identifier {
+		t.Fatalf("decoded catalog=%#v err=%v", decoded, err)
+	}
+}

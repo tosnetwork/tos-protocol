@@ -21,7 +21,9 @@ The security boundary is intentional:
   execution, production signing, and receipt delivery are wired end to end.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
-  operator-approved local catalogs.
+  operator-approved local catalogs. Valid TOS Worker extensions contribute
+  bounded model, operation, runtime, digest, and service-ID terms to lexical
+  search and same-capability exact `x-tos.*` filters.
 - `pkg/ard.BuildWorkerCatalog` converts a fresh validated private Worker
   capability snapshot into one deterministic, privacy-minimized public service
   entry. The operator-approved ARD identifier remains stable and bindable by
@@ -30,6 +32,11 @@ The security boundary is intentional:
 - `pkg/ard.WriteCatalogFile` provides an atomic mode-0600 local handoff for
   explicitly configured `tos-edge` or Registry inputs and refuses symlink or
   non-regular targets. It performs no network publication.
+- `pkg/ard.ReadCatalogFile` refuses symlink, non-regular, group/other-writable,
+  or concurrently replaced inputs. Registry multi-catalog reload is one atomic
+  bounded generation change, never a partially visible sequence.
+- Known TOS Worker extensions are strictly validated at the catalog boundary;
+  unknown third-party ARD extensions remain bounded and opaque.
 - vertical workers use the versioned ConnectRPC API over a private Unix
   socket. The reference client verifies the private directory, socket type,
   mode and owner, bounds messages and deadlines, and does not retry work.
@@ -59,6 +66,16 @@ go run ./cmd/tos-ard-registry \
   -catalog ./examples/ai-catalog.json
 ```
 
+`tos-ard-registry` reads only regular local catalog files that are not
+group/other writable. After an operator atomically replaces one or more
+configured files, `SIGHUP` performs an all-or-nothing reload. Every catalog,
+known extension, identifier ownership rule, publisher quota, and search-memory
+bound is validated before the index generation changes. A failed reload keeps
+the last valid generation and its pagination tokens unchanged.
+The public `/search` and `/agents` handlers admit at most 64 concurrent active
+requests and reject excess work immediately with `503 RESOURCE_EXHAUSTED` and
+`Retry-After`; `/healthz` remains allocation-light and outside that work gate.
+
 After replacing the placeholder controller, RPC URLs, and reviewed contract
 code hash, add `-tos-chain-config ./examples/tos-chain.json` to make startup
 and `/readyz` fail closed against the live TOS quorum. This does not expose an
@@ -68,6 +85,12 @@ Remote crawling, federation, payment forwarding, and invocation are
 deliberately not enabled in this bootstrap. They require the SSRF, provenance,
 authentication, replay, and bounded-state controls described in the
 architecture plan.
+
+For TOS Worker entries, `POST /search` additionally accepts exact,
+case-insensitive `x-tos.serviceId`, `x-tos.operation`, `x-tos.model`,
+`x-tos.modelDigest`, and `x-tos.runtime` filters. Multiple values for one
+field are OR alternatives; different TOS fields must match one capability
+selector rather than unrelated capabilities in the same service entry.
 
 ## Base protocol
 

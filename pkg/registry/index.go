@@ -12,24 +12,29 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
 )
 
 type Limits struct {
-	MaxEntries      int
-	MaxPerPublisher int
-	MaxQueryBytes   int
-	MaxPageSize     int
+	MaxEntries            int
+	MaxPerPublisher       int
+	MaxQueryBytes         int
+	MaxPageSize           int
+	MaxWorkerSearchBytes  int
+	MaxConcurrentRequests int
 }
 
 func DefaultLimits() Limits {
 	return Limits{
-		MaxEntries:      10_000,
-		MaxPerPublisher: 1_000,
-		MaxQueryBytes:   2_048,
-		MaxPageSize:     100,
+		MaxEntries:            10_000,
+		MaxPerPublisher:       1_000,
+		MaxQueryBytes:         2_048,
+		MaxPageSize:           100,
+		MaxWorkerSearchBytes:  16 << 10,
+		MaxConcurrentRequests: 64,
 	}
 }
 
@@ -37,7 +42,22 @@ type record struct {
 	entry         ard.Entry
 	catalogSource string
 	publisher     string
+	workerSearch  string
 }
+
+const (
+	workerCapabilitySeparator byte = 0x1e
+	workerFieldSeparator      byte = 0x1f
+	maximumConcurrentRequests      = 1024
+
+	// WorkerFilter* names are the exact TOS Worker extension filters accepted
+	// in QueryModel.Filter.
+	WorkerFilterServiceID   = "x-tos.serviceId"
+	WorkerFilterOperation   = "x-tos.operation"
+	WorkerFilterModel       = "x-tos.model"
+	WorkerFilterModelDigest = "x-tos.modelDigest"
+	WorkerFilterRuntime     = "x-tos.runtime"
+)
 
 type Index struct {
 	mu         sync.RWMutex
@@ -46,22 +66,27 @@ type Index struct {
 	records    map[string]record
 }
 
+// CatalogInput is one candidate source replacement in an atomic Registry
+// catalog-set reload. ReplaceCatalogs validates every candidate.
+type CatalogInput struct {
+	Source  string
+	Catalog ard.Catalog
+}
+
 func NewIndex(limits Limits) (*Index, error) {
 	if limits.MaxEntries <= 0 || limits.MaxPerPublisher <= 0 ||
-		limits.MaxQueryBytes <= 0 || limits.MaxPageSize <= 0 {
+		limits.MaxQueryBytes <= 0 || limits.MaxPageSize <= 0 ||
+		limits.MaxWorkerSearchBytes <= 0 || limits.MaxConcurrentRequests <= 0 ||
+		limits.MaxConcurrentRequests > maximumConcurrentRequests {
 		return nil, errors.New("invalid Registry limits")
 	}
 	return &Index{limits: limits, records: make(map[string]record)}, nil
 }
 
 func (i *Index) AddCatalog(source string, catalog ard.Catalog) error {
-	next := make([]record, 0, len(catalog.Entries))
-	for _, entry := range catalog.Entries {
-		publisher, err := ard.Publisher(entry.Identifier)
-		if err != nil {
-			return err
-		}
-		next = append(next, record{entry: cloneEntry(entry), catalogSource: source, publisher: publisher})
+	next, err := i.buildCatalogRecords(source, catalog)
+	if err != nil {
+		return err
 	}
 
 	i.mu.Lock()
@@ -79,6 +104,80 @@ func (i *Index) AddCatalog(source string, catalog ard.Catalog) error {
 		}
 		projected[candidate.entry.Identifier] = candidate
 	}
+	if err := i.validateProjectedRecords(projected); err != nil {
+		return err
+	}
+	i.records = projected
+	i.generation++
+	return nil
+}
+
+// ReplaceCatalogs validates and indexes a complete catalog set before one
+// locked pointer replacement. A failed reload leaves the previous generation
+// and all of its pagination tokens unchanged.
+func (i *Index) ReplaceCatalogs(inputs []CatalogInput) error {
+	projected := make(map[string]record)
+	sources := make(map[string]struct{}, len(inputs))
+	for _, input := range inputs {
+		if _, duplicate := sources[input.Source]; duplicate {
+			return fmt.Errorf("duplicate catalog source %q", input.Source)
+		}
+		sources[input.Source] = struct{}{}
+		records, err := i.buildCatalogRecords(input.Source, input.Catalog)
+		if err != nil {
+			return err
+		}
+		for _, candidate := range records {
+			if existing, exists := projected[candidate.entry.Identifier]; exists {
+				return fmt.Errorf(
+					"identifier %q belongs to both %q and %q",
+					candidate.entry.Identifier, existing.catalogSource,
+					candidate.catalogSource,
+				)
+			}
+			projected[candidate.entry.Identifier] = candidate
+		}
+	}
+	if err := i.validateProjectedRecords(projected); err != nil {
+		return err
+	}
+	i.mu.Lock()
+	i.records = projected
+	i.generation++
+	i.mu.Unlock()
+	return nil
+}
+
+func (i *Index) buildCatalogRecords(
+	source string, catalog ard.Catalog,
+) ([]record, error) {
+	if source == "" {
+		return nil, errors.New("Registry catalog source is required")
+	}
+	if err := catalog.Validate(ard.DefaultLimits()); err != nil {
+		return nil, fmt.Errorf("validate Registry catalog %q: %w", source, err)
+	}
+	next := make([]record, 0, len(catalog.Entries))
+	for _, entry := range catalog.Entries {
+		publisher, err := ard.Publisher(entry.Identifier)
+		if err != nil {
+			return nil, err
+		}
+		workerSearch, err := workerExtensionSearchText(
+			entry, i.limits.MaxWorkerSearchBytes,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("entry %q: %w", entry.Identifier, err)
+		}
+		next = append(next, record{
+			entry: cloneEntry(entry), catalogSource: source,
+			publisher: publisher, workerSearch: workerSearch,
+		})
+	}
+	return next, nil
+}
+
+func (i *Index) validateProjectedRecords(projected map[string]record) error {
 	if len(projected) > i.limits.MaxEntries {
 		return errors.New("Registry index capacity exceeded")
 	}
@@ -89,8 +188,6 @@ func (i *Index) AddCatalog(source string, catalog ard.Catalog) error {
 			return fmt.Errorf("publisher %q exceeds entry limit", candidate.publisher)
 		}
 	}
-	i.records = projected
-	i.generation++
 	return nil
 }
 
@@ -130,7 +227,8 @@ func (i *Index) Search(request SearchRequest, registrySource string) (SearchResp
 	if request.Federation != "" && request.Federation != "none" {
 		return SearchResponse{}, errors.New("federation is not enabled by this Registry")
 	}
-	if err := validateFilters(request.Query.Filter); err != nil {
+	filters, err := compileFilters(request.Query.Filter)
+	if err != nil {
 		return SearchResponse{}, err
 	}
 	pageSize, err := i.pageSize(request.PageSize, 10)
@@ -142,7 +240,7 @@ func (i *Index) Search(request SearchRequest, registrySource string) (SearchResp
 	generation := i.generation
 	candidates := make([]record, 0, len(i.records))
 	for _, item := range i.records {
-		if matchesFilters(item, request.Query.Filter) {
+		if matchesFilters(item, filters) {
 			candidates = append(candidates, item)
 		}
 	}
@@ -151,7 +249,7 @@ func (i *Index) Search(request SearchRequest, registrySource string) (SearchResp
 	tokens := tokenize(request.Query.Text)
 	results := make([]SearchResult, 0, len(candidates))
 	for _, candidate := range candidates {
-		score := lexicalScore(tokens, candidate.entry)
+		score := lexicalScore(tokens, candidate.entry, candidate.workerSearch)
 		if score == 0 {
 			continue
 		}
@@ -223,14 +321,20 @@ func (i *Index) pageSize(requested, fallback int) (int, error) {
 	return requested, nil
 }
 
-func matchesFilters(item record, filters map[string]interface{}) bool {
-	for key, raw := range filters {
-		want := filterStrings(raw)
-		if len(want) == 0 {
-			return false
-		}
+type compiledFilter struct {
+	key    string
+	values []string
+}
+
+type compiledFilters struct {
+	generic []compiledFilter
+	worker  []compiledFilter
+}
+
+func matchesFilters(item record, filters compiledFilters) bool {
+	for _, filter := range filters.generic {
 		var have []string
-		switch key {
+		switch filter.key {
 		case "type":
 			have = []string{item.entry.Type}
 		case "publisher":
@@ -241,40 +345,128 @@ func matchesFilters(item record, filters map[string]interface{}) bool {
 			have = item.entry.Tags
 		case "capabilities":
 			have = item.entry.Capabilities
-		default:
-			return false
 		}
-		if !intersects(have, want) {
+		if !intersects(have, filter.values) {
 			return false
 		}
 	}
-	return true
+	return matchesWorkerFilters(item.workerSearch, filters.worker)
 }
 
-func validateFilters(filters map[string]interface{}) error {
-	for key, raw := range filters {
+func compileFilters(filters map[string]interface{}) (compiledFilters, error) {
+	compiled := compiledFilters{}
+	keys := make([]string, 0, len(filters))
+	for key := range filters {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		raw := filters[key]
+		tag, workerFilter := workerFilterTag(key)
 		switch key {
 		case "type", "publisher", "version", "tags", "capabilities":
 		default:
-			return fmt.Errorf("unsupported filter %q", key)
+			if !workerFilter {
+				return compiledFilters{}, fmt.Errorf("unsupported filter %q", key)
+			}
 		}
 		values := filterStrings(raw)
 		if len(values) == 0 || len(values) > 64 {
-			return fmt.Errorf("filter %q must be a string or a bounded string array", key)
+			return compiledFilters{}, fmt.Errorf("filter %q must be a string or a bounded string array", key)
 		}
 		for _, value := range values {
 			if len(value) == 0 || len(value) > 1024 {
-				return fmt.Errorf("filter %q contains an invalid value", key)
+				return compiledFilters{}, fmt.Errorf("filter %q contains an invalid value", key)
+			}
+			if workerFilter && strings.IndexFunc(value, unicode.IsControl) >= 0 {
+				return compiledFilters{}, fmt.Errorf("filter %q contains an invalid value", key)
 			}
 		}
+		if workerFilter {
+			terms := make([]string, 0, len(values))
+			for _, value := range values {
+				terms = append(terms, workerFilterTerm(tag, value))
+			}
+			compiled.worker = append(compiled.worker, compiledFilter{
+				key: key, values: terms,
+			})
+			continue
+		}
+		compiled.generic = append(compiled.generic, compiledFilter{
+			key: key, values: values,
+		})
 	}
-	return nil
+	return compiled, nil
+}
+
+func workerFilterTag(key string) (byte, bool) {
+	switch key {
+	case WorkerFilterServiceID:
+		return 's', true
+	case WorkerFilterOperation:
+		return 'o', true
+	case WorkerFilterModel:
+		return 'm', true
+	case WorkerFilterModelDigest:
+		return 'd', true
+	case WorkerFilterRuntime:
+		return 'r', true
+	default:
+		return 0, false
+	}
+}
+
+func matchesWorkerFilters(projection string, filters []compiledFilter) bool {
+	if len(filters) == 0 {
+		return true
+	}
+	for len(projection) != 0 {
+		start := strings.IndexByte(projection, workerCapabilitySeparator)
+		if start < 0 {
+			return false
+		}
+		projection = projection[start+1:]
+		end := strings.IndexByte(projection, workerCapabilitySeparator)
+		capability := projection
+		if end >= 0 {
+			capability = projection[:end]
+		}
+		matched := true
+		for _, filter := range filters {
+			found := false
+			for _, term := range filter.values {
+				if strings.Contains(capability, term) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+		if end < 0 {
+			return false
+		}
+		projection = projection[end:]
+	}
+	return false
+}
+
+func workerFilterTerm(tag byte, value string) string {
+	return string([]byte{workerFieldSeparator, tag, '='}) +
+		strings.ToLower(value) + string(workerFieldSeparator)
 }
 
 func filterStrings(value interface{}) []string {
 	switch typed := value.(type) {
 	case string:
 		return []string{typed}
+	case []string:
+		return append([]string(nil), typed...)
 	case []interface{}:
 		out := make([]string, 0, len(typed))
 		for _, value := range typed {
@@ -301,7 +493,7 @@ func intersects(a, b []string) bool {
 	return false
 }
 
-func lexicalScore(tokens []string, entry ard.Entry) int {
+func lexicalScore(tokens []string, entry ard.Entry, workerSearch string) int {
 	if len(tokens) == 0 {
 		return 0
 	}
@@ -311,7 +503,7 @@ func lexicalScore(tokens []string, entry ard.Entry) int {
 	), " "))
 	matched := 0
 	for _, token := range tokens {
-		if strings.Contains(haystack, token) {
+		if strings.Contains(haystack, token) || strings.Contains(workerSearch, token) {
 			matched++
 		}
 	}
@@ -319,6 +511,37 @@ func lexicalScore(tokens []string, entry ard.Entry) int {
 		return 0
 	}
 	return min(100, 1+(99*matched)/len(tokens))
+}
+
+func workerExtensionSearchText(entry ard.Entry, maxBytes int) (string, error) {
+	extension, present, err := ard.DecodeWorkerCatalogExtension(entry)
+	if err != nil || !present {
+		return "", err
+	}
+	var builder strings.Builder
+	for _, capability := range extension.Capabilities {
+		builder.WriteByte(workerCapabilitySeparator)
+		for _, field := range []struct {
+			tag   byte
+			value string
+		}{
+			{'s', capability.ServiceID}, {'o', capability.Operation},
+			{'m', capability.Model}, {'d', capability.ModelDigest},
+			{'r', capability.Runtime},
+		} {
+			value := strings.ToLower(field.value)
+			additional := 3 + len(value) + 1
+			if builder.Len()+additional > maxBytes {
+				return "", errors.New("Worker capability search text exceeds limit")
+			}
+			builder.WriteByte(workerFieldSeparator)
+			builder.WriteByte(field.tag)
+			builder.WriteByte('=')
+			builder.WriteString(value)
+			builder.WriteByte(workerFieldSeparator)
+		}
+	}
+	return builder.String(), nil
 }
 
 func tokenize(text string) []string {

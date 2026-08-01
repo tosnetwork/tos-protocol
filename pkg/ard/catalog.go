@@ -279,6 +279,9 @@ func (e Entry) Validate(limits Limits) error {
 	if extensionBytes > limits.MaxExtensionBytes {
 		return errors.New("entry extensions exceed byte limit")
 	}
+	if _, present, err := DecodeWorkerCatalogExtension(e); present && err != nil {
+		return err
+	}
 	if e.TrustManifest != nil {
 		if err := e.TrustManifest.validate(limits); err != nil {
 			return fmt.Errorf("trustManifest: %w", err)
