@@ -108,11 +108,9 @@ tos-ai:       go test -race -count=1 ./...
 The systemd templates parse successfully; verification reports only expected
 missing target-host binaries/unit dependencies in the development checkout.
 
-## Remaining external gates
+## Production-gate status
 
-Tier 1 NVIDIA hardware, reviewed GPU/container isolation, real model trust
-roots and artifacts, key ceremony/HSM custody, deployment authentication and
-read-access policy, public TLS/rate limiting/firewall, official ARD
-conformance, sustained availability/memory soak, independent security review,
-reproducible signed artifacts and immutable release tags remain external
-certification work.
+This dated report is immutable evidence of the local M1 rehearsal, not the
+living backlog for later deployment work. Current status, remaining evidence
+and last-verification dates are maintained only in
+[`non-streaming-v0.1-production-gates.md`](non-streaming-v0.1-production-gates.md).

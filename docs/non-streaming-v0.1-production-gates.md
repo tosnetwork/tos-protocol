@@ -2,6 +2,29 @@
 
 Status: M1 local integration passed; external deployment certification is not complete
 
+This file is the canonical, mutable production-gate ledger for the compatible
+non-streaming `tos-protocol` and `tos-ai` release pair. Repository ROADMAPs
+summarize scope and milestone ordering; dated evidence reports record what a
+particular rehearsal proved. Neither replaces the status table in this file.
+
+Status meanings:
+
+- **Passed**: every required item for the stated production claim has linked,
+  reviewable evidence.
+- **Partial**: implementation or representative local evidence exists, but at
+  least one deployment-specific requirement remains unverified.
+- **Open**: the required representative deployment evidence does not yet exist.
+- **Deferred**: the claim is outside non-streaming v0.1 and must not be
+  advertised as part of this release.
+
+Current immutable integration pair:
+
+- `tos-protocol`: `c1e33bc6208e9d275fe50f220e471263726fd357`
+- `tos-ai`: `515a5cabdec44a57256ddf76bbd590d413778360`
+
+Both revisions passed their independent GitHub CI runs. They are integration
+commits, not signed v0.1 release tags.
+
 This document separates repository work from claims that can be established
 only by a real TOS Network and physical AI terminal deployment. “Implemented”
 means the bounded code path and its automated tests exist. It does not mean a
@@ -48,27 +71,41 @@ bounded 5,000-request anonymous malformed-input sample. See
 
 This evidence closes the local integration portion of M1 only. The target
 hardware, custody, public perimeter, long-duration soak and release rows below
-remain open.
+are not Passed.
 
-## Gates that require a deployment
+## Production-gate ledger
 
-| Gate | Evidence required before a production claim |
-|---|---|
-| Immutable release | Commit and tag `tos-protocol`; update `tos-ai` to the exact immutable protocol revision; run both repositories independently and together in CI. |
-| Live chain authority | Deploy the reviewed Agent Account/service contracts, configure at least three independent RPC endpoints and a strict majority, then demonstrate controller rotation, client-key revocation, stale-node rejection and payment reorganization behavior. |
-| Key custody | Complete quote and receipt key ceremonies; bind current manifest roles to the deployed sidecars or HSMs; rehearse rotation, revocation, process restart and unavailable-signer behavior without reusing wallet-owner keys. |
-| Public authentication policy | Select and implement the deployment-owned session/quote issuance ceremony and the concrete action-status/receipt access authorizers. The base library intentionally does not invent an operator's identity, KYC, mTLS, wallet-challenge or gateway policy. |
-| Settlement policy | Deploy the payment destination and decide whether successful receipts always charge the full quote. Any partial successful charge requires an independently audited refund/reconciliation mechanism; the receipt alone does not move funds back to a payer. |
-| Physical isolation | Run the containerd lifecycle suite in the exact production kernel, cgroup v2, runc, seccomp, namespace and filesystem configuration. GPU access requires a separate NVIDIA runtime/device-isolation implementation and certification; the current concrete containerd driver is CPU-only and network-none. |
-| Model supply chain | Provision operator trust roots and signed model/update manifests; rehearse interrupted download/activation, anti-rollback, corruption, disk-full, known-good rollback and offline operation on the target terminal class. |
-| Availability and memory | Execute sustained bounded-concurrency load, slow-client, malformed-input, chain-outage, Worker-crash, signer-outage, disk-quota and restart tests while recording RSS, heap, goroutine, file-descriptor, task-store and bbolt growth. Passing unit race tests is necessary but not a long-duration leak certificate. |
-| Network perimeter | Terminate TLS at a reviewed ingress, enforce connection/rate/body/header timeouts outside the process, keep Worker and signer sockets private, and verify that no private runtime, hardware identity, credential or raw error crosses public responses. |
-| ARD publication | Publish the operator-approved catalog under the selected domain or TOS naming path and run the pinned official ARD conformance tool. Remote crawling and federation are separate Registry deployment features, not prerequisites for the local bounded Registry. |
+| ID | Gate | Status | Evidence required before the production claim | Current evidence | Last verified |
+|---|---|---|---|---|---|
+| PG-01 | Immutable release pair | Partial | Tag the compatible revisions, publish a compatibility matrix and rollback procedure, and produce reproducible signed artifacts. | Exact protocol pin and independent CI passed: [protocol CI](https://github.com/tosnetwork/tos-protocol/actions/runs/30717664628), [AI CI](https://github.com/tosnetwork/tos-ai/actions/runs/30717705818). No signed v0.1 tag or artifact exists. | 2026-08-01 |
+| PG-02 | Live chain authority | Partial | Deploy reviewed Agent Account/service contracts behind at least three independent RPC endpoints and demonstrate controller rotation, client-key revocation, stale-node rejection, finality and payment-reorganization behavior. | The [local M1 report](local-three-node-ai-edge-m1-evidence-2026-08-01.md) proves three-node strict-majority authority, client-key resolution and finalized native payment, but not the remaining rotation/reorganization cases. | 2026-08-01 |
+| PG-03 | Key custody | Partial | Complete production Quote/Receipt key ceremonies, bind manifest roles to sidecars or HSMs, and rehearse rotation, revocation, backup, restart and unavailable-signer behavior without reusing wallet-owner keys. | Purpose-fixed software sidecars, response revalidation and unavailable-signer readiness were tested locally; no production ceremony or HSM evidence exists. | 2026-08-01 |
+| PG-04 | Public authentication and read access | Partial | Select, implement and audit the deployment-owned session/Quote issuance ceremony and concrete Action-status/Receipt-read authorizers. | Session issuance plus authenticated, non-enumerating read handlers exist. Operator identity, wallet challenge, mTLS, KYC or gateway policy remains a deployment choice. | 2026-08-01 |
+| PG-05 | Settlement policy | Partial | Deploy the production payment destination and document full-charge or independently audited refund/reconciliation rules, including restart behavior. | Exact finalized payment and full-charge Receipt behavior passed locally. A Receipt is not an on-chain refund and no production refund policy has been certified. | 2026-08-01 |
+| PG-06 | Tier 1 NVIDIA terminal | Open | Certify the supported driver/runtime matrix, model load, cold start, sustained inference, thermal/power behavior and owner-priority operation on the selected Linux/NVIDIA terminal class. | The M1 host had no NVIDIA device and intentionally used the development mock executor. | 2026-08-01 |
+| PG-07 | Physical execution isolation | Partial | Run lifecycle and cleanup tests on the exact kernel, cgroup v2, containerd, runc, seccomp, namespace, filesystem and NVIDIA device configuration. Prove no residual workload objects after success, failure, cancellation or restart. | CPU-only, preloaded-image, `network=none` containerd code and automated lifecycle tests exist; target-host and GPU isolation are uncertified. | 2026-08-01 |
+| PG-08 | Model and update supply chain | Partial | Provision real trust roots and signed artifacts; rehearse corruption, incompatible runtime, interrupted activation, disk full, power loss, anti-rollback, known-good rollback and disconnected operation on target hardware. | Verification, activation, rollback and anti-rollback state machines have automated tests; no target-hardware trust-root ceremony or power-loss report exists. | 2026-08-01 |
+| PG-09 | Availability and bounded memory | Partial | Run sustained bounded-concurrency, slow-client, malformed-input, chain/Worker/signer outage, disk-quota and restart tests while recording RSS, heap, goroutines, file descriptors, task store, bbolt, RAM, VRAM and cache behavior to steady state. | Race tests and the bounded 5,000-request local sample passed without monotonic growth; this is not a long-duration leak certificate. | 2026-08-01 |
+| PG-10 | Public network perimeter | Partial | Certify TLS ingress, connection/rate/body/header limits, firewall policy, private socket ownership, response redaction and supported home/relay reachability. | Edge is forced to literal loopback and private mode-0600 Worker/signer sockets; no reviewed public TLS perimeter has been deployed. | 2026-08-01 |
+| PG-11 | ARD publication | Partial | Publish the operator-approved catalog under the selected domain or TOS naming path and run the pinned official ARD conformance tool. | The bounded operator-fed Registry and local catalog projection pass automated tests; public publication and official conformance remain open. | 2026-08-01 |
+| PG-12 | Offline physical terminal and fleet claims | Deferred | Before advertising this product class, complete disconnected soak, bounded journal, reconnect idempotency, real-time priority, safe update rollout, independent actuator safety, delegation/revocation and bounded fleet fan-out. | Foundations exist in terminal policy, scheduling and update state machines, but the physical/fleet milestone is outside non-streaming v0.1. | 2026-08-01 |
+| PG-13 | Release governance | Partial | Produce reproducible builds, signed source/binary artifacts, compatibility and rollback records, an independent security review, testnet observation and final release approval. | Source commits and independent repository CI are public; the remaining release evidence and approval do not yet exist. | 2026-08-01 |
+
+## Updating and closing gates
+
+- Change a status only in this table and link the evidence in the same change.
+- Evidence must identify the exact source revisions, configuration or hardware
+  class, commands, duration and pass/fail criteria without publishing secrets.
+- A local rehearsal may move a gate from Open to Partial. Only evidence from
+  the deployment described by the claim may move it to Passed.
+- ROADMAPs may advance a milestone after this ledger supports the transition;
+  they must not maintain an independent copy of gate status.
 
 ## Release decision
 
-The repository candidate is ready for an immutable integration commit when all
-automated tests pass. A production-ready or secure-hardware claim must wait for
-the relevant rows above to be evidenced on the actual terminal and chain
-deployment. These gates do not authorize widening v0.1 with streaming; the
-separate streaming RFC remains targeted at v0.2.
+M1 is integration-complete, but non-streaming v0.1 is not production-certified.
+A production-ready or secure-hardware claim must wait until every applicable
+row above is Passed on the actual terminal and chain deployment. PG-12 is
+Deferred and therefore does not block a release that makes no offline,
+physical-control or fleet claim. These gates do not authorize widening v0.1
+with streaming; the separate streaming RFC remains targeted at v0.2.

@@ -313,7 +313,7 @@ The no-retry private key-custody transport and sidecar requirements are
 documented in
 [`docs/receipt-signer-sidecar.md`](docs/receipt-signer-sidecar.md).
 The remaining environment-owned certification work is separated from the
-implemented code in
+implemented code and maintained as the canonical status ledger in
 [`docs/non-streaming-v0.1-production-gates.md`](docs/non-streaming-v0.1-production-gates.md).
 
 ## Repository map

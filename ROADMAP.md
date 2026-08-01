@@ -94,33 +94,16 @@ The active milestone is P2, the immutable v0.1 production candidate:
 
 ## External Certification
 
-The following gates are intentionally not marked Completed by repository CI:
+External certification spans live-chain authority and settlement, key custody
+and public authentication, target hardware and execution isolation, model and
+update trust, availability and bounded memory, public networking, ARD
+publication, and release governance. Repository CI alone cannot close these
+claims.
 
-- **Live chain authority:** reviewed contract deployment; three independent
-  RPC endpoints; controller/key rotation; revocation; rollback protection;
-  finality and payment-reorganization rehearsal.
-- **Key custody:** Quote/Receipt key ceremonies; manifest-role binding; HSM or
-  sidecar deployment; rotation, revocation, restart, backup, and outage tests.
-- **Authentication policy:** deployment selection and audit of session/Quote
-  issuance plus Action/Receipt read authorization. Discovery is not authority.
-- **Settlement policy:** deployed destination, full-charge or audited refund
-  rules, restart reconciliation, and proof that a receipt is not mistaken for
-  an on-chain refund.
-- **Availability and memory:** sustained bounded-concurrency, anonymous-input,
-  slow-client, malformed-request, chain/signer/Worker outage, disk-quota, and
-  restart tests with RSS, heap, goroutine, file-descriptor, journal, and bbolt
-  measurements.
-- **Network perimeter:** reviewed TLS ingress, rate/connection limits, firewall,
-  private Unix sockets, response redaction, and relay/home reachability.
-- **ARD publication:** real catalog publication and pinned official ARD
-  conformance execution; the current operator-fed Registry is not a claim of
-  crawler or federation conformance.
-- **Release governance:** reproducible build, compatibility matrix, rollback
-  procedure, independent security review, signed artifacts, and testnet
-  observation.
-
-The detailed evidence table is maintained in
+The only mutable gate status, required evidence, evidence links and
+last-verification dates are maintained in
 [`docs/non-streaming-v0.1-production-gates.md`](docs/non-streaming-v0.1-production-gates.md).
+This ROADMAP intentionally does not duplicate that ledger.
 
 ## Release milestones
 
@@ -135,6 +118,6 @@ The detailed evidence table is maintained in
 ## Maintenance
 
 Update this file in the same pull request whenever a deliverable changes
-category. A code item may move to Completed after merge and CI. An External
-Certification item moves only when the corresponding deployment artifact is
-linked from the production-gate record.
+category. A code item may move to Completed after merge and CI. External gate
+status changes only in the canonical production-gate ledger; this ROADMAP may
+advance a milestone only when the linked ledger evidence supports it.
