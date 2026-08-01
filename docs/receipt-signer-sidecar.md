@@ -72,7 +72,13 @@ refuses to remove or replace an existing path, creates a mode-0600 Unix
 socket, and performs graceful bounded shutdown. The daemon fixes the domain
 and key ID at startup, strictly decodes bounded JSON, limits concurrent calls,
 sets `no-store`, and does not log request bodies, payloads, keys, or
-signatures.
+signatures. Graceful shutdown stops new signatures, waits for an active
+signature to leave the key critical section, clears the in-process software
+private-key buffer, and permanently marks the handler unavailable. Process
+memory and language/runtime copies still do not provide HSM-grade erasure.
+The Edge-side client is also explicitly closed: it rejects new calls, cancels
+active bounded Unix-socket requests, waits for them to return, and closes idle
+HTTP transports before Edge exits.
 
 Example (the operator creates both private directories first):
 

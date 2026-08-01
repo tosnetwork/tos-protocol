@@ -252,6 +252,82 @@ func TestHandlerConfigurationBounds(t *testing.T) {
 	}
 }
 
+func TestHandlerCloseClearsKeyAndFailsClosed(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Config{
+		KeyID: "receipt-key", PrivateKey: privateKey,
+		MaxMessageBytes: DefaultMaxMessageBytes, MaxConcurrent: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyStorage := handler.privateKey
+	if err := handler.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for index, value := range keyStorage {
+		if value != 0 {
+			t.Fatalf("private key byte %d was not cleared", index)
+		}
+	}
+
+	health := httptest.NewRecorder()
+	handler.ServeHTTP(
+		health,
+		httptest.NewRequest(http.MethodGet, localrpc.ReceiptSignerHealthPath, nil),
+	)
+	if health.Code != http.StatusServiceUnavailable {
+		t.Fatalf("closed health status=%d", health.Code)
+	}
+	request := httptest.NewRequest(
+		http.MethodPost, localrpc.ReceiptSignerPath,
+		strings.NewReader(`{"version":"1","payload":"eA==","issuedUnixMillis":1000,"expiresUnixMillis":2000}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("closed signing status=%d", response.Code)
+	}
+}
+
+func TestHandlerCloseWaitsForSigningCriticalSection(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Config{
+		KeyID: "receipt-key", PrivateKey: privateKey,
+		MaxMessageBytes: DefaultMaxMessageBytes, MaxConcurrent: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler.mutex.RLock()
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- handler.Close() }()
+	select {
+	case err := <-closeDone:
+		handler.mutex.RUnlock()
+		t.Fatalf("close crossed the signing critical section: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	handler.mutex.RUnlock()
+	if err := <-closeDone; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ready := handler.identity(); ready {
+		t.Fatal("closed handler retained signing identity")
+	}
+}
+
 func TestLimitListenerBoundsIdleConnectionsAndCloses(t *testing.T) {
 	base, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

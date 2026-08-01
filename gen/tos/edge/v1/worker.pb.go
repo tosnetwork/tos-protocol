@@ -1398,12 +1398,15 @@ func (x *InvokeRequest) GetRetainUntilUnixMillis() int64 {
 }
 
 type Usage struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	InputBytes      uint64                 `protobuf:"varint,1,opt,name=input_bytes,json=inputBytes,proto3" json:"input_bytes,omitempty"`
-	OutputBytes     uint64                 `protobuf:"varint,2,opt,name=output_bytes,json=outputBytes,proto3" json:"output_bytes,omitempty"`
-	InputTokens     uint64                 `protobuf:"varint,3,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
-	OutputTokens    uint64                 `protobuf:"varint,4,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
-	ExecutionMillis uint64                 `protobuf:"varint,5,opt,name=execution_millis,json=executionMillis,proto3" json:"execution_millis,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Worker v0.1 portable receipt vocabulary. Host CPU, peak-memory, block-IO,
+	// accelerator and energy counters remain local policy/audit evidence and
+	// must not be silently mapped into these fields.
+	InputBytes      uint64 `protobuf:"varint,1,opt,name=input_bytes,json=inputBytes,proto3" json:"input_bytes,omitempty"`
+	OutputBytes     uint64 `protobuf:"varint,2,opt,name=output_bytes,json=outputBytes,proto3" json:"output_bytes,omitempty"`
+	InputTokens     uint64 `protobuf:"varint,3,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens    uint64 `protobuf:"varint,4,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	ExecutionMillis uint64 `protobuf:"varint,5,opt,name=execution_millis,json=executionMillis,proto3" json:"execution_millis,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }

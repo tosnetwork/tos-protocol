@@ -81,6 +81,28 @@ type edgeReceiptSigner struct {
 	beforeSign func(int32)
 }
 
+func TestCompletionReceiptUsageUsesExactWorkerV01Vocabulary(t *testing.T) {
+	usage := completionReceiptUsage(localrpc.InvocationUsage{
+		InputBytes: 1, OutputBytes: 2, InputTokens: 3,
+		OutputTokens: 4, ExecutionMillis: 5,
+	})
+	want := []protocol.UsageItem{
+		{Unit: "input_bytes", Quantity: 1},
+		{Unit: "output_bytes", Quantity: 2},
+		{Unit: "input_tokens", Quantity: 3},
+		{Unit: "output_tokens", Quantity: 4},
+		{Unit: "execution_millis", Quantity: 5},
+	}
+	if len(usage) != len(want) {
+		t.Fatalf("usage length=%d", len(usage))
+	}
+	for index := range want {
+		if usage[index] != want[index] {
+			t.Fatalf("usage[%d]=%#v want=%#v", index, usage[index], want[index])
+		}
+	}
+}
+
 func (s *edgeReceiptSigner) SignReceipt(
 	ctx context.Context,
 	payload []byte,

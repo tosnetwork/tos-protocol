@@ -67,6 +67,13 @@ admission check during Quote and creates the authoritative local reservation
 again during Invoke. Invoke uses the committed profile stored with the quote;
 it does not trust a payload or recompute a less restrictive caller profile.
 
+Worker v0.1 usage intentionally contains only input/output bytes, optional
+model token counts, and elapsed execution milliseconds. Runtime CPU time,
+peak memory, block IO, accelerator counters, and energy estimates are local
+admission/audit evidence, not portable receipt units in v0.1. A runtime must
+still enforce those local ceilings, but Edge must not silently reinterpret them
+as billable usage without a future versioned protocol and pricing rule.
+
 ## Evidence, freshness, and revision
 
 Evidence levels retain their base-protocol meanings. In particular,

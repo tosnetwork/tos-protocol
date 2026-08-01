@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
@@ -60,6 +61,13 @@ type ReceiptSignerClient struct {
 	slots             chan struct{}
 	expectedKeyID     string
 	expectedPublicKey ed25519.PublicKey
+
+	mutex     sync.Mutex
+	active    map[uint64]context.CancelFunc
+	nextID    uint64
+	closed    bool
+	requests  sync.WaitGroup
+	closeOnce sync.Once
 }
 
 type receiptSignerRequest struct {
@@ -111,6 +119,7 @@ func NewReceiptSignerClient(
 		slots:             make(chan struct{}, config.MaxConcurrent),
 		expectedKeyID:     config.ExpectedKeyID,
 		expectedPublicKey: expectedPublicKey,
+		active:            make(map[uint64]context.CancelFunc, config.MaxConcurrent),
 	}, nil
 }
 
@@ -121,7 +130,7 @@ func (c *ReceiptSignerClient) SignReceipt(
 	expiresAt time.Time,
 ) (identity.Envelope, error) {
 	if c == nil || nilHTTPClient(c.httpClient) || c.maxMessageBytes <= 0 ||
-		c.slots == nil {
+		c.slots == nil || c.active == nil {
 		return identity.Envelope{}, errors.New("invalid receipt signer client")
 	}
 	if ctx == nil {
@@ -148,14 +157,13 @@ func (c *ReceiptSignerClient) SignReceipt(
 	if len(encoded) > c.maxMessageBytes {
 		return identity.Envelope{}, errors.New("receipt signing request exceeds message limit")
 	}
-	select {
-	case c.slots <- struct{}{}:
-		defer func() { <-c.slots }()
-	case <-ctx.Done():
-		return identity.Envelope{}, ctx.Err()
+	requestContext, finish, err := c.beginRequest(ctx)
+	if err != nil {
+		return identity.Envelope{}, err
 	}
+	defer finish()
 	request, err := http.NewRequestWithContext(
-		ctx, http.MethodPost, "http://unix"+ReceiptSignerPath,
+		requestContext, http.MethodPost, "http://unix"+ReceiptSignerPath,
 		bytes.NewReader(encoded),
 	)
 	if err != nil {
@@ -167,6 +175,9 @@ func (c *ReceiptSignerClient) SignReceipt(
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return identity.Envelope{}, contextErr
+		}
+		if requestContext.Err() != nil {
+			return identity.Envelope{}, errors.New("receipt signer client is closed")
 		}
 		return identity.Envelope{}, errors.New("receipt signer unavailable")
 	}
@@ -218,7 +229,7 @@ func (c *ReceiptSignerClient) SignReceipt(
 // with signing calls and never retries.
 func (c *ReceiptSignerClient) CheckReady(ctx context.Context) error {
 	if c == nil || nilHTTPClient(c.httpClient) || c.maxMessageBytes <= 0 ||
-		c.slots == nil {
+		c.slots == nil || c.active == nil {
 		return errors.New("invalid receipt signer client")
 	}
 	if ctx == nil {
@@ -227,14 +238,13 @@ func (c *ReceiptSignerClient) CheckReady(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	select {
-	case c.slots <- struct{}{}:
-		defer func() { <-c.slots }()
-	case <-ctx.Done():
-		return ctx.Err()
+	requestContext, finish, err := c.beginRequest(ctx)
+	if err != nil {
+		return err
 	}
+	defer finish()
 	request, err := http.NewRequestWithContext(
-		ctx, http.MethodGet, "http://unix"+ReceiptSignerHealthPath, nil,
+		requestContext, http.MethodGet, "http://unix"+ReceiptSignerHealthPath, nil,
 	)
 	if err != nil {
 		return errors.New("construct receipt signer readiness request")
@@ -244,6 +254,9 @@ func (c *ReceiptSignerClient) CheckReady(ctx context.Context) error {
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr
+		}
+		if requestContext.Err() != nil {
+			return errors.New("receipt signer client is closed")
 		}
 		return errors.New("receipt signer unavailable")
 	}
@@ -276,6 +289,79 @@ func (c *ReceiptSignerClient) CheckReady(ctx context.Context) error {
 			!bytes.Equal(publicKey, c.expectedPublicKey)) {
 		return errors.New("receipt signer identity does not match startup policy")
 	}
+	return nil
+}
+
+func (c *ReceiptSignerClient) beginRequest(
+	ctx context.Context,
+) (context.Context, func(), error) {
+	select {
+	case c.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+	requestContext, cancel := context.WithCancel(ctx)
+	c.mutex.Lock()
+	if c.closed {
+		c.mutex.Unlock()
+		cancel()
+		<-c.slots
+		return nil, nil, errors.New("receipt signer client is closed")
+	}
+	var id uint64
+	for {
+		c.nextID++
+		if c.nextID == 0 {
+			c.nextID++
+		}
+		id = c.nextID
+		if _, exists := c.active[id]; !exists {
+			break
+		}
+	}
+	c.active[id] = cancel
+	c.requests.Add(1)
+	c.mutex.Unlock()
+	var once sync.Once
+	finish := func() {
+		once.Do(func() {
+			c.mutex.Lock()
+			delete(c.active, id)
+			c.mutex.Unlock()
+			cancel()
+			<-c.slots
+			c.requests.Done()
+		})
+	}
+	return requestContext, finish, nil
+}
+
+// Close rejects new operations, cancels active Unix-socket requests, waits for
+// them to leave the bounded client admission set, and closes idle transports.
+// It is safe to call more than once.
+func (c *ReceiptSignerClient) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeOnce.Do(func() {
+		c.mutex.Lock()
+		c.closed = true
+		cancels := make([]context.CancelFunc, 0, len(c.active))
+		for _, cancel := range c.active {
+			cancels = append(cancels, cancel)
+		}
+		c.mutex.Unlock()
+		for _, cancel := range cancels {
+			cancel()
+		}
+		if c.httpClient != nil {
+			c.httpClient.CloseIdleConnections()
+		}
+		c.requests.Wait()
+		if c.httpClient != nil {
+			c.httpClient.CloseIdleConnections()
+		}
+	})
 	return nil
 }
 

@@ -335,6 +335,55 @@ func TestReceiptSignerClientBoundsConcurrentRequests(t *testing.T) {
 	}
 }
 
+func TestReceiptSignerClientCloseCancelsAndRejectsRequests(t *testing.T) {
+	entered := make(chan struct{}, 1)
+	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(
+		func(_ http.ResponseWriter, request *http.Request) {
+			entered <- struct{}{}
+			<-request.Context().Done()
+		},
+	))
+	defer stop()
+	client, err := NewReceiptSignerClient(
+		DefaultReceiptSignerClientConfig(socketPath),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.SignReceipt(
+			context.Background(), []byte("active"), now, now.Add(time.Minute),
+		)
+		done <- err
+	}()
+	<-entered
+	if err := client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err == nil || err.Error() != "receipt signer client is closed" {
+			t.Fatalf("active close error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("client close did not cancel active signing")
+	}
+	if _, err := client.SignReceipt(
+		context.Background(), []byte("new"), now, now.Add(time.Minute),
+	); err == nil || err.Error() != "receipt signer client is closed" {
+		t.Fatalf("closed client signing error=%v", err)
+	}
+	if err := client.CheckReady(context.Background()); err == nil ||
+		err.Error() != "receipt signer client is closed" {
+		t.Fatalf("closed client readiness error=%v", err)
+	}
+}
+
 func TestReceiptSignerReadinessRejectsMalformedResponses(t *testing.T) {
 	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

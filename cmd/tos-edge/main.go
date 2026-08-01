@@ -139,6 +139,7 @@ func main() {
 		)
 	}
 	var receiptReadiness edge.ReadinessChecker
+	var receiptSignerClient *localrpc.ReceiptSignerClient
 	if receiptSignerConfigured {
 		clientConfig := localrpc.DefaultReceiptSignerClientConfig(receiptSignerSocket)
 		clientConfig.ExpectedKeyID = receiptSignerKeyID
@@ -155,8 +156,16 @@ func main() {
 		if clientErr != nil {
 			log.Fatal("receipt signer startup preflight failed")
 		}
+		receiptSignerClient = client
 		receiptReadiness = client
 		log.Printf("receipt signer ready on private Unix socket")
+	}
+	if receiptSignerClient != nil {
+		defer func() {
+			if closeErr := receiptSignerClient.Close(); closeErr != nil {
+				log.Printf("close receipt signer client: %v", closeErr)
+			}
+		}()
 	}
 	var core *edge.Core
 	if requestJournalPath != "" {

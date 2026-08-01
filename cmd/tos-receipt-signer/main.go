@@ -41,6 +41,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer func() {
+		if closeErr := handler.Close(); closeErr != nil {
+			log.Printf("close receipt signer key: %v", closeErr)
+		}
+	}()
 	listener, err := receiptsigner.ListenPrivateUnix(socketPath)
 	if err != nil {
 		log.Fatal(err)

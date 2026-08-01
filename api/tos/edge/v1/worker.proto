@@ -188,6 +188,9 @@ message InvokeRequest {
 }
 
 message Usage {
+  // Worker v0.1 portable receipt vocabulary. Host CPU, peak-memory, block-IO,
+  // accelerator and energy counters remain local policy/audit evidence and
+  // must not be silently mapped into these fields.
   uint64 input_bytes = 1;
   uint64 output_bytes = 2;
   uint64 input_tokens = 3;

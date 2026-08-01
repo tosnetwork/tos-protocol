@@ -229,7 +229,12 @@ does not replace current-manifest role and revocation verification. HSM
 integration and automatic key rotation remain deployment work. Optional
 receipt-signer configuration performs a side-effect-free startup health
 preflight and adds the private signer to `/readyz`; paid public ingress remains
-disabled.
+disabled. Graceful sidecar shutdown stops new signing, synchronizes with active
+signatures, and clears the software private-key buffer before exit; this is
+best-effort process-memory hygiene, not HSM-grade erasure.
+Edge synchronously cancels and closes its bounded signer client during shutdown,
+so the private Unix transport does not remain an implicit process-lifetime
+resource.
 The private RPC now
 defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A

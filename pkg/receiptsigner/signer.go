@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
@@ -34,11 +35,13 @@ type Config struct {
 }
 
 type Handler struct {
+	mutex           sync.RWMutex
 	keyID           string
 	privateKey      ed25519.PrivateKey
 	maxMessageBytes int64
 	slots           chan struct{}
 	publicKey       string
+	closed          bool
 }
 
 type signRequest struct {
@@ -79,12 +82,17 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 			http.Error(response, "invalid health request", http.StatusBadRequest)
 			return
 		}
+		keyID, publicKey, ready := h.identity()
+		if !ready {
+			http.Error(response, "signer unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		response.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(response).Encode(struct {
 			Status    string `json:"status"`
 			KeyID     string `json:"keyId"`
 			PublicKey string `json:"publicKey"`
-		}{Status: "ready", KeyID: h.keyID, PublicKey: h.publicKey})
+		}{Status: "ready", KeyID: keyID, PublicKey: publicKey})
 		return
 	}
 	if request.URL.Path != localrpc.ReceiptSignerPath {
@@ -128,10 +136,13 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.Error(response, "invalid request", http.StatusBadRequest)
 		return
 	}
-	envelope, err := identity.Sign(
-		h.privateKey, protocol.ReceiptDomain, h.keyID,
+	envelope, err := h.sign(
 		append([]byte(nil), input.Payload...), issuedAt, expiresAt,
 	)
+	if errors.Is(err, errSignerClosed) {
+		http.Error(response, "signer unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		http.Error(response, "signing failed", http.StatusInternalServerError)
 		return
@@ -143,4 +154,54 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 	}
 	response.Header().Set("Content-Type", "application/json")
 	_, _ = response.Write(encoded)
+}
+
+var errSignerClosed = errors.New("receipt signer is closed")
+
+func (h *Handler) sign(
+	payload []byte,
+	issuedAt time.Time,
+	expiresAt time.Time,
+) (identity.Envelope, error) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	if h.closed || len(h.privateKey) != ed25519.PrivateKeySize {
+		return identity.Envelope{}, errSignerClosed
+	}
+	return identity.Sign(
+		h.privateKey, protocol.ReceiptDomain, h.keyID,
+		payload, issuedAt, expiresAt,
+	)
+}
+
+// Close waits for active signatures to leave the key read-side critical
+// section, clears the software private-key buffer, and permanently disables
+// both readiness and signing. It is safe to call more than once.
+func (h *Handler) Close() error {
+	if h == nil {
+		return nil
+	}
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	if h.closed {
+		return nil
+	}
+	for index := range h.privateKey {
+		h.privateKey[index] = 0
+	}
+	h.privateKey = nil
+	h.closed = true
+	return nil
+}
+
+func (h *Handler) identity() (string, string, bool) {
+	if h == nil {
+		return "", "", false
+	}
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	if h.closed || len(h.privateKey) != ed25519.PrivateKeySize {
+		return "", "", false
+	}
+	return h.keyID, h.publicKey, true
 }
