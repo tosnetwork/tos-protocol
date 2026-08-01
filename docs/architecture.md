@@ -58,7 +58,11 @@ the concrete Worker client policy before the atomic claim. Exact
 reconstruction replays across restart and any mapper drift conflicts. Mapper
 selection uses an immutable startup registry bounded to 128 exact
 profile/version/extension/operation selectors, with no wildcard fallback or
-request-driven state. The dispatch coordinator invokes only a newly committed
+request-driven state. A constructor-validated deployment plan narrows that
+registry to the exact declared selector allowlist required by every paid
+claim, recovery, and dispatch path; installed but undeclared mappers remain
+unreachable.
+The dispatch coordinator invokes only a newly committed
 claim. A replay performs only a binding-preserving task lookup, and an RPC
 failure produces an `uncertain` outcome that retains the claim for recovery
 rather than retrying. `NOT_FOUND` is an observation, not permission to
@@ -92,7 +96,7 @@ no invocation route.
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
 | Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, atomic bounded recovery context, post-expiry recheck, bounded batch coordinator, adaptive scheduler and binary runtime composition implemented; refund reconciliation remains |
 | Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results and zero-charge failed/canceled/timed-out outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; production signer, profile refund/charging policy and public delivery remain |
-| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, exact startup capability inspection, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; `tos-ai` owns the first reviewed text-generation mapper candidate, while deployment composition remains explicit |
+| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, constructor-validated deployment plan required by every paid claim/recovery/dispatch path, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; `tos-ai` owns the first reviewed text-generation mapper candidate and constructs its plan from a private runtime capability snapshot, while public ingress remains disabled |
 | Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment plus bounded execution-authorization persistence, reorganization dispatch gate, exact paid execution claim, quote-expiry-safe Worker recovery, full signed-receipt terminal application/replay, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded TOS success/error envelopes plus strict-majority authority, key and native-payment adapters, startup preflight and freshness-bounded readiness implemented and three-node tested |

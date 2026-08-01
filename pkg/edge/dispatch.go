@@ -89,7 +89,7 @@ func (c *Core) DispatchRegisteredPaidExecution(
 	expectedRevision uint64,
 	paymentAuthorization authorization.AuthorizedPayment,
 	intent []byte,
-	registry *ProfileInvocationRegistry,
+	plan *ProfileInvocationPlan,
 	worker *localrpc.WorkerClient,
 ) (ExecutionDispatch, error) {
 	claimed, err := c.MapAndClaimRegisteredPaidExecution(
@@ -98,7 +98,7 @@ func (c *Core) DispatchRegisteredPaidExecution(
 		expectedRevision,
 		paymentAuthorization,
 		intent,
-		registry,
+		plan,
 		worker,
 	)
 	return dispatchClaimedExecution(ctx, claimed, worker, err)
@@ -112,14 +112,14 @@ func (c *Core) DispatchRecoveredPaidExecution(
 	ctx context.Context,
 	scope journal.Scope,
 	intent []byte,
-	registry *ProfileInvocationRegistry,
+	plan *ProfileInvocationPlan,
 	worker *localrpc.WorkerClient,
 ) (ExecutionDispatch, error) {
 	claimed, err := c.MapAndClaimRecoveredPaidExecution(
 		ctx,
 		scope,
 		intent,
-		registry,
+		plan,
 		worker,
 	)
 	return dispatchClaimedExecution(ctx, claimed, worker, err)

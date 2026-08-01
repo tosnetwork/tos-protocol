@@ -30,9 +30,13 @@ This table reserves the identifier and records where its normative schema,
 vectors, limits, privacy rules, and mapper live. It does not import vertical
 business logic into this module or cause an Edge process to load the mapper.
 An operator must still install the exact reviewed mapper registration at
-startup. `ProfileInvocationRegistry.Supports` can be used by composition code
-to fail before advertising a profile whose exact version, extension set, and
-operation are absent.
+startup. Production composition should use `NewProfileInvocationPlan`, which
+constructs the registry and validates one bounded unique startup selector set
+in a single operation. The plan exposes only selectors that are both installed
+and declared, and rejects invalid, duplicate, or missing selectors without
+version or extension fallback. `ProfileInvocationRegistry.Supports` and
+`ValidateRequirements` remain available for registry inspection and tooling;
+they do not replace the deployment plan at a paid execution boundary.
 
 Edge runtime mapper registration is a separate local deployment concern. The
 base implementation accepts only an immutable startup set of at most 128

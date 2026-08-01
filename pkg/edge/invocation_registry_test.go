@@ -71,6 +71,27 @@ func TestProfileInvocationRegistryUsesExactCanonicalSelector(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
+			if !registry.Supports(
+				"tos.ai.inference",
+				"0.1.0",
+				[]string{"urn:tos:extension:z", "urn:tos:extension:a"},
+				"invoke",
+			) {
+				errorsSeen <- errors.New("concurrent exact selector lookup failed")
+				return
+			}
+			if err := registry.ValidateRequirements(
+				[]ProfileInvocationRequirement{{
+					ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+					ProfileExtensions: []string{
+						"urn:tos:extension:a", "urn:tos:extension:z",
+					},
+					Operation: "invoke",
+				}},
+			); err != nil {
+				errorsSeen <- err
+				return
+			}
 			resolved, err := registry.resolve(material)
 			if err != nil {
 				errorsSeen <- err
@@ -164,7 +185,156 @@ func TestProfileInvocationRegistryRejectsInvalidOrAmbiguousEntries(t *testing.T)
 	}
 }
 
-func TestCoreClaimsOnlyRegisteredPaidProfileInvocation(t *testing.T) {
+func TestProfileInvocationRegistryValidatesBoundedExactRequirements(t *testing.T) {
+	mapper := ProfileInvocationMapperFunc(func(
+		context.Context,
+		ProfileInvocationInput,
+	) (ProfileInvocationOutput, error) {
+		return ProfileInvocationOutput{Model: "model"}, nil
+	})
+	registry, err := NewProfileInvocationRegistry([]ProfileInvocationRegistration{
+		{
+			ProfileID: "tos.ai.text-generation", ProfileVersion: "0.1.0",
+			Operation: "generate", Mapper: mapper,
+		},
+		{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.2.0",
+			ProfileExtensions: []string{"urn:tos:extension:a"},
+			Operation:         "embed", Mapper: mapper,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requirements := []ProfileInvocationRequirement{
+		{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.2.0",
+			ProfileExtensions: []string{"urn:tos:extension:a"},
+			Operation:         "embed",
+		},
+		{
+			ProfileID: "tos.ai.text-generation", ProfileVersion: "0.1.0",
+			Operation: "generate",
+		},
+	}
+	if err := registry.ValidateRequirements(requirements); err != nil {
+		t.Fatal(err)
+	}
+	requirements[0].ProfileExtensions[0] = "urn:tos:extension:b"
+	if err := registry.ValidateRequirements(requirements); err == nil {
+		t.Fatal("missing exact mapper requirement was accepted")
+	}
+	if err := registry.ValidateRequirements(nil); err == nil {
+		t.Fatal("empty requirements were accepted")
+	}
+	duplicate := []ProfileInvocationRequirement{
+		requirements[1], requirements[1],
+	}
+	if err := registry.ValidateRequirements(duplicate); err == nil {
+		t.Fatal("duplicate requirements were accepted")
+	}
+	overLimit := make(
+		[]ProfileInvocationRequirement,
+		MaxProfileInvocationRequirements+1,
+	)
+	if err := registry.ValidateRequirements(overLimit); err == nil {
+		t.Fatal("oversized requirements were accepted")
+	}
+	var nilRegistry *ProfileInvocationRegistry
+	if err := nilRegistry.ValidateRequirements(requirements); err == nil {
+		t.Fatal("nil registry accepted requirements")
+	}
+}
+
+func TestProfileInvocationPlanEnablesOnlyDeclaredSelectors(t *testing.T) {
+	mapper := ProfileInvocationMapperFunc(func(
+		context.Context,
+		ProfileInvocationInput,
+	) (ProfileInvocationOutput, error) {
+		return ProfileInvocationOutput{Model: "model"}, nil
+	})
+	registrations := []ProfileInvocationRegistration{
+		{
+			ProfileID: "tos.ai.text-generation", ProfileVersion: "0.1.0",
+			Operation: "generate", Mapper: mapper,
+		},
+		{
+			ProfileID: "tos.ai.embedding", ProfileVersion: "0.1.0",
+			Operation: "embed", Mapper: mapper,
+		},
+	}
+	plan, err := NewProfileInvocationPlan(
+		registrations,
+		[]ProfileInvocationRequirement{{
+			ProfileID: "tos.ai.text-generation", ProfileVersion: "0.1.0",
+			Operation: "generate",
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Len() != 1 || !plan.Supports(
+		"tos.ai.text-generation", "0.1.0", nil, "generate",
+	) {
+		t.Fatalf("required selector not enabled: length = %d", plan.Len())
+	}
+	if plan.Supports("tos.ai.embedding", "0.1.0", nil, "embed") {
+		t.Fatal("installed but undeclared selector was enabled")
+	}
+	if _, err := plan.resolve(authorization.ReceiptInvocationMaterial{
+		ProfileID: "tos.ai.embedding", ProfileVersion: "0.1.0",
+		Operation: "embed",
+	}); err == nil {
+		t.Fatal("installed but undeclared selector resolved through plan")
+	}
+	if _, err := NewProfileInvocationPlan(
+		registrations,
+		[]ProfileInvocationRequirement{{
+			ProfileID: "tos.ai.unknown", ProfileVersion: "0.1.0",
+			Operation: "invoke",
+		}},
+	); err == nil {
+		t.Fatal("plan with missing mapper was accepted")
+	}
+	var nilPlan *ProfileInvocationPlan
+	if nilPlan.Len() != 0 || nilPlan.Supports(
+		"tos.ai.text-generation", "0.1.0", nil, "generate",
+	) {
+		t.Fatal("nil plan reported an enabled selector")
+	}
+
+	const readers = 64
+	var wait sync.WaitGroup
+	failures := make(chan error, readers)
+	for range readers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			if !plan.Supports(
+				"tos.ai.text-generation", "0.1.0", nil, "generate",
+			) {
+				failures <- errors.New("concurrent plan lookup failed")
+				return
+			}
+			if _, err := plan.resolve(authorization.ReceiptInvocationMaterial{
+				ProfileID: "tos.ai.text-generation", ProfileVersion: "0.1.0",
+				Operation: "generate",
+			}); err != nil {
+				failures <- err
+			}
+		}()
+	}
+	wait.Wait()
+	close(failures)
+	for err := range failures {
+		t.Error(err)
+	}
+	if plan.Len() != 1 {
+		t.Fatalf("concurrent lookups changed plan length: %d", plan.Len())
+	}
+}
+
+func TestCoreClaimsOnlyPlannedPaidProfileInvocation(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "requests.db"))
 	config.CleanupInterval = time.Hour
@@ -202,10 +372,21 @@ func TestCoreClaimsOnlyRegisteredPaidProfileInvocation(t *testing.T) {
 			Model: "registered-model", Payload: []byte("worker-payload"),
 		}, nil
 	})
-	wrongRegistry, err := NewProfileInvocationRegistry(
-		[]ProfileInvocationRegistration{{
+	registrations := []ProfileInvocationRegistration{
+		{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+			Operation: "invoke", Mapper: mapper,
+		},
+		{
 			ProfileID: "tos.ai.inference", ProfileVersion: "0.2.0",
 			Operation: "invoke", Mapper: mapper,
+		},
+	}
+	wrongPlan, err := NewProfileInvocationPlan(
+		registrations,
+		[]ProfileInvocationRequirement{{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.2.0",
+			Operation: "invoke",
 		}},
 	)
 	if err != nil {
@@ -213,28 +394,32 @@ func TestCoreClaimsOnlyRegisteredPaidProfileInvocation(t *testing.T) {
 	}
 	if _, err := core.MapAndClaimRegisteredPaidExecution(
 		context.Background(), scope, request.Revision, authorized,
-		intent, wrongRegistry, worker,
+		intent, wrongPlan, worker,
 	); err == nil {
-		t.Fatal("unregistered exact selector was claimed")
+		t.Fatal("selector outside the deployment plan was claimed")
 	}
 	if mapperCalls != 0 {
-		t.Fatal("nonmatching registered mapper was called")
+		t.Fatal("mapper outside the deployment plan was called")
 	}
 	if _, err := core.Execution(scope); !errors.Is(err, journal.ErrNotFound) {
 		t.Fatalf("failed registry lookup persisted execution: %v", err)
 	}
-	registry, err := NewProfileInvocationRegistry(
-		[]ProfileInvocationRegistration{{
+	plan, err := NewProfileInvocationPlan(
+		registrations,
+		[]ProfileInvocationRequirement{{
 			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
-			Operation: "invoke", Mapper: mapper,
+			Operation: "invoke",
 		}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if plan.Supports("tos.ai.inference", "0.2.0", nil, "invoke") {
+		t.Fatal("unused installed mapper was enabled")
+	}
 	claimed, err := core.MapAndClaimRegisteredPaidExecution(
 		context.Background(), scope, request.Revision, authorized,
-		intent, registry, worker,
+		intent, plan, worker,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -243,5 +428,15 @@ func TestCoreClaimsOnlyRegisteredPaidProfileInvocation(t *testing.T) {
 		claimed.Request.Model != "registered-model" ||
 		string(claimed.Request.Payload) != "worker-payload" {
 		t.Fatalf("unexpected registered claim: %#v", claimed)
+	}
+	recovered, err := core.MapAndClaimRecoveredPaidExecution(
+		context.Background(), scope, intent, plan, worker,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mapperCalls != 2 || recovered.Disposition != journal.ExecutionReplay ||
+		recovered.Request.TaskId != claimed.Request.TaskId {
+		t.Fatalf("unexpected planned recovery: %#v", recovered)
 	}
 }

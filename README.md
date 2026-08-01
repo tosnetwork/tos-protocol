@@ -169,13 +169,20 @@ signed quote, lets a vertical mapper return only its model and payload,
 derives all security fields in Edge, validates the complete request against
 the concrete Worker client before changing durable state, and
 deterministically replays the same task after restart. A startup-only,
-immutable registry selects at most 128 mappers by exact profile ID, version,
+immutable registry holds at most 128 mappers by exact profile ID, version,
 extension set, and operation; it has no wildcard fallback or request-driven
-growth. No production vertical mapper is included in this repository.
+growth. Production composition wraps it in an immutable deployment plan whose
+constructor requires a bounded exact selector allowlist. Only mappers that are
+both installed and declared can enter any paid claim, recovery, or dispatch
+path. No production vertical mapper is included in this repository.
 The first externally maintained mapper candidate is
 `tos.ai.text-generation` v0.1.0 in `tosnetwork/tos-ai`; the local registry can
 verify its exact version, extension set, and operation before a deployment
 advertises it, but this base module never auto-loads vertical code.
+Deployment composition constructs the mapper registry and validates its
+bounded set of unique required selectors in one operation; any invalid,
+duplicate, or missing exact mapper aborts startup without version or extension
+fallback. Installing unused mapper code does not silently enable it.
 The internal dispatch coordinator now performs the only safe next action:
 one newly committed claim may call `Invoke` once, while every exact replay
 uses read-only `GetTask`, including after the execution deadline while bounded

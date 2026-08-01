@@ -243,9 +243,9 @@ func TestRecoveredExecutionRejectsReorganizedPayment(t *testing.T) {
 	}
 }
 
-func restartRecoveryRegistry(t *testing.T) *ProfileInvocationRegistry {
+func restartRecoveryRegistry(t *testing.T) *ProfileInvocationPlan {
 	t.Helper()
-	registry, err := NewProfileInvocationRegistry(
+	plan, err := NewProfileInvocationPlan(
 		[]ProfileInvocationRegistration{{
 			ProfileID:      "tos.ai.inference",
 			ProfileVersion: "0.1.0",
@@ -265,9 +265,13 @@ func restartRecoveryRegistry(t *testing.T) *ProfileInvocationRegistry {
 				}, nil
 			}),
 		}},
+		[]ProfileInvocationRequirement{{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+			Operation: "invoke",
+		}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return registry
+	return plan
 }

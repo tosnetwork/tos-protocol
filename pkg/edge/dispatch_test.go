@@ -392,7 +392,7 @@ func prepareDispatchRequest(
 	journal.Scope,
 	authorization.AuthorizedPayment,
 	journal.Record,
-	*ProfileInvocationRegistry,
+	*ProfileInvocationPlan,
 	coreSessionFixture,
 ) {
 	t.Helper()
@@ -417,7 +417,7 @@ func prepareDispatchRequest(
 	request := applyAuthorizedPaymentForCompletion(
 		t, core, scope, authorized, now,
 	)
-	registry, err := NewProfileInvocationRegistry(
+	plan, err := NewProfileInvocationPlan(
 		[]ProfileInvocationRegistration{{
 			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
 			Operation: "invoke",
@@ -430,12 +430,16 @@ func prepareDispatchRequest(
 				}, nil
 			}),
 		}},
+		[]ProfileInvocationRequirement{{
+			ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",
+			Operation: "invoke",
+		}},
 	)
 	if err != nil {
 		core.Close()
 		t.Fatal(err)
 	}
-	return core, scope, authorized, request, registry, fixture
+	return core, scope, authorized, request, plan, fixture
 }
 
 func startDispatchWorkerClient(
