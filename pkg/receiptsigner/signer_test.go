@@ -373,6 +373,88 @@ func TestPrivateSeedAndSocketPermissions(t *testing.T) {
 	}
 }
 
+func TestSignerRotationRejectsOldPinnedIdentity(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	socketPath := filepath.Join(directory, "rotating-signer.sock")
+	oldPublic, oldPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newPublic, newPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := func(keyID string, privateKey ed25519.PrivateKey) func() {
+		handler, handlerErr := NewHandler(Config{
+			KeyID: keyID, PrivateKey: privateKey,
+			MaxMessageBytes: DefaultMaxMessageBytes, MaxConcurrent: 2,
+		})
+		if handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		listener, listenErr := ListenPrivateUnix(socketPath)
+		if listenErr != nil {
+			t.Fatal(listenErr)
+		}
+		server := &http.Server{Handler: handler, ReadHeaderTimeout: time.Second}
+		done := make(chan error, 1)
+		go func() { done <- server.Serve(listener) }()
+		return func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_ = server.Shutdown(ctx)
+			<-done
+			if removeErr := os.Remove(socketPath); removeErr != nil &&
+				!os.IsNotExist(removeErr) {
+				t.Fatal(removeErr)
+			}
+		}
+	}
+	clientFor := func(keyID string, publicKey ed25519.PublicKey) *localrpc.ReceiptSignerClient {
+		config := localrpc.DefaultReceiptSignerClientConfig(socketPath)
+		config.ExpectedKeyID = keyID
+		config.ExpectedPublicKey = base64.RawURLEncoding.EncodeToString(publicKey)
+		client, clientErr := localrpc.NewReceiptSignerClient(config)
+		if clientErr != nil {
+			t.Fatal(clientErr)
+		}
+		return client
+	}
+
+	stopOld := start("receipt-key-old", oldPrivate)
+	oldClient := clientFor("receipt-key-old", oldPublic)
+	if err := oldClient.CheckReady(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_ = oldClient.Close()
+	stopOld()
+
+	stopNew := start("receipt-key-new", newPrivate)
+	defer stopNew()
+	staleClient := clientFor("receipt-key-old", oldPublic)
+	if err := staleClient.CheckReady(context.Background()); err == nil {
+		t.Fatal("rotated signer was accepted under the old pinned identity")
+	}
+	_ = staleClient.Close()
+	newClient := clientFor("receipt-key-new", newPublic)
+	defer newClient.Close()
+	if err := newClient.CheckReady(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	issuedAt := time.UnixMilli(1_800_000_000_000)
+	envelope, err := newClient.SignReceipt(
+		context.Background(), []byte("post-rotation receipt"),
+		issuedAt, issuedAt.Add(time.Minute),
+	)
+	if err != nil || envelope.KeyID != "receipt-key-new" ||
+		envelope.Verify(newPublic, protocol.ReceiptDomain, issuedAt) != nil {
+		t.Fatalf("post-rotation envelope=%#v err=%v", envelope, err)
+	}
+}
+
 func TestHandlerConfigurationBounds(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

@@ -55,10 +55,16 @@ requirements remain in `docs/`.
   fail-closed startup, Worker/signer outage readiness, and the local bounded
   anonymous-input rehearsal recorded in
   `docs/local-three-node-ai-edge-m1-evidence-2026-08-01.md`.
+- Independent-module, non-cached race/static gates; byte-identical command
+  builds; session issuance/revocation; signer rotation identity drift; TLS
+  malformed-input load; and the complete local closure matrix recorded in
+  `docs/local-production-gate-closure-2026-08-01.md`.
 
 ## In Progress
 
-The active milestone is P2, the immutable v0.1 production candidate:
+The active milestone is P2, the immutable v0.1 production candidate. All
+identified locally executable engineering sub-gates are complete; the
+remaining work is deployment policy and external evidence:
 
 - keep `tos-ai` pinned to the resulting immutable protocol revision, rerun
   both repositories independently and in CI, and prepare the release pair;

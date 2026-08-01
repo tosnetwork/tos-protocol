@@ -17,13 +17,16 @@ Status meanings:
 - **Deferred**: the claim is outside non-streaming v0.1 and must not be
   advertised as part of this release.
 
-Current immutable integration pair:
+Last deployed M1 integration pair:
 
 - `tos-protocol`: `c1e33bc6208e9d275fe50f220e471263726fd357`
 - `tos-ai`: `515a5cabdec44a57256ddf76bbd590d413778360`
 
-Both revisions passed their independent GitHub CI runs. They are integration
-commits, not signed v0.1 release tags.
+Both revisions passed their independent GitHub CI runs and produced the local
+M1 deployment evidence. They are the deployed evidence baseline, not the
+current repository HEADs or signed v0.1 release tags. The final immutable
+candidate pair must be recorded only after the local-closure changes pass
+remote CI and are deliberately tagged.
 
 This document separates repository work from claims that can be established
 only by a real TOS Network and physical AI terminal deployment. “Implemented”
@@ -73,23 +76,38 @@ This evidence closes the local integration portion of M1 only. The target
 hardware, custody, public perimeter, long-duration soak and release rows below
 are not Passed.
 
+## Local engineering closure
+
+All implementation, deterministic automation and fault-injection work that is
+applicable to non-streaming v0.1 and executable on the current host has been
+completed. This includes independent-module race/static checks, reproducible
+builds, session issuance and signer-rotation coverage, simulated NVIDIA
+degradation/recovery, TLS malformed-input load, and another live local
+three-node discovery-to-Receipt run. See
+[`local-production-gate-closure-2026-08-01.md`](local-production-gate-closure-2026-08-01.md).
+
+This closes local engineering sub-gates, not the production rows below. Status
+remains Partial or Open whenever the remaining evidence requires selected
+operator policy, real NVIDIA hardware, exact privileged isolation, HSM
+custody, public infrastructure, an independent review, or release approval.
+
 ## Production-gate ledger
 
 | ID | Gate | Status | Evidence required before the production claim | Current evidence | Last verified |
 |---|---|---|---|---|---|
-| PG-01 | Immutable release pair | Partial | Tag the compatible revisions, publish a compatibility matrix and rollback procedure, and produce reproducible signed artifacts. | Exact protocol pin and independent CI passed: [protocol CI](https://github.com/tosnetwork/tos-protocol/actions/runs/30717664628), [AI CI](https://github.com/tosnetwork/tos-ai/actions/runs/30717705818). No signed v0.1 tag or artifact exists. | 2026-08-01 |
+| PG-01 | Immutable release pair | Partial | Tag the compatible revisions, publish a compatibility matrix and rollback procedure, and produce reproducible signed artifacts. | Exact protocol pin and independent CI passed; byte-identical local builds are now enforced by `make reproducible-builds`. No signed v0.1 tag or artifact exists. | 2026-08-01 |
 | PG-02 | Live chain authority | Partial | Deploy reviewed Agent Account/service contracts behind at least three independent RPC endpoints and demonstrate controller rotation, client-key revocation, stale-node rejection, finality and payment-reorganization behavior. | The [local M1 report](local-three-node-ai-edge-m1-evidence-2026-08-01.md) proves three-node strict-majority authority, client-key resolution and finalized native payment, but not the remaining rotation/reorganization cases. | 2026-08-01 |
-| PG-03 | Key custody | Partial | Complete production Quote/Receipt key ceremonies, bind manifest roles to sidecars or HSMs, and rehearse rotation, revocation, backup, restart and unavailable-signer behavior without reusing wallet-owner keys. | Purpose-fixed software sidecars, response revalidation and unavailable-signer readiness were tested locally; no production ceremony or HSM evidence exists. | 2026-08-01 |
+| PG-03 | Key custody | Partial | Complete production Quote/Receipt key ceremonies, bind manifest roles to sidecars or HSMs, and rehearse rotation, revocation, backup, restart and unavailable-signer behavior without reusing wallet-owner keys. | Purpose-fixed software sidecars, response revalidation, unavailable-signer readiness and pinned-identity rotation rejection were tested locally; no production ceremony or HSM evidence exists. | 2026-08-01 |
 | PG-04 | Public authentication and read access | Partial | Select, implement and audit the deployment-owned session/Quote issuance ceremony and concrete Action-status/Receipt-read authorizers. | Session issuance plus authenticated, non-enumerating read handlers exist. Operator identity, wallet challenge, mTLS, KYC or gateway policy remains a deployment choice. | 2026-08-01 |
 | PG-05 | Settlement policy | Partial | Deploy the production payment destination and document full-charge or independently audited refund/reconciliation rules, including restart behavior. | Exact finalized payment and full-charge Receipt behavior passed locally. A Receipt is not an on-chain refund and no production refund policy has been certified. | 2026-08-01 |
-| PG-06 | Tier 1 NVIDIA terminal | Open | Certify the supported driver/runtime matrix, model load, cold start, sustained inference, thermal/power behavior and owner-priority operation on the selected Linux/NVIDIA terminal class. | The M1 host had no NVIDIA device and intentionally used the development mock executor. | 2026-08-01 |
+| PG-06 | Tier 1 NVIDIA terminal | Open | Certify the supported driver/runtime matrix, model load, cold start, sustained inference, thermal/power behavior and owner-priority operation on the selected Linux/NVIDIA terminal class. | Mock telemetry and end-to-end admission now cover VRAM, thermal/power degradation, GPU loss and recovery. The host has no NVIDIA device, so this remains simulation rather than terminal evidence. | 2026-08-01 |
 | PG-07 | Physical execution isolation | Partial | Run lifecycle and cleanup tests on the exact kernel, cgroup v2, containerd, runc, seccomp, namespace, filesystem and NVIDIA device configuration. Prove no residual workload objects after success, failure, cancellation or restart. | CPU-only, preloaded-image, `network=none` containerd code and automated lifecycle tests exist; target-host and GPU isolation are uncertified. | 2026-08-01 |
 | PG-08 | Model and update supply chain | Partial | Provision real trust roots and signed artifacts; rehearse corruption, incompatible runtime, interrupted activation, disk full, power loss, anti-rollback, known-good rollback and disconnected operation on target hardware. | Verification, activation, rollback and anti-rollback state machines have automated tests; no target-hardware trust-root ceremony or power-loss report exists. | 2026-08-01 |
-| PG-09 | Availability and bounded memory | Partial | Run sustained bounded-concurrency, slow-client, malformed-input, chain/Worker/signer outage, disk-quota and restart tests while recording RSS, heap, goroutines, file descriptors, task store, bbolt, RAM, VRAM and cache behavior to steady state. | Race tests and the bounded 5,000-request local sample passed without monotonic growth; this is not a long-duration leak certificate. | 2026-08-01 |
-| PG-10 | Public network perimeter | Partial | Certify TLS ingress, connection/rate/body/header limits, firewall policy, private socket ownership, response redaction and supported home/relay reachability. | Edge is forced to literal loopback and private mode-0600 Worker/signer sockets; no reviewed public TLS perimeter has been deployed. | 2026-08-01 |
+| PG-09 | Availability and bounded memory | Partial | Run sustained bounded-concurrency, slow-client, malformed-input, chain/Worker/signer outage, disk-quota and restart tests while recording RSS, heap, goroutines, file descriptors, task store, bbolt, RAM, VRAM and cache behavior to steady state. | Race tests, TLS test and an additional 30,000-request local sample passed with stable RSS, descriptors and database sizes; this is not a long-duration target-host leak certificate. | 2026-08-01 |
+| PG-10 | Public network perimeter | Partial | Certify TLS ingress, connection/rate/body/header limits, firewall policy, private socket ownership, response redaction and supported home/relay reachability. | TLS 1.3 handler load, literal-loopback Edge and private mode-0600 Worker/signer sockets pass locally; no reviewed public TLS perimeter has been deployed. | 2026-08-01 |
 | PG-11 | ARD publication | Partial | Publish the operator-approved catalog under the selected domain or TOS naming path and run the pinned official ARD conformance tool. | The bounded operator-fed Registry and local catalog projection pass automated tests; public publication and official conformance remain open. | 2026-08-01 |
 | PG-12 | Offline physical terminal and fleet claims | Deferred | Before advertising this product class, complete disconnected soak, bounded journal, reconnect idempotency, real-time priority, safe update rollout, independent actuator safety, delegation/revocation and bounded fleet fan-out. | Foundations exist in terminal policy, scheduling and update state machines, but the physical/fleet milestone is outside non-streaming v0.1. | 2026-08-01 |
-| PG-13 | Release governance | Partial | Produce reproducible builds, signed source/binary artifacts, compatibility and rollback records, an independent security review, testnet observation and final release approval. | Source commits and independent repository CI are public; the remaining release evidence and approval do not yet exist. | 2026-08-01 |
+| PG-13 | Release governance | Partial | Produce reproducible builds, signed source/binary artifacts, compatibility and rollback records, an independent security review, testnet observation and final release approval. | Source and CI are public, and local byte-identical builds are now automated; signing, independent review, observation and approval remain open. | 2026-08-01 |
 
 ## Updating and closing gates
 
