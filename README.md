@@ -5,6 +5,11 @@ It owns protocol envelopes, ARD-compatible discovery, the chain integration
 boundary, Edge Core, shared SDKs, and conformance tests. It does not contain
 validator consensus code or AI runtime implementations.
 
+Current delivery status and ordered follow-up work are maintained in
+[`ROADMAP.md`](ROADMAP.md). Code completion is deliberately separated from the
+real-chain, key-custody, physical-isolation, network, and load evidence required
+for a production claim.
+
 This repository is an early Go 1.24 foundation. It now includes the draft
 TOS Service Protocol v0.1 contracts: deterministic signed values, operational
 service manifests, exact profile negotiation, bounded sessions and
