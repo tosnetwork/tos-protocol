@@ -1,6 +1,6 @@
 # tos-protocol Roadmap
 
-Status: non-streaming v0.1 code-complete candidate  
+Status: non-streaming v0.1 M1 integration-complete candidate
 Last reviewed: 2026-08-01
 
 This is the repository-level delivery roadmap for the generic TOS Service
@@ -45,22 +45,31 @@ requirements remain in `docs/`.
   readiness.
 - Full repository race tests, static analysis, conformance tests, repeated
   concurrency tests, CI, and GPL-3.0 licensing.
+- Production `tos-ai-edge` composition through current three-node chain
+  authority, real Agent Account client keys, exact native payment, private
+  session/Quote/Receipt signers, private Worker, signed Receipt and exact
+  restart replay. Direct Invoke and retained GetTask now share one durable
+  Worker-owned completion timestamp.
+- Strict deployment material/config generation, bounded server-side paid-action
+  diagnostics, systemd/config examples, one-node quorum tolerance, two-node
+  fail-closed startup, Worker/signer outage readiness, and the local bounded
+  anonymous-input rehearsal recorded in
+  `docs/local-three-node-ai-edge-m1-evidence-2026-08-01.md`.
 
 ## In Progress
 
-The active milestone is the first deployable non-streaming AI Edge service.
-Within this repository that means:
+The active milestone is P2, the immutable v0.1 production candidate:
 
-- keep the v0.1 base and Worker interfaces frozen while `tos-ai-edge` composes
-  the implemented public-action and private-Worker boundaries;
-- provide reviewed configuration examples for current chain authority,
-  client-key resolution, payment observation, Quote/Receipt sidecars, and
-  deployment-owned access authorization;
-- exercise controller rotation, client-key revocation, stale RPC responses,
-  payment reorganization, signer outage, and restart recovery on the local
-  three-node TOS network;
-- turn `docs/non-streaming-v0.1-production-gates.md` into reproducible release
-  evidence and then create the immutable v0.1 release tag.
+- merge the candidate, pin `tos-ai` to the resulting immutable protocol
+  revision, and rerun both repositories independently and in CI;
+- select and audit deployment-owned session/Quote issuance and authenticated
+  Action-status/Receipt-read policy;
+- complete controller/key rotation, revocation, stale-node and settlement
+  rehearsals without weakening the strict-majority/high-water rules;
+- finish the applicable target hardware, custody, public perimeter,
+  long-duration memory and release-governance certification rows below;
+- create the immutable v0.1 release tag only after those selected production
+  claims have evidence.
 
 ## Next
 
@@ -118,8 +127,8 @@ The detailed evidence table is maintained in
 | Milestone | Exit condition | State |
 |---|---|---|
 | P0: non-streaming foundation | Base schemas, auth/payment/receipt, chain adapters, Edge Core, WorkerService, bounded Registry, conformance and race tests | Completed |
-| P1: AI Edge integration | `tos-ai-edge` uses the frozen interfaces and completes the local discovery-to-receipt flow | In Progress |
-| P2: v0.1 production candidate | External gates applicable to the reference deployment have evidence and the compatible repositories are tagged | Next |
+| P1: AI Edge integration | `tos-ai-edge` uses the frozen interfaces and completes the local discovery-to-receipt flow | Completed |
+| P2: v0.1 production candidate | External gates applicable to the reference deployment have evidence and the compatible repositories are tagged | In Progress |
 | P3: discovery expansion | Bounded crawler/federation plus stable SDK and registrar surfaces | Next |
 | P4: streaming v0.2 | Versioned streaming and receipt semantics pass compatibility and fault-injection tests | Next |
 

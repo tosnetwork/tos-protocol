@@ -204,6 +204,9 @@ message InvokeResponse {
   Usage usage = 3;
   string model_revision = 4;
   string runtime_revision = 5;
+  // Worker-owned durable completion time. Invoke and GetTask MUST return the
+  // same millisecond value so receipt replay is independent of RPC latency.
+  int64 completed_unix_millis = 6;
 }
 
 message GetTaskRequest {

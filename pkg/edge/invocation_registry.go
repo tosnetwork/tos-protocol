@@ -461,14 +461,24 @@ func (c *Core) MapAndClaimRecoveredPaidExecution(
 		return ClaimedInvocation{}, err
 	}
 	deadline := time.UnixMilli(prepared.DeadlineUnixMillis).UTC()
-	if execution.Scope != scope ||
-		execution.IntentDigest != material.IntentDigest ||
-		execution.AuthorizationID != material.AuthorizationID ||
-		execution.QuoteID != material.QuoteID ||
-		execution.TaskID != prepared.TaskId ||
-		execution.RequestDigest != prepared.RequestDigest ||
-		!execution.Deadline.Equal(deadline) {
-		return ClaimedInvocation{}, journal.ErrConflict
+	checks := []struct {
+		field   string
+		matches bool
+	}{
+		{"scope", execution.Scope == scope},
+		{"intent-digest", execution.IntentDigest == material.IntentDigest},
+		{"authorization-id", execution.AuthorizationID == material.AuthorizationID},
+		{"quote-id", execution.QuoteID == material.QuoteID},
+		{"task-id", execution.TaskID == prepared.TaskId},
+		{"request-digest", execution.RequestDigest == prepared.RequestDigest},
+		{"deadline", execution.Deadline.Equal(deadline)},
+	}
+	for _, check := range checks {
+		if !check.matches {
+			return ClaimedInvocation{}, fmt.Errorf(
+				"terminal replay %s mismatch: %w", check.field, journal.ErrConflict,
+			)
+		}
 	}
 	return ClaimedInvocation{
 		Request: prepared, State: request, Execution: execution,

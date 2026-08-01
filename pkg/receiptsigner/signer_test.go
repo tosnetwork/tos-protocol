@@ -22,9 +22,72 @@ import (
 )
 
 var (
+	_ authorization.SessionSigner = (*localrpc.SessionSignerClient)(nil)
 	_ authorization.QuoteSigner   = (*localrpc.QuoteSignerClient)(nil)
 	_ authorization.ReceiptSigner = (*localrpc.ReceiptSignerClient)(nil)
 )
+
+func TestSessionHandlerInteroperatesWithPurposeBoundClient(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Config{
+		KeyID: "session-key-1", PrivateKey: privateKey,
+		MaxMessageBytes: DefaultMaxMessageBytes, MaxConcurrent: 2,
+		Domain: protocol.SessionGrantDomain,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	socketPath := filepath.Join(directory, "session-signer.sock")
+	listener, err := ListenPrivateUnix(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: time.Second}
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+		<-serverDone
+	})
+	config := localrpc.DefaultSessionSignerClientConfig(socketPath)
+	config.ExpectedKeyID = "session-key-1"
+	config.ExpectedPublicKey = base64.RawURLEncoding.EncodeToString(publicKey)
+	client, err := localrpc.NewSessionSignerClient(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if err := client.CheckReady(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	issuedAt := time.UnixMilli(1_800_000_000_000)
+	envelope, err := client.SignSession(
+		context.Background(), []byte("canonical session grant"),
+		issuedAt, issuedAt.Add(time.Minute),
+	)
+	if err != nil || envelope.KeyID != "session-key-1" ||
+		envelope.Verify(publicKey, protocol.SessionGrantDomain, issuedAt) != nil {
+		t.Fatal("session signer returned an invalid purpose-bound envelope")
+	}
+	request := httptest.NewRequest(
+		http.MethodPost, localrpc.QuoteSignerPath, strings.NewReader(`{}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("session signer exposed quote path: %d", response.Code)
+	}
+}
 
 func TestHandlerInteroperatesWithBoundedClient(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)

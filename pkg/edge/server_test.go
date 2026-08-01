@@ -74,6 +74,36 @@ type testActionStatusAuthorizer struct {
 	bound bool
 }
 
+type testPaidActionErrorReporter struct {
+	stage string
+	err   error
+	panic bool
+}
+
+func (reporter *testPaidActionErrorReporter) ReportPaidActionError(
+	_ context.Context,
+	stage string,
+	err error,
+) {
+	if reporter.panic {
+		panic("reporter panic")
+	}
+	reporter.stage = stage
+	reporter.err = err
+}
+
+func TestPaidActionErrorReporterIsServerSideAndPanicContained(t *testing.T) {
+	reporter := &testPaidActionErrorReporter{}
+	server := &Server{paidActionErrors: reporter}
+	expected := errors.New("internal failure")
+	server.reportPaidActionError(context.Background(), "process", expected)
+	if reporter.stage != "process" || !errors.Is(reporter.err, expected) {
+		t.Fatalf("unexpected diagnostic: stage=%q err=%v", reporter.stage, reporter.err)
+	}
+	reporter.panic = true
+	server.reportPaidActionError(context.Background(), "process", expected)
+}
+
 func (authorizer *testActionStatusAuthorizer) AuthorizeActionStatus(
 	ctx context.Context,
 	request *http.Request,

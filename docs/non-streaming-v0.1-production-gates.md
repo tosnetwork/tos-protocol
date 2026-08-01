@@ -1,6 +1,6 @@
 # Non-streaming v0.1 production gates
 
-Status: code-complete candidate; deployment certification is not complete
+Status: M1 local integration passed; external deployment certification is not complete
 
 This document separates repository work from claims that can be established
 only by a real TOS Network and physical AI terminal deployment. “Implemented”
@@ -35,6 +35,20 @@ The non-streaming v0.1 candidate includes:
 
 Streaming, arbitrary container execution, bare GPU rental, public shell access,
 and request-selected runtime endpoints are outside this candidate.
+
+## Local M1 evidence
+
+The 2026-08-01 local rehearsal completed discovery, current 2-of-3 chain
+authority, real Agent Account client-key resolution, exact finalized native
+payment, private Worker execution, signed Receipt, exact replay and byte-stable
+Worker/Edge restart recovery. It also verified one-node quorum tolerance,
+two-node fail-closed behavior, Worker and signer readiness degradation, and a
+bounded 5,000-request anonymous malformed-input sample. See
+[`local-three-node-ai-edge-m1-evidence-2026-08-01.md`](local-three-node-ai-edge-m1-evidence-2026-08-01.md).
+
+This evidence closes the local integration portion of M1 only. The target
+hardware, custody, public perimeter, long-duration soak and release rows below
+remain open.
 
 ## Gates that require a deployment
 

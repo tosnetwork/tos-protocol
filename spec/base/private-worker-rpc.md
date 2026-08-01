@@ -50,6 +50,8 @@ Transport success is not semantic success. Edge rejects:
 - quote responses bound to another request or expiring after its deadline
 - empty or malformed revisions and identifiers
 - invocation responses bound to another request
+- a missing, future, post-deadline, post-retention, or inconsistent durable
+  completion timestamp
 - outputs larger than the authorized maximum
 - input/output usage counters inconsistent with the transferred bytes
 - oversized or duplicate capability, readiness, resource, attribute, and
@@ -62,6 +64,9 @@ binding. The opaque result retains the requested output limit, absolute
 deadline, task ID, deterministic digest of the exact private protobuf request,
 completion time, byte/token usage, output, and worker revisions so later
 receipt issuance cannot substitute a different or less restrictive request.
+`InvokeResponse.completed_unix_millis` is Worker-owned durable state, not the
+Edge RPC receive time. A later successful `GetTask` must repeat exactly the
+same millisecond value in both its terminal metadata and nested result.
 
 ## Priority and retries
 

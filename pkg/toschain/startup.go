@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/payment"
 )
 
@@ -28,6 +29,17 @@ type StartupConfig struct {
 	PaymentQueryTimeoutMillis       uint64   `json:"paymentQueryTimeoutMillis,omitempty"`
 	PaymentMaxObservationAgeSeconds uint64   `json:"paymentMaxObservationAgeSeconds,omitempty"`
 	AllowOverpayment                bool     `json:"allowOverpayment,omitempty"`
+}
+
+// DecodeStartupConfigJSON strictly decodes an operator-owned chain runtime
+// document. Duplicate and unknown fields are rejected before any endpoint is
+// contacted; BuildRuntime remains the single semantic-policy validator.
+func DecodeStartupConfigJSON(data []byte) (StartupConfig, error) {
+	var config StartupConfig
+	if err := jsonstrict.Decode(data, &config); err != nil {
+		return StartupConfig{}, errors.New("invalid TOS chain startup config JSON")
+	}
+	return config, nil
 }
 
 // BuildRuntime validates all startup bounds and creates one shared

@@ -73,7 +73,11 @@ func (w *dispatchWorker) Invoke(
 			errors.New("simulated ambiguous worker failure"),
 		)
 	}
-	return connect.NewResponse(dispatchInvokeResponse(request.Msg, w.output)), nil
+	completedAt := time.Now().UTC().Truncate(time.Millisecond).UnixMilli()
+	w.completedAt.CompareAndSwap(0, completedAt)
+	response := dispatchInvokeResponse(request.Msg, w.output)
+	response.CompletedUnixMillis = w.completedAt.Load()
+	return connect.NewResponse(response), nil
 }
 
 func (w *dispatchWorker) GetTask(
@@ -103,6 +107,7 @@ func (w *dispatchWorker) GetTask(
 				time.Millisecond,
 			).UnixMilli()
 		}
+		response.Result.CompletedUnixMillis = response.CompletedUnixMillis
 		response.RetainUntilUnixMillis = request.Msg.RetainUntilUnixMillis
 	case edgev1.TaskStatus_TASK_STATUS_FAILED,
 		edgev1.TaskStatus_TASK_STATUS_CANCELED:

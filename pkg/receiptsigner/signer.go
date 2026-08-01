@@ -1,6 +1,6 @@
 // Package receiptsigner implements a local, purpose-specific protocol key
-// service. Each handler is fixed at construction to exactly one quote or
-// receipt signing domain and path.
+// service. Each handler is fixed at construction to exactly one session,
+// quote, or receipt signing domain and path.
 package receiptsigner
 
 import (
@@ -33,8 +33,8 @@ type Config struct {
 	PrivateKey      ed25519.PrivateKey
 	MaxMessageBytes int
 	MaxConcurrent   int
-	// Domain may be protocol.ReceiptDomain or protocol.QuoteDomain. The zero
-	// value preserves the receipt-only compatibility default.
+	// Domain may be a supported purpose-specific protocol signing domain. The
+	// zero value preserves the receipt-only compatibility default.
 	Domain string
 }
 
@@ -62,8 +62,11 @@ func NewHandler(config Config) (*Handler, error) {
 		config.Domain = protocol.ReceiptDomain
 	}
 	path := localrpc.ReceiptSignerPath
-	if config.Domain == protocol.QuoteDomain {
+	switch config.Domain {
+	case protocol.QuoteDomain:
 		path = localrpc.QuoteSignerPath
+	case protocol.SessionGrantDomain:
+		path = localrpc.SessionSignerPath
 	}
 	if len(config.PrivateKey) != ed25519.PrivateKeySize ||
 		config.MaxMessageBytes <= 0 || config.MaxMessageBytes > MaxMessageBytes ||
@@ -71,7 +74,8 @@ func NewHandler(config Config) (*Handler, error) {
 		config.KeyID == "" || len(config.KeyID) > 512 ||
 		strings.ContainsRune(config.KeyID, '\x00') ||
 		(config.Domain != protocol.ReceiptDomain &&
-			config.Domain != protocol.QuoteDomain) {
+			config.Domain != protocol.QuoteDomain &&
+			config.Domain != protocol.SessionGrantDomain) {
 		return nil, errors.New("invalid receipt signer configuration")
 	}
 	return &Handler{

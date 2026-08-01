@@ -180,6 +180,7 @@ func (s *Server) processPaidAction(
 	}
 	known, err := s.core.HasAuthorizedPaidAction(authorized)
 	if err != nil {
+		s.reportPaidActionError(request.Context(), "lookup", err)
 		writePaidActionUnavailable(writer)
 		return
 	}
@@ -192,7 +193,16 @@ func (s *Server) processPaidAction(
 		s.worker, s.receiptSigner, s.paidActionRetention,
 		s.receiptLifetime,
 	)
+	if processErr != nil {
+		s.reportPaidActionError(request.Context(), "process", processErr)
+	}
 	if !resolution.valid {
+		if processErr == nil {
+			s.reportPaidActionError(
+				request.Context(), "process",
+				errors.New("paid action returned an invalid resolution"),
+			)
+		}
 		writeDocument(
 			writer, []byte(`{"error":"paid action unavailable"}`),
 			"application/json", "no-store", http.StatusServiceUnavailable,
@@ -201,6 +211,7 @@ func (s *Server) processPaidAction(
 	}
 	disposition, err := resolution.Disposition()
 	if err != nil {
+		s.reportPaidActionError(request.Context(), "disposition", err)
 		writeDocument(
 			writer, []byte(`{"error":"paid action unavailable"}`),
 			"application/json", "no-store", http.StatusServiceUnavailable,
@@ -220,6 +231,7 @@ func (s *Server) processPaidAction(
 	case ExecutionResolutionSucceeded:
 		completed, completionErr := resolution.CompletedInvocation()
 		if completionErr != nil {
+			s.reportPaidActionError(request.Context(), "completion", completionErr)
 			writePaidActionUnavailable(writer)
 			return
 		}
@@ -232,6 +244,7 @@ func (s *Server) processPaidAction(
 		ExecutionResolutionTimedOut:
 		terminated, terminationErr := resolution.TerminatedInvocation()
 		if terminationErr != nil {
+			s.reportPaidActionError(request.Context(), "termination", terminationErr)
 			writePaidActionUnavailable(writer)
 			return
 		}
@@ -243,6 +256,10 @@ func (s *Server) processPaidAction(
 		ExecutionResolutionAccepted,
 		ExecutionResolutionRunning:
 	default:
+		s.reportPaidActionError(
+			request.Context(), "disposition",
+			errors.New("paid action returned an unknown disposition"),
+		)
 		writePaidActionUnavailable(writer)
 		return
 	}
@@ -251,6 +268,10 @@ func (s *Server) processPaidAction(
 	// permission to submit another action.
 	document, err := json.Marshal(result)
 	if err != nil || len(document) > maxPaidActionResponseBytes {
+		if err == nil {
+			err = errors.New("paid-action response exceeds byte limit")
+		}
+		s.reportPaidActionError(request.Context(), "response", err)
 		writePaidActionUnavailable(writer)
 		return
 	}
@@ -258,6 +279,14 @@ func (s *Server) processPaidAction(
 		writer, document, PaidActionResultMediaType,
 		"no-store", statusCode,
 	)
+}
+
+func (s *Server) reportPaidActionError(ctx context.Context, stage string, err error) {
+	if s == nil || s.paidActionErrors == nil || ctx == nil || err == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	s.paidActionErrors.ReportPaidActionError(ctx, stage, err)
 }
 
 func (s *Server) paidActionReady(ctx context.Context) bool {

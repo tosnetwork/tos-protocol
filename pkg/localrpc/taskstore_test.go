@@ -57,8 +57,8 @@ func TestWorkerTaskStoreLifecycleAndExactReplay(t *testing.T) {
 	); err != nil || transition != TaskTransitionReplay {
 		t.Fatalf("running replay disposition=%q err=%v", transition, err)
 	}
-	result := testStoredInvokeResult(replayed.Request, "output-lifecycle")
 	completedAt := now.Add(4 * time.Second)
+	result := testStoredInvokeResult(replayed.Request, "output-lifecycle", completedAt)
 	completed, transition, err := store.CompleteTaskSuccess(
 		identity,
 		result,
@@ -78,7 +78,7 @@ func TestWorkerTaskStoreLifecycleAndExactReplay(t *testing.T) {
 	); err != nil || transition != TaskTransitionReplay {
 		t.Fatalf("completion replay disposition=%q err=%v", transition, err)
 	}
-	changed := testStoredInvokeResult(replayed.Request, "changed-output")
+	changed := testStoredInvokeResult(replayed.Request, "changed-output", completedAt)
 	if _, _, err := store.CompleteTaskSuccess(
 		identity,
 		changed,
@@ -603,12 +603,13 @@ func TestWorkerTaskStoreRetainedByteBudgetIsAtomicAndReleased(t *testing.T) {
 		t.Fatalf("claimed byte stats=%#v err=%v", stats, err)
 	}
 	reservedAfterClaim := stats.ReservedBytes
-	result := testStoredInvokeResult(first.Request, "terminal-output")
+	completedAt := now.Add(time.Second)
+	result := testStoredInvokeResult(first.Request, "terminal-output", completedAt)
 	if _, _, err := store.CompleteTaskSuccess(
 		identityForStoredTask(first),
 		result,
-		now.Add(time.Second),
-		now.Add(time.Second),
+		completedAt,
+		completedAt,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -968,13 +969,14 @@ func TestWorkerTaskStoreRejectsUnknownProtobufFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := testStoredInvokeResult(claimed.Request, "output")
+	completedAt := now.Add(time.Second)
+	result := testStoredInvokeResult(claimed.Request, "output", completedAt)
 	result.ProtoReflect().SetUnknown(unknown)
 	if _, _, err := store.CompleteTaskSuccess(
 		identityForStoredTask(claimed),
 		result,
-		now.Add(time.Second),
-		now.Add(time.Second),
+		completedAt,
+		completedAt,
 	); err == nil {
 		t.Fatal("unknown Invoke result fields were persisted")
 	}
@@ -1031,6 +1033,7 @@ func testStoredInvokeRequest(
 func testStoredInvokeResult(
 	request *edgev1.InvokeRequest,
 	output string,
+	completedAt time.Time,
 ) *edgev1.InvokeResponse {
 	return &edgev1.InvokeResponse{
 		RequestId: request.RequestId,
@@ -1039,8 +1042,9 @@ func testStoredInvokeResult(
 			InputBytes:  uint64(len(request.Payload)),
 			OutputBytes: uint64(len(output)),
 		},
-		ModelRevision:   "model-revision-1",
-		RuntimeRevision: "runtime-revision-1",
+		ModelRevision:       "model-revision-1",
+		RuntimeRevision:     "runtime-revision-1",
+		CompletedUnixMillis: completedAt.UnixMilli(),
 	}
 }
 

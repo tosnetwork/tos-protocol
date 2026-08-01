@@ -728,6 +728,11 @@ func (store *WorkerTaskStore) transitionTask(
 				if errorCode != "" || completedAt.After(deadline) {
 					return errors.New("successful Worker task completed after deadline")
 				}
+				if result == nil || !time.UnixMilli(
+					result.CompletedUnixMillis,
+				).UTC().Equal(completedAt) {
+					return errors.New("Worker result completion time mismatch")
+				}
 				if err := validateInvokeResponse(result, request); err != nil {
 					return err
 				}

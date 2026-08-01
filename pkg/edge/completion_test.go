@@ -28,7 +28,8 @@ import (
 
 type completionWorker struct {
 	edgev1connect.UnimplementedWorkerServiceHandler
-	output []byte
+	output      []byte
+	completedAt time.Time
 }
 
 func (w completionWorker) Invoke(
@@ -45,8 +46,9 @@ func (w completionWorker) Invoke(
 			OutputTokens:    3,
 			ExecutionMillis: 4,
 		},
-		ModelRevision:   "model-revision-1",
-		RuntimeRevision: "runtime-revision-1",
+		ModelRevision:       "model-revision-1",
+		RuntimeRevision:     "runtime-revision-1",
+		CompletedUnixMillis: w.completedAt.UnixMilli(),
 	}), nil
 }
 
@@ -54,7 +56,7 @@ func (w completionWorker) GetTask(
 	_ context.Context,
 	request *connect.Request[edgev1.GetTaskRequest],
 ) (*connect.Response[edgev1.GetTaskResponse], error) {
-	completedAt := time.Now().UTC().Truncate(time.Millisecond)
+	completedAt := w.completedAt
 	return connect.NewResponse(&edgev1.GetTaskResponse{
 		RequestId: request.Msg.RequestId, TaskId: request.Msg.TaskId,
 		RequestDigest: request.Msg.RequestDigest,
@@ -66,8 +68,9 @@ func (w completionWorker) GetTask(
 				InputBytes: 5, OutputBytes: uint64(len(w.output)),
 				InputTokens: 2, OutputTokens: 3, ExecutionMillis: 4,
 			},
-			ModelRevision:   "model-revision-1",
-			RuntimeRevision: "runtime-revision-1",
+			ModelRevision:       "model-revision-1",
+			RuntimeRevision:     "runtime-revision-1",
+			CompletedUnixMillis: completedAt.UnixMilli(),
 		},
 		CompletedUnixMillis:   completedAt.UnixMilli(),
 		RetainUntilUnixMillis: request.Msg.RetainUntilUnixMillis,
@@ -884,7 +887,9 @@ func startCompletionWorkerClient(
 		t.Fatal(err)
 	}
 	path, handler := edgev1connect.NewWorkerServiceHandler(
-		completionWorker{output: output},
+		completionWorker{
+			output: output, completedAt: time.Now().UTC().Truncate(time.Millisecond),
+		},
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)

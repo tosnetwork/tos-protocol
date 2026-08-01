@@ -24,6 +24,7 @@ import (
 const (
 	ReceiptSignerPath                   = "/v1/receipt/sign"
 	QuoteSignerPath                     = "/v1/quote/sign"
+	SessionSignerPath                   = "/v1/session/sign"
 	ReceiptSignerHealthPath             = "/healthz"
 	DefaultReceiptSignerTimeout         = 5 * time.Second
 	DefaultReceiptSignerMaxMessageBytes = 2 << 20
@@ -48,6 +49,10 @@ type ReceiptSignerClientConfig struct {
 // receipt signing, but NewQuoteSignerClient fixes it to the quote operation.
 type QuoteSignerClientConfig = ReceiptSignerClientConfig
 
+// SessionSignerClientConfig uses the same bounded private transport policy,
+// fixed to authenticate-role session grants.
+type SessionSignerClientConfig = ReceiptSignerClientConfig
+
 func DefaultReceiptSignerClientConfig(socketPath string) ReceiptSignerClientConfig {
 	return ReceiptSignerClientConfig{
 		SocketPath: socketPath, Timeout: DefaultReceiptSignerTimeout,
@@ -57,6 +62,10 @@ func DefaultReceiptSignerClientConfig(socketPath string) ReceiptSignerClientConf
 }
 
 func DefaultQuoteSignerClientConfig(socketPath string) QuoteSignerClientConfig {
+	return DefaultReceiptSignerClientConfig(socketPath)
+}
+
+func DefaultSessionSignerClientConfig(socketPath string) SessionSignerClientConfig {
 	return DefaultReceiptSignerClientConfig(socketPath)
 }
 
@@ -117,8 +126,10 @@ func newPurposeSignerClient(
 		(config.ExpectedKeyID == "") != (config.ExpectedPublicKey == "") ||
 		len(config.ExpectedKeyID) > 512 ||
 		strings.ContainsRune(config.ExpectedKeyID, '\x00') ||
-		(domain != protocol.ReceiptDomain && domain != protocol.QuoteDomain) ||
-		(path != ReceiptSignerPath && path != QuoteSignerPath) {
+		(domain != protocol.ReceiptDomain && domain != protocol.QuoteDomain &&
+			domain != protocol.SessionGrantDomain) ||
+		(path != ReceiptSignerPath && path != QuoteSignerPath &&
+			path != SessionSignerPath) {
 		return nil, errors.New("invalid receipt signer client configuration")
 	}
 	var expectedPublicKey ed25519.PublicKey
@@ -303,6 +314,52 @@ func (c *QuoteSignerClient) CheckReady(ctx context.Context) error {
 }
 
 func (c *QuoteSignerClient) Close() error {
+	if c == nil || c.client == nil {
+		return nil
+	}
+	return c.client.Close()
+}
+
+// SessionSignerClient implements authorization.SessionSigner using a
+// purpose-fixed authenticate-role sidecar. It cannot sign Quotes or Receipts.
+type SessionSignerClient struct {
+	client *ReceiptSignerClient
+}
+
+func NewSessionSignerClient(
+	config SessionSignerClientConfig,
+) (*SessionSignerClient, error) {
+	client, err := newPurposeSignerClient(
+		config, protocol.SessionGrantDomain, SessionSignerPath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &SessionSignerClient{client: client}, nil
+}
+
+func (c *SessionSignerClient) SignSession(
+	ctx context.Context,
+	payload []byte,
+	issuedAt time.Time,
+	expiresAt time.Time,
+) (identity.Envelope, error) {
+	if c == nil || c.client == nil ||
+		c.client.domain != protocol.SessionGrantDomain ||
+		c.client.path != SessionSignerPath {
+		return identity.Envelope{}, errors.New("invalid session signer client")
+	}
+	return c.client.signPurpose(ctx, payload, issuedAt, expiresAt)
+}
+
+func (c *SessionSignerClient) CheckReady(ctx context.Context) error {
+	if c == nil || c.client == nil {
+		return errors.New("invalid session signer client")
+	}
+	return c.client.CheckReady(ctx)
+}
+
+func (c *SessionSignerClient) Close() error {
 	if c == nil || c.client == nil {
 		return nil
 	}

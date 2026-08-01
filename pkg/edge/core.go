@@ -779,14 +779,25 @@ func (c *Core) completeSuccessfulInvocation(
 	if err != nil {
 		return CompletedInvocation{}, err
 	}
-	if execution.IntentDigest != material.IntentDigest ||
-		execution.AuthorizationID != material.AuthorizationID ||
-		execution.QuoteID != material.QuoteID ||
-		execution.TaskID != expectedTaskID ||
-		execution.TaskID != completion.TaskID ||
-		execution.RequestDigest != completion.RequestDigest ||
-		!execution.Deadline.Equal(completion.Deadline) {
-		return CompletedInvocation{}, journal.ErrConflict
+	checks := []struct {
+		field   string
+		matches bool
+	}{
+		{"intent-digest", execution.IntentDigest == material.IntentDigest},
+		{"authorization-id", execution.AuthorizationID == material.AuthorizationID},
+		{"quote-id", execution.QuoteID == material.QuoteID},
+		{"derived-task-id", execution.TaskID == expectedTaskID},
+		{"worker-task-id", execution.TaskID == completion.TaskID},
+		{"request-digest", execution.RequestDigest == completion.RequestDigest},
+		{"deadline", execution.Deadline.Equal(completion.Deadline)},
+	}
+	for _, check := range checks {
+		if !check.matches {
+			return CompletedInvocation{}, fmt.Errorf(
+				"successful completion %s mismatch: %w",
+				check.field, journal.ErrConflict,
+			)
+		}
 	}
 	usage := completionReceiptUsage(completion.Usage)
 	resultDigest := digestInvocationOutput(completion.Output)

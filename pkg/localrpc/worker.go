@@ -393,11 +393,22 @@ func (c *WorkerClient) Invoke(
 			err,
 		)
 	}
+	completedAt := time.UnixMilli(response.Msg.CompletedUnixMillis).UTC()
+	now := c.now().UTC()
+	if response.Msg.CompletedUnixMillis == 0 ||
+		completedAt.Before(now.Add(-c.maxInvocationDuration-maxWorkerRecoveryClockSkew)) ||
+		completedAt.After(now.Add(maxWorkerRecoveryClockSkew)) ||
+		completedAt.After(time.UnixMilli(request.DeadlineUnixMillis)) ||
+		!time.UnixMilli(request.RetainUntilUnixMillis).After(completedAt) {
+		return ValidatedInvocation{}, errors.New(
+			"worker Invoke response has invalid durable completion time",
+		)
+	}
 	return validatedInvocationFromResponse(
 		request,
 		response.Msg,
 		requestDigest,
-		c.now().UTC().Truncate(time.Millisecond),
+		completedAt,
 	), nil
 }
 
@@ -824,6 +835,9 @@ func (c *WorkerClient) validateGetTaskResponse(
 		}
 		if completedAt.After(time.UnixMilli(invocation.DeadlineUnixMillis)) {
 			return errors.New("successful worker task completed after deadline")
+		}
+		if response.Result.CompletedUnixMillis != response.CompletedUnixMillis {
+			return errors.New("worker task result completion time mismatch")
 		}
 		return validateInvokeResponse(response.Result, invocation)
 	}

@@ -244,9 +244,9 @@ the exact mapper output, task ID, request digest, deadline, and retention from
 durable state, use only `GetTask`, and compare recovered output, usage,
 completion time, charge, and receipt identity to the existing signed receipt.
 Successful and failed terminal retries reuse the original receipt without
-another signature. Direct and recovered completion timestamps are normalized
-to the Worker's millisecond wire precision, preventing false conflicts after
-a lost client response.
+another signature. Direct and recovered completion timestamps use the exact
+Worker-owned `completed_unix_millis` carried by both `Invoke` and retained
+`GetTask`, preventing RPC latency from creating false replay conflicts.
 Its resolution boundary creates no receipt for `uncertain`, `NOT_FOUND`,
 `ACCEPTED`, or `RUNNING`. Only a validated direct/recovered success or a
 validated recovered `FAILED`, `CANCELED`, or `TIMED_OUT` outcome enters the

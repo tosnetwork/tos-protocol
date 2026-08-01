@@ -1483,8 +1483,11 @@ type InvokeResponse struct {
 	Usage           *Usage                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
 	ModelRevision   string                 `protobuf:"bytes,4,opt,name=model_revision,json=modelRevision,proto3" json:"model_revision,omitempty"`
 	RuntimeRevision string                 `protobuf:"bytes,5,opt,name=runtime_revision,json=runtimeRevision,proto3" json:"runtime_revision,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Worker-owned durable completion time. Invoke and GetTask MUST return the
+	// same millisecond value so receipt replay is independent of RPC latency.
+	CompletedUnixMillis int64 `protobuf:"varint,6,opt,name=completed_unix_millis,json=completedUnixMillis,proto3" json:"completed_unix_millis,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *InvokeResponse) Reset() {
@@ -1550,6 +1553,13 @@ func (x *InvokeResponse) GetRuntimeRevision() string {
 		return x.RuntimeRevision
 	}
 	return ""
+}
+
+func (x *InvokeResponse) GetCompletedUnixMillis() int64 {
+	if x != nil {
+		return x.CompletedUnixMillis
+	}
+	return 0
 }
 
 type GetTaskRequest struct {
@@ -1958,14 +1968,15 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\foutput_bytes\x18\x02 \x01(\x04R\voutputBytes\x12!\n" +
 	"\finput_tokens\x18\x03 \x01(\x04R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x04 \x01(\x04R\foutputTokens\x12)\n" +
-	"\x10execution_millis\x18\x05 \x01(\x04R\x0fexecutionMillis\"\xc3\x01\n" +
+	"\x10execution_millis\x18\x05 \x01(\x04R\x0fexecutionMillis\"\xf7\x01\n" +
 	"\x0eInvokeResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\fR\x06output\x12(\n" +
 	"\x05usage\x18\x03 \x01(\v2\x12.tos.edge.v1.UsageR\x05usage\x12%\n" +
 	"\x0emodel_revision\x18\x04 \x01(\tR\rmodelRevision\x12)\n" +
-	"\x10runtime_revision\x18\x05 \x01(\tR\x0fruntimeRevision\"\xa8\x01\n" +
+	"\x10runtime_revision\x18\x05 \x01(\tR\x0fruntimeRevision\x122\n" +
+	"\x15completed_unix_millis\x18\x06 \x01(\x03R\x13completedUnixMillis\"\xa8\x01\n" +
 	"\x0eGetTaskRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +

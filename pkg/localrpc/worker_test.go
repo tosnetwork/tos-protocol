@@ -170,6 +170,7 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 					InputBytes: uint64(len(request.Payload)), OutputBytes: uint64(len(output)),
 				},
 				ModelRevision: "sha256:" + strings.Repeat("a", 64), RuntimeRevision: "mock-v1",
+				CompletedUnixMillis: now.UnixMilli(),
 			}, nil
 		},
 		getTask: func(
@@ -186,8 +187,9 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 					Usage: &edgev1.Usage{
 						InputBytes: 5, OutputBytes: uint64(len(output)),
 					},
-					ModelRevision:   "sha256:" + strings.Repeat("a", 64),
-					RuntimeRevision: "mock-v1",
+					ModelRevision:       "sha256:" + strings.Repeat("a", 64),
+					RuntimeRevision:     "mock-v1",
+					CompletedUnixMillis: now.UnixMilli(),
 				},
 				CompletedUnixMillis:   now.UnixMilli(),
 				RetainUntilUnixMillis: request.RetainUntilUnixMillis,
@@ -266,7 +268,8 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	if err != nil || statusErr != nil ||
 		recoveredStatus != edgev1.TaskStatus_TASK_STATUS_SUCCEEDED ||
 		string(recoveredCompletion.Output) != "echo:hello" ||
-		recoveredCompletion.RequestDigest != expectedRequestDigest {
+		recoveredCompletion.RequestDigest != expectedRequestDigest ||
+		!recoveredCompletion.CompletedAt.Equal(response.CompletedAt) {
 		t.Fatalf(
 			"recovered=%#v completion=%#v err=%v",
 			recovered,
@@ -388,6 +391,7 @@ func TestWorkerClientRejectsSubstitutedOrInconsistentResponses(t *testing.T) {
 					InputBytes: uint64(len(request.Payload)), OutputBytes: 1,
 				},
 				ModelRevision: "model-v1", RuntimeRevision: "runtime-v1",
+				CompletedUnixMillis: now.UnixMilli(),
 			}, nil
 		},
 		cancel: func(

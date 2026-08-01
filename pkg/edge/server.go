@@ -90,6 +90,14 @@ type ServerDependencies struct {
 	PaidActionRetention     time.Duration
 	ReceiptLifetime         time.Duration
 	PaidActionMaxConcurrent int
+	PaidActionErrorReporter PaidActionErrorReporter
+}
+
+// PaidActionErrorReporter receives server-side diagnostics for failures that
+// are deliberately collapsed to generic public HTTP errors. Implementations
+// must not return these diagnostics to unauthenticated callers.
+type PaidActionErrorReporter interface {
+	ReportPaidActionError(context.Context, string, error)
 }
 
 type readinessGate struct {
@@ -164,6 +172,7 @@ type Server struct {
 	paidActionRetention  time.Duration
 	receiptLifetime      time.Duration
 	paidActionSlots      chan struct{}
+	paidActionErrors     PaidActionErrorReporter
 	network              string
 	serviceID            string
 }
@@ -263,6 +272,7 @@ func newServer(
 		receiptSigner:        dependencies.ReceiptSigner,
 		paidActionRetention:  dependencies.PaidActionRetention,
 		receiptLifetime:      dependencies.ReceiptLifetime,
+		paidActionErrors:     dependencies.PaidActionErrorReporter,
 		network:              descriptor.Network,
 		serviceID:            descriptor.ServiceID,
 	}
