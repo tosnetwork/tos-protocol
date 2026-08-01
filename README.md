@@ -295,5 +295,4 @@ tests/conformance/    schema and cross-language vector checks
   into the bootstrap binaries before their authority and update policies are
   specified.
 
-No license has been selected for this new repository yet. Add one before the
-first public release.
+Licensed under the [GNU General Public License v3.0](LICENSE).
