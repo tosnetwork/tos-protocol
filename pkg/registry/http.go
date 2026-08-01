@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
@@ -59,8 +60,18 @@ func (h *Handler) limit(next http.Handler) http.Handler {
 }
 
 func (h *Handler) search(writer http.ResponseWriter, request *http.Request) {
-	contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-	if err != nil || contentType != "application/json" {
+	if request.URL.RawQuery != "" {
+		writeError(writer, http.StatusBadRequest, "INVALID_ARGUMENT", "search query parameters are not supported")
+		return
+	}
+	if request.Header.Get("Content-Encoding") != "" {
+		writeError(writer, http.StatusUnsupportedMediaType, "INVALID_ARGUMENT", "Content-Encoding is not supported")
+		return
+	}
+	contentType, parameters, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	charset := strings.ToLower(parameters["charset"])
+	if err != nil || contentType != "application/json" ||
+		(len(parameters) > 1 || (len(parameters) == 1 && charset != "utf-8")) {
 		writeError(writer, http.StatusUnsupportedMediaType, "INVALID_ARGUMENT", "Content-Type must be application/json")
 		return
 	}
@@ -78,6 +89,13 @@ func (h *Handler) search(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (h *Handler) list(writer http.ResponseWriter, request *http.Request) {
+	if err := validateListQuery(request); err != nil {
+		writeError(writer, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
+		return
+	}
+	// ARD v0.9 makes List optional. This bootstrap deliberately exposes only
+	// deterministic unfiltered browsing; implementing the draft filter grammar
+	// partially would create a misleading interoperability claim.
 	if request.URL.Query().Get("filter") != "" || request.URL.Query().Get("orderBy") != "" {
 		writeError(writer, http.StatusNotImplemented, "NOT_IMPLEMENTED", "filter and orderBy are not implemented")
 		return
@@ -93,6 +111,21 @@ func (h *Handler) list(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeJSON(writer, http.StatusOK, response)
+}
+
+func validateListQuery(request *http.Request) error {
+	allowed := map[string]struct{}{
+		"filter": {}, "orderBy": {}, "pageSize": {}, "pageToken": {},
+	}
+	for key, values := range request.URL.Query() {
+		if _, ok := allowed[key]; !ok {
+			return errors.New("unsupported list query parameter")
+		}
+		if len(values) != 1 {
+			return errors.New("duplicate list query parameter")
+		}
+	}
+	return nil
 }
 
 func decodeJSONBody(reader io.Reader, output interface{}) error {

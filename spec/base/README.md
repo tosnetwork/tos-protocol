@@ -45,6 +45,8 @@ The adjacent Go implementation is in `pkg/protocol`, `pkg/codec`, and
 checks unknown-field rejection, and verifies fixed canonical vectors.
 
 This package is a draft foundation, not a complete network implementation.
-Remote Registry crawling, authenticated public sessions, paid execution,
-settlement reconciliation, transport profiles, terminal isolation, and
-vertical conformance remain separate milestones.
+The fail-closed paid-action library route is implemented, while authenticated
+public session/quote issuance, stock vertical deployment composition, remote
+Registry crawling, refund reconciliation, additional transport profiles,
+privileged terminal certification, and broader vertical conformance remain
+separate milestones.

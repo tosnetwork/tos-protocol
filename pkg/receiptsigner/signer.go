@@ -1,5 +1,6 @@
-// Package receiptsigner implements the local, purpose-specific receipt key
-// service. It deliberately exposes only the fixed receipt-signing operation.
+// Package receiptsigner implements a local, purpose-specific protocol key
+// service. Each handler is fixed at construction to exactly one quote or
+// receipt signing domain and path.
 package receiptsigner
 
 import (
@@ -32,6 +33,9 @@ type Config struct {
 	PrivateKey      ed25519.PrivateKey
 	MaxMessageBytes int
 	MaxConcurrent   int
+	// Domain may be protocol.ReceiptDomain or protocol.QuoteDomain. The zero
+	// value preserves the receipt-only compatibility default.
+	Domain string
 }
 
 type Handler struct {
@@ -41,6 +45,8 @@ type Handler struct {
 	maxMessageBytes int64
 	slots           chan struct{}
 	publicKey       string
+	domain          string
+	path            string
 	closed          bool
 }
 
@@ -52,11 +58,20 @@ type signRequest struct {
 }
 
 func NewHandler(config Config) (*Handler, error) {
+	if config.Domain == "" {
+		config.Domain = protocol.ReceiptDomain
+	}
+	path := localrpc.ReceiptSignerPath
+	if config.Domain == protocol.QuoteDomain {
+		path = localrpc.QuoteSignerPath
+	}
 	if len(config.PrivateKey) != ed25519.PrivateKeySize ||
 		config.MaxMessageBytes <= 0 || config.MaxMessageBytes > MaxMessageBytes ||
 		config.MaxConcurrent <= 0 || config.MaxConcurrent > MaxConcurrent ||
 		config.KeyID == "" || len(config.KeyID) > 512 ||
-		strings.ContainsRune(config.KeyID, '\x00') {
+		strings.ContainsRune(config.KeyID, '\x00') ||
+		(config.Domain != protocol.ReceiptDomain &&
+			config.Domain != protocol.QuoteDomain) {
 		return nil, errors.New("invalid receipt signer configuration")
 	}
 	return &Handler{
@@ -67,6 +82,8 @@ func NewHandler(config Config) (*Handler, error) {
 		publicKey: base64.RawURLEncoding.EncodeToString(
 			config.PrivateKey.Public().(ed25519.PublicKey),
 		),
+		domain: config.Domain,
+		path:   path,
 	}, nil
 }
 
@@ -92,10 +109,15 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 			Status    string `json:"status"`
 			KeyID     string `json:"keyId"`
 			PublicKey string `json:"publicKey"`
-		}{Status: "ready", KeyID: keyID, PublicKey: publicKey})
+			Domain    string `json:"domain"`
+			Path      string `json:"path"`
+		}{
+			Status: "ready", KeyID: keyID, PublicKey: publicKey,
+			Domain: h.domain, Path: h.path,
+		})
 		return
 	}
-	if request.URL.Path != localrpc.ReceiptSignerPath {
+	if request.URL.Path != h.path {
 		http.Error(response, "not found", http.StatusNotFound)
 		return
 	}
@@ -104,8 +126,11 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	mediaType, parameters, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	charset := strings.ToLower(parameters["charset"])
+	if err != nil || mediaType != "application/json" ||
+		(len(parameters) > 1 || (len(parameters) == 1 && charset != "utf-8")) ||
+		request.Header.Get("Content-Encoding") != "" || request.URL.RawQuery != "" {
 		http.Error(response, "unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -169,7 +194,7 @@ func (h *Handler) sign(
 		return identity.Envelope{}, errSignerClosed
 	}
 	return identity.Sign(
-		h.privateKey, protocol.ReceiptDomain, h.keyID,
+		h.privateKey, h.domain, h.keyID,
 		payload, issuedAt, expiresAt,
 	)
 }

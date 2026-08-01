@@ -21,6 +21,8 @@ import (
 type Limits struct {
 	MaxEntries            int
 	MaxPerPublisher       int
+	MaxIndexedEntryBytes  int
+	MaxIndexBytes         int64
 	MaxQueryBytes         int
 	MaxPageSize           int
 	MaxWorkerSearchBytes  int
@@ -31,10 +33,12 @@ func DefaultLimits() Limits {
 	return Limits{
 		MaxEntries:            10_000,
 		MaxPerPublisher:       1_000,
+		MaxIndexedEntryBytes:  64 << 10,
+		MaxIndexBytes:         64 << 20,
 		MaxQueryBytes:         2_048,
 		MaxPageSize:           100,
 		MaxWorkerSearchBytes:  16 << 10,
-		MaxConcurrentRequests: 64,
+		MaxConcurrentRequests: 16,
 	}
 }
 
@@ -43,6 +47,7 @@ type record struct {
 	catalogSource string
 	publisher     string
 	workerSearch  string
+	indexedBytes  int64
 }
 
 const (
@@ -75,6 +80,7 @@ type CatalogInput struct {
 
 func NewIndex(limits Limits) (*Index, error) {
 	if limits.MaxEntries <= 0 || limits.MaxPerPublisher <= 0 ||
+		limits.MaxIndexedEntryBytes <= 0 || limits.MaxIndexBytes <= 0 ||
 		limits.MaxQueryBytes <= 0 || limits.MaxPageSize <= 0 ||
 		limits.MaxWorkerSearchBytes <= 0 || limits.MaxConcurrentRequests <= 0 ||
 		limits.MaxConcurrentRequests > maximumConcurrentRequests {
@@ -169,9 +175,18 @@ func (i *Index) buildCatalogRecords(
 		if err != nil {
 			return nil, fmt.Errorf("entry %q: %w", entry.Identifier, err)
 		}
+		encoded, err := json.Marshal(entry)
+		if err != nil {
+			return nil, fmt.Errorf("entry %q: encode indexed entry: %w", entry.Identifier, err)
+		}
+		indexedBytes := len(encoded) + len(workerSearch)
+		if indexedBytes > i.limits.MaxIndexedEntryBytes {
+			return nil, fmt.Errorf("entry %q exceeds indexed byte limit", entry.Identifier)
+		}
 		next = append(next, record{
 			entry: cloneEntry(entry), catalogSource: source,
 			publisher: publisher, workerSearch: workerSearch,
+			indexedBytes: int64(indexedBytes),
 		})
 	}
 	return next, nil
@@ -182,7 +197,13 @@ func (i *Index) validateProjectedRecords(projected map[string]record) error {
 		return errors.New("Registry index capacity exceeded")
 	}
 	publisherCounts := make(map[string]int)
+	var indexedBytes int64
 	for _, candidate := range projected {
+		if candidate.indexedBytes <= 0 ||
+			indexedBytes > i.limits.MaxIndexBytes-candidate.indexedBytes {
+			return errors.New("Registry index byte capacity exceeded")
+		}
+		indexedBytes += candidate.indexedBytes
 		publisherCounts[candidate.publisher]++
 		if publisherCounts[candidate.publisher] > i.limits.MaxPerPublisher {
 			return fmt.Errorf("publisher %q exceeds entry limit", candidate.publisher)

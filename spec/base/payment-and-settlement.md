@@ -143,9 +143,9 @@ session/client authentication scheme.
 
 This does not by itself provide production key custody or authenticated public
 delivery. A deployment
-must deploy the included software-key sidecar or an HSM-backed replacement
-behind the bounded private Unix signer client, keep its private key outside
-Edge and the Worker,
+must deploy the included purpose-fixed quote and receipt software-key sidecars
+or HSM-backed replacements behind the bounded private Unix signer clients,
+keep their private keys outside Edge and the Worker,
 register reviewed vertical mappers behind the generic intent-to-Worker
 boundary, define any refund reconciliation or unsupported usage-dependent
 charging policy, implement the

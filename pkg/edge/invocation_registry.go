@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
@@ -413,7 +414,8 @@ func (c *Core) MapAndClaimRecoveredPaidExecution(
 		return ClaimedInvocation{}, err
 	}
 	if request.State != journal.StateAuthorized &&
-		request.State != journal.StateRunning {
+		request.State != journal.StateRunning &&
+		!request.State.Terminal() {
 		return ClaimedInvocation{}, journal.ErrTransition
 	}
 	mapper, err := plan.resolve(material)
@@ -424,16 +426,54 @@ func (c *Core) MapAndClaimRecoveredPaidExecution(
 	if err != nil {
 		return ClaimedInvocation{}, err
 	}
-	return c.mapAndClaimPaidExecutionMaterial(
+	if !request.State.Terminal() {
+		return c.mapAndClaimPaidExecutionMaterial(
+			ctx,
+			scope,
+			request.Revision,
+			material,
+			intent,
+			mapper,
+			policy,
+			worker,
+		)
+	}
+	invocation, err := mapPaidWorkerRequest(
 		ctx,
 		scope,
-		request.Revision,
 		material,
 		intent,
 		mapper,
 		policy,
-		worker,
+		request,
 	)
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	prepared, err := worker.PrepareTaskLookup(invocation)
+	if err != nil {
+		return ClaimedInvocation{}, fmt.Errorf(
+			"validate terminal Worker replay request: %w", err,
+		)
+	}
+	execution, err := c.requests.GetExecution(scope, c.now().UTC())
+	if err != nil {
+		return ClaimedInvocation{}, err
+	}
+	deadline := time.UnixMilli(prepared.DeadlineUnixMillis).UTC()
+	if execution.Scope != scope ||
+		execution.IntentDigest != material.IntentDigest ||
+		execution.AuthorizationID != material.AuthorizationID ||
+		execution.QuoteID != material.QuoteID ||
+		execution.TaskID != prepared.TaskId ||
+		execution.RequestDigest != prepared.RequestDigest ||
+		!execution.Deadline.Equal(deadline) {
+		return ClaimedInvocation{}, journal.ErrConflict
+	}
+	return ClaimedInvocation{
+		Request: prepared, State: request, Execution: execution,
+		Disposition: journal.ExecutionReplay,
+	}, nil
 }
 
 func canonicalProfileInvocationSelector(

@@ -27,22 +27,22 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 	}
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
-		return nil, errors.New("open receipt signing seed")
+		return nil, errors.New("open protocol signing seed")
 	}
 	file := os.NewFile(uintptr(fd), path)
 	if file == nil {
 		_ = unix.Close(fd)
-		return nil, errors.New("open receipt signing seed")
+		return nil, errors.New("open protocol signing seed")
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 ||
 		requireCurrentOwner(info) != nil || info.Size() <= 0 || info.Size() > MaxSeedFileBytes {
-		return nil, errors.New("receipt signing seed is not a private regular file")
+		return nil, errors.New("protocol signing seed is not a private regular file")
 	}
 	data := make([]byte, info.Size())
 	if _, err := io.ReadFull(file, data); err != nil {
-		return nil, errors.New("read receipt signing seed")
+		return nil, errors.New("read protocol signing seed")
 	}
 	if len(data) > 0 && data[len(data)-1] == '\n' {
 		data = data[:len(data)-1]
@@ -55,7 +55,7 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 		for index := range seed {
 			seed[index] = 0
 		}
-		return nil, errors.New("receipt signing seed must be 32-byte base64url")
+		return nil, errors.New("protocol signing seed must be 32-byte base64url")
 	}
 	privateKey := ed25519.NewKeyFromSeed(seed)
 	for index := range seed {
@@ -78,17 +78,17 @@ func ListenPrivateUnix(path string) (*net.UnixListener, error) {
 	}
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
-		return nil, errors.New("listen on receipt signer socket")
+		return nil, errors.New("listen on protocol signer socket")
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		_ = listener.Close()
-		return nil, errors.New("protect receipt signer socket")
+		return nil, errors.New("protect protocol signer socket")
 	}
 	info, err := os.Lstat(path)
 	if err != nil || info.Mode()&os.ModeSocket == 0 || info.Mode().Perm() != 0o600 ||
 		requireCurrentOwner(info) != nil {
 		_ = listener.Close()
-		return nil, errors.New("receipt signer socket failed ownership validation")
+		return nil, errors.New("protocol signer socket failed ownership validation")
 	}
 	return listener, nil
 }

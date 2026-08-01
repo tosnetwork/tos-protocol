@@ -66,6 +66,7 @@ type coreSessionFixture struct {
 	resolver         edgeClientKeyResolver
 	snapshot         authorization.AuthoritySnapshot
 	manifestEnvelope identity.Envelope
+	sessionEnvelope  identity.Envelope
 	manifest         *authorization.VerifiedManifest
 	session          *authorization.VerifiedSessionGrant
 }
@@ -169,6 +170,7 @@ func newCoreSessionFixture(t *testing.T, now time.Time) coreSessionFixture {
 			ObservedAt: now,
 		},
 		manifestEnvelope: manifestEnvelope,
+		sessionEnvelope:  grantEnvelope,
 		resolver: edgeClientKeyResolver{snapshot: authorization.ClientKeySnapshot{
 			Network: manifest.Network, ServiceID: manifest.ServiceID,
 			KeyID: grant.Client, Principal: grant.Client,

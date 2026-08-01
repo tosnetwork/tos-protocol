@@ -147,46 +147,9 @@ func (c *Core) mapAndClaimPaidExecutionMaterial(
 	if err := ctx.Err(); err != nil {
 		return ClaimedInvocation{}, err
 	}
-	if _, err := policy.chargedNanoTOS(0); err != nil {
-		return ClaimedInvocation{}, err
-	}
-	if scope.Network != material.Network ||
-		scope.ServiceID != material.ServiceID ||
-		scope.SessionID != material.SessionID ||
-		scope.Operation != material.Operation ||
-		scope.RequestID != material.RequestID {
-		return ClaimedInvocation{}, errors.New(
-			"profile invocation does not match paid request",
-		)
-	}
-	if uint64(len(intent)) > material.MaxInputBytes {
-		return ClaimedInvocation{}, errors.New(
-			"profile intent exceeds quoted input limit",
-		)
-	}
-	intentDigest, err := protocol.RequestIntentDigest(
-		material.ProfileID,
-		material.ProfileVersion,
-		material.ProfileExtensions,
-		material.Operation,
-		intent,
-	)
-	if err != nil {
-		return ClaimedInvocation{}, fmt.Errorf("commit profile intent: %w", err)
-	}
-	if intentDigest != material.IntentDigest {
-		return ClaimedInvocation{}, errors.New(
-			"profile intent does not match paid request commitment",
-		)
-	}
 	state, err := c.requests.Get(scope, c.now().UTC())
 	if err != nil {
 		return ClaimedInvocation{}, err
-	}
-	if state.IntentDigest != material.IntentDigest {
-		return ClaimedInvocation{}, errors.New(
-			"profile intent does not match durable request",
-		)
 	}
 	switch state.State {
 	case journal.StateAuthorized:
@@ -198,34 +161,11 @@ func (c *Core) mapAndClaimPaidExecutionMaterial(
 	default:
 		return ClaimedInvocation{}, journal.ErrTransition
 	}
-	input := ProfileInvocationInput{
-		Network: material.Network, ServiceID: material.ServiceID,
-		ProfileID: material.ProfileID, ProfileVersion: material.ProfileVersion,
-		ProfileExtensions: append([]string(nil), material.ProfileExtensions...),
-		SessionID:         material.SessionID, Operation: material.Operation,
-		RequestID: material.RequestID, IntentDigest: material.IntentDigest,
-		Intent:        append([]byte(nil), intent...),
-		MaxInputBytes: material.MaxInputBytes, MaxOutputBytes: material.MaxOutputBytes,
-		Deadline: material.Deadline, ServiceRevision: material.ServiceRevision,
-		ResourceRevision: material.ResourceRevision,
-	}
-	mapped, err := callProfileInvocationMapper(ctx, mapper, input)
+	request, err := mapPaidWorkerRequest(
+		ctx, scope, material, intent, mapper, policy, state,
+	)
 	if err != nil {
 		return ClaimedInvocation{}, err
-	}
-	taskID, err := profileWorkerTaskID(material, policy)
-	if err != nil {
-		return ClaimedInvocation{}, err
-	}
-	request := &edgev1.InvokeRequest{
-		RequestId: material.RequestID, QuoteId: material.QuoteID,
-		TaskId: taskID, ServiceId: material.ServiceID,
-		Operation: material.Operation, Model: mapped.Model,
-		Payload:               append([]byte(nil), mapped.Payload...),
-		MaxOutputBytes:        material.MaxOutputBytes,
-		DeadlineUnixMillis:    material.Deadline.UnixMilli(),
-		RetainUntilUnixMillis: ceilUnixMillis(state.RetainUntil),
-		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
 	}
 	if state.State == journal.StateRunning {
 		claimed, err := c.claimPaidExecutionMaterial(
@@ -260,6 +200,86 @@ func (c *Core) mapAndClaimPaidExecutionMaterial(
 		material,
 		request,
 	)
+}
+
+func mapPaidWorkerRequest(
+	ctx context.Context,
+	scope journal.Scope,
+	material authorization.ReceiptInvocationMaterial,
+	intent []byte,
+	mapper ProfileInvocationMapper,
+	policy SuccessfulReceiptPolicy,
+	state journal.Record,
+) (*edgev1.InvokeRequest, error) {
+	if ctx == nil {
+		return nil, errors.New("nil profile mapping context")
+	}
+	if mapper == nil {
+		return nil, errors.New("nil profile invocation mapper")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := policy.chargedNanoTOS(0); err != nil {
+		return nil, err
+	}
+	if scope.Network != material.Network ||
+		scope.ServiceID != material.ServiceID ||
+		scope.SessionID != material.SessionID ||
+		scope.Operation != material.Operation ||
+		scope.RequestID != material.RequestID {
+		return nil, errors.New(
+			"profile invocation does not match paid request",
+		)
+	}
+	if uint64(len(intent)) > material.MaxInputBytes {
+		return nil, errors.New("profile intent exceeds quoted input limit")
+	}
+	intentDigest, err := protocol.RequestIntentDigest(
+		material.ProfileID,
+		material.ProfileVersion,
+		material.ProfileExtensions,
+		material.Operation,
+		intent,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("commit profile intent: %w", err)
+	}
+	if intentDigest != material.IntentDigest ||
+		state.Scope != scope || state.IntentDigest != material.IntentDigest {
+		return nil, errors.New(
+			"profile intent does not match durable paid request",
+		)
+	}
+	input := ProfileInvocationInput{
+		Network: material.Network, ServiceID: material.ServiceID,
+		ProfileID: material.ProfileID, ProfileVersion: material.ProfileVersion,
+		ProfileExtensions: append([]string(nil), material.ProfileExtensions...),
+		SessionID:         material.SessionID, Operation: material.Operation,
+		RequestID: material.RequestID, IntentDigest: material.IntentDigest,
+		Intent:        append([]byte(nil), intent...),
+		MaxInputBytes: material.MaxInputBytes, MaxOutputBytes: material.MaxOutputBytes,
+		Deadline: material.Deadline, ServiceRevision: material.ServiceRevision,
+		ResourceRevision: material.ResourceRevision,
+	}
+	mapped, err := callProfileInvocationMapper(ctx, mapper, input)
+	if err != nil {
+		return nil, err
+	}
+	taskID, err := profileWorkerTaskID(material, policy)
+	if err != nil {
+		return nil, err
+	}
+	return &edgev1.InvokeRequest{
+		RequestId: material.RequestID, QuoteId: material.QuoteID,
+		TaskId: taskID, ServiceId: material.ServiceID,
+		Operation: material.Operation, Model: mapped.Model,
+		Payload:               append([]byte(nil), mapped.Payload...),
+		MaxOutputBytes:        material.MaxOutputBytes,
+		DeadlineUnixMillis:    material.Deadline.UnixMilli(),
+		RetainUntilUnixMillis: ceilUnixMillis(state.RetainUntil),
+		Priority:              edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+	}, nil
 }
 
 func callProfileInvocationMapper(

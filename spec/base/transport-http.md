@@ -1,11 +1,12 @@
 # HTTP transport binding
 
 HTTPS is the baseline public transport for ARD interoperability and browser
-gateways. Public paid execution remains disabled until authentication,
-idempotency, production payment observation, profile-specific isolated
-invocation, production receipt key custody, refund reconciliation, and
-authenticated delivery are wired end to end. The bounded successful-charge
-fraction is an internal library policy and does not expose this public route.
+gateways. The generic server contains a bounded paid-action resource, but it
+registers that resource only when deployment composition supplies the complete
+current-authority authorizer, payment observer, exact vertical profile plan,
+private Worker, receipt signer, readiness checks, durable journal, retention
+policy, and concurrency bound. The stock `tos-edge` command supplies no
+vertical plan and therefore remains discovery-only.
 
 ## Discovery
 
@@ -33,13 +34,49 @@ GET  /tos/v1/actions/{actionId}/events
 GET  /tos/v1/receipts/{receiptId}
 ```
 
-These paths reserve the base namespace. The bootstrap server does not expose
-sessions, quotes, actions, cancellation, or events. It can install the receipt
-resource only when both an explicit receipt-access authorizer and a trusted
-durable receipt source are supplied by deployment composition; the stock
-`tos-edge` binary supplies neither and therefore keeps the route absent.
+These paths reserve the base namespace. The generic server currently implements
+`POST /tos/v1/actions` plus optional authenticated action-status and receipt
+resources. Session and quote issuance exist as transport-neutral verified
+libraries; public session/quote creation, cancellation, and events are not registered. The
+receipt resource is installed only when deployment composition supplies both
+an explicit receipt-access authorizer and a trusted durable receipt source.
+The stock `tos-edge` binary supplies neither public resource composition and
+therefore keeps both routes absent.
 Vertical operations are selected by a negotiated profile and operation
 identifier, not by accepting arbitrary executable URLs.
+
+An enabled action resource accepts one strict, bounded JSON document containing
+the exact intent bytes and signed session, quote, delegation, and payment
+envelopes. It rejects unknown or duplicate fields, content encoding, query
+parameters, oversized bodies, incomplete dependencies, and excess concurrency.
+After authentication, a new request rejects known-unready chain, signer,
+Worker, or exact-profile state before payment admission. An existing durable
+request remains eligible for strict `GetTask` recovery while new-work capacity
+is full or draining; that path cannot call `Invoke`. Current authority uses a
+process-monotonic chain high-water mark with a concurrent
+overtaking check. Payment application, execution claim, Worker task identity,
+terminal receipt, and replay remain durable. A new claim may call `Invoke` once;
+every replay uses `GetTask`. Ambiguous private-RPC delivery returns `202` with
+status `uncertain` and never grants permission to resubmit work. Terminal
+success returns bounded output and the signed receipt; terminal failure returns
+only the signed zero-charge receipt.
+
+The v0.1 implementation admits at most eight concurrent action handlers per
+process (default four). Admission occurs before body allocation, and each body
+and response has a fixed byte ceiling. Deployments scale with additional
+bounded processes instead of raising an edge terminal to an unbounded
+request-buffer or in-flight task population.
+
+An enabled action-status resource authenticates the exact path action ID before
+consulting durable state and returns only `{version, actionId, status}` plus the
+original signed receipt envelope when a terminal request has an applied
+payment. It never serializes the intent, output, payer/payee fields, Worker
+payload, execution claim, timestamps, error diagnostics, or other journal
+metadata. A paid terminal record without its atomically required receipt fails
+closed. A legitimate terminal record created before payment may omit a receipt.
+Authorization denial or panic, malformed IDs, query parameters, missing state,
+and expired state share the same non-enumerating `404`; internal inconsistency
+uses a redacted `503`. Responses use `Cache-Control: no-store`.
 
 An enabled receipt resource authenticates before consulting durable state,
 uses one bounded authorization deadline, requires the resulting scope to match

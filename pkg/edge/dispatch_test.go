@@ -30,6 +30,36 @@ type dispatchWorker struct {
 	cancel      bool
 	getStatus   edgev1.TaskStatus
 	output      []byte
+	completedAt atomic.Int64
+	healthError atomic.Bool
+}
+
+func (w *dispatchWorker) Health(
+	context.Context,
+	*connect.Request[edgev1.HealthRequest],
+) (*connect.Response[edgev1.HealthResponse], error) {
+	if w.healthError.Load() {
+		return nil, connect.NewError(
+			connect.CodeUnavailable, errors.New("simulated Worker degradation"),
+		)
+	}
+	return connect.NewResponse(&edgev1.HealthResponse{
+		Status: "ready", Version: "test-v1",
+		Readiness: dispatchReadyComponents(),
+	}), nil
+}
+
+func dispatchReadyComponents() []*edgev1.ReadinessComponent {
+	components := make([]*edgev1.ReadinessComponent, 0, 6)
+	for _, id := range []string{
+		"worker", "admission", "resources", "runtimes", "model-binding",
+		"task-store",
+	} {
+		components = append(components, &edgev1.ReadinessComponent{
+			Id: id, Status: edgev1.ReadinessStatus_READINESS_STATUS_READY,
+		})
+	}
+	return components
 }
 
 func (w *dispatchWorker) Invoke(
@@ -67,9 +97,12 @@ func (w *dispatchWorker) GetTask(
 			},
 			w.output,
 		)
-		response.CompletedUnixMillis = time.Now().UTC().Truncate(
-			time.Millisecond,
-		).UnixMilli()
+		response.CompletedUnixMillis = w.completedAt.Load()
+		if response.CompletedUnixMillis == 0 {
+			response.CompletedUnixMillis = time.Now().UTC().Truncate(
+				time.Millisecond,
+			).UnixMilli()
+		}
 		response.RetainUntilUnixMillis = request.Msg.RetainUntilUnixMillis
 	case edgev1.TaskStatus_TASK_STATUS_FAILED,
 		edgev1.TaskStatus_TASK_STATUS_CANCELED:

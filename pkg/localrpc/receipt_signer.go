@@ -23,6 +23,7 @@ import (
 
 const (
 	ReceiptSignerPath                   = "/v1/receipt/sign"
+	QuoteSignerPath                     = "/v1/quote/sign"
 	ReceiptSignerHealthPath             = "/healthz"
 	DefaultReceiptSignerTimeout         = 5 * time.Second
 	DefaultReceiptSignerMaxMessageBytes = 2 << 20
@@ -43,12 +44,20 @@ type ReceiptSignerClientConfig struct {
 	ExpectedPublicKey string
 }
 
+// QuoteSignerClientConfig uses the same bounded private transport policy as
+// receipt signing, but NewQuoteSignerClient fixes it to the quote operation.
+type QuoteSignerClientConfig = ReceiptSignerClientConfig
+
 func DefaultReceiptSignerClientConfig(socketPath string) ReceiptSignerClientConfig {
 	return ReceiptSignerClientConfig{
 		SocketPath: socketPath, Timeout: DefaultReceiptSignerTimeout,
 		MaxMessageBytes: DefaultReceiptSignerMaxMessageBytes,
 		MaxConcurrent:   DefaultReceiptSignerMaxConcurrent,
 	}
+}
+
+func DefaultQuoteSignerClientConfig(socketPath string) QuoteSignerClientConfig {
+	return DefaultReceiptSignerClientConfig(socketPath)
 }
 
 // ReceiptSignerClient implements authorization.ReceiptSigner without loading
@@ -61,6 +70,8 @@ type ReceiptSignerClient struct {
 	slots             chan struct{}
 	expectedKeyID     string
 	expectedPublicKey ed25519.PublicKey
+	domain            string
+	path              string
 
 	mutex     sync.Mutex
 	active    map[uint64]context.CancelFunc
@@ -81,10 +92,22 @@ type receiptSignerHealth struct {
 	Status    string `json:"status"`
 	KeyID     string `json:"keyId"`
 	PublicKey string `json:"publicKey"`
+	Domain    string `json:"domain"`
+	Path      string `json:"path"`
 }
 
 func NewReceiptSignerClient(
 	config ReceiptSignerClientConfig,
+) (*ReceiptSignerClient, error) {
+	return newPurposeSignerClient(
+		config, protocol.ReceiptDomain, ReceiptSignerPath,
+	)
+}
+
+func newPurposeSignerClient(
+	config ReceiptSignerClientConfig,
+	domain string,
+	path string,
 ) (*ReceiptSignerClient, error) {
 	if config.Timeout <= 0 || config.Timeout > maxReceiptSignerTimeout ||
 		config.MaxMessageBytes <= 0 ||
@@ -93,7 +116,9 @@ func NewReceiptSignerClient(
 		config.MaxConcurrent > maxReceiptSignerConcurrent ||
 		(config.ExpectedKeyID == "") != (config.ExpectedPublicKey == "") ||
 		len(config.ExpectedKeyID) > 512 ||
-		strings.ContainsRune(config.ExpectedKeyID, '\x00') {
+		strings.ContainsRune(config.ExpectedKeyID, '\x00') ||
+		(domain != protocol.ReceiptDomain && domain != protocol.QuoteDomain) ||
+		(path != ReceiptSignerPath && path != QuoteSignerPath) {
 		return nil, errors.New("invalid receipt signer client configuration")
 	}
 	var expectedPublicKey ed25519.PublicKey
@@ -120,6 +145,8 @@ func NewReceiptSignerClient(
 		expectedKeyID:     config.ExpectedKeyID,
 		expectedPublicKey: expectedPublicKey,
 		active:            make(map[uint64]context.CancelFunc, config.MaxConcurrent),
+		domain:            domain,
+		path:              path,
 	}, nil
 }
 
@@ -129,8 +156,20 @@ func (c *ReceiptSignerClient) SignReceipt(
 	issuedAt time.Time,
 	expiresAt time.Time,
 ) (identity.Envelope, error) {
+	if c == nil || c.domain != protocol.ReceiptDomain || c.path != ReceiptSignerPath {
+		return identity.Envelope{}, errors.New("invalid receipt signer client")
+	}
+	return c.signPurpose(ctx, payload, issuedAt, expiresAt)
+}
+
+func (c *ReceiptSignerClient) signPurpose(
+	ctx context.Context,
+	payload []byte,
+	issuedAt time.Time,
+	expiresAt time.Time,
+) (identity.Envelope, error) {
 	if c == nil || nilHTTPClient(c.httpClient) || c.maxMessageBytes <= 0 ||
-		c.slots == nil || c.active == nil {
+		c.slots == nil || c.active == nil || c.domain == "" || c.path == "" {
 		return identity.Envelope{}, errors.New("invalid receipt signer client")
 	}
 	if ctx == nil {
@@ -163,7 +202,7 @@ func (c *ReceiptSignerClient) SignReceipt(
 	}
 	defer finish()
 	request, err := http.NewRequestWithContext(
-		requestContext, http.MethodPost, "http://unix"+ReceiptSignerPath,
+		requestContext, http.MethodPost, "http://unix"+c.path,
 		bytes.NewReader(encoded),
 	)
 	if err != nil {
@@ -185,8 +224,10 @@ func (c *ReceiptSignerClient) SignReceipt(
 	if response.StatusCode != http.StatusOK {
 		return identity.Envelope{}, errors.New("receipt signer rejected request")
 	}
-	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	mediaType, parameters, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	charset := strings.ToLower(parameters["charset"])
+	if err != nil || mediaType != "application/json" ||
+		(len(parameters) > 1 || (len(parameters) == 1 && charset != "utf-8")) {
 		return identity.Envelope{}, errors.New("receipt signer returned an invalid content type")
 	}
 	responseData, err := io.ReadAll(io.LimitReader(
@@ -202,7 +243,7 @@ func (c *ReceiptSignerClient) SignReceipt(
 	if err := jsonstrict.Decode(responseData, &envelope); err != nil {
 		return identity.Envelope{}, errors.New("receipt signer returned an invalid envelope")
 	}
-	if envelope.Domain != protocol.ReceiptDomain ||
+	if envelope.Domain != c.domain ||
 		envelope.IssuedAt != issuedAt.UnixMilli() ||
 		envelope.ExpiresAt != expiresAt.UnixMilli() ||
 		!bytes.Equal(envelope.Payload, payload) {
@@ -213,15 +254,59 @@ func (c *ReceiptSignerClient) SignReceipt(
 	}
 	if c.expectedKeyID != "" {
 		if envelope.KeyID != c.expectedKeyID ||
-			envelope.Verify(
-				c.expectedPublicKey, protocol.ReceiptDomain, issuedAt,
-			) != nil {
+			envelope.Verify(c.expectedPublicKey, c.domain, issuedAt) != nil {
 			return identity.Envelope{}, errors.New(
 				"receipt signer response does not match startup identity",
 			)
 		}
 	}
 	return cloneIdentityEnvelope(envelope), nil
+}
+
+// QuoteSignerClient implements authorization.QuoteSigner using the same
+// bounded private transport while fixing the operation to the quote domain
+// and path. It intentionally does not expose SignReceipt.
+type QuoteSignerClient struct {
+	client *ReceiptSignerClient
+}
+
+func NewQuoteSignerClient(
+	config QuoteSignerClientConfig,
+) (*QuoteSignerClient, error) {
+	client, err := newPurposeSignerClient(
+		config, protocol.QuoteDomain, QuoteSignerPath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &QuoteSignerClient{client: client}, nil
+}
+
+func (c *QuoteSignerClient) SignQuote(
+	ctx context.Context,
+	payload []byte,
+	issuedAt time.Time,
+	expiresAt time.Time,
+) (identity.Envelope, error) {
+	if c == nil || c.client == nil ||
+		c.client.domain != protocol.QuoteDomain || c.client.path != QuoteSignerPath {
+		return identity.Envelope{}, errors.New("invalid quote signer client")
+	}
+	return c.client.signPurpose(ctx, payload, issuedAt, expiresAt)
+}
+
+func (c *QuoteSignerClient) CheckReady(ctx context.Context) error {
+	if c == nil || c.client == nil {
+		return errors.New("invalid quote signer client")
+	}
+	return c.client.CheckReady(ctx)
+}
+
+func (c *QuoteSignerClient) Close() error {
+	if c == nil || c.client == nil {
+		return nil
+	}
+	return c.client.Close()
 }
 
 // CheckReady verifies the private transport and signer process without asking
@@ -264,8 +349,10 @@ func (c *ReceiptSignerClient) CheckReady(ctx context.Context) error {
 	if response.StatusCode != http.StatusOK {
 		return errors.New("receipt signer is not ready")
 	}
-	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	mediaType, parameters, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	charset := strings.ToLower(parameters["charset"])
+	if err != nil || mediaType != "application/json" ||
+		(len(parameters) > 1 || (len(parameters) == 1 && charset != "utf-8")) {
 		return errors.New("receipt signer returned an invalid readiness content type")
 	}
 	data, err := io.ReadAll(io.LimitReader(
@@ -277,7 +364,8 @@ func (c *ReceiptSignerClient) CheckReady(ctx context.Context) error {
 	var health receiptSignerHealth
 	if err := jsonstrict.Decode(data, &health); err != nil || health.Status != "ready" ||
 		health.KeyID == "" || len(health.KeyID) > 512 ||
-		strings.ContainsRune(health.KeyID, '\x00') {
+		strings.ContainsRune(health.KeyID, '\x00') ||
+		health.Domain != c.domain || health.Path != c.path {
 		return errors.New("receipt signer returned an invalid readiness response")
 	}
 	publicKey, err := base64.RawURLEncoding.DecodeString(health.PublicKey)

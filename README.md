@@ -14,17 +14,20 @@ Schemas, and fixed conformance vectors.
 
 The security boundary is intentional:
 
-- `tos-edge` is the public control-plane process. The initial binary serves
-  health and discovery documents only. It can fail closed against an explicitly
-  configured live TOS authority/client-key/payment runtime, but public paid
-  invocation stays disabled until reviewed profile mappers, isolated
-  execution, production signing, and receipt delivery are wired end to end.
-  The HTTP library has an opt-in, non-enumerating signed-receipt delivery
-  boundary, but the stock binary installs no access authorizer and does not
-  expose that route.
-- `tos-ard-registry` provides the mandatory ARD `POST /search` and
-  `GET /agents` baseline over a bounded in-memory index loaded from
-  operator-approved local catalogs. Valid TOS Worker extensions contribute
+- `tos-edge` is the public control-plane process. The stock binary serves
+  health and discovery documents only and can fail closed against an explicitly
+  configured live TOS authority/client-key/payment runtime. The HTTP library
+  has opt-in paid-action, authenticated action-status, and non-enumerating
+  signed-receipt routes, but no route exists unless its complete dependency set
+  is installed. Paid execution requires all authorizers, payment observer, exact profile
+  plan and capability-drift readiness, private Worker, signer, retention bound,
+  and concurrency bound are supplied together. The stock binary supplies no
+  public-route dependencies.
+- `tos-ard-registry` provides the mandatory ARD `POST /search` baseline and a
+  minimal optional, unfiltered `GET /agents` browsing endpoint over a bounded
+  in-memory index loaded from operator-approved local catalogs. The draft
+  List `filter` and `orderBy` extensions are not advertised by this bootstrap.
+  Valid TOS Worker extensions contribute
   bounded model, operation, runtime, digest, and service-ID terms to lexical
   search and same-capability exact `x-tos.*` filters.
 - `pkg/ard.BuildWorkerCatalog` converts a fresh validated private Worker
@@ -67,6 +70,11 @@ go run ./cmd/tos-edge \
 go run ./cmd/tos-ard-registry \
   -listen 127.0.0.1:8090 \
   -catalog ./examples/ai-catalog.json
+
+go run ./cmd/tos-quote-signer \
+  -socket /absolute/private/quote-signer.sock \
+  -seed-file /absolute/private/quote.seed \
+  -key-id manifest-quote-key
 ```
 
 `tos-ard-registry` reads only regular local catalog files that are not
@@ -75,19 +83,22 @@ configured files, `SIGHUP` performs an all-or-nothing reload. Every catalog,
 known extension, identifier ownership rule, publisher quota, and search-memory
 bound is validated before the index generation changes. A failed reload keeps
 the last valid generation and its pagination tokens unchanged.
-The public `/search` and `/agents` handlers admit at most 64 concurrent active
+The public `/search` and minimal `/agents` handlers admit at most 16 concurrent active
 requests and reject excess work immediately with `503 RESOURCE_EXHAUSTED` and
 `Retry-After`; `/healthz` remains allocation-light and outside that work gate.
+Indexed entries are capped at 64 KiB each and 64 MiB in aggregate in addition
+to the entry and per-publisher quotas, so legal but data-heavy catalogs cannot
+turn the process into an unbounded in-memory document store.
 
 After replacing the placeholder controller, RPC URLs, and reviewed contract
 code hash, add `-tos-chain-config ./examples/tos-chain.json` to make startup
 and `/readyz` fail closed against the live TOS quorum. This does not expose an
 invocation route.
 
-Remote crawling, federation, payment forwarding, and invocation are
-deliberately not enabled in this bootstrap. They require the SSRF, provenance,
-authentication, replay, and bounded-state controls described in the
-architecture plan.
+Remote crawling, federation, and payment forwarding are deliberately not
+enabled in this bootstrap. Paid invocation is available only through the
+fail-closed library composition described below; the stock command remains
+discovery-only.
 
 For TOS Worker entries, `POST /search` additionally accepts exact,
 case-insensitive `x-tos.serviceId`, `x-tos.operation`, `x-tos.model`,
@@ -116,14 +127,29 @@ descriptor -> controller-signed manifest -> profile negotiation
 
 The quote binds the exact session, request-intent digest, service/profile and
 resource revisions, network, payee, settlement target, limits, price, and
-deadline. `tos-edge` still exposes discovery only until manifest-backed
-authorization uses the configured live TOS runtime in a public request path,
-with production profile mappers, execution isolation, signing, and public
-delivery. When both the chain runtime and request journal are configured, the
+deadline. The generic server exposes `POST /tos/v1/actions` only when a strict
+JSON authorizer and the complete live execution dependency set are installed.
+The request carries base64 exact intent bytes plus signed session, quote,
+delegation, and payment envelopes. Duplicate/unknown fields, oversized bodies,
+content encoding, partial deployment configuration, and excess concurrency
+fail closed. New work also requires current chain, signer, Worker, and exact
+profile readiness before payment admission. A previously persisted request can
+still perform strict `GetTask`-only recovery while new-work capacity is full;
+it cannot call `Invoke` again. The route verifies current authority with a
+concurrency-safe monotonic chain high-water mark, observes payment, atomically
+executes or recovers the action, and returns only a bounded status or bounded
+output plus the signed receipt. The stock
+`tos-edge` command does not install this vertical composition. When both the
+chain runtime and request journal are configured, the
 bounded durable payment reconciliation scheduler is enabled automatically;
 consecutive chain or entry failures exponentially back off its one shared
 timer to a fixed operator limit, and a successful batch resets the base
 interval.
+An independently authenticated `GET /tos/v1/actions/{actionId}` may be
+installed with the durable Core. It returns only the bounded state and, for a
+terminal paid action, the original signed receipt. It never serializes intent,
+output, payment metadata, Worker payload, or journal internals; malformed IDs,
+denial, absence, and expiry share one non-enumerating response.
 The manifest/runtime verifier, strict stateless chain-resolver boundary,
 atomic signed-envelope nonce admission, bounded durable request journal, and
 cleanup owner are implemented as internal libraries. The private Worker RPC
@@ -134,6 +160,13 @@ delegation chains, and cumulative session/delegation budgets are verified and
 atomically admitted without double-charging replay. Runtime-signed quotes and
 client-signed payment authorizations can also be matched to a fresh, exact,
 final-by-default chain observation through the bounded payment observer.
+Quote issuance has a purpose-specific custody boundary and a bounded,
+no-retry Unix-socket client/software sidecar: Edge derives every
+manifest and session authority field, accepts only request, price,
+destination, and bounded resource draft fields, delegates canonical bytes to
+a `QuoteSigner`, rejects payload or validity substitution, immediately
+verifies the result under the current manifest quote role, and exposes only a
+defensive signed envelope during its verified lifetime.
 Edge Core can apply that opaque observation exactly once: the payment record,
 global replay index, and pending-to-authorized request transition commit in
 one bounded journal transaction and survive restart. That transaction also
@@ -199,6 +232,16 @@ uses read-only `GetTask`, including after the execution deadline while bounded
 retention remains live. RPC failure returns an explicit `uncertain` result
 that still exposes a defensive copy of the durable claim; even `NOT_FOUND`
 never authorizes automatic resubmission.
+`ExecuteRegisteredPaidAction` and `RecoverRegisteredPaidAction` compose this
+rule with terminal resolution so callers cannot accidentally discard the
+claim-preserving error path or retry `Invoke`. Terminal retries reconstruct
+the exact mapper output, task ID, request digest, deadline, and retention from
+durable state, use only `GetTask`, and compare recovered output, usage,
+completion time, charge, and receipt identity to the existing signed receipt.
+Successful and failed terminal retries reuse the original receipt without
+another signature. Direct and recovered completion timestamps are normalized
+to the Worker's millisecond wire precision, preventing false conflicts after
+a lost client response.
 Its resolution boundary creates no receipt for `uncertain`, `NOT_FOUND`,
 `ACCEPTED`, or `RUNNING`. Only a validated direct/recovered success or a
 validated recovered `FAILED`, `CANCELED`, or `TIMED_OUT` outcome enters the
@@ -215,26 +258,25 @@ execution still owns the durable `running` request before sending the
 request/task/digest tuple to the Worker. Accepted, rejected, and ambiguous
 cancellation attempts preserve the claim and never create a terminal receipt;
 only a later validated `GetTask` terminal observation can do that.
-The concrete quorum TOS authority/client-key/native-payment adapters are now
+The concrete quorum TOS authority/client-key/native-payment adapters are
 implemented, exercised against a three-node chain, and available to `tos-edge`
-through strict operator startup configuration and `/readyz`. Refund
-reconciliation, usage-dependent or failed partial-work charging, the
-key-custody deployment wiring, isolated executor, and public receipt route
-remain intentionally disconnected. A bounded no-retry receipt-signer client
-and independent software-key `tos-receipt-signer` process now implement the
-private Unix-socket boundary. Both sides enforce ownership, permissions,
-message size, fixed concurrency, and exact payload/time preservation before
-the existing manifest verification accepts any signature. Edge startup also
-requires the expected signer key ID and Ed25519 public key, rejects a different
-sidecar identity before opening its listener, and cryptographically pins every
-later signing response to that same key. This operator binding
-does not replace current-manifest role and revocation verification. HSM
-integration and automatic key rotation remain deployment work. Optional
-receipt-signer configuration performs a side-effect-free startup health
-preflight and adds the private signer to `/readyz`; paid public ingress remains
-disabled. Graceful sidecar shutdown stops new signing, synchronizes with active
-signatures, and clears the software private-key buffer before exit; this is
-best-effort process-memory hygiene, not HSM-grade erasure.
+through strict operator startup configuration and `/readyz`. Bounded,
+no-retry purpose-signer clients and independent software-key
+`tos-quote-signer` and `tos-receipt-signer` processes implement separate
+private Unix-socket custody boundaries. Both sides enforce ownership,
+permissions, message size, fixed
+concurrency, and exact payload/time preservation before current-manifest
+verification accepts a signature. Edge startup pins the expected signer key ID
+and Ed25519 public key and rejects a different sidecar identity before opening
+its listener and on every later signing response. This operator binding does
+not replace manifest role and revocation verification. HSM integration,
+automatic key rotation, refund reconciliation, and usage-dependent or partial
+failure charging remain deployment or later-policy work. Receipt-signer flags
+alone add the signer to `/readyz` but do not enable public routes; the complete
+vertical action composition is still required. Graceful sidecar shutdown stops
+new signing, synchronizes with active signatures, and clears the software
+private-key buffer before exit; this is best-effort process-memory hygiene, not
+HSM-grade erasure.
 Edge synchronously cancels and closes its bounded signer client during shutdown,
 so the private Unix transport does not remain an implicit process-lifetime
 resource.
@@ -253,8 +295,9 @@ A production Worker must still choose an explicit reconciliation policy:
 while a future durable runtime may recover only through an idempotent job or
 sandbox supervisor bound to the exact task ID. Neither the Edge claim nor the
 task table alone proves that an external executor accepted or completed an RPC
-interrupted by a crash. None of these internal boundaries enable public
-actions by themselves.
+interrupted by a crash. None of these internal boundaries enable a public
+action unless the complete opt-in HTTP dependency set is installed; partial
+configuration prevents server construction.
 
 The chain mapping, quorum rules, canonical references, startup composition,
 and local rehearsal are documented in
@@ -264,6 +307,9 @@ Worker-side persistence and `tos-ai` integration are documented in
 The no-retry private key-custody transport and sidecar requirements are
 documented in
 [`docs/receipt-signer-sidecar.md`](docs/receipt-signer-sidecar.md).
+The remaining environment-owned certification work is separated from the
+implemented code in
+[`docs/non-streaming-v0.1-production-gates.md`](docs/non-streaming-v0.1-production-gates.md).
 
 ## Repository map
 
@@ -271,6 +317,8 @@ documented in
 api/                  versioned worker RPC contract
 cmd/tos-edge/         public Edge Core entry point
 cmd/tos-ard-registry/ ARD HTTP Registry entry point
+cmd/tos-quote-signer/ independent purpose-specific quote key process
+cmd/tos-receipt-signer/ independent purpose-specific receipt key process
 pkg/ard/              pinned ARD model, Worker catalog projection and validation
 pkg/chain/            bounded JSON-RPC adapter
 pkg/toschain/         quorum TOS authority, client-key and payment composition

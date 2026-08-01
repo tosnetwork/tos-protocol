@@ -390,7 +390,9 @@ func TestReceiptSignerReadinessRejectsMalformedResponses(t *testing.T) {
 		t.Fatal(err)
 	}
 	identityFields := `,"keyId":"receipt-key-1","publicKey":"` +
-		base64.RawURLEncoding.EncodeToString(publicKey) + `"`
+		base64.RawURLEncoding.EncodeToString(publicKey) +
+		`","domain":"` + protocol.ReceiptDomain +
+		`","path":"` + ReceiptSignerPath + `"`
 	tests := []struct {
 		name, contentType, body string
 		status                  int
@@ -403,6 +405,11 @@ func TestReceiptSignerReadinessRejectsMalformedResponses(t *testing.T) {
 		{"missing identity", "application/json", `{"status":"ready"}`, http.StatusOK, false},
 		{"duplicate", "application/json", `{"status":"ready","status":"ready"` + identityFields + `}`, http.StatusOK, false},
 		{"unknown", "application/json", `{"status":"ready"` + identityFields + `,"detail":"secret"}`, http.StatusOK, false},
+		{"wrong purpose", "application/json", strings.Replace(
+			`{"status":"ready"`+identityFields+`}`,
+			`"domain":"`+protocol.ReceiptDomain+`"`,
+			`"domain":"`+protocol.QuoteDomain+`"`, 1,
+		), http.StatusOK, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

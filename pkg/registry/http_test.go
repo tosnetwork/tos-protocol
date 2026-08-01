@@ -50,6 +50,60 @@ func TestSearchRequiresExactJSONMediaType(t *testing.T) {
 	}
 }
 
+func TestSearchRejectsTransportAmbiguity(t *testing.T) {
+	index, err := NewIndex(DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(index, "https://registry.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, test := range map[string][3]string{
+		"query":           {"/search?ignored=1", "application/json", ""},
+		"encoding":        {"/search", "application/json", "gzip"},
+		"media parameter": {"/search", "application/json; profile=unexpected", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := httptest.NewRequest(
+				http.MethodPost, test[0],
+				strings.NewReader(`{"query":{"text":"edge"}}`),
+			)
+			request.Header.Set("Content-Type", test[1])
+			if test[2] != "" {
+				request.Header.Set("Content-Encoding", test[2])
+			}
+			response := httptest.NewRecorder()
+			handler.Routes().ServeHTTP(response, request)
+			if response.Code < 400 {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestListRejectsUnknownAndDuplicateQueryParameters(t *testing.T) {
+	index, err := NewIndex(DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(index, "https://registry.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{
+		"/agents?unknown=1", "/agents?pageSize=1&pageSize=2",
+	} {
+		response := httptest.NewRecorder()
+		handler.Routes().ServeHTTP(
+			response, httptest.NewRequest(http.MethodGet, target, nil),
+		)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("target=%q status=%d body=%s", target, response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestHandlerRejectsExcessConcurrentRequestsWithoutQueuing(t *testing.T) {
 	limits := DefaultLimits()
 	limits.MaxConcurrentRequests = 1

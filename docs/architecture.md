@@ -1,12 +1,12 @@
 # Bootstrap architecture
 
-This bootstrap turns the repository boundary in the TOS design documents into
-code without claiming that the full protocol is implemented.
+This repository implements the bounded non-streaming v0.1 control and action
+boundaries while keeping optional vertical composition explicit.
 
 ```text
 Internet
    |
-   | HTTPS / TOS Sites (discovery only in bootstrap)
+   | HTTPS / TOS Sites (discovery; paid action only when fully composed)
    v
 tos-edge ------------------> TOS chain adapter
    |
@@ -30,7 +30,8 @@ application, and bounded expiry cleanup. Payment application atomically retains
 the minimum verified quote/payment/profile context required to reconstruct the
 same execution after restart and quote expiry. Recovery revalidates every
 binding, never stores the intent or Worker payload, uses `GetTask` for a
-running claim, and can only replay an already-committed terminal receipt.
+running or terminal claim, and can only replay an already-committed terminal
+receipt after the retained Worker result matches it exactly.
 The authorization library
 verifies fresh controller authority, the current signed manifest, runtime
 roles and revocation, canonical semantic payloads, and admission bindings.
@@ -73,9 +74,20 @@ the configured service authority, and separates `/healthz` liveness from
 quorum-backed `/readyz`. When a durable journal is also configured, the
 bounded payment reconciliation schedule starts automatically. It uses one
 exponentially backed-off timer so a chain outage cannot sustain base-rate
-polling. The public process must still supply a reconciliation/refund policy,
-explicitly installed reviewed profile mappers, invocation isolation, production
-receipt key custody, and public receipt delivery before it forwards paid work.
+polling. The public process must supply an explicitly installed reviewed
+profile mapper, isolated Worker, production receipt key custody, chain-backed
+paid-action authorizer, payment observer, retention policy, and bounded
+concurrency before the opt-in action route exists. Partial composition fails
+server construction.
+The action-level composition now couples dispatch and resolution so an
+ambiguous private RPC cannot lose its durable claim. A client retry after a
+terminal response was lost reconstructs the exact Worker lookup from durable
+state, performs no `Invoke`, and returns output only when its usage, digest,
+completion time, charge, and receipt identity all match the stored signed
+receipt. Direct and recovered completion times use the same millisecond wire
+precision. The authorization layer can also derive and issue quotes without
+letting an ingress handler supply manifest/session authority fields; canonical
+quote signing is immediately re-verified under the current role key.
 Edge Core now supports an immutable exact-profile successful-charge fraction
 with full-charge compatibility, deterministic recovered evaluation, and
 fail-closed replay. Every successful completion/resolution requires the plan,
@@ -88,8 +100,13 @@ wire the reusable bounded task table to an idempotent runtime job or durable
 sandbox supervisor. The table provides atomic claim/replay, exact lookup,
 terminal persistence, capacity backpressure, and cleanup, but cannot infer
 whether an external executor ran before a process crash.
-Those runtime operations remain absent from the public server, so it exposes
-no invocation route.
+The generic public server contains the bounded opt-in action route, strict
+exact-byte JSON credential adapter, and independently authenticated
+non-enumerating durable action-status/receipt reads. Status reads expose no
+intent, output, payment metadata, Worker payload, or journal internals. The
+stock `tos-edge` command installs no
+vertical plan or public-action dependencies and therefore remains
+discovery-only.
 
 ## Dependency decisions
 
@@ -97,13 +114,13 @@ no invocation route.
 |---|---|---|
 | Language | Go 1.24+ | implemented |
 | Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, owner-local slot reserve, priority-aware capacity, terminal persistence, lookup, cleanup, startup audit and payload-free active-task pagination; synchronous workers can fail interrupted tasks closed, while durable executor/supervisor recovery remains |
-| Public discovery | ARD v0.9 Draft | structural model, bounded Registry, deterministic privacy-minimized projection of fresh external Worker capabilities, strict known-extension validation, bounded model/operation/runtime lexical and exact-filter indexing, and fail-closed atomic local-catalog reload implemented |
+| Public discovery | ARD v0.9 Draft | mandatory bounded `POST /search`, minimal optional unfiltered `GET /agents`, deterministic privacy-minimized projection of fresh external Worker capabilities, strict known-extension validation, bounded model/operation/runtime lexical and exact-filter indexing, and fail-closed atomic local-catalog reload implemented; draft List filtering/sorting, remote crawling and federation remain disabled |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
-| Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, atomic bounded recovery context, post-expiry recheck, bounded batch coordinator, adaptive scheduler and binary runtime composition implemented; refund reconciliation remains |
-| Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results support a bounded immutable exact-profile quoted-price fraction (default full charge), deterministic live/recovered evaluation and fail-closed replay, while failed/canceled/timed-out outcomes remain zero-charge; all terminal outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; bounded no-retry private Unix signer client, software-key sidecar, exact expected-key startup/per-response cryptographic binding and side-effect-free Edge readiness wiring implemented, while the public paid route, HSM deployment, automated rotation, refund reconciliation and usage-dependent charging remain |
-| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, constructor-validated deployment plan required by every paid claim/recovery/dispatch path, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; `tos-ai` owns the first reviewed text-generation mapper candidate and constructs its plan from a private runtime capability snapshot, while public ingress remains disabled |
+| Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | manifest/session-derived quote issuance through a purpose-fixed, identity-pinned, bounded no-retry Unix signer client/software sidecar, defensive signed-envelope delivery, exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, atomic bounded recovery context, post-expiry recheck, bounded batch coordinator and adaptive scheduler implemented; public quote-route composition, HSM deployment and refund reconciliation remain |
+| Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results support a bounded immutable exact-profile quoted-price fraction (default full charge), deterministic live/recovered evaluation and fail-closed replay, while failed/canceled/timed-out outcomes remain zero-charge; all terminal outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; bounded no-retry private Unix signer client, software-key sidecar, exact expected-key startup/per-response cryptographic binding, side-effect-free Edge readiness wiring, and the fully dependency-gated public action result are implemented, while stock-binary composition, HSM deployment, automated rotation, refund reconciliation and usage-dependent charging remain |
+| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, constructor-validated deployment plan required by every paid claim/recovery/dispatch path, pre-claim Worker-policy validation, restart and terminal-output replay with mapping-drift rejection implemented; `tos-ai` owns the first reviewed text-generation mapper and can construct the exact plan either in-process or from a fresh fully validated private Worker capability snapshot; the public route exists only in a fully composed vertical deployment |
 | Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment plus bounded execution-authorization persistence, reorganization dispatch gate, exact paid execution claim, quote-expiry-safe Worker recovery, full signed-receipt terminal application/replay, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded TOS success/error envelopes plus strict-majority authority, key and native-payment adapters, startup preflight and freshness-bounded readiness implemented and three-node tested |
@@ -137,8 +154,14 @@ replacement. A malformed file, cross-source identifier collision, publisher
 quota, entry limit, or projection limit rejects the complete reload and leaves
 the previous generation intact. There is one fixed signal goroutine, no file
 watcher, polling loop, historical generation cache, or remote mutation API.
-Search and list execution share a fixed 64-request non-queuing admission gate.
-Over-capacity requests receive a retryable 503 before catalog candidate/result
+Search and the minimal unfiltered list execution share a fixed 16-request
+non-queuing admission gate. ARD v0.9 makes List optional; this bootstrap does
+not advertise its draft `filter` or `orderBy` extensions and returns a bounded
+`501` if either is requested.
+Every indexed entry is capped at 64 KiB and the complete index at 64 MiB,
+including the precomputed Worker search projection. These byte quotas compose
+with entry and per-publisher quotas and are checked before an atomic generation
+replacement. Over-capacity requests receive a retryable 503 before catalog candidate/result
 allocation; health checks do not consume a slot. This bounds concurrent index
 work inside the process, while deployment-level connection and traffic limits
 remain the responsibility of the front proxy or service manager.

@@ -30,6 +30,12 @@ type blockingReadinessChecker struct {
 	release chan struct{}
 }
 
+type panickingReadinessChecker struct{}
+
+func (panickingReadinessChecker) CheckReady(context.Context) error {
+	panic("readiness panic")
+}
+
 type testReceiptAuthorizer struct {
 	scope journal.Scope
 	err   error
@@ -58,6 +64,29 @@ type testReceiptSource struct {
 	err     error
 	panic   bool
 	calls   int
+}
+
+type testActionStatusAuthorizer struct {
+	scope journal.Scope
+	err   error
+	panic bool
+	calls int
+	bound bool
+}
+
+func (authorizer *testActionStatusAuthorizer) AuthorizeActionStatus(
+	ctx context.Context,
+	request *http.Request,
+	_ string,
+) (journal.Scope, error) {
+	authorizer.calls++
+	_, contextBound := ctx.Deadline()
+	_, requestBound := request.Context().Deadline()
+	authorizer.bound = contextBound && requestBound
+	if authorizer.panic {
+		panic("private action status authorization failure")
+	}
+	return authorizer.scope, authorizer.err
 }
 
 func (source *testReceiptSource) Receipt(journal.Scope) (journal.ReceiptRecord, error) {
@@ -138,6 +167,17 @@ func TestServerHasDiscoveryButNoInvocation(t *testing.T) {
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("public invocation unexpectedly exposed: %d", response.StatusCode)
 	}
+	response, err = http.Post(
+		httpServer.URL+"/tos/v1/actions", "application/json",
+		strings.NewReader(`{}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("paid action unexpectedly exposed: %d", response.StatusCode)
+	}
 
 	response, err = http.Get(httpServer.URL + "/tos/v1/receipts/receipt-0001")
 	if err != nil {
@@ -146,6 +186,118 @@ func TestServerHasDiscoveryButNoInvocation(t *testing.T) {
 	response.Body.Close()
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("receipt delivery unexpectedly exposed: %d", response.StatusCode)
+	}
+	response, err = http.Get(httpServer.URL + "/tos/v1/actions/request-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("action status unexpectedly exposed: %d", response.StatusCode)
+	}
+}
+
+func TestActionStatusRequiresCoreAndReturnsBoundedPendingState(t *testing.T) {
+	now, descriptor, catalog, scope, _, _ := receiptDeliveryFixture(t)
+	authorizer := &testActionStatusAuthorizer{scope: scope}
+	if _, err := NewServerWithDependencies(
+		descriptor, catalog, now,
+		ServerDependencies{ActionStatusAuthorizer: authorizer},
+	); err == nil {
+		t.Fatal("action status authorizer without Edge Core was accepted")
+	}
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "action-status.db"))
+	config.CleanupInterval = time.Hour
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	if _, _, err := core.BeginRequest(
+		scope, "sha256:"+strings.Repeat("a", 64), now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServerWithDependencies(
+		descriptor, catalog, now, ServerDependencies{
+			Core: core, ActionStatusAuthorizer: authorizer,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, httptest.NewRequest(
+		http.MethodGet, "/tos/v1/actions/"+scope.RequestID, nil,
+	))
+	if response.Code != http.StatusOK ||
+		response.Header().Get("Content-Type") != ActionStatusMediaType ||
+		response.Header().Get("Cache-Control") != "no-store" ||
+		authorizer.calls != 1 || !authorizer.bound {
+		t.Fatalf(
+			"pending action status=%d headers=%v auth=%d/%v body=%s",
+			response.Code, response.Header(), authorizer.calls,
+			authorizer.bound, response.Body.String(),
+		)
+	}
+	var status publicActionStatus
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Version != protocol.BaseEnvelopeVersion ||
+		status.ActionID != scope.RequestID || status.Status != journal.StatePending ||
+		status.Receipt != nil {
+		t.Fatalf("unexpected pending action status: %#v", status)
+	}
+	for _, target := range []string{
+		"/tos/v1/actions/short",
+		"/tos/v1/actions/" + scope.RequestID + "?detail=1",
+	} {
+		before := authorizer.calls
+		blocked := httptest.NewRecorder()
+		server.Routes().ServeHTTP(blocked, httptest.NewRequest(
+			http.MethodGet, target, nil,
+		))
+		if blocked.Code != http.StatusNotFound || authorizer.calls != before {
+			t.Fatalf("malformed action status reached authorization: %s %#v", target, blocked)
+		}
+	}
+}
+
+func TestActionStatusHidesAuthorizationAndLookupFailures(t *testing.T) {
+	now, descriptor, catalog, scope, _, _ := receiptDeliveryFixture(t)
+	config := DefaultCoreConfig(filepath.Join(t.TempDir(), "action-status.db"))
+	config.CleanupInterval = time.Hour
+	core, err := openCore(config, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	wrong := scope
+	wrong.RequestID = "request-other"
+	for name, authorizer := range map[string]*testActionStatusAuthorizer{
+		"denied":   {scope: scope, err: errors.New("private denial")},
+		"panicked": {scope: scope, panic: true},
+		"mismatch": {scope: wrong},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server, serverErr := NewServerWithDependencies(
+				descriptor, catalog, now, ServerDependencies{
+					Core: core, ActionStatusAuthorizer: authorizer,
+				},
+			)
+			if serverErr != nil {
+				t.Fatal(serverErr)
+			}
+			response := httptest.NewRecorder()
+			server.Routes().ServeHTTP(response, httptest.NewRequest(
+				http.MethodGet, "/tos/v1/actions/"+scope.RequestID, nil,
+			))
+			if response.Code != http.StatusNotFound ||
+				strings.Contains(response.Body.String(), "private") {
+				t.Fatalf("action status authorization leaked: %d %s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -648,5 +800,17 @@ func TestReadinessGateBoundsConcurrentChainProbes(t *testing.T) {
 	}
 	if calls := checker.calls.Load(); calls != 1 {
 		t.Fatalf("cached readiness reached chain: calls=%d", calls)
+	}
+}
+
+func TestReadinessGateContainsCheckerPanic(t *testing.T) {
+	gate := newReadinessGate(panickingReadinessChecker{})
+	now := time.Now().UTC()
+	if err := gate.check(context.Background(), now); err == nil {
+		t.Fatal("readiness checker panic escaped")
+	}
+	if err := gate.check(context.Background(), now); err == nil ||
+		errors.Is(err, errReadinessProbeBusy) {
+		t.Fatalf("readiness gate remained busy after panic: %v", err)
 	}
 }

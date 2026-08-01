@@ -1,22 +1,26 @@
-# Receipt signer sidecar contract
+# Quote and receipt signer sidecar contract
 
-Status: bounded client, software-key sidecar, and identity-bound Edge startup
-wiring implemented; HSM integration, key rotation orchestration, and
+Status: bounded purpose-fixed clients and software-key sidecars implemented;
+receipt identity-bound Edge startup wiring is implemented. HSM integration,
+quote-route composition, key rotation orchestration, and
 deployment remain operator responsibilities.
 
-`pkg/localrpc.ReceiptSignerClient` implements the Edge
-`authorization.ReceiptSigner` boundary without loading a receipt private key
-into `tos-edge` or a Worker. It sends exactly one request to a private local
-Unix socket and never retries signing.
+`pkg/localrpc.ReceiptSignerClient` and `QuoteSignerClient` implement the Edge
+`authorization.ReceiptSigner` and `QuoteSigner` boundaries without loading
+either private key into `tos-edge` or a Worker. Each sends exactly one request
+to its own private local Unix socket and never retries signing.
 
 ## Transport
 
 - HTTP/1.1 or HTTP/2 over a local Unix stream socket.
-- `POST /v1/receipt/sign`.
+- `POST /v1/receipt/sign` for a receipt-only daemon, or
+  `POST /v1/quote/sign` for a quote-only daemon. One process never exposes
+  both operations.
 - `GET /healthz` returns the fixed startup identity
-  `{"status":"ready","keyId":"...","publicKey":"..."}` and never signs or
-  mutates key state. `publicKey` is the unpadded base64url encoding of the
-  32-byte Ed25519 public key.
+  `{"status":"ready","keyId":"...","publicKey":"...","domain":"...","path":"..."}`
+  and never signs or mutates key state. The client requires the exact purpose
+  domain and path as well as the key identity. `publicKey` is the unpadded
+  base64url encoding of the 32-byte Ed25519 public key.
 - Socket path must be absolute and clean.
 - The socket directory must be a non-symlink directory owned by the current
   effective user with no group or other permissions.
@@ -43,7 +47,7 @@ The JSON request is:
 ```
 
 The response is the JSON representation of `identity.Envelope`. It must use
-domain `tos.receipt.v1`, repeat the payload and exact millisecond validity
+the daemon's fixed `tos.receipt.v1` or `tos.quote.v1` domain, repeat the payload and exact millisecond validity
 interval, contain a structurally valid nonce and Ed25519 signature encoding,
 and fit the configured response limit. Duplicate keys, unknown fields,
 trailing JSON, an incorrect media type, and any changed request material are
@@ -58,8 +62,9 @@ receipt.
 
 ## Included software sidecar
 
-`cmd/tos-receipt-signer` implements this contract without opening a TCP
-listener. It accepts an absolute socket path, a manifest receipt-role key ID,
+`cmd/tos-receipt-signer` and `cmd/tos-quote-signer` implement this contract
+without opening a TCP listener. Each accepts an absolute socket path, the
+matching manifest role key ID,
 and an absolute seed file containing one base64url-encoded 32-byte Ed25519
 seed. The seed must be a current-user-owned, non-symlink, regular mode-0600
 file in a current-user-owned private directory. The final file is opened with
@@ -69,8 +74,8 @@ does not claim HSM-grade extraction resistance.
 
 The socket directory follows the same ownership and privacy rules. Startup
 refuses to remove or replace an existing path, creates a mode-0600 Unix
-socket, and performs graceful bounded shutdown. The daemon fixes the domain
-and key ID at startup, strictly decodes bounded JSON, limits concurrent calls,
+socket, and performs graceful bounded shutdown. Each daemon fixes one domain,
+path, and key ID at startup, strictly decodes bounded JSON, limits concurrent calls,
 sets `no-store`, and does not log request bodies, payloads, keys, or
 signatures. Graceful shutdown stops new signatures, waits for an active
 signature to leave the key critical section, clears the in-process software
@@ -87,6 +92,11 @@ go run ./cmd/tos-receipt-signer \
   -socket /run/user/$(id -u)/tos-receipt-signer/signer.sock \
   -seed-file /etc/tos-protocol/receipt.seed \
   -key-id receipt-key-2026-08
+
+go run ./cmd/tos-quote-signer \
+  -socket /run/user/$(id -u)/tos-quote-signer/signer.sock \
+  -seed-file /etc/tos-protocol/quote.seed \
+  -key-id quote-key-2026-08
 ```
 
 Edge requires the socket and expected signer identity as one indivisible
@@ -115,13 +125,13 @@ to sign merely because these flags are present.
 
 ## Sidecar requirements
 
-A production sidecar must:
+A production purpose signer must:
 
-- hold only purpose-specific receipt keys, never wallet owner keys;
+- hold only one purpose-specific quote or receipt key, never wallet owner keys;
 - select a key that is currently present in the service manifest with the
-  `receipt` role;
+  matching `quote` or `receipt` role;
 - enforce the request and response limits independently;
-- sign only the fixed receipt domain and never accept a caller-selected
+- sign only its fixed quote or receipt domain and never accept a caller-selected
   domain or key ID;
 - avoid logging payloads, signatures, private keys, or raw request bodies;
 - honor request cancellation and deadlines;

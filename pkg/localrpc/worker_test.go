@@ -118,7 +118,10 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	now := time.Now().UTC()
 	service := &testWorkerService{
 		health: func(context.Context) (*edgev1.HealthResponse, error) {
-			return &edgev1.HealthResponse{Status: "ready", Version: "test-v1"}, nil
+			return &edgev1.HealthResponse{
+				Status: "ready", Version: "test-v1",
+				Readiness: readyWorkerReadinessComponents(),
+			}, nil
 		},
 		capabilities: func(context.Context) (*edgev1.GetCapabilitiesResponse, error) {
 			return &edgev1.GetCapabilitiesResponse{
@@ -205,6 +208,9 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	if _, err := client.Health(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	if err := client.CheckReady(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := client.GetCapabilities(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -287,6 +293,41 @@ func TestWorkerClientValidatesPrivateRoundTrip(t *testing.T) {
 	if err != nil || !accepted {
 		t.Fatalf("cancel accepted=%v err=%v", accepted, err)
 	}
+}
+
+func TestWorkerClientReadinessRequiresAllComponents(t *testing.T) {
+	response := &edgev1.HealthResponse{Status: "ready", Version: "test-v1"}
+	client := startWorkerClient(t, &testWorkerService{
+		health: func(context.Context) (*edgev1.HealthResponse, error) {
+			return proto.Clone(response).(*edgev1.HealthResponse), nil
+		},
+	}, DefaultWorkerMaxMessageBytes)
+	if err := client.CheckReady(context.Background()); err == nil {
+		t.Fatal("empty Worker readiness was accepted")
+	}
+	response.Readiness = []*edgev1.ReadinessComponent{{
+		Id: "worker", Status: edgev1.ReadinessStatus_READINESS_STATUS_DEGRADED,
+	}}
+	if err := client.CheckReady(context.Background()); err == nil {
+		t.Fatal("degraded Worker readiness was accepted")
+	}
+	response.Readiness = readyWorkerReadinessComponents()
+	if err := client.CheckReady(context.Background()); err != nil {
+		t.Fatalf("ready Worker was rejected: %v", err)
+	}
+}
+
+func readyWorkerReadinessComponents() []*edgev1.ReadinessComponent {
+	components := make([]*edgev1.ReadinessComponent, 0, 6)
+	for _, id := range []string{
+		"worker", "admission", "resources", "runtimes", "model-binding",
+		"task-store",
+	} {
+		components = append(components, &edgev1.ReadinessComponent{
+			Id: id, Status: edgev1.ReadinessStatus_READINESS_STATUS_READY,
+		})
+	}
+	return components
 }
 
 func TestInvocationRequestDigestVector(t *testing.T) {

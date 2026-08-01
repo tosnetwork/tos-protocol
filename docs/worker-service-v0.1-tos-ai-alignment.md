@@ -103,6 +103,14 @@ but consumers make routing decisions from the structured components.
 Draining, unavailable resources, an incomplete runtime set, or missing model
 binding must remain visible even if another component is ready.
 
+Paid Edge readiness requires the structured `worker`, `admission`, `resources`,
+`runtimes`, `model-binding`, and `task-store` components to be present and
+`READY`. Route-optional informational components such as `gpu` do not block a
+CPU-only route by themselves; the mandatory `resources` component remains
+responsible for the hardware required by the configured terminal policy. The
+vertical deployment additionally re-reads fresh capabilities and rejects any
+change to its startup service/model/digest/runtime identity commitment.
+
 ## Hard limits and privacy
 
 The reference private client rejects more than 128 capabilities, 128 resource

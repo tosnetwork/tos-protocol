@@ -130,7 +130,8 @@ func (m *VerifiedManifest) IssueReceipt(
 			err,
 		)
 	}
-	envelope, err := signer.SignReceipt(
+	envelope, err := callReceiptSigner(
+		signer,
 		ctx,
 		append([]byte(nil), payload...),
 		issuedAt,
@@ -160,6 +161,22 @@ func (m *VerifiedManifest) IssueReceipt(
 		)
 	}
 	return verified, nil
+}
+
+func callReceiptSigner(
+	signer ReceiptSigner,
+	ctx context.Context,
+	payload []byte,
+	issuedAt time.Time,
+	expiresAt time.Time,
+) (envelope identity.Envelope, err error) {
+	defer func() {
+		if recover() != nil {
+			envelope = identity.Envelope{}
+			err = errors.New("receipt signer panicked")
+		}
+	}()
+	return signer.SignReceipt(ctx, payload, issuedAt, expiresAt)
 }
 
 func (a AuthorizedPayment) prepareReceipt(

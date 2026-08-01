@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
+	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
+	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/payment"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
 
@@ -50,12 +53,43 @@ type ReceiptSource interface {
 	Receipt(journal.Scope) (journal.ReceiptRecord, error)
 }
 
+// ActionStatusAuthorizer authenticates a read of one durable action. The
+// implementation must bind the path action ID to the returned request scope;
+// discovery metadata is never sufficient authorization.
+type ActionStatusAuthorizer interface {
+	AuthorizeActionStatus(
+		context.Context,
+		*http.Request,
+		string,
+	) (journal.Scope, error)
+}
+
+// PaidActionHTTPAuthorizer parses and authenticates one bounded public action
+// request. The returned opaque value must come from PaidActionAuthorizer;
+// discovery fields alone cannot implement this boundary.
+type PaidActionHTTPAuthorizer interface {
+	AuthorizePaidAction(
+		context.Context,
+		*http.Request,
+	) (authorization.AuthorizedPaidAction, error)
+}
+
 type ServerDependencies struct {
-	Core                   *Core
-	ChainReadiness         ReadinessChecker
-	ReceiptSignerReadiness ReadinessChecker
-	ReceiptAuthorizer      ReceiptDeliveryAuthorizer
-	ReceiptSource          ReceiptSource
+	Core                    *Core
+	ChainReadiness          ReadinessChecker
+	ReceiptSignerReadiness  ReadinessChecker
+	ProfileReadiness        ReadinessChecker
+	ReceiptAuthorizer       ReceiptDeliveryAuthorizer
+	ReceiptSource           ReceiptSource
+	ActionStatusAuthorizer  ActionStatusAuthorizer
+	PaidActionAuthorizer    PaidActionHTTPAuthorizer
+	PaymentObserver         *payment.Observer
+	ProfilePlan             *ProfileInvocationPlan
+	Worker                  *localrpc.WorkerClient
+	ReceiptSigner           authorization.ReceiptSigner
+	PaidActionRetention     time.Duration
+	ReceiptLifetime         time.Duration
+	PaidActionMaxConcurrent int
 }
 
 type readinessGate struct {
@@ -88,7 +122,7 @@ func (gate *readinessGate) check(ctx context.Context, now time.Time) error {
 	gate.running = true
 	gate.mu.Unlock()
 
-	err := gate.checker.CheckReady(ctx)
+	err := callReadinessChecker(gate.checker, ctx)
 	gate.mu.Lock()
 	gate.running = false
 	gate.checked = now
@@ -97,18 +131,41 @@ func (gate *readinessGate) check(ctx context.Context, now time.Time) error {
 	return err
 }
 
+func callReadinessChecker(
+	checker ReadinessChecker,
+	ctx context.Context,
+) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errors.New("readiness checker panicked")
+		}
+	}()
+	return checker.CheckReady(ctx)
+}
+
 type Server struct {
-	descriptor          []byte
-	descriptorExpiresAt time.Time
-	catalog             []byte
-	now                 func() time.Time
-	core                *Core
-	chainReadiness      *readinessGate
-	receiptReadiness    *readinessGate
-	receiptAuthorizer   ReceiptDeliveryAuthorizer
-	receiptSource       ReceiptSource
-	network             string
-	serviceID           string
+	descriptor           []byte
+	descriptorExpiresAt  time.Time
+	catalog              []byte
+	now                  func() time.Time
+	core                 *Core
+	chainReadiness       *readinessGate
+	receiptReadiness     *readinessGate
+	workerReadiness      *readinessGate
+	profileReadiness     *readinessGate
+	receiptAuthorizer    ReceiptDeliveryAuthorizer
+	receiptSource        ReceiptSource
+	actionStatusAuth     ActionStatusAuthorizer
+	paidActionAuthorizer PaidActionHTTPAuthorizer
+	paymentObserver      *payment.Observer
+	profilePlan          *ProfileInvocationPlan
+	worker               *localrpc.WorkerClient
+	receiptSigner        authorization.ReceiptSigner
+	paidActionRetention  time.Duration
+	receiptLifetime      time.Duration
+	paidActionSlots      chan struct{}
+	network              string
+	serviceID            string
 }
 
 func NewServer(descriptor protocol.ServiceDescriptor, catalog ard.Catalog, now time.Time) (*Server, error) {
@@ -146,6 +203,31 @@ func newServer(
 		(dependencies.ReceiptSource == nil) {
 		return nil, errors.New("partial receipt delivery dependencies")
 	}
+	if dependencies.ActionStatusAuthorizer != nil && dependencies.Core == nil {
+		return nil, errors.New("action status requires Edge Core")
+	}
+	paidConfigured := dependencies.PaidActionAuthorizer != nil ||
+		dependencies.PaymentObserver != nil || dependencies.ProfilePlan != nil ||
+		dependencies.ProfileReadiness != nil ||
+		dependencies.Worker != nil || dependencies.ReceiptSigner != nil ||
+		dependencies.PaidActionRetention != 0 ||
+		dependencies.ReceiptLifetime != 0 ||
+		dependencies.PaidActionMaxConcurrent != 0
+	if paidConfigured && (dependencies.Core == nil ||
+		dependencies.ChainReadiness == nil ||
+		dependencies.ReceiptSignerReadiness == nil ||
+		dependencies.ProfileReadiness == nil ||
+		dependencies.PaidActionAuthorizer == nil ||
+		dependencies.PaymentObserver == nil || dependencies.ProfilePlan == nil ||
+		dependencies.Worker == nil || dependencies.ReceiptSigner == nil ||
+		dependencies.PaidActionRetention <= 0 ||
+		dependencies.PaidActionRetention > localrpc.MaximumWorkerTaskRetention ||
+		dependencies.ReceiptLifetime < minReceiptLifetime ||
+		dependencies.ReceiptLifetime > maxReceiptLifetime ||
+		dependencies.PaidActionMaxConcurrent <= 0 ||
+		dependencies.PaidActionMaxConcurrent > MaxPaidActionConcurrent) {
+		return nil, errors.New("invalid or partial paid-action dependencies")
+	}
 	if err := descriptor.Validate(now); err != nil {
 		return nil, err
 	}
@@ -163,19 +245,35 @@ func newServer(
 	if len(descriptorJSON) > 256<<10 {
 		return nil, errors.New("descriptor exceeds byte limit")
 	}
-	return &Server{
-		descriptor:          descriptorJSON,
-		descriptorExpiresAt: descriptor.ExpiresAt,
-		catalog:             catalogJSON,
-		now:                 time.Now,
-		core:                dependencies.Core,
-		chainReadiness:      newReadinessGate(dependencies.ChainReadiness),
-		receiptReadiness:    newReadinessGate(dependencies.ReceiptSignerReadiness),
-		receiptAuthorizer:   dependencies.ReceiptAuthorizer,
-		receiptSource:       dependencies.ReceiptSource,
-		network:             descriptor.Network,
-		serviceID:           descriptor.ServiceID,
-	}, nil
+	server := &Server{
+		descriptor:           descriptorJSON,
+		descriptorExpiresAt:  descriptor.ExpiresAt,
+		catalog:              catalogJSON,
+		now:                  time.Now,
+		core:                 dependencies.Core,
+		chainReadiness:       newReadinessGate(dependencies.ChainReadiness),
+		receiptReadiness:     newReadinessGate(dependencies.ReceiptSignerReadiness),
+		receiptAuthorizer:    dependencies.ReceiptAuthorizer,
+		receiptSource:        dependencies.ReceiptSource,
+		actionStatusAuth:     dependencies.ActionStatusAuthorizer,
+		paidActionAuthorizer: dependencies.PaidActionAuthorizer,
+		paymentObserver:      dependencies.PaymentObserver,
+		profilePlan:          dependencies.ProfilePlan,
+		worker:               dependencies.Worker,
+		receiptSigner:        dependencies.ReceiptSigner,
+		paidActionRetention:  dependencies.PaidActionRetention,
+		receiptLifetime:      dependencies.ReceiptLifetime,
+		network:              descriptor.Network,
+		serviceID:            descriptor.ServiceID,
+	}
+	if paidConfigured {
+		server.workerReadiness = newReadinessGate(dependencies.Worker)
+		server.profileReadiness = newReadinessGate(dependencies.ProfileReadiness)
+		server.paidActionSlots = make(
+			chan struct{}, dependencies.PaidActionMaxConcurrent,
+		)
+	}
+	return server, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -195,7 +293,8 @@ func (s *Server) Routes() http.Handler {
 		}
 		var readinessContext context.Context
 		var cancelReadiness context.CancelFunc
-		if s.chainReadiness != nil || s.receiptReadiness != nil {
+		if s.chainReadiness != nil || s.receiptReadiness != nil ||
+			s.workerReadiness != nil || s.profileReadiness != nil {
 			readinessContext, cancelReadiness = context.WithTimeout(
 				request.Context(), readinessCheckTimeout,
 			)
@@ -218,6 +317,28 @@ func (s *Server) Routes() http.Handler {
 				writeDocument(
 					writer,
 					[]byte(`{"status":"degraded","component":"receipt-signer"}`),
+					"application/json", "no-store", http.StatusServiceUnavailable,
+				)
+				return
+			}
+		}
+		if s.workerReadiness != nil {
+			err := s.workerReadiness.check(readinessContext, s.now())
+			if err != nil {
+				writeDocument(
+					writer,
+					[]byte(`{"status":"degraded","component":"worker"}`),
+					"application/json", "no-store", http.StatusServiceUnavailable,
+				)
+				return
+			}
+		}
+		if s.profileReadiness != nil {
+			err := s.profileReadiness.check(readinessContext, s.now())
+			if err != nil {
+				writeDocument(
+					writer,
+					[]byte(`{"status":"degraded","component":"profile"}`),
 					"application/json", "no-store", http.StatusServiceUnavailable,
 				)
 				return
@@ -249,6 +370,12 @@ func (s *Server) Routes() http.Handler {
 	})
 	if s.receiptAuthorizer != nil && s.receiptSource != nil {
 		mux.HandleFunc("GET /tos/v1/receipts/{receiptId}", s.deliverReceipt)
+	}
+	if s.paidActionAuthorizer != nil && s.paidActionSlots != nil {
+		mux.HandleFunc("POST /tos/v1/actions", s.processPaidAction)
+	}
+	if s.actionStatusAuth != nil && s.core != nil {
+		mux.HandleFunc("GET /tos/v1/actions/{actionId}", s.deliverActionStatus)
 	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")

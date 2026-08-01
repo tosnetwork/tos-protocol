@@ -82,9 +82,12 @@ The default journal bounds budget records to 600,000: six authority budgets
 for each of 100,000 request records in the worst configured default shape.
 No process-global session or delegation cache is introduced.
 
-## Remaining integration
+## Deployment integration
 
-The production deployment must provide the authoritative client-key resolver
-and payment observer, then connect this admission result to the isolated
-Worker RPC. The discovery-only server exposes no public session or invocation
-route in this milestone.
+The production deployment must provide the authoritative client-key resolver,
+payment observer, exact vertical mapper, isolated Worker and receipt custody.
+When all of those dependencies and their readiness checks are installed, the
+generic server can expose the bounded paid-action route. Public creation of a
+session grant remains a separate authenticated exchange; this package verifies
+the resulting signed grant but does not invent the client's authentication
+ceremony.

@@ -659,6 +659,21 @@ func TestReceiptIssuanceRejectsSignerDeviationAndCancellation(t *testing.T) {
 		t.Fatalf("canceled issue err=%v called=%v", err, called)
 	}
 
+	panickingSigner := receiptSignerFunc(func(
+		context.Context,
+		[]byte,
+		time.Time,
+		time.Time,
+	) (identity.Envelope, error) {
+		panic("custody panic")
+	})
+	if _, err := fixture.manifest.IssueReceipt(
+		context.Background(), fixture.authorized, draft, panickingSigner,
+		receiptNow, receiptNow.Add(time.Minute),
+	); err == nil {
+		t.Fatal("receipt signing panic escaped")
+	}
+
 	draft.ChargedNanoTOS = fixture.quote.PriceNanoTOS + 1
 	if _, err := fixture.manifest.IssueReceipt(
 		context.Background(),

@@ -280,6 +280,39 @@ func (c *WorkerClient) Health(
 	return proto.Clone(response.Msg).(*edgev1.HealthResponse), nil
 }
 
+// CheckReady adapts the exact private Worker client to Edge readiness. A
+// syntactically valid Health response is insufficient for paid admission. The
+// mandatory execution components must all be present and ready. Informational
+// or route-optional components (for example GPU on a CPU-only route) do not
+// independently block admission; the resource component remains authoritative
+// for the resources required by the configured Worker.
+func (c *WorkerClient) CheckReady(ctx context.Context) error {
+	response, err := c.Health(ctx)
+	if err != nil {
+		return err
+	}
+	for _, required := range []string{
+		"worker", "admission", "resources", "runtimes", "model-binding",
+		"task-store",
+	} {
+		found := false
+		for _, component := range response.Readiness {
+			if component.Id != required {
+				continue
+			}
+			found = true
+			if component.Status != edgev1.ReadinessStatus_READINESS_STATUS_READY {
+				return errors.New("worker is not ready")
+			}
+			break
+		}
+		if !found {
+			return errors.New("worker omitted a required readiness component")
+		}
+	}
+	return nil
+}
+
 func (c *WorkerClient) GetCapabilities(
 	ctx context.Context,
 ) (*edgev1.GetCapabilitiesResponse, error) {
@@ -364,7 +397,7 @@ func (c *WorkerClient) Invoke(
 		request,
 		response.Msg,
 		requestDigest,
-		c.now().UTC(),
+		c.now().UTC().Truncate(time.Millisecond),
 	), nil
 }
 

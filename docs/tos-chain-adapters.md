@@ -143,8 +143,10 @@ chain outage does not create a restart storm. `/readyz` checks the request
 journal and the fresh TOS quorum and returns `503` without leaking endpoint
 details when either is unavailable. Its fixed one-entry, one-second cache and
 single-flight gate permit at most one chain readiness probe at a time; they do
-not create request-keyed state or a waiter queue. This startup composition
-still does not add a public invocation route.
+not create request-keyed state or a waiter queue. This chain configuration
+alone does not add a public invocation route. A vertical deployment must also
+install the complete paid-action dependency set; the stock command
+intentionally does not.
 
 When `-request-journal` is present with `-tos-chain-config`, `tos-edge` also
 starts the existing durable payment reconciliation loop. Defaults are one

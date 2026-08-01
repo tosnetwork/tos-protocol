@@ -17,6 +17,7 @@ import (
 type VerifiedQuote struct {
 	valid          bool
 	quote          protocol.Quote
+	envelope       identity.Envelope
 	envelopeDigest string
 	network        string
 	serviceID      string
@@ -102,11 +103,31 @@ func (m *VerifiedManifest) VerifyQuote(
 		return nil, fmt.Errorf("fingerprint quote: %w", err)
 	}
 	return &VerifiedQuote{
-		valid: true, quote: quote,
+		valid: true, quote: quote, envelope: cloneEnvelope(verified.envelope),
 		envelopeDigest: digest,
 		network:        m.manifest.Network, serviceID: m.manifest.ServiceID,
 		validUntil: earliest(verified.validUntil, quote.ExpiresAt),
 	}, nil
+}
+
+// SignedEnvelope returns a defensive copy of the current runtime-signed quote
+// for delivery to the authenticated client. It does not expose mutable quote
+// authority after the verified lifetime expires.
+func (q *VerifiedQuote) SignedEnvelope(now time.Time) (
+	identity.Envelope,
+	error,
+) {
+	if q == nil || !q.valid || q.envelopeDigest == "" {
+		return identity.Envelope{}, errors.New("invalid verified quote")
+	}
+	now, err := validateNow(now)
+	if err != nil {
+		return identity.Envelope{}, err
+	}
+	if !q.validUntil.After(now) {
+		return identity.Envelope{}, errors.New("verified quote is no longer current")
+	}
+	return cloneEnvelope(q.envelope), nil
 }
 
 // AuthorizePayment verifies a direct client or complete delegation chain over

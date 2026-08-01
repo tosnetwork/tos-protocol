@@ -46,6 +46,41 @@ func TestIndexRejectsInvalidRequestConcurrencyLimit(t *testing.T) {
 	}
 }
 
+func TestIndexRejectsInvalidByteLimits(t *testing.T) {
+	for _, mutate := range []func(*Limits){
+		func(limits *Limits) { limits.MaxIndexedEntryBytes = 0 },
+		func(limits *Limits) { limits.MaxIndexBytes = 0 },
+	} {
+		limits := DefaultLimits()
+		mutate(&limits)
+		if _, err := NewIndex(limits); err == nil {
+			t.Fatal("invalid Registry byte limit was accepted")
+		}
+	}
+}
+
+func TestIndexEnforcesEntryAndAggregateByteLimits(t *testing.T) {
+	limits := DefaultLimits()
+	limits.MaxIndexedEntryBytes = 256
+	index, err := NewIndex(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := index.AddCatalog("file:///entry-limit.json", testCatalog()); err == nil {
+		t.Fatal("oversized indexed entry was accepted")
+	}
+
+	limits = DefaultLimits()
+	limits.MaxIndexBytes = 1
+	index, err = NewIndex(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := index.AddCatalog("file:///index-limit.json", testCatalog()); err == nil {
+		t.Fatal("aggregate index byte overflow was accepted")
+	}
+}
+
 func TestIndexSearchAndPagination(t *testing.T) {
 	index, err := NewIndex(DefaultLimits())
 	if err != nil {

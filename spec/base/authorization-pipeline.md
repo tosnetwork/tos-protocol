@@ -110,15 +110,15 @@ enough authority snapshot. Restart recovery of nonterminal journal records
 must re-resolve current controller, manifest replacement, runtime-key
 revocation, payment, and local policy before continuing.
 
-This library does not by itself enable a public session or invocation route.
-The bootstrap server exposes discovery by default. It also contains an opt-in,
-fail-closed receipt delivery boundary, but that route is registered only when
-deployment composition installs both a concrete access authorizer and a
-trusted durable receipt source. A production action route must
-wire a real authority resolver, typed payload policy, the concrete TOS payment
-adapter and watcher schedule, profile-specific Worker mapping, execution
-isolation, production receipt key custody, failure policy, and authenticated
-receipt delivery authorization.
+The verifier library does not by itself enable a public route. The generic
+server exposes discovery by default and contains opt-in, fail-closed action,
+action-status, and receipt boundaries. The action route is registered only when deployment
+composition installs the current authority/client-key resolvers, strict JSON
+authorizer, concrete payment observer, exact profile plan, private Worker,
+production receipt custody, readiness probes, retention policy, durable Core,
+and concurrency bound together. The receipt route separately requires a
+concrete access authorizer and trusted durable source. Partial composition
+prevents server construction; the stock command installs none of these routes.
 
 Runtime requests such as quotes and receipts can use the opaque
 `AuthorizedEnvelope` path directly. Client actions additionally require a

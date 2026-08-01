@@ -16,8 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
+)
+
+var (
+	_ authorization.QuoteSigner   = (*localrpc.QuoteSignerClient)(nil)
+	_ authorization.ReceiptSigner = (*localrpc.ReceiptSignerClient)(nil)
 )
 
 func TestHandlerInteroperatesWithBoundedClient(t *testing.T) {
@@ -80,6 +86,71 @@ func TestHandlerInteroperatesWithBoundedClient(t *testing.T) {
 	}
 }
 
+func TestQuoteHandlerInteroperatesWithPurposeBoundClient(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Config{
+		KeyID: "quote-key-1", PrivateKey: privateKey,
+		MaxMessageBytes: DefaultMaxMessageBytes, MaxConcurrent: 4,
+		Domain: protocol.QuoteDomain,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	socketPath := filepath.Join(directory, "quote-signer.sock")
+	listener, err := ListenPrivateUnix(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: time.Second}
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+		<-serverDone
+	})
+	config := localrpc.DefaultQuoteSignerClientConfig(socketPath)
+	config.ExpectedKeyID = "quote-key-1"
+	config.ExpectedPublicKey = base64.RawURLEncoding.EncodeToString(publicKey)
+	client, err := localrpc.NewQuoteSignerClient(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if err := client.CheckReady(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	issuedAt := time.UnixMilli(1_800_000_000_000)
+	envelope, err := client.SignQuote(
+		context.Background(), []byte("canonical quote"),
+		issuedAt, issuedAt.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envelope.KeyID != "quote-key-1" ||
+		envelope.Verify(publicKey, protocol.QuoteDomain, issuedAt) != nil {
+		t.Fatal("quote signer returned an invalid purpose-bound envelope")
+	}
+	request := httptest.NewRequest(
+		http.MethodPost, localrpc.ReceiptSignerPath, strings.NewReader(`{}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("quote signer exposed receipt path: %d", response.Code)
+	}
+}
+
 func TestHandlerRejectsAmbiguousOrUnboundedRequests(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -100,6 +171,8 @@ func TestHandlerRejectsAmbiguousOrUnboundedRequests(t *testing.T) {
 		{"method", http.MethodGet, localrpc.ReceiptSignerPath, "application/json", valid, http.StatusMethodNotAllowed},
 		{"path", http.MethodPost, "/other", "application/json", valid, http.StatusNotFound},
 		{"media", http.MethodPost, localrpc.ReceiptSignerPath, "text/plain", valid, http.StatusUnsupportedMediaType},
+		{"media parameter", http.MethodPost, localrpc.ReceiptSignerPath, "application/json; profile=unexpected", valid, http.StatusUnsupportedMediaType},
+		{"query", http.MethodPost, localrpc.ReceiptSignerPath + "?purpose=other", "application/json", valid, http.StatusUnsupportedMediaType},
 		{"duplicate", http.MethodPost, localrpc.ReceiptSignerPath, "application/json", strings.Replace(valid, `"version":"1"`, `"version":"1","version":"1"`, 1), http.StatusBadRequest},
 		{"unknown", http.MethodPost, localrpc.ReceiptSignerPath, "application/json", strings.Replace(valid, `}`, `,"domain":"evil"}`, 1), http.StatusBadRequest},
 		{"version", http.MethodPost, localrpc.ReceiptSignerPath, "application/json", strings.Replace(valid, `"1"`, `"2"`, 1), http.StatusBadRequest},
@@ -139,12 +212,14 @@ func TestHandlerHealthHasNoSigningSideEffect(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	var health struct {
-		Status, KeyID, PublicKey string
+		Status, KeyID, PublicKey, Domain, Path string
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &health); err != nil ||
 		response.Code != http.StatusOK || health.Status != "ready" ||
 		health.KeyID != "receipt-key" ||
 		health.PublicKey != base64.RawURLEncoding.EncodeToString(publicKey) ||
+		health.Domain != protocol.ReceiptDomain ||
+		health.Path != localrpc.ReceiptSignerPath ||
 		response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("unexpected health response: %d %q", response.Code, response.Body.String())
 	}
@@ -245,6 +320,7 @@ func TestHandlerConfigurationBounds(t *testing.T) {
 		{KeyID: "key", PrivateKey: privateKey, MaxMessageBytes: MaxMessageBytes + 1, MaxConcurrent: 1},
 		{KeyID: "key", PrivateKey: privateKey, MaxMessageBytes: 1, MaxConcurrent: MaxConcurrent + 1},
 		{KeyID: "bad\x00key", PrivateKey: privateKey, MaxMessageBytes: 1, MaxConcurrent: 1},
+		{KeyID: "key", PrivateKey: privateKey, MaxMessageBytes: 1, MaxConcurrent: 1, Domain: "tos.any.v1"},
 	} {
 		if _, err := NewHandler(config); err == nil {
 			t.Fatal("accepted invalid handler configuration")
