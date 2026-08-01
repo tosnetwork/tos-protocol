@@ -1014,6 +1014,19 @@ func validateCapabilitiesResponse(
 	return nil
 }
 
+// ValidateWorkerCapabilitiesResponse applies the complete private Worker
+// capability boundary without opening a transport. Discovery adapters use it
+// before deriving a smaller public representation from a local snapshot.
+func ValidateWorkerCapabilitiesResponse(
+	response *edgev1.GetCapabilitiesResponse,
+	now time.Time,
+) error {
+	if now.IsZero() {
+		return errors.New("invalid Worker capability validation time")
+	}
+	return validateCapabilitiesResponse(response, now.UTC())
+}
+
 func validateWorkerEvidence(value *edgev1.ClaimEvidence) error {
 	if value == nil {
 		return nil

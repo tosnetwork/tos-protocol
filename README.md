@@ -22,6 +22,14 @@ The security boundary is intentional:
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs.
+- `pkg/ard.BuildWorkerCatalog` converts a fresh validated private Worker
+  capability snapshot into one deterministic, privacy-minimized public service
+  entry. The operator-approved ARD identifier remains stable and bindable by
+  the TOS descriptor; a bounded extension includes only externally callable
+  selectors. Dynamic capacity and private hardware evidence are omitted.
+- `pkg/ard.WriteCatalogFile` provides an atomic mode-0600 local handoff for
+  explicitly configured `tos-edge` or Registry inputs and refuses symlink or
+  non-regular targets. It performs no network publication.
 - vertical workers use the versioned ConnectRPC API over a private Unix
   socket. The reference client verifies the private directory, socket type,
   mode and owner, bounds messages and deadlines, and does not retry work.
@@ -198,7 +206,7 @@ Worker-side persistence and `tos-ai` integration are documented in
 api/                  versioned worker RPC contract
 cmd/tos-edge/         public Edge Core entry point
 cmd/tos-ard-registry/ ARD HTTP Registry entry point
-pkg/ard/              pinned ARD v0.9 data model and validation
+pkg/ard/              pinned ARD model, Worker catalog projection and validation
 pkg/chain/            bounded JSON-RPC adapter
 pkg/toschain/         quorum TOS authority, client-key and payment composition
 pkg/edge/             safe public discovery server

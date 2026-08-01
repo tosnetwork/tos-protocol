@@ -86,7 +86,7 @@ no invocation route.
 |---|---|---|
 | Language | Go 1.24+ | implemented |
 | Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, owner-local slot reserve, priority-aware capacity, terminal persistence, lookup, cleanup, startup audit and payload-free active-task pagination; synchronous workers can fail interrupted tasks closed, while durable executor/supervisor recovery remains |
-| Public discovery | ARD v0.9 Draft | structural model and bounded Registry implemented |
+| Public discovery | ARD v0.9 Draft | structural model, bounded Registry, and deterministic privacy-minimized projection of fresh external Worker capabilities implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
@@ -101,6 +101,15 @@ no invocation route.
 | Artifacts | ORAS + Cosign + TUF | interfaces planned; AI repository starts manifest verification |
 
 The Registry accepts only local operator-approved catalogs in this milestone.
+An operator can derive such a catalog from a fresh validated Worker snapshot.
+The projection creates one service entry with the operator-approved stable ARD
+identifier that its TOS descriptor must bind. A bounded TOS extension carries
+the sorted external capability selectors and model/runtime revisions, while
+live capacity, evidence references, attributes, local paths, and hardware
+identifiers are omitted. Generation is not publication authority and does not
+open a listener. The optional local file handoff is atomic, mode 0600, and
+rejects symlink or non-regular targets before an operator explicitly loads it
+into `tos-edge` or the Registry.
 Remote crawling is withheld until DNS rebinding, redirect, IP range,
 decompression, recursion, federation, retry, and per-publisher limits are all
 enforced.
