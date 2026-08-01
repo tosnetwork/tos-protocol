@@ -135,7 +135,14 @@ legacy context, malformed or mismatched context, and a reorganized nonterminal
 payment fail closed. Receipt issuance still requires the current manifest and
 current `receipt` role; persisted recovery context is never signing authority.
 
-This does not provide production key custody or public delivery. A deployment
+The reference HTTP server provides a bounded opt-in delivery adapter that
+returns only an exact stored signed receipt envelope after a deployment-owned
+authorizer produces the matching journal scope. The stock binary leaves it
+disabled, and the adapter deliberately does not define or weaken the required
+session/client authentication scheme.
+
+This does not by itself provide production key custody or authenticated public
+delivery. A deployment
 must deploy the included software-key sidecar or an HSM-backed replacement
 behind the bounded private Unix signer client, keep its private key outside
 Edge and the Worker,

@@ -33,9 +33,23 @@ GET  /tos/v1/actions/{actionId}/events
 GET  /tos/v1/receipts/{receiptId}
 ```
 
-These paths reserve the base namespace; they are not implemented by the
-bootstrap server. Vertical operations are selected by a negotiated profile
-and operation identifier, not by accepting arbitrary executable URLs.
+These paths reserve the base namespace. The bootstrap server does not expose
+sessions, quotes, actions, cancellation, or events. It can install the receipt
+resource only when both an explicit receipt-access authorizer and a trusted
+durable receipt source are supplied by deployment composition; the stock
+`tos-edge` binary supplies neither and therefore keeps the route absent.
+Vertical operations are selected by a negotiated profile and operation
+identifier, not by accepting arbitrary executable URLs.
+
+An enabled receipt resource authenticates before consulting durable state,
+uses one bounded authorization deadline, requires the resulting scope to match
+the server network and service, and returns only the exact stored signed
+envelope with `Cache-Control: no-store`. Authorization denial, malformed IDs,
+missing records, and expired records share one non-enumerating response.
+Internal journal fields, output bytes, payer metadata, and private errors are
+never serialized. The transport-neutral hook is not itself an authentication
+scheme: a deployment still has to implement current session/client or
+delegation verification and bind it to the exact receipt ID and request scope.
 
 Creation requests require a bounded unpredictable idempotency key. Reuse with
 identical canonical content returns the existing disposition; reuse with

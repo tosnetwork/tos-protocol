@@ -111,11 +111,14 @@ must re-resolve current controller, manifest replacement, runtime-key
 revocation, payment, and local policy before continuing.
 
 This library does not by itself enable a public session or invocation route.
-The bootstrap server still exposes discovery only. A production route must
+The bootstrap server exposes discovery by default. It also contains an opt-in,
+fail-closed receipt delivery boundary, but that route is registered only when
+deployment composition installs both a concrete access authorizer and a
+trusted durable receipt source. A production action route must
 wire a real authority resolver, typed payload policy, the concrete TOS payment
 adapter and watcher schedule, profile-specific Worker mapping, execution
 isolation, production receipt key custody, failure policy, and authenticated
-receipt delivery.
+receipt delivery authorization.
 
 Runtime requests such as quotes and receipts can use the opaque
 `AuthorizedEnvelope` path directly. Client actions additionally require a

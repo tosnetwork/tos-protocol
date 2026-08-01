@@ -11,12 +11,19 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
+	"github.com/tosnetwork/tos-protocol/pkg/journal"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
 
 const (
 	readinessCheckTimeout = 8 * time.Second
 	readinessCacheTTL     = time.Second
+	receiptAccessTimeout  = 5 * time.Second
+	maxReceiptDocument    = 2 << 20
+
+	// SignedEnvelopeMediaType is the public JSON representation of a signed
+	// TOS protocol envelope. Receipt delivery returns no journal metadata.
+	SignedEnvelopeMediaType = "application/vnd.tos.signed-envelope+json"
 )
 
 var errReadinessProbeBusy = errors.New("readiness probe already in progress")
@@ -28,10 +35,27 @@ type ReadinessChecker interface {
 	CheckReady(context.Context) error
 }
 
+// ReceiptDeliveryAuthorizer authenticates one receipt read before durable
+// state is consulted. Implementations must derive the returned scope from
+// current session/client authority rather than trusting request parameters.
+// The public server invokes it with a short bounded context and hides all
+// authorization failures behind the same unavailable response.
+type ReceiptDeliveryAuthorizer interface {
+	AuthorizeReceiptAccess(context.Context, *http.Request, string) (journal.Scope, error)
+}
+
+// ReceiptSource returns an already validated durable receipt for an exact
+// authorized scope. *Core implements this interface.
+type ReceiptSource interface {
+	Receipt(journal.Scope) (journal.ReceiptRecord, error)
+}
+
 type ServerDependencies struct {
 	Core                   *Core
 	ChainReadiness         ReadinessChecker
 	ReceiptSignerReadiness ReadinessChecker
+	ReceiptAuthorizer      ReceiptDeliveryAuthorizer
+	ReceiptSource          ReceiptSource
 }
 
 type readinessGate struct {
@@ -81,6 +105,10 @@ type Server struct {
 	core                *Core
 	chainReadiness      *readinessGate
 	receiptReadiness    *readinessGate
+	receiptAuthorizer   ReceiptDeliveryAuthorizer
+	receiptSource       ReceiptSource
+	network             string
+	serviceID           string
 }
 
 func NewServer(descriptor protocol.ServiceDescriptor, catalog ard.Catalog, now time.Time) (*Server, error) {
@@ -114,6 +142,10 @@ func newServer(
 	now time.Time,
 	dependencies ServerDependencies,
 ) (*Server, error) {
+	if (dependencies.ReceiptAuthorizer == nil) !=
+		(dependencies.ReceiptSource == nil) {
+		return nil, errors.New("partial receipt delivery dependencies")
+	}
 	if err := descriptor.Validate(now); err != nil {
 		return nil, err
 	}
@@ -139,6 +171,10 @@ func newServer(
 		core:                dependencies.Core,
 		chainReadiness:      newReadinessGate(dependencies.ChainReadiness),
 		receiptReadiness:    newReadinessGate(dependencies.ReceiptSignerReadiness),
+		receiptAuthorizer:   dependencies.ReceiptAuthorizer,
+		receiptSource:       dependencies.ReceiptSource,
+		network:             descriptor.Network,
+		serviceID:           descriptor.ServiceID,
 	}, nil
 }
 
@@ -211,11 +247,118 @@ func (s *Server) Routes() http.Handler {
 			"public, max-age=60, must-revalidate", http.StatusOK,
 		)
 	})
+	if s.receiptAuthorizer != nil && s.receiptSource != nil {
+		mux.HandleFunc("GET /tos/v1/receipts/{receiptId}", s.deliverReceipt)
+	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("Referrer-Policy", "no-referrer")
 		mux.ServeHTTP(writer, request)
 	})
+}
+
+func (s *Server) deliverReceipt(writer http.ResponseWriter, request *http.Request) {
+	receiptID := request.PathValue("receiptId")
+	if !validPublicReceiptID(receiptID) {
+		writeReceiptUnavailable(writer)
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), receiptAccessTimeout)
+	defer cancel()
+	authorizedRequest := request.Clone(ctx)
+	scope, err := authorizeReceiptAccess(
+		ctx, s.receiptAuthorizer, authorizedRequest, receiptID,
+	)
+	if err != nil || scope.Validate() != nil || scope.Network != s.network ||
+		scope.ServiceID != s.serviceID {
+		writeReceiptUnavailable(writer)
+		return
+	}
+	receipt, err := readReceipt(s.receiptSource, scope)
+	if err != nil {
+		if errors.Is(err, journal.ErrNotFound) || errors.Is(err, journal.ErrExpired) {
+			writeReceiptUnavailable(writer)
+			return
+		}
+		writeDocument(
+			writer, []byte(`{"error":"receipt delivery unavailable"}`),
+			"application/json", "no-store", http.StatusServiceUnavailable,
+		)
+		return
+	}
+	if receipt.Scope != scope || receipt.ReceiptID != receiptID {
+		writeDocument(
+			writer, []byte(`{"error":"receipt delivery unavailable"}`),
+			"application/json", "no-store", http.StatusServiceUnavailable,
+		)
+		return
+	}
+	fingerprint, err := receipt.Envelope.Fingerprint()
+	if err != nil || fingerprint != receipt.ReceiptEnvelopeDigest {
+		writeDocument(
+			writer, []byte(`{"error":"receipt delivery unavailable"}`),
+			"application/json", "no-store", http.StatusServiceUnavailable,
+		)
+		return
+	}
+	document, err := json.Marshal(receipt.Envelope)
+	if err != nil || len(document) == 0 || len(document) > maxReceiptDocument {
+		writeDocument(
+			writer, []byte(`{"error":"receipt delivery unavailable"}`),
+			"application/json", "no-store", http.StatusServiceUnavailable,
+		)
+		return
+	}
+	writeDocument(
+		writer, document, SignedEnvelopeMediaType, "no-store", http.StatusOK,
+	)
+}
+
+func authorizeReceiptAccess(
+	ctx context.Context,
+	authorizer ReceiptDeliveryAuthorizer,
+	request *http.Request,
+	receiptID string,
+) (scope journal.Scope, err error) {
+	defer func() {
+		if recover() != nil {
+			scope = journal.Scope{}
+			err = errors.New("receipt authorizer panicked")
+		}
+	}()
+	return authorizer.AuthorizeReceiptAccess(ctx, request, receiptID)
+}
+
+func readReceipt(
+	source ReceiptSource,
+	scope journal.Scope,
+) (receipt journal.ReceiptRecord, err error) {
+	defer func() {
+		if recover() != nil {
+			receipt = journal.ReceiptRecord{}
+			err = errors.New("receipt source panicked")
+		}
+	}()
+	return source.Receipt(scope)
+}
+
+func validPublicReceiptID(value string) bool {
+	if len(value) < 8 || len(value) > 128 {
+		return false
+	}
+	for _, character := range value {
+		if character == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func writeReceiptUnavailable(writer http.ResponseWriter) {
+	writeDocument(
+		writer, []byte(`{"error":"receipt unavailable"}`),
+		"application/json", "no-store", http.StatusNotFound,
+	)
 }
 
 func (s *Server) writeLiveness(writer http.ResponseWriter) bool {

@@ -19,6 +19,9 @@ The security boundary is intentional:
   configured live TOS authority/client-key/payment runtime, but public paid
   invocation stays disabled until reviewed profile mappers, isolated
   execution, production signing, and receipt delivery are wired end to end.
+  The HTTP library has an opt-in, non-enumerating signed-receipt delivery
+  boundary, but the stock binary installs no access authorizer and does not
+  expose that route.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` and
   `GET /agents` baseline over a bounded in-memory index loaded from
   operator-approved local catalogs. Valid TOS Worker extensions contribute
