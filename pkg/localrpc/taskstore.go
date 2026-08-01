@@ -49,6 +49,7 @@ var (
 	taskExpiryBucket   = []byte("task-expiry-v1")
 	taskMetaBucket     = []byte("task-meta-v1")
 	taskCountKey       = []byte("task-count")
+	taskOwnerCountKey  = []byte("task-owner-count")
 )
 
 // WorkerTaskStoreConfig bounds the durable idempotency table owned by one
@@ -58,6 +59,7 @@ var (
 type WorkerTaskStoreConfig struct {
 	Path                  string
 	MaxTasks              int
+	OwnerReservedTasks    int
 	MaxMessageBytes       int
 	MaxInvocationDuration time.Duration
 	MaxTaskRetention      time.Duration
@@ -88,6 +90,8 @@ func (config WorkerTaskStoreConfig) validate() error {
 		return errors.New("Worker task store path must be absolute")
 	}
 	if config.MaxTasks <= 0 || config.MaxTasks > maximumWorkerTasks ||
+		config.OwnerReservedTasks < 0 ||
+		config.OwnerReservedTasks > config.MaxTasks ||
 		config.MaxMessageBytes <= 0 ||
 		config.MaxMessageBytes > maxWorkerMessageBytes ||
 		config.MaxInvocationDuration <= 0 ||
@@ -99,8 +103,16 @@ func (config WorkerTaskStoreConfig) validate() error {
 		config.OpenTimeout <= 0 || config.OpenTimeout > time.Minute {
 		return errors.New("invalid Worker task store configuration")
 	}
-	_, err := validateAllowedPriorities(config.AllowedPriorities)
-	return err
+	priorities, err := validateAllowedPriorities(config.AllowedPriorities)
+	if err != nil {
+		return err
+	}
+	if config.OwnerReservedTasks != 0 {
+		if _, allowed := priorities[edgev1.Priority_PRIORITY_LOCAL_ASYNC]; !allowed {
+			return errors.New("owner task reserve requires local-async priority")
+		}
+	}
+	return nil
 }
 
 // TaskClaimDisposition distinguishes the one request that acquired execution
@@ -292,6 +304,7 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 	results := transaction.Bucket(taskResultsBucket)
 	expiry := transaction.Bucket(taskExpiryBucket)
 	count := 0
+	ownerCount := 0
 	if err := records.ForEach(func(key, encoded []byte) error {
 		if len(key) != sha256.Size {
 			return fmt.Errorf("%w: malformed task key", ErrTaskCorrupt)
@@ -302,8 +315,12 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 		}
 		request := requests.Get(key)
 		result := results.Get(key)
-		if _, err := store.decodeStoredTask(key, metadata, request, result); err != nil {
+		task, err := store.decodeStoredTask(key, metadata, request, result)
+		if err != nil {
 			return err
+		}
+		if ownerTaskPriority(task.Request.Priority) {
+			ownerCount++
 		}
 		if expiry.Get(taskExpiryKey(metadata.RetainUntil, key)) == nil {
 			return fmt.Errorf("%w: task has no expiry index", ErrTaskCorrupt)
@@ -349,9 +366,18 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 			binary.BigEndian.Uint64(existingCount) != uint64(count) {
 			return fmt.Errorf("%w: task count mismatch", ErrTaskCorrupt)
 		}
+	} else if err := writeTaskCount(transaction, uint64(count)); err != nil {
+		return err
+	}
+	existingOwnerCount := meta.Get(taskOwnerCountKey)
+	if existingOwnerCount != nil {
+		if len(existingOwnerCount) != 8 ||
+			binary.BigEndian.Uint64(existingOwnerCount) != uint64(ownerCount) {
+			return fmt.Errorf("%w: owner task count mismatch", ErrTaskCorrupt)
+		}
 		return nil
 	}
-	return writeTaskCount(transaction, uint64(count))
+	return writeTaskOwnerCount(transaction, uint64(ownerCount))
 }
 
 // ClaimTask atomically creates one ACCEPTED task or identifies an exact
@@ -414,7 +440,19 @@ func (store *WorkerTaskStore) ClaimTask(
 		if err != nil {
 			return err
 		}
+		ownerCount, err := readTaskOwnerCount(transaction)
+		if err != nil || ownerCount > count {
+			return ErrTaskCorrupt
+		}
 		if count >= uint64(store.config.MaxTasks) {
+			return ErrTaskCapacity
+		}
+		ownerTask := ownerTaskPriority(request.Priority)
+		externalCount := count - ownerCount
+		externalCapacity := uint64(
+			store.config.MaxTasks - store.config.OwnerReservedTasks,
+		)
+		if !ownerTask && externalCount >= externalCapacity {
 			return ErrTaskCapacity
 		}
 		if err := store.validator.validateInvokeRequest(request, now); err != nil {
@@ -449,6 +487,11 @@ func (store *WorkerTaskStore) ClaimTask(
 		}
 		if err := writeTaskCount(transaction, count+1); err != nil {
 			return err
+		}
+		if ownerTask {
+			if err := writeTaskOwnerCount(transaction, ownerCount+1); err != nil {
+				return err
+			}
 		}
 		output = StoredWorkerTask{
 			Request: cloneInvokeRequest(request), Status: metadata.Status,
@@ -756,9 +799,13 @@ func (store *WorkerTaskStore) Cleanup(
 // WorkerTaskStoreStats is an O(1) logical capacity snapshot. It contains no
 // database path, task identity, payload, or retention metadata.
 type WorkerTaskStoreStats struct {
-	Tasks     uint64
-	Capacity  uint64
-	Available uint64
+	Tasks             uint64
+	Capacity          uint64
+	Available         uint64
+	OwnerReserved     uint64
+	OwnerTasks        uint64
+	ExternalTasks     uint64
+	AvailableExternal uint64
 }
 
 func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
@@ -772,11 +819,24 @@ func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
 			return err
 		}
 		capacity := uint64(store.config.MaxTasks)
-		if count > capacity {
+		ownerCount, err := readTaskOwnerCount(transaction)
+		if err != nil || count > capacity || ownerCount > count {
 			return ErrTaskCorrupt
+		}
+		ownerReserved := uint64(store.config.OwnerReservedTasks)
+		externalCount := count - ownerCount
+		externalCapacity := capacity - ownerReserved
+		availableExternal := uint64(0)
+		if externalCount < externalCapacity && count < capacity {
+			availableExternal = min(
+				externalCapacity-externalCount,
+				capacity-count,
+			)
 		}
 		output = WorkerTaskStoreStats{
 			Tasks: count, Capacity: capacity, Available: capacity - count,
+			OwnerReserved: ownerReserved, OwnerTasks: ownerCount,
+			ExternalTasks: externalCount, AvailableExternal: availableExternal,
 		}
 		return nil
 	})
@@ -1117,6 +1177,7 @@ func (store *WorkerTaskStore) pruneExpiredTx(
 		return 0, false, ErrTaskCorrupt
 	}
 	cursor := expiry.Cursor()
+	ownerRemoved := 0
 	for key, _ := cursor.First(); key != nil && removed < limit; key, _ = cursor.Next() {
 		if len(key) != 8+sha256.Size {
 			return removed, false, fmt.Errorf(
@@ -1142,6 +1203,18 @@ func (store *WorkerTaskStore) pruneExpiredTx(
 				"%w: task expiry binding mismatch", ErrTaskCorrupt,
 			)
 		}
+		task, err := store.decodeStoredTask(
+			taskKey,
+			metadata,
+			requests.Get(taskKey),
+			results.Get(taskKey),
+		)
+		if err != nil {
+			return removed, false, err
+		}
+		if ownerTaskPriority(task.Request.Priority) {
+			ownerRemoved++
+		}
 		if err := records.Delete(taskKey); err != nil {
 			return removed, false, err
 		}
@@ -1165,6 +1238,17 @@ func (store *WorkerTaskStore) pruneExpiredTx(
 	}
 	if removed != 0 {
 		if err := writeTaskCount(transaction, count-uint64(removed)); err != nil {
+			return removed, false, err
+		}
+	}
+	ownerCount, err := readTaskOwnerCount(transaction)
+	if err != nil || uint64(ownerRemoved) > ownerCount || ownerCount > count {
+		return removed, false, ErrTaskCorrupt
+	}
+	if ownerRemoved != 0 {
+		if err := writeTaskOwnerCount(
+			transaction, ownerCount-uint64(ownerRemoved),
+		); err != nil {
 			return removed, false, err
 		}
 	}
@@ -1266,6 +1350,32 @@ func writeTaskCount(transaction *bolt.Tx, count uint64) error {
 	encoded := make([]byte, 8)
 	binary.BigEndian.PutUint64(encoded, count)
 	return meta.Put(taskCountKey, encoded)
+}
+
+func readTaskOwnerCount(transaction *bolt.Tx) (uint64, error) {
+	meta := transaction.Bucket(taskMetaBucket)
+	if meta == nil {
+		return 0, ErrTaskCorrupt
+	}
+	encoded := meta.Get(taskOwnerCountKey)
+	if len(encoded) != 8 {
+		return 0, fmt.Errorf("%w: invalid owner task count", ErrTaskCorrupt)
+	}
+	return binary.BigEndian.Uint64(encoded), nil
+}
+
+func writeTaskOwnerCount(transaction *bolt.Tx, count uint64) error {
+	meta := transaction.Bucket(taskMetaBucket)
+	if meta == nil {
+		return ErrTaskCorrupt
+	}
+	encoded := make([]byte, 8)
+	binary.BigEndian.PutUint64(encoded, count)
+	return meta.Put(taskOwnerCountKey, encoded)
+}
+
+func ownerTaskPriority(priority edgev1.Priority) bool {
+	return priority == edgev1.Priority_PRIORITY_LOCAL_ASYNC
 }
 
 func marshalTaskMessage(message proto.Message, maximum int) ([]byte, error) {

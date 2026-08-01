@@ -95,7 +95,8 @@ permission for a caller to override terminal policy.
 
 `storage.task_slots` is one durable execution identity, not a byte quota.
 Capabilities and quotes commit one slot. A terminal may advertise the
-configured maximum and current available count without exposing task IDs,
-payloads, results, paths, or retention timestamps. The snapshot is advisory;
-only the Worker's atomic durable claim grants a slot.
+configured maximum, owner-reserved subset, and external availability without
+exposing task IDs, payloads, results, paths, or retention timestamps.
+Owner-reserved slots are available only to owner-local work. The snapshot is
+advisory; only the Worker's atomic priority-aware durable claim grants a slot.
 See [`docs/worker-service-v0.1-tos-ai-alignment.md`](../../docs/worker-service-v0.1-tos-ai-alignment.md).

@@ -460,6 +460,113 @@ func TestWorkerTaskStoreCapacityAndBoundedCleanup(t *testing.T) {
 	}
 }
 
+func TestWorkerTaskStoreOwnerReserveIsAtomicAndMigrates(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	path := privateWorkerTaskStorePath(t)
+	config := DefaultWorkerTaskStoreConfig(path)
+	config.MaxTasks = 4
+	config.OwnerReservedTasks = 1
+	config.AllowedPriorities = []edgev1.Priority{
+		edgev1.Priority_PRIORITY_LOCAL_ASYNC,
+		edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+		edgev1.Priority_PRIORITY_BACKGROUND,
+	}
+	store, err := OpenWorkerTaskStore(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim := func(suffix string, priority edgev1.Priority, retain time.Time) error {
+		request := testStoredInvokeRequest(now, suffix)
+		request.Priority = priority
+		request.DeadlineUnixMillis = now.Add(time.Minute).UnixMilli()
+		request.RetainUntilUnixMillis = retain.UnixMilli()
+		_, _, err := store.ClaimTask(request, now)
+		return err
+	}
+	for index := range 3 {
+		retain := now.Add(time.Hour)
+		if index == 0 {
+			retain = now.Add(2 * time.Minute)
+		}
+		if err := claim(
+			fmt.Sprintf("reserve-external-%d", index),
+			edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+			retain,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := claim(
+		"reserve-external-blocked",
+		edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+		now.Add(time.Hour),
+	); !errors.Is(err, ErrTaskCapacity) {
+		t.Fatalf("external task consumed owner reserve: %v", err)
+	}
+	if err := claim(
+		"reserve-background-blocked",
+		edgev1.Priority_PRIORITY_BACKGROUND,
+		now.Add(time.Hour),
+	); !errors.Is(err, ErrTaskCapacity) {
+		t.Fatalf("background task consumed owner reserve: %v", err)
+	}
+	stats, err := store.Stats()
+	if err != nil || stats.Tasks != 3 || stats.OwnerTasks != 0 ||
+		stats.ExternalTasks != 3 || stats.OwnerReserved != 1 ||
+		stats.Available != 1 || stats.AvailableExternal != 0 {
+		t.Fatalf("reserved stats=%#v err=%v", stats, err)
+	}
+	if err := claim(
+		"reserve-owner",
+		edgev1.Priority_PRIORITY_LOCAL_ASYNC,
+		now.Add(time.Hour),
+	); err != nil {
+		t.Fatal(err)
+	}
+	stats, err = store.Stats()
+	if err != nil || stats.Tasks != 4 || stats.OwnerTasks != 1 ||
+		stats.ExternalTasks != 3 || stats.Available != 0 ||
+		stats.AvailableExternal != 0 {
+		t.Fatalf("full owner stats=%#v err=%v", stats, err)
+	}
+	removed, _, err := store.Cleanup(now.Add(3*time.Minute), 1)
+	if err != nil || removed != 1 {
+		t.Fatalf("owner-reserve cleanup removed=%d err=%v", removed, err)
+	}
+	stats, err = store.Stats()
+	if err != nil || stats.Tasks != 3 || stats.OwnerTasks != 1 ||
+		stats.ExternalTasks != 2 || stats.Available != 1 ||
+		stats.AvailableExternal != 1 {
+		t.Fatalf("post-cleanup owner stats=%#v err=%v", stats, err)
+	}
+
+	if err := store.db.Update(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(taskMetaBucket).Delete(taskOwnerCountKey)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := OpenWorkerTaskStore(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer migrated.Close()
+	stats, err = migrated.Stats()
+	if err != nil || stats.OwnerTasks != 1 || stats.ExternalTasks != 2 {
+		t.Fatalf("migrated owner stats=%#v err=%v", stats, err)
+	}
+}
+
+func TestWorkerTaskStoreRejectsReserveWithoutOwnerPriority(t *testing.T) {
+	config := DefaultWorkerTaskStoreConfig(privateWorkerTaskStorePath(t))
+	config.OwnerReservedTasks = 1
+	if _, err := OpenWorkerTaskStore(config); err == nil {
+		t.Fatal("owner reserve without local-async priority was accepted")
+	}
+}
+
 func TestWorkerTaskStoreFailsClosedOnCorruption(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	path := privateWorkerTaskStorePath(t)
