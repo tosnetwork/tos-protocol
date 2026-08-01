@@ -173,9 +173,11 @@ defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A
 reusable bbolt Worker task store now provides atomic claim/replay, exact
 `GetTask`, bounded terminal persistence, capacity backpressure, expiry cleanup,
-startup corruption auditing, bounded payload-free active-task pagination, and
-an atomically enforced owner-local slot reserve with O(1) priority-aware
-capacity snapshots.
+startup corruption auditing, bounded payload-free active-task pagination,
+atomically enforced owner-local slot and retained-byte reserves, and O(1)
+priority-aware capacity snapshots. Retained-byte admission reserves terminal
+result space at claim time, so later completion cannot lose a storage race;
+physical bbolt allocation remains protected by an operator filesystem quota.
 A production Worker must still choose an explicit reconciliation policy:
 `tos-ai` fails interrupted synchronous work closed before opening its listener,
 while a future durable runtime may recover only through an idempotent job or

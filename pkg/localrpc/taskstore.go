@@ -23,11 +23,13 @@ import (
 
 const (
 	DefaultWorkerMaxTasks         = 10_000
+	DefaultWorkerMaxRetainedBytes = 8 << 30
 	DefaultWorkerMaxPrunePerWrite = 64
 	DefaultWorkerActiveScanLimit  = 256
 	DefaultWorkerTaskOpenTimeout  = 5 * time.Second
 
 	maximumWorkerTasks         = 1_000_000
+	maximumWorkerRetainedBytes = 1 << 40
 	maximumWorkerPrunePerWrite = 4096
 	maximumWorkerActiveScan    = 4096
 	maximumTaskMetadataBytes   = 16 << 10
@@ -50,6 +52,8 @@ var (
 	taskMetaBucket     = []byte("task-meta-v1")
 	taskCountKey       = []byte("task-count")
 	taskOwnerCountKey  = []byte("task-owner-count")
+	taskBytesKey       = []byte("task-reserved-bytes")
+	taskOwnerBytesKey  = []byte("task-owner-reserved-bytes")
 )
 
 // WorkerTaskStoreConfig bounds the durable idempotency table owned by one
@@ -60,6 +64,7 @@ type WorkerTaskStoreConfig struct {
 	Path                  string
 	MaxTasks              int
 	OwnerReservedTasks    int
+	MaxRetainedBytes      uint64
 	MaxMessageBytes       int
 	MaxInvocationDuration time.Duration
 	MaxTaskRetention      time.Duration
@@ -74,6 +79,7 @@ func DefaultWorkerTaskStoreConfig(path string) WorkerTaskStoreConfig {
 	return WorkerTaskStoreConfig{
 		Path:                  path,
 		MaxTasks:              DefaultWorkerMaxTasks,
+		MaxRetainedBytes:      DefaultWorkerMaxRetainedBytes,
 		MaxMessageBytes:       DefaultWorkerMaxMessageBytes,
 		MaxInvocationDuration: DefaultWorkerMaxInvocationDuration,
 		MaxTaskRetention:      DefaultWorkerMaxTaskRetention,
@@ -92,6 +98,8 @@ func (config WorkerTaskStoreConfig) validate() error {
 	if config.MaxTasks <= 0 || config.MaxTasks > maximumWorkerTasks ||
 		config.OwnerReservedTasks < 0 ||
 		config.OwnerReservedTasks > config.MaxTasks ||
+		config.MaxRetainedBytes == 0 ||
+		config.MaxRetainedBytes > maximumWorkerRetainedBytes ||
 		config.MaxMessageBytes <= 0 ||
 		config.MaxMessageBytes > maxWorkerMessageBytes ||
 		config.MaxInvocationDuration <= 0 ||
@@ -111,6 +119,18 @@ func (config WorkerTaskStoreConfig) validate() error {
 		if _, allowed := priorities[edgev1.Priority_PRIORITY_LOCAL_ASYNC]; !allowed {
 			return errors.New("owner task reserve requires local-async priority")
 		}
+	}
+	maximumReservation, err := workerTaskMaximumReservationBytes(
+		config.MaxMessageBytes,
+	)
+	if err != nil || config.MaxRetainedBytes < maximumReservation {
+		return errors.New("Worker task byte capacity is too small")
+	}
+	ownerByteReserve, err := checkedMultiplyUint64(
+		uint64(config.OwnerReservedTasks), maximumReservation,
+	)
+	if err != nil || ownerByteReserve > config.MaxRetainedBytes {
+		return errors.New("owner task byte reserve exceeds capacity")
 	}
 	return nil
 }
@@ -305,6 +325,8 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 	expiry := transaction.Bucket(taskExpiryBucket)
 	count := 0
 	ownerCount := 0
+	var reservedBytes uint64
+	var ownerReservedBytes uint64
 	if err := records.ForEach(func(key, encoded []byte) error {
 		if len(key) != sha256.Size {
 			return fmt.Errorf("%w: malformed task key", ErrTaskCorrupt)
@@ -322,6 +344,24 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 		if ownerTaskPriority(task.Request.Priority) {
 			ownerCount++
 		}
+		reservation, err := workerTaskReservationBytes(
+			len(request), store.config.MaxMessageBytes,
+		)
+		if err != nil {
+			return fmt.Errorf("%w: invalid task byte reservation", ErrTaskCorrupt)
+		}
+		reservedBytes, err = checkedAddUint64(reservedBytes, reservation)
+		if err != nil {
+			return fmt.Errorf("%w: task byte accounting overflow", ErrTaskCorrupt)
+		}
+		if ownerTaskPriority(task.Request.Priority) {
+			ownerReservedBytes, err = checkedAddUint64(
+				ownerReservedBytes, reservation,
+			)
+			if err != nil {
+				return fmt.Errorf("%w: owner byte accounting overflow", ErrTaskCorrupt)
+			}
+		}
 		if expiry.Get(taskExpiryKey(metadata.RetainUntil, key)) == nil {
 			return fmt.Errorf("%w: task has no expiry index", ErrTaskCorrupt)
 		}
@@ -331,6 +371,9 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 		return err
 	}
 	if count > store.config.MaxTasks {
+		return ErrTaskCapacity
+	}
+	if reservedBytes > store.config.MaxRetainedBytes {
 		return ErrTaskCapacity
 	}
 	if requests.Stats().KeyN != count || expiry.Stats().KeyN != count ||
@@ -375,9 +418,20 @@ func (store *WorkerTaskStore) initialize(transaction *bolt.Tx) error {
 			binary.BigEndian.Uint64(existingOwnerCount) != uint64(ownerCount) {
 			return fmt.Errorf("%w: owner task count mismatch", ErrTaskCorrupt)
 		}
-		return nil
+	} else if err := writeTaskOwnerCount(transaction, uint64(ownerCount)); err != nil {
+		return err
 	}
-	return writeTaskOwnerCount(transaction, uint64(ownerCount))
+	if err := verifyOrMigrateTaskUint64(
+		transaction, taskBytesKey, reservedBytes, "task byte reservation",
+	); err != nil {
+		return err
+	}
+	return verifyOrMigrateTaskUint64(
+		transaction,
+		taskOwnerBytesKey,
+		ownerReservedBytes,
+		"owner task byte reservation",
+	)
 }
 
 // ClaimTask atomically creates one ACCEPTED task or identifies an exact
@@ -401,6 +455,12 @@ func (store *WorkerTaskStore) ClaimTask(
 		return StoredWorkerTask{}, "", err
 	}
 	encodedRequest, err := marshalTaskMessage(request, store.config.MaxMessageBytes)
+	if err != nil {
+		return StoredWorkerTask{}, "", err
+	}
+	reservationBytes, err := workerTaskReservationBytes(
+		len(encodedRequest), store.config.MaxMessageBytes,
+	)
 	if err != nil {
 		return StoredWorkerTask{}, "", err
 	}
@@ -455,6 +515,42 @@ func (store *WorkerTaskStore) ClaimTask(
 		if !ownerTask && externalCount >= externalCapacity {
 			return ErrTaskCapacity
 		}
+		reservedBytes, err := readTaskReservedBytes(transaction)
+		if err != nil || reservedBytes > store.config.MaxRetainedBytes {
+			return ErrTaskCorrupt
+		}
+		ownerReservedBytes, err := readTaskOwnerReservedBytes(transaction)
+		if err != nil || ownerReservedBytes > reservedBytes {
+			return ErrTaskCorrupt
+		}
+		nextReservedBytes, err := checkedAddUint64(
+			reservedBytes, reservationBytes,
+		)
+		if err != nil || nextReservedBytes > store.config.MaxRetainedBytes {
+			return ErrTaskCapacity
+		}
+		maximumReservation, err := workerTaskMaximumReservationBytes(
+			store.config.MaxMessageBytes,
+		)
+		if err != nil {
+			return err
+		}
+		ownerByteReserve, err := checkedMultiplyUint64(
+			uint64(store.config.OwnerReservedTasks), maximumReservation,
+		)
+		if err != nil || ownerByteReserve > store.config.MaxRetainedBytes {
+			return ErrTaskCorrupt
+		}
+		if !ownerTask {
+			externalBytes := reservedBytes - ownerReservedBytes
+			nextExternalBytes, err := checkedAddUint64(
+				externalBytes, reservationBytes,
+			)
+			if err != nil ||
+				nextExternalBytes > store.config.MaxRetainedBytes-ownerByteReserve {
+				return ErrTaskCapacity
+			}
+		}
 		if err := store.validator.validateInvokeRequest(request, now); err != nil {
 			return err
 		}
@@ -490,6 +586,22 @@ func (store *WorkerTaskStore) ClaimTask(
 		}
 		if ownerTask {
 			if err := writeTaskOwnerCount(transaction, ownerCount+1); err != nil {
+				return err
+			}
+		}
+		if err := writeTaskReservedBytes(transaction, nextReservedBytes); err != nil {
+			return err
+		}
+		if ownerTask {
+			nextOwnerBytes, err := checkedAddUint64(
+				ownerReservedBytes, reservationBytes,
+			)
+			if err != nil {
+				return err
+			}
+			if err := writeTaskOwnerReservedBytes(
+				transaction, nextOwnerBytes,
+			); err != nil {
 				return err
 			}
 		}
@@ -799,13 +911,21 @@ func (store *WorkerTaskStore) Cleanup(
 // WorkerTaskStoreStats is an O(1) logical capacity snapshot. It contains no
 // database path, task identity, payload, or retention metadata.
 type WorkerTaskStoreStats struct {
-	Tasks             uint64
-	Capacity          uint64
-	Available         uint64
-	OwnerReserved     uint64
-	OwnerTasks        uint64
-	ExternalTasks     uint64
-	AvailableExternal uint64
+	Tasks                  uint64
+	Capacity               uint64
+	Available              uint64
+	OwnerReserved          uint64
+	OwnerTasks             uint64
+	ExternalTasks          uint64
+	AvailableExternal      uint64
+	ReservedBytes          uint64
+	ByteCapacity           uint64
+	AvailableBytes         uint64
+	MaximumTaskBytes       uint64
+	OwnerReservedBytes     uint64
+	OwnerBytes             uint64
+	ExternalBytes          uint64
+	AvailableExternalBytes uint64
 }
 
 func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
@@ -833,10 +953,47 @@ func (store *WorkerTaskStore) Stats() (WorkerTaskStoreStats, error) {
 				capacity-count,
 			)
 		}
+		reservedBytes, err := readTaskReservedBytes(transaction)
+		if err != nil || reservedBytes > store.config.MaxRetainedBytes {
+			return ErrTaskCorrupt
+		}
+		ownerBytes, err := readTaskOwnerReservedBytes(transaction)
+		if err != nil || ownerBytes > reservedBytes {
+			return ErrTaskCorrupt
+		}
+		maximumTaskBytes, err := workerTaskMaximumReservationBytes(
+			store.config.MaxMessageBytes,
+		)
+		if err != nil {
+			return err
+		}
+		ownerReservedBytes, err := checkedMultiplyUint64(
+			ownerReserved, maximumTaskBytes,
+		)
+		if err != nil || ownerReservedBytes > store.config.MaxRetainedBytes {
+			return ErrTaskCorrupt
+		}
+		externalBytes := reservedBytes - ownerBytes
+		externalByteCapacity := store.config.MaxRetainedBytes - ownerReservedBytes
+		availableExternalBytes := uint64(0)
+		if externalBytes < externalByteCapacity &&
+			reservedBytes < store.config.MaxRetainedBytes {
+			availableExternalBytes = min(
+				externalByteCapacity-externalBytes,
+				store.config.MaxRetainedBytes-reservedBytes,
+			)
+		}
 		output = WorkerTaskStoreStats{
 			Tasks: count, Capacity: capacity, Available: capacity - count,
 			OwnerReserved: ownerReserved, OwnerTasks: ownerCount,
 			ExternalTasks: externalCount, AvailableExternal: availableExternal,
+			ReservedBytes:      reservedBytes,
+			ByteCapacity:       store.config.MaxRetainedBytes,
+			AvailableBytes:     store.config.MaxRetainedBytes - reservedBytes,
+			MaximumTaskBytes:   maximumTaskBytes,
+			OwnerReservedBytes: ownerReservedBytes,
+			OwnerBytes:         ownerBytes, ExternalBytes: externalBytes,
+			AvailableExternalBytes: availableExternalBytes,
 		}
 		return nil
 	})
@@ -1178,6 +1335,8 @@ func (store *WorkerTaskStore) pruneExpiredTx(
 	}
 	cursor := expiry.Cursor()
 	ownerRemoved := 0
+	var bytesRemoved uint64
+	var ownerBytesRemoved uint64
 	for key, _ := cursor.First(); key != nil && removed < limit; key, _ = cursor.Next() {
 		if len(key) != 8+sha256.Size {
 			return removed, false, fmt.Errorf(
@@ -1215,6 +1374,26 @@ func (store *WorkerTaskStore) pruneExpiredTx(
 		if ownerTaskPriority(task.Request.Priority) {
 			ownerRemoved++
 		}
+		reservationBytes, err := workerTaskReservationBytes(
+			len(requests.Get(taskKey)), store.config.MaxMessageBytes,
+		)
+		if err != nil {
+			return removed, false, fmt.Errorf(
+				"%w: invalid task byte reservation", ErrTaskCorrupt,
+			)
+		}
+		bytesRemoved, err = checkedAddUint64(bytesRemoved, reservationBytes)
+		if err != nil {
+			return removed, false, ErrTaskCorrupt
+		}
+		if ownerTaskPriority(task.Request.Priority) {
+			ownerBytesRemoved, err = checkedAddUint64(
+				ownerBytesRemoved, reservationBytes,
+			)
+			if err != nil {
+				return removed, false, ErrTaskCorrupt
+			}
+		}
 		if err := records.Delete(taskKey); err != nil {
 			return removed, false, err
 		}
@@ -1248,6 +1427,29 @@ func (store *WorkerTaskStore) pruneExpiredTx(
 	if ownerRemoved != 0 {
 		if err := writeTaskOwnerCount(
 			transaction, ownerCount-uint64(ownerRemoved),
+		); err != nil {
+			return removed, false, err
+		}
+	}
+	reservedBytes, err := readTaskReservedBytes(transaction)
+	if err != nil || bytesRemoved > reservedBytes {
+		return removed, false, ErrTaskCorrupt
+	}
+	if bytesRemoved != 0 {
+		if err := writeTaskReservedBytes(
+			transaction, reservedBytes-bytesRemoved,
+		); err != nil {
+			return removed, false, err
+		}
+	}
+	ownerReservedBytes, err := readTaskOwnerReservedBytes(transaction)
+	if err != nil || ownerBytesRemoved > ownerReservedBytes ||
+		ownerReservedBytes > reservedBytes {
+		return removed, false, ErrTaskCorrupt
+	}
+	if ownerBytesRemoved != 0 {
+		if err := writeTaskOwnerReservedBytes(
+			transaction, ownerReservedBytes-ownerBytesRemoved,
 		); err != nil {
 			return removed, false, err
 		}
@@ -1374,8 +1576,125 @@ func writeTaskOwnerCount(transaction *bolt.Tx, count uint64) error {
 	return meta.Put(taskOwnerCountKey, encoded)
 }
 
+func readTaskReservedBytes(transaction *bolt.Tx) (uint64, error) {
+	return readTaskUint64(transaction, taskBytesKey, "task byte reservation")
+}
+
+func writeTaskReservedBytes(transaction *bolt.Tx, value uint64) error {
+	return writeTaskUint64(transaction, taskBytesKey, value)
+}
+
+func readTaskOwnerReservedBytes(transaction *bolt.Tx) (uint64, error) {
+	return readTaskUint64(
+		transaction, taskOwnerBytesKey, "owner task byte reservation",
+	)
+}
+
+func writeTaskOwnerReservedBytes(transaction *bolt.Tx, value uint64) error {
+	return writeTaskUint64(transaction, taskOwnerBytesKey, value)
+}
+
+func readTaskUint64(
+	transaction *bolt.Tx,
+	key []byte,
+	name string,
+) (uint64, error) {
+	meta := transaction.Bucket(taskMetaBucket)
+	if meta == nil {
+		return 0, ErrTaskCorrupt
+	}
+	encoded := meta.Get(key)
+	if len(encoded) != 8 {
+		return 0, fmt.Errorf("%w: invalid %s", ErrTaskCorrupt, name)
+	}
+	return binary.BigEndian.Uint64(encoded), nil
+}
+
+func writeTaskUint64(transaction *bolt.Tx, key []byte, value uint64) error {
+	meta := transaction.Bucket(taskMetaBucket)
+	if meta == nil {
+		return ErrTaskCorrupt
+	}
+	encoded := make([]byte, 8)
+	binary.BigEndian.PutUint64(encoded, value)
+	return meta.Put(key, encoded)
+}
+
+func verifyOrMigrateTaskUint64(
+	transaction *bolt.Tx,
+	key []byte,
+	expected uint64,
+	name string,
+) error {
+	meta := transaction.Bucket(taskMetaBucket)
+	if meta == nil {
+		return ErrTaskCorrupt
+	}
+	existing := meta.Get(key)
+	if existing == nil {
+		return writeTaskUint64(transaction, key, expected)
+	}
+	if len(existing) != 8 || binary.BigEndian.Uint64(existing) != expected {
+		return fmt.Errorf("%w: %s mismatch", ErrTaskCorrupt, name)
+	}
+	return nil
+}
+
 func ownerTaskPriority(priority edgev1.Priority) bool {
 	return priority == edgev1.Priority_PRIORITY_LOCAL_ASYNC
+}
+
+// WorkerTaskMaximumReservationBytes returns the conservative retained-byte
+// reservation advertised for one task. The reservation covers a maximum-size
+// deterministic request, a maximum-size terminal result, bounded metadata,
+// and the fixed logical bucket keys/index value. It deliberately excludes
+// bbolt page and freelist overhead, which requires a filesystem quota.
+func WorkerTaskMaximumReservationBytes(maxMessageBytes int) (uint64, error) {
+	if maxMessageBytes <= 0 || maxMessageBytes > maxWorkerMessageBytes {
+		return 0, errors.New("invalid Worker task message byte limit")
+	}
+	return workerTaskReservationBytes(maxMessageBytes, maxMessageBytes)
+}
+
+func workerTaskMaximumReservationBytes(maxMessageBytes int) (uint64, error) {
+	return WorkerTaskMaximumReservationBytes(maxMessageBytes)
+}
+
+func workerTaskReservationBytes(
+	encodedRequestBytes int,
+	maxMessageBytes int,
+) (uint64, error) {
+	if encodedRequestBytes <= 0 || encodedRequestBytes > maxMessageBytes ||
+		maxMessageBytes <= 0 || maxMessageBytes > maxWorkerMessageBytes {
+		return 0, errors.New("invalid Worker task reservation inputs")
+	}
+	// Three payload-bucket keys plus the timestamped expiry key/value are
+	// fixed-size. Metadata is charged at its hard ceiling so every legal state
+	// transition remains writable after ClaimTask commits.
+	fixed := uint64(maximumTaskMetadataBytes + 4*sha256.Size + 8 + 1)
+	return checkedAddUint64(
+		fixed,
+		uint64(encodedRequestBytes),
+		uint64(maxMessageBytes),
+	)
+}
+
+func checkedAddUint64(values ...uint64) (uint64, error) {
+	var output uint64
+	for _, value := range values {
+		if ^uint64(0)-output < value {
+			return 0, errors.New("Worker task byte accounting overflow")
+		}
+		output += value
+	}
+	return output, nil
+}
+
+func checkedMultiplyUint64(left, right uint64) (uint64, error) {
+	if left != 0 && right > ^uint64(0)/left {
+		return 0, errors.New("Worker task byte accounting overflow")
+	}
+	return left * right, nil
 }
 
 func marshalTaskMessage(message proto.Message, maximum int) ([]byte, error) {

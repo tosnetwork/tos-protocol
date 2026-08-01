@@ -513,7 +513,10 @@ func TestWorkerTaskStoreOwnerReserveIsAtomicAndMigrates(t *testing.T) {
 	stats, err := store.Stats()
 	if err != nil || stats.Tasks != 3 || stats.OwnerTasks != 0 ||
 		stats.ExternalTasks != 3 || stats.OwnerReserved != 1 ||
-		stats.Available != 1 || stats.AvailableExternal != 0 {
+		stats.Available != 1 || stats.AvailableExternal != 0 ||
+		stats.OwnerReservedBytes != stats.MaximumTaskBytes ||
+		stats.OwnerBytes != 0 || stats.ExternalBytes != stats.ReservedBytes ||
+		stats.AvailableExternalBytes == 0 {
 		t.Fatalf("reserved stats=%#v err=%v", stats, err)
 	}
 	if err := claim(
@@ -526,7 +529,8 @@ func TestWorkerTaskStoreOwnerReserveIsAtomicAndMigrates(t *testing.T) {
 	stats, err = store.Stats()
 	if err != nil || stats.Tasks != 4 || stats.OwnerTasks != 1 ||
 		stats.ExternalTasks != 3 || stats.Available != 0 ||
-		stats.AvailableExternal != 0 {
+		stats.AvailableExternal != 0 || stats.OwnerBytes == 0 ||
+		stats.ExternalBytes+stats.OwnerBytes != stats.ReservedBytes {
 		t.Fatalf("full owner stats=%#v err=%v", stats, err)
 	}
 	removed, _, err := store.Cleanup(now.Add(3*time.Minute), 1)
@@ -541,7 +545,15 @@ func TestWorkerTaskStoreOwnerReserveIsAtomicAndMigrates(t *testing.T) {
 	}
 
 	if err := store.db.Update(func(transaction *bolt.Tx) error {
-		return transaction.Bucket(taskMetaBucket).Delete(taskOwnerCountKey)
+		meta := transaction.Bucket(taskMetaBucket)
+		for _, key := range [][]byte{
+			taskOwnerCountKey, taskBytesKey, taskOwnerBytesKey,
+		} {
+			if err := meta.Delete(key); err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -554,8 +566,183 @@ func TestWorkerTaskStoreOwnerReserveIsAtomicAndMigrates(t *testing.T) {
 	}
 	defer migrated.Close()
 	stats, err = migrated.Stats()
-	if err != nil || stats.OwnerTasks != 1 || stats.ExternalTasks != 2 {
+	if err != nil || stats.OwnerTasks != 1 || stats.ExternalTasks != 2 ||
+		stats.ReservedBytes == 0 || stats.OwnerBytes == 0 ||
+		stats.ExternalBytes+stats.OwnerBytes != stats.ReservedBytes {
 		t.Fatalf("migrated owner stats=%#v err=%v", stats, err)
+	}
+}
+
+func TestWorkerTaskStoreRetainedByteBudgetIsAtomicAndReleased(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	path := privateWorkerTaskStorePath(t)
+	config := DefaultWorkerTaskStoreConfig(path)
+	config.MaxTasks = 4
+	maximumTaskBytes, err := WorkerTaskMaximumReservationBytes(
+		config.MaxMessageBytes,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MaxRetainedBytes = maximumTaskBytes
+	store, err := OpenWorkerTaskStore(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstRequest := testStoredInvokeRequest(now, "byte-budget-first")
+	firstRequest.RetainUntilUnixMillis = now.Add(2 * time.Minute).UnixMilli()
+	first, disposition, err := store.ClaimTask(firstRequest, now)
+	if err != nil || disposition != TaskClaimed {
+		t.Fatalf("first claim disposition=%q err=%v", disposition, err)
+	}
+	stats, err := store.Stats()
+	if err != nil || stats.ReservedBytes == 0 ||
+		stats.ReservedBytes > stats.ByteCapacity ||
+		stats.AvailableBytes != stats.ByteCapacity-stats.ReservedBytes ||
+		stats.MaximumTaskBytes != maximumTaskBytes {
+		t.Fatalf("claimed byte stats=%#v err=%v", stats, err)
+	}
+	reservedAfterClaim := stats.ReservedBytes
+	result := testStoredInvokeResult(first.Request, "terminal-output")
+	if _, _, err := store.CompleteTaskSuccess(
+		identityForStoredTask(first),
+		result,
+		now.Add(time.Second),
+		now.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	stats, err = store.Stats()
+	if err != nil || stats.ReservedBytes != reservedAfterClaim {
+		t.Fatalf("terminal reservation changed stats=%#v err=%v", stats, err)
+	}
+	secondRequest := testStoredInvokeRequest(now, "byte-budget-second")
+	if _, _, err := store.ClaimTask(
+		secondRequest, now,
+	); !errors.Is(err, ErrTaskCapacity) {
+		t.Fatalf("second retained-byte claim error=%v", err)
+	}
+	removed, hasMore, err := store.Cleanup(now.Add(3*time.Minute), 1)
+	if err != nil || removed != 1 || hasMore {
+		t.Fatalf("byte cleanup removed=%d more=%v err=%v", removed, hasMore, err)
+	}
+	stats, err = store.Stats()
+	if err != nil || stats.ReservedBytes != 0 ||
+		stats.AvailableBytes != stats.ByteCapacity {
+		t.Fatalf("released byte stats=%#v err=%v", stats, err)
+	}
+	secondRequest.DeadlineUnixMillis = now.Add(5 * time.Minute).UnixMilli()
+	secondRequest.RetainUntilUnixMillis = now.Add(time.Hour).UnixMilli()
+	if _, disposition, err := store.ClaimTask(
+		secondRequest, now.Add(3*time.Minute),
+	); err != nil || disposition != TaskClaimed {
+		t.Fatalf("post-cleanup byte claim disposition=%q err=%v", disposition, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkerTaskStoreOwnerByteReserveRejectsExternalWork(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	config := DefaultWorkerTaskStoreConfig(privateWorkerTaskStorePath(t))
+	config.MaxTasks = 4
+	config.OwnerReservedTasks = 1
+	config.AllowedPriorities = []edgev1.Priority{
+		edgev1.Priority_PRIORITY_LOCAL_ASYNC,
+		edgev1.Priority_PRIORITY_EXTERNAL_SERVICE,
+	}
+	maximumTaskBytes, err := WorkerTaskMaximumReservationBytes(
+		config.MaxMessageBytes,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MaxRetainedBytes = 2 * maximumTaskBytes
+	store, err := OpenWorkerTaskStore(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	first := testStoredInvokeRequest(now, "owner-byte-external-first")
+	if _, _, err := store.ClaimTask(first, now); err != nil {
+		t.Fatal(err)
+	}
+	second := testStoredInvokeRequest(now, "owner-byte-external-blocked")
+	if _, _, err := store.ClaimTask(
+		second, now,
+	); !errors.Is(err, ErrTaskCapacity) {
+		t.Fatalf("external task consumed owner byte reserve: %v", err)
+	}
+	owner := testStoredInvokeRequest(now, "owner-byte-local")
+	owner.Priority = edgev1.Priority_PRIORITY_LOCAL_ASYNC
+	if _, disposition, err := store.ClaimTask(
+		owner, now,
+	); err != nil || disposition != TaskClaimed {
+		t.Fatalf("owner byte claim disposition=%q err=%v", disposition, err)
+	}
+	stats, err := store.Stats()
+	if err != nil || stats.Tasks != 2 || stats.OwnerTasks != 1 ||
+		stats.ExternalTasks != 1 || stats.AvailableExternalBytes >=
+		stats.MaximumTaskBytes || stats.OwnerReservedBytes != maximumTaskBytes ||
+		stats.OwnerBytes == 0 {
+		t.Fatalf("owner byte stats=%#v err=%v", stats, err)
+	}
+}
+
+func TestWorkerTaskStoreConcurrentRetainedByteCapacity(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	config := DefaultWorkerTaskStoreConfig(privateWorkerTaskStorePath(t))
+	config.MaxTasks = 32
+	maximumTaskBytes, err := WorkerTaskMaximumReservationBytes(
+		config.MaxMessageBytes,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MaxRetainedBytes = maximumTaskBytes
+	store, err := OpenWorkerTaskStore(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	const attempts = 16
+	var claimed atomic.Int32
+	var exhausted atomic.Int32
+	errorsSeen := make(chan error, attempts)
+	var wait sync.WaitGroup
+	for index := range attempts {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			request := testStoredInvokeRequest(
+				now, fmt.Sprintf("concurrent-byte-%d", index),
+			)
+			_, disposition, err := store.ClaimTask(request, now)
+			switch {
+			case err == nil && disposition == TaskClaimed:
+				claimed.Add(1)
+			case errors.Is(err, ErrTaskCapacity):
+				exhausted.Add(1)
+			default:
+				errorsSeen <- fmt.Errorf(
+					"disposition=%q error=%w", disposition, err,
+				)
+			}
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		t.Error(err)
+	}
+	stats, err := store.Stats()
+	if err != nil || claimed.Load() != 1 || exhausted.Load() != attempts-1 ||
+		stats.Tasks != 1 || stats.ReservedBytes > stats.ByteCapacity {
+		t.Fatalf(
+			"claimed=%d exhausted=%d stats=%#v err=%v",
+			claimed.Load(), exhausted.Load(), stats, err,
+		)
 	}
 }
 
@@ -564,6 +751,23 @@ func TestWorkerTaskStoreRejectsReserveWithoutOwnerPriority(t *testing.T) {
 	config.OwnerReservedTasks = 1
 	if _, err := OpenWorkerTaskStore(config); err == nil {
 		t.Fatal("owner reserve without local-async priority was accepted")
+	}
+}
+
+func TestWorkerTaskStoreRejectsInvalidRetainedByteCapacity(t *testing.T) {
+	config := DefaultWorkerTaskStoreConfig(privateWorkerTaskStorePath(t))
+	config.MaxRetainedBytes = 1
+	if _, err := OpenWorkerTaskStore(config); err == nil {
+		t.Fatal("task store accepted a byte capacity below one maximum task")
+	}
+	config = DefaultWorkerTaskStoreConfig(privateWorkerTaskStorePath(t))
+	config.OwnerReservedTasks = config.MaxTasks
+	config.AllowedPriorities = append(
+		config.AllowedPriorities,
+		edgev1.Priority_PRIORITY_LOCAL_ASYNC,
+	)
+	if _, err := OpenWorkerTaskStore(config); err == nil {
+		t.Fatal("task store accepted an owner byte reserve above byte capacity")
 	}
 }
 
@@ -597,6 +801,32 @@ func TestWorkerTaskStoreFailsClosedOnCorruption(t *testing.T) {
 	}
 	if _, err := OpenWorkerTaskStore(config); !errors.Is(err, ErrTaskCorrupt) {
 		t.Fatalf("corrupt store reopened: %v", err)
+	}
+}
+
+func TestWorkerTaskStoreRejectsRetainedByteCounterMismatch(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	path := privateWorkerTaskStorePath(t)
+	config := DefaultWorkerTaskStoreConfig(path)
+	store, err := OpenWorkerTaskStore(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.ClaimTask(
+		testStoredInvokeRequest(now, "corrupt-byte-counter"), now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.Update(func(transaction *bolt.Tx) error {
+		return writeTaskReservedBytes(transaction, 0)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenWorkerTaskStore(config); !errors.Is(err, ErrTaskCorrupt) {
+		t.Fatalf("mismatched retained-byte counter reopened: %v", err)
 	}
 }
 

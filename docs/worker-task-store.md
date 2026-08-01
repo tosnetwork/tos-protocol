@@ -42,28 +42,36 @@ provides:
   identities without loading request or result payloads;
 - atomic concurrent claim and terminal replay behavior.
 
-The task database is bounded by `MaxTasks`. `OwnerReservedTasks` may reserve a
+The task database is bounded by `MaxTasks` and `MaxRetainedBytes`.
+`OwnerReservedTasks` may reserve a
 subset exclusively for `LOCAL_ASYNC`; external-service and background tasks
 cannot consume that subset. Total, owner, and non-owner counts are maintained
 and audited transactionally, including cleanup and migration of databases
 created before the owner counter existed. Each request and successful result
 is independently bounded by `MaxMessageBytes`; metadata is capped separately.
-The implementation adds no task-index mirror, waiter list, per-task goroutine,
-or per-task timer in process memory.
+At claim time, the database also atomically reserves the encoded request, one
+maximum-size result, maximum metadata, and fixed logical key/index bytes. That
+reservation remains until retention cleanup, even after a smaller terminal
+result is stored. This guarantees that terminal persistence cannot fail due to
+byte-capacity races. Owner-reserved slots imply the same number of
+maximum-sized owner byte reservations, so external work cannot consume them.
+Startup audits or migrates total and owner byte counters from canonical stored
+requests. The implementation adds no task-index mirror, waiter list, per-task
+goroutine, or per-task timer in process memory.
 
-`MaxTasks` plus per-message limits do not constitute an exact database-byte
-ceiling. bbolt retains its high-water file allocation after logical deletion,
-and filesystem allocation includes pages and freelist overhead. Until a
-transactional logical-byte reservation counter and reviewed compaction policy
-are implemented, production deployments must place this database on a
-dedicated filesystem/project quota and monitor free space. Checking only the
-current file length before a write is not a safe hard limit.
+`MaxRetainedBytes` is not an exact database-file ceiling. It bounds live
+logical task reservations, while bbolt retains its high-water file allocation
+after logical deletion and adds pages/freelist overhead. Production deployments
+must still place this database on a dedicated filesystem/project quota, monitor
+free space, and use a separately reviewed offline compaction procedure.
+Checking only the current file length before a write is not a safe hard limit.
 
-`Stats` exposes only O(1) total/owner/non-owner counts, configured capacity,
-owner reserve, and total/external availability. It never exposes the database
-path, task identities, payloads, results, or retention timestamps. A vertical
-Worker uses this snapshot for advisory readiness and priority-aware Quote
-routing; `ClaimTask` remains the only authoritative admission operation under
+`Stats` exposes only O(1) total/owner/non-owner counts and byte reservations,
+configured capacities, owner reserves, maximum per-task charge, and
+total/external availability. It never exposes the database path, task
+identities, payloads, results, or retention timestamps. A vertical Worker uses
+this snapshot for advisory readiness and priority-aware Quote routing;
+`ClaimTask` remains the only authoritative admission operation under
 concurrency.
 
 ## Worker integration

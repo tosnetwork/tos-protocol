@@ -86,6 +86,7 @@ The `tos-ai` v0.1 Worker profile fixes the following identifiers and units:
 | `runtime.output` | bytes |
 | `runtime.execution` | milliseconds |
 | `storage.task_slots` | count |
+| `storage.task_bytes` | bytes |
 
 Capability values are maximum admission profiles. Quote commitments are the
 actual profile checked for that request, including its output and remaining
@@ -100,3 +101,13 @@ exposing task IDs, payloads, results, paths, or retention timestamps.
 Owner-reserved slots are available only to owner-local work. The snapshot is
 advisory; only the Worker's atomic priority-aware durable claim grants a slot.
 See [`docs/worker-service-v0.1-tos-ai-alignment.md`](../../docs/worker-service-v0.1-tos-ai-alignment.md).
+
+`storage.task_bytes` is the conservative retained-byte reservation for that
+identity. A Worker charges the deterministic request bytes plus the configured
+maximum result size, maximum metadata size, and fixed logical key/index bytes
+when it atomically claims a task. It retains that charge through every terminal
+state until retention cleanup, so completion cannot fail merely because a
+concurrent task consumed the result budget. The terminal may derive an
+owner-only byte reserve from its owner-reserved slots. This is a logical
+admission bound, not a physical bbolt file-size claim; filesystem allocation,
+free pages, and compaction remain operator concerns.
