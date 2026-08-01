@@ -81,6 +81,31 @@ func TestLoadTOSChainRuntimeRejectsAmbiguousConfig(t *testing.T) {
 	}
 }
 
+func TestReceiptSignerFlagsRequireCompleteStartupPolicy(t *testing.T) {
+	tests := []struct {
+		name                  string
+		socket, keyID, public string
+		configured            bool
+		wantError             bool
+	}{
+		{name: "disabled"},
+		{name: "complete", socket: "/private/signer.sock", keyID: "receipt-key", public: "public-key", configured: true},
+		{name: "socket only", socket: "/private/signer.sock", wantError: true},
+		{name: "identity only", keyID: "receipt-key", public: "public-key", wantError: true},
+		{name: "missing public key", socket: "/private/signer.sock", keyID: "receipt-key", wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			configured, err := receiptSignerFlagsConfigured(
+				test.socket, test.keyID, test.public,
+			)
+			if configured != test.configured || (err != nil) != test.wantError {
+				t.Fatalf("configured=%v err=%v", configured, err)
+			}
+		})
+	}
+}
+
 func startupRPCServer(t *testing.T, code *cell.Cell) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

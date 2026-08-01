@@ -281,6 +281,43 @@ func TestServerSeparatesLivenessFromChainReadiness(t *testing.T) {
 	}
 }
 
+func TestServerReportsReceiptSignerReadinessWithoutLeakingDetail(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	descriptor := protocol.ServiceDescriptor{
+		ProtocolVersion: protocol.DescriptorVersion,
+		ServiceID:       "edge.example.ai", DisplayName: "Edge",
+		Controller: "tos:test:controller", Network: "testnet",
+		Revision: "1", ExpiresAt: now.Add(time.Hour),
+		Profiles: []protocol.ProfileReference{{
+			ID: "tos.ai.inference", Version: "0.1",
+			MediaType: "application/vnd.tos.ai-inference+json",
+			URL:       "https://example.com/inference",
+			Digest:    "sha256:" + strings.Repeat("a", 64),
+		}},
+	}
+	checker := &testReadinessChecker{err: errors.New("private signer detail")}
+	server, err := NewServerWithDependencies(
+		descriptor, ard.Catalog{SpecVersion: ard.SpecVersion}, now,
+		ServerDependencies{ReceiptSignerReadiness: checker},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.now = func() time.Time { return now }
+	health := httptest.NewRecorder()
+	server.Routes().ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if health.Code != http.StatusOK || checker.calls != 0 {
+		t.Fatalf("liveness used signer readiness: status=%d calls=%d", health.Code, checker.calls)
+	}
+	ready := httptest.NewRecorder()
+	server.Routes().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable || checker.calls != 1 ||
+		!strings.Contains(ready.Body.String(), `"component":"receipt-signer"`) ||
+		strings.Contains(ready.Body.String(), "private signer detail") {
+		t.Fatalf("unexpected signer readiness: %d %s", ready.Code, ready.Body.String())
+	}
+}
+
 func TestReadinessGateBoundsConcurrentChainProbes(t *testing.T) {
 	checker := &blockingReadinessChecker{
 		entered: make(chan struct{}), release: make(chan struct{}),

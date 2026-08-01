@@ -14,6 +14,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/edge"
+	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 )
@@ -39,6 +40,9 @@ func main() {
 	var catalogPath string
 	var requestJournalPath string
 	var tosChainConfigPath string
+	var receiptSignerSocket string
+	var receiptSignerKeyID string
+	var receiptSignerPublicKey string
 	var cleanupInterval time.Duration
 	var paymentReconciliationInterval time.Duration
 	var paymentReconciliationMaxInterval time.Duration
@@ -54,6 +58,18 @@ func main() {
 	flag.StringVar(
 		&tosChainConfigPath, "tos-chain-config", "",
 		"path to strict TOS authority/client-key/payment startup configuration",
+	)
+	flag.StringVar(
+		&receiptSignerSocket, "receipt-signer-socket", "",
+		"absolute private receipt-signer Unix socket (optional until paid ingress is enabled)",
+	)
+	flag.StringVar(
+		&receiptSignerKeyID, "receipt-signer-key-id", "",
+		"expected manifest receipt-role key ID for the private signer",
+	)
+	flag.StringVar(
+		&receiptSignerPublicKey, "receipt-signer-public-key", "",
+		"expected base64url Ed25519 public key for the private signer",
 	)
 	flag.DurationVar(
 		&cleanupInterval, "journal-cleanup-interval", edge.DefaultCleanupInterval,
@@ -80,6 +96,16 @@ func main() {
 		"maximum durable payment records scanned per reconciliation batch",
 	)
 	flag.Parse()
+	receiptSignerConfigured, signerFlagErr := receiptSignerFlagsConfigured(
+		receiptSignerSocket, receiptSignerKeyID, receiptSignerPublicKey,
+	)
+	if signerFlagErr != nil {
+		fmt.Fprintln(
+			os.Stderr,
+			"receipt signer socket, key ID, and public key must be configured together",
+		)
+		os.Exit(2)
+	}
 
 	if descriptorPath == "" || catalogPath == "" {
 		fmt.Fprintln(os.Stderr, "-descriptor and -catalog are required")
@@ -112,6 +138,26 @@ func main() {
 			readiness.Network, readiness.ObservedMasterSeqno, readiness.QuorumEndpoints,
 		)
 	}
+	var receiptReadiness edge.ReadinessChecker
+	if receiptSignerConfigured {
+		clientConfig := localrpc.DefaultReceiptSignerClientConfig(receiptSignerSocket)
+		clientConfig.ExpectedKeyID = receiptSignerKeyID
+		clientConfig.ExpectedPublicKey = receiptSignerPublicKey
+		client, clientErr := localrpc.NewReceiptSignerClient(clientConfig)
+		if clientErr != nil {
+			log.Fatal(clientErr)
+		}
+		ctx, cancel := context.WithTimeout(
+			context.Background(), localrpc.DefaultReceiptSignerTimeout,
+		)
+		clientErr = client.CheckReady(ctx)
+		cancel()
+		if clientErr != nil {
+			log.Fatal("receipt signer startup preflight failed")
+		}
+		receiptReadiness = client
+		log.Printf("receipt signer ready on private Unix socket")
+	}
 	var core *edge.Core
 	if requestJournalPath != "" {
 		coreConfig := edge.DefaultCoreConfig(requestJournalPath)
@@ -141,24 +187,22 @@ func main() {
 			)
 		}
 	}
-	var handler *edge.Server
+	var chainReadiness edge.ReadinessChecker
 	if chainRuntime != nil {
-		chainReadiness := &tosServiceReadiness{
+		chainReadiness = &tosServiceReadiness{
 			runtime: chainRuntime,
 			reference: authorization.Reference{
 				Network: descriptor.Network, Address: descriptor.Controller,
 				ServiceID: descriptor.ServiceID,
 			},
 		}
-		handler, err = edge.NewServerWithDependencies(
-			descriptor, catalog, time.Now(),
-			edge.ServerDependencies{Core: core, ChainReadiness: chainReadiness},
-		)
-	} else if core == nil {
-		handler, err = edge.NewServer(descriptor, catalog, time.Now())
-	} else {
-		handler, err = edge.NewServerWithCore(descriptor, catalog, time.Now(), core)
 	}
+	handler, err := edge.NewServerWithDependencies(
+		descriptor, catalog, time.Now(), edge.ServerDependencies{
+			Core: core, ChainReadiness: chainReadiness,
+			ReceiptSignerReadiness: receiptReadiness,
+		},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -166,6 +210,22 @@ func main() {
 	if err := serve.HTTP(edge.NewHTTPServer(listenAddress, handler.Routes())); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func receiptSignerFlagsConfigured(socketPath, keyID, publicKey string) (bool, error) {
+	configured := 0
+	for _, value := range []string{socketPath, keyID, publicKey} {
+		if value != "" {
+			configured++
+		}
+	}
+	if configured == 0 {
+		return false, nil
+	}
+	if configured != 3 {
+		return false, errors.New("partial receipt signer startup policy")
+	}
+	return true, nil
 }
 
 func loadTOSChainRuntime(

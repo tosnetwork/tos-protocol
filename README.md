@@ -216,8 +216,20 @@ The concrete quorum TOS authority/client-key/native-payment adapters are now
 implemented, exercised against a three-node chain, and available to `tos-edge`
 through strict operator startup configuration and `/readyz`. Refund
 reconciliation, usage-dependent or failed partial-work charging, the
-production signer adapter, isolated executor, and public receipt route remain
-intentionally disconnected.
+key-custody deployment wiring, isolated executor, and public receipt route
+remain intentionally disconnected. A bounded no-retry receipt-signer client
+and independent software-key `tos-receipt-signer` process now implement the
+private Unix-socket boundary. Both sides enforce ownership, permissions,
+message size, fixed concurrency, and exact payload/time preservation before
+the existing manifest verification accepts any signature. Edge startup also
+requires the expected signer key ID and Ed25519 public key, rejects a different
+sidecar identity before opening its listener, and cryptographically pins every
+later signing response to that same key. This operator binding
+does not replace current-manifest role and revocation verification. HSM
+integration and automatic key rotation remain deployment work. Optional
+receipt-signer configuration performs a side-effect-free startup health
+preflight and adds the private signer to `/readyz`; paid public ingress remains
+disabled.
 The private RPC now
 defines a binding-preserving task-status/result lookup, and its client can
 feed a recovered successful result through the existing receipt path. A
@@ -241,6 +253,9 @@ and local rehearsal are documented in
 [`docs/tos-chain-adapters.md`](docs/tos-chain-adapters.md).
 Worker-side persistence and `tos-ai` integration are documented in
 [`docs/worker-task-store.md`](docs/worker-task-store.md).
+The no-retry private key-custody transport and sidecar requirements are
+documented in
+[`docs/receipt-signer-sidecar.md`](docs/receipt-signer-sidecar.md).
 
 ## Repository map
 

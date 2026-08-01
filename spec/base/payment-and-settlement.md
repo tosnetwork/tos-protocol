@@ -136,7 +136,9 @@ payment fail closed. Receipt issuance still requires the current manifest and
 current `receipt` role; persisted recovery context is never signing authority.
 
 This does not provide production key custody or public delivery. A deployment
-must supply a bounded signer adapter, keep its private key outside the Worker,
+must deploy the included software-key sidecar or an HSM-backed replacement
+behind the bounded private Unix signer client, keep its private key outside
+Edge and the Worker,
 register reviewed vertical mappers behind the generic intent-to-Worker
 boundary, define any refund reconciliation or unsupported usage-dependent
 charging policy, implement the

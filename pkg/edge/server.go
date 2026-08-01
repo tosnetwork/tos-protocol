@@ -29,8 +29,9 @@ type ReadinessChecker interface {
 }
 
 type ServerDependencies struct {
-	Core           *Core
-	ChainReadiness ReadinessChecker
+	Core                   *Core
+	ChainReadiness         ReadinessChecker
+	ReceiptSignerReadiness ReadinessChecker
 }
 
 type readinessGate struct {
@@ -79,6 +80,7 @@ type Server struct {
 	now                 func() time.Time
 	core                *Core
 	chainReadiness      *readinessGate
+	receiptReadiness    *readinessGate
 }
 
 func NewServer(descriptor protocol.ServiceDescriptor, catalog ard.Catalog, now time.Time) (*Server, error) {
@@ -136,6 +138,7 @@ func newServer(
 		now:                 time.Now,
 		core:                dependencies.Core,
 		chainReadiness:      newReadinessGate(dependencies.ChainReadiness),
+		receiptReadiness:    newReadinessGate(dependencies.ReceiptSignerReadiness),
 	}, nil
 }
 
@@ -154,14 +157,31 @@ func (s *Server) Routes() http.Handler {
 		if !s.writeCoreReadiness(writer) {
 			return
 		}
+		var readinessContext context.Context
+		var cancelReadiness context.CancelFunc
+		if s.chainReadiness != nil || s.receiptReadiness != nil {
+			readinessContext, cancelReadiness = context.WithTimeout(
+				request.Context(), readinessCheckTimeout,
+			)
+			defer cancelReadiness()
+		}
 		if s.chainReadiness != nil {
-			ctx, cancel := context.WithTimeout(request.Context(), readinessCheckTimeout)
-			err := s.chainReadiness.check(ctx, s.now())
-			cancel()
+			err := s.chainReadiness.check(readinessContext, s.now())
 			if err != nil {
 				writeDocument(
 					writer,
 					[]byte(`{"status":"degraded","component":"tos-chain"}`),
+					"application/json", "no-store", http.StatusServiceUnavailable,
+				)
+				return
+			}
+		}
+		if s.receiptReadiness != nil {
+			err := s.receiptReadiness.check(readinessContext, s.now())
+			if err != nil {
+				writeDocument(
+					writer,
+					[]byte(`{"status":"degraded","component":"receipt-signer"}`),
 					"application/json", "no-store", http.StatusServiceUnavailable,
 				)
 				return
