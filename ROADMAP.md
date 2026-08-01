@@ -60,8 +60,8 @@ requirements remain in `docs/`.
 
 The active milestone is P2, the immutable v0.1 production candidate:
 
-- merge the candidate, pin `tos-ai` to the resulting immutable protocol
-  revision, and rerun both repositories independently and in CI;
+- keep `tos-ai` pinned to the resulting immutable protocol revision, rerun
+  both repositories independently and in CI, and prepare the release pair;
 - select and audit deployment-owned session/Quote issuance and authenticated
   Action-status/Receipt-read policy;
 - complete controller/key rotation, revocation, stale-node and settlement
