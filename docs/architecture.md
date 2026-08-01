@@ -70,7 +70,7 @@ quorum-backed `/readyz`. When a durable journal is also configured, the
 bounded payment reconciliation schedule starts automatically. It uses one
 exponentially backed-off timer so a chain outage cannot sustain base-rate
 polling. The public process must still supply a reconciliation/refund policy,
-reviewed production profile mappers, invocation isolation, production
+explicitly installed reviewed profile mappers, invocation isolation, production
 receipt key custody, partial-work refund/charging policy, and public receipt
 delivery before it forwards paid work. A production Worker must additionally
 wire the reusable bounded task table to an idempotent runtime job or durable
@@ -92,7 +92,7 @@ no invocation route.
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
 | Quote/payment observation | runtime quote role + client/delegation authorization + exact chain echo | exact native transaction BOC/source/destination/value/hash verification, majority finality/high-water, atomic bounded recovery context, post-expiry recheck, bounded batch coordinator, adaptive scheduler and binary runtime composition implemented; refund reconciliation remains |
 | Receipt authorization | current manifest `receipt` role + original opaque payment | signature/canonical payload and payment binding implemented; successful validated Worker results and zero-charge failed/canceled/timed-out outcomes use a purpose-specific signer, deterministic execution-bound receipt identity, immediate manifest re-verification and concurrency-safe application; production signer, profile refund/charging policy and public delivery remain |
-| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; reviewed vertical mapper implementations and startup configuration remain |
+| Profile invocation mapping | profile/version/extension-bound intent commitment + Edge-derived Worker security fields | generic deterministic mapper boundary, immutable bounded exact-selector registry, exact startup capability inspection, pre-claim Worker-policy validation, restart replay and mapping-drift rejection implemented; `tos-ai` owns the first reviewed text-generation mapper candidate, while deployment composition remains explicit |
 | Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment plus bounded execution-authorization persistence, reorganization dispatch gate, exact paid execution claim, quote-expiry-safe Worker recovery, full signed-receipt terminal application/replay, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded TOS success/error envelopes plus strict-majority authority, key and native-payment adapters, startup preflight and freshness-bounded readiness implemented and three-node tested |

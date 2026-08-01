@@ -91,6 +91,33 @@ func (r *ProfileInvocationRegistry) Len() int {
 	return len(r.mappers)
 }
 
+// Supports reports whether the immutable registry contains one exact profile
+// selector. Invalid selectors return false. It does not perform wildcard,
+// compatible-version, or extension-subset matching and cannot grow registry
+// state. Startup composition can use it to fail closed before advertising a
+// profile whose mapper was not installed.
+func (r *ProfileInvocationRegistry) Supports(
+	profileID string,
+	profileVersion string,
+	profileExtensions []string,
+	operation string,
+) bool {
+	if r == nil || len(r.mappers) == 0 {
+		return false
+	}
+	_, key, err := canonicalProfileInvocationSelector(
+		profileID,
+		profileVersion,
+		profileExtensions,
+		operation,
+	)
+	if err != nil {
+		return false
+	}
+	_, ok := r.mappers[key]
+	return ok
+}
+
 func (r *ProfileInvocationRegistry) resolve(
 	material authorization.ReceiptInvocationMaterial,
 ) (ProfileInvocationMapper, error) {

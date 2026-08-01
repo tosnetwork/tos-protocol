@@ -35,6 +35,27 @@ func TestProfileInvocationRegistryUsesExactCanonicalSelector(t *testing.T) {
 	if registry.Len() != 1 {
 		t.Fatalf("registry length = %d", registry.Len())
 	}
+	if !registry.Supports(
+		"tos.ai.inference",
+		"0.1.0",
+		[]string{"urn:tos:extension:a", "urn:tos:extension:z"},
+		"invoke",
+	) {
+		t.Fatal("exact canonical selector was not reported as supported")
+	}
+	if registry.Supports(
+		"tos.ai.inference", "0.1.0",
+		[]string{"urn:tos:extension:a"}, "invoke",
+	) {
+		t.Fatal("partial extension selector was reported as supported")
+	}
+	if registry.Supports("tos.ai.inference", "01.0.0", nil, "invoke") {
+		t.Fatal("invalid selector was reported as supported")
+	}
+	var nilRegistry *ProfileInvocationRegistry
+	if nilRegistry.Supports("tos.ai.inference", "0.1.0", nil, "invoke") {
+		t.Fatal("nil registry reported a selector as supported")
+	}
 	extensions[0] = "urn:tos:extension:changed"
 	material := authorization.ReceiptInvocationMaterial{
 		ProfileID: "tos.ai.inference", ProfileVersion: "0.1.0",

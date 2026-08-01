@@ -172,6 +172,10 @@ deterministically replays the same task after restart. A startup-only,
 immutable registry selects at most 128 mappers by exact profile ID, version,
 extension set, and operation; it has no wildcard fallback or request-driven
 growth. No production vertical mapper is included in this repository.
+The first externally maintained mapper candidate is
+`tos.ai.text-generation` v0.1.0 in `tosnetwork/tos-ai`; the local registry can
+verify its exact version, extension set, and operation before a deployment
+advertises it, but this base module never auto-loads vertical code.
 The internal dispatch coordinator now performs the only safe next action:
 one newly committed claim may call `Invoke` once, while every exact replay
 uses read-only `GetTask`, including after the execution deadline while bounded

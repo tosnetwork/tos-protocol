@@ -20,6 +20,20 @@ The `tos.ai.*` namespace is owned by the `tos-ai` repository. AI profile
 schemas and business logic are deliberately not copied into this base
 repository.
 
+## Externally maintained profiles
+
+| Profile ID | Version | Operation | Critical extensions | Normative owner |
+| --- | --- | --- | --- | --- |
+| `tos.ai.text-generation` | `0.1.0` | `generate` | none | `tosnetwork/tos-ai`, `spec/profiles/text-generation/v0.1/` |
+
+This table reserves the identifier and records where its normative schema,
+vectors, limits, privacy rules, and mapper live. It does not import vertical
+business logic into this module or cause an Edge process to load the mapper.
+An operator must still install the exact reviewed mapper registration at
+startup. `ProfileInvocationRegistry.Supports` can be used by composition code
+to fail before advertising a profile whose exact version, extension set, and
+operation are absent.
+
 Edge runtime mapper registration is a separate local deployment concern. The
 base implementation accepts only an immutable startup set of at most 128
 exact `profile ID + version + extension set + operation` registrations.
