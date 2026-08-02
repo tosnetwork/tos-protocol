@@ -101,6 +101,24 @@ func TestIndexSearchAndPagination(t *testing.T) {
 	}
 }
 
+func TestSearchResultRejectsAmbiguousMetadataAndExtensionCollisions(t *testing.T) {
+	var result SearchResult
+	if err := json.Unmarshal([]byte(`{
+		"identifier":"urn:air:example.com:ai:vision",
+		"displayName":"vision","type":"application/json",
+		"score":1,"score":2,"source":"registry"
+	}`), &result); err == nil {
+		t.Fatal("duplicate Registry score accepted")
+	}
+	for _, key := range []string{"score", "source"} {
+		result = SearchResult{Entry: testCatalog().Entries[0], Score: 1, Source: "registry"}
+		result.Entry.Extensions = map[string]json.RawMessage{key: json.RawMessage(`"shadow"`)}
+		if _, err := json.Marshal(result); err == nil {
+			t.Fatalf("entry extension collision %q accepted", key)
+		}
+	}
+}
+
 func TestIndexSearchesValidatedWorkerCapabilityExtension(t *testing.T) {
 	extension, err := json.Marshal(ard.WorkerCatalogExtension{
 		Version: ard.WorkerCatalogExtensionVersion, TerminalRevision: "worker-v1",

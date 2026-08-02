@@ -2,6 +2,8 @@ package registry
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -93,6 +95,23 @@ func TestClientRejectsListInputsBeforeTransport(t *testing.T) {
 	}
 	if called {
 		t.Fatal("invalid list request reached transport")
+	}
+}
+
+func TestClientRejectsLateResponseAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client, err := NewClient("https://registry.example", roundTripperClient(func(*http.Request) (*http.Response, error) {
+		cancel()
+		return &http.Response{
+			StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(`{"items":[],"total":0}`)),
+		}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.List(ctx, ListRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("late response returned err=%v", err)
 	}
 }
 

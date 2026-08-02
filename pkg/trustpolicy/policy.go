@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 )
@@ -101,6 +102,9 @@ func (c *OPAClient) Evaluate(ctx context.Context, input DecisionInput, now time.
 		!output.Result.ExpiresAt.After(now) || output.Result.ExpiresAt.After(now.Add(24*time.Hour)) {
 		return Decision{}, errors.New("policy adapter response rejected")
 	}
+	if err := ctx.Err(); err != nil {
+		return Decision{}, err
+	}
 	return output.Result, nil
 }
 
@@ -164,11 +168,23 @@ func validateDecisionInput(input DecisionInput) error {
 		seen[digest] = struct{}{}
 	}
 	for key, value := range input.Attributes {
-		if !validBoundedID(key, 128) || len(value) > 1024 || strings.ContainsRune(value, '\x00') {
+		if !validBoundedID(key, 128) || !validPolicyAttributeValue(value) {
 			return errors.New("invalid policy input")
 		}
 	}
 	return nil
+}
+
+func validPolicyAttributeValue(value string) bool {
+	if len(value) > 1024 || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if character < ' ' || character == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func decisionKey(input DecisionInput) string {
@@ -185,7 +201,7 @@ func isLoopbackHTTP(value *url.URL) bool {
 }
 
 func validSecret(value string) bool {
-	if len(value) == 0 || len(value) > 8192 {
+	if len(value) < 16 || len(value) > 8192 {
 		return false
 	}
 	for _, character := range value {

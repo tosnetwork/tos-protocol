@@ -48,6 +48,13 @@ type EvidenceClaim struct {
 	Reference   string        `json:"reference,omitempty"`
 }
 
+// IsValidEvidenceType reports whether value is a canonical protocol evidence
+// type. Trust-policy configuration and claims intentionally share this exact
+// grammar so a policy cannot silently authorize an unrepresentable type.
+func IsValidEvidenceType(value string) bool {
+	return serviceIDPattern.MatchString(value)
+}
+
 func (b EvidenceBundle) Validate(now time.Time) error {
 	if b.Version != BaseEnvelopeVersion {
 		return errors.New("unsupported evidence bundle version")
@@ -78,7 +85,7 @@ func (b EvidenceBundle) Validate(now time.Time) error {
 }
 
 func (c EvidenceClaim) Validate(now time.Time) error {
-	if !serviceIDPattern.MatchString(c.Type) {
+	if !IsValidEvidenceType(c.Type) {
 		return errors.New("invalid evidence claim type")
 	}
 	if !c.Level.Valid() {

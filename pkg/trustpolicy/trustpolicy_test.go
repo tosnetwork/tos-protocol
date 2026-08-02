@@ -11,6 +11,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -51,6 +53,23 @@ func TestWorkloadVerifierExactSPIFFEIdentity(t *testing.T) {
 	}
 	if _, err := verifier.Verify([]*x509.Certificate{leaf}, principal.SPIFFEID, leaf.NotAfter.Add(time.Second)); err == nil {
 		t.Fatal("accepted an expired certificate")
+	}
+	for name, mutate := range map[string]func(*x509.Certificate){
+		"CA leaf": func(certificate *x509.Certificate) { certificate.IsCA = true },
+		"missing digital signature usage": func(certificate *x509.Certificate) {
+			certificate.KeyUsage = x509.KeyUsageKeyEncipherment
+		},
+		"wrong extended usage": func(certificate *x509.Certificate) {
+			certificate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := *leaf
+			mutate(&invalid)
+			if _, err := verifier.Verify([]*x509.Certificate{&invalid}, principal.SPIFFEID, now); err == nil {
+				t.Fatal("accepted a certificate outside the workload leaf policy")
+			}
+		})
 	}
 }
 
@@ -126,13 +145,25 @@ func TestEvidenceVerifierTrustAndRequirements(t *testing.T) {
 	if _, err := verifier.Verify(overclaimedEnvelope, nil, now); err == nil {
 		t.Fatal("accepted a level the issuer is not trusted to assert")
 	}
+	for _, claimType := range []string{"GPU Benchmark", "ab", "gpu/benchmark"} {
+		if _, err := NewEvidenceVerifier(map[string]EvidenceIssuer{"lab-key": {
+			PublicKey: publicKey, Issuer: "lab.example", AllowedTypes: []string{claimType}, MaximumLevel: protocol.EvidenceBenchmarked,
+		}}); err == nil {
+			t.Fatalf("accepted non-canonical configured evidence type %q", claimType)
+		}
+	}
+	if _, err := verifier.Verify(envelope, []EvidenceRequirement{{
+		Type: "GPU Benchmark", Subject: "device-pool-a", MinimumLevel: protocol.EvidenceObserved,
+	}}, now); err == nil {
+		t.Fatal("accepted non-canonical required evidence type")
+	}
 }
 
 func TestOPAClientAndStaticEvaluator(t *testing.T) {
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	input := DecisionInput{WorkloadID: "spiffe://operator.example/worker/1", ServiceID: "ai.inference", Operation: "invoke"}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("Authorization") != "Bearer secret-token" || request.Header.Get("Content-Type") != "application/json" {
+		if request.Header.Get("Authorization") != "Bearer operator-policy-token" || request.Header.Get("Content-Type") != "application/json" {
 			t.Error("missing authenticated JSON request")
 		}
 		var received struct {
@@ -146,7 +177,7 @@ func TestOPAClientAndStaticEvaluator(t *testing.T) {
 		_ = json.NewEncoder(writer).Encode(map[string]Decision{"result": {Allow: true, Revision: "policy-7", ExpiresAt: now.Add(time.Hour)}})
 	}))
 	defer server.Close()
-	client, err := NewOPAClient(server.URL, "secret-token", server.Client(), 1)
+	client, err := NewOPAClient(server.URL, "operator-policy-token", server.Client(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +214,7 @@ func TestOPAClientCapacityFailsClosed(t *testing.T) {
 		_, _ = writer.Write([]byte(`{"result":{"allow":true,"revision":"r1","expiresAt":"2026-08-02T13:00:00Z"}}`))
 	}))
 	defer server.Close()
-	client, err := NewOPAClient(server.URL, "token", server.Client(), 1)
+	client, err := NewOPAClient(server.URL, "operator-policy-token", server.Client(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,6 +229,50 @@ func TestOPAClientCapacityFailsClosed(t *testing.T) {
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+type policyRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (function policyRoundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return function(request)
+}
+
+func TestOPAClientRejectsLateDecisionAfterCancellation(t *testing.T) {
+	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	transport := policyRoundTripperFunc(func(*http.Request) (*http.Response, error) {
+		cancel()
+		return &http.Response{
+			StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(bytes.NewBufferString(`{"result":{"allow":true,"revision":"r1","expiresAt":"2026-08-02T13:00:00Z"}}`)),
+		}, nil
+	})
+	client, err := NewOPAClient("https://policy.example/v1/data", "operator-policy-token", &http.Client{Transport: transport}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Evaluate(ctx, DecisionInput{
+		WorkloadID: "worker", ServiceID: "service", Operation: "invoke",
+	}, now); !errors.Is(err, context.Canceled) {
+		t.Fatalf("late policy decision returned err=%v", err)
+	}
+}
+
+func TestPolicyInputRejectsControlAndInvalidUTF8Attributes(t *testing.T) {
+	base := DecisionInput{WorkloadID: "worker", ServiceID: "service", Operation: "invoke"}
+	for name, value := range map[string]string{
+		"newline": "operator\nadmin",
+		"delete":  "operator\x7fadmin",
+		"utf8":    string([]byte{0xff}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := base
+			input.Attributes = map[string]string{"role": value}
+			if err := validateDecisionInput(input); err == nil {
+				t.Fatal("unsafe policy attribute accepted")
+			}
+		})
 	}
 }
 
@@ -254,7 +329,7 @@ func TestOPAClientConcurrentConstruction(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			if _, err := NewOPAClient("http://127.0.0.1/policy", "token", source, 1); err != nil {
+			if _, err := NewOPAClient("http://127.0.0.1/policy", "operator-policy-token", source, 1); err != nil {
 				t.Error(err)
 			}
 		}()

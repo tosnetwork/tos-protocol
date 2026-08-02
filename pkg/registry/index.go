@@ -232,6 +232,12 @@ type SearchResult struct {
 }
 
 func (r SearchResult) MarshalJSON() ([]byte, error) {
+	if _, collision := r.Entry.Extensions["score"]; collision {
+		return nil, errors.New("entry extension collides with Registry score")
+	}
+	if _, collision := r.Entry.Extensions["source"]; collision {
+		return nil, errors.New("entry extension collides with Registry source")
+	}
 	entry, err := json.Marshal(r.Entry)
 	if err != nil {
 		return nil, err
@@ -250,7 +256,7 @@ func (r SearchResult) MarshalJSON() ([]byte, error) {
 // embedding would otherwise consume score/source as entry extensions.
 func (r *SearchResult) UnmarshalJSON(data []byte) error {
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
+	if err := jsonstrict.Decode(data, &fields); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(fields["score"], &r.Score); err != nil {

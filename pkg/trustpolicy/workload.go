@@ -35,6 +35,10 @@ func (v *WorkloadVerifier) Verify(chain []*x509.Certificate, expectedID string, 
 	if v == nil || len(chain) == 0 || len(chain) > MaxCertificateChain || chain[0] == nil || now.IsZero() {
 		return WorkloadPrincipal{}, errors.New("workload identity rejected")
 	}
+	leaf := chain[0]
+	if leaf.IsCA || leaf.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		return WorkloadPrincipal{}, errors.New("workload identity rejected")
+	}
 	expected, err := parseSPIFFE(expectedID, v.trustDomain)
 	if err != nil {
 		return WorkloadPrincipal{}, errors.New("workload identity rejected")
@@ -46,14 +50,14 @@ func (v *WorkloadVerifier) Verify(chain []*x509.Certificate, expectedID string, 
 		}
 		intermediates.AddCert(certificate)
 	}
-	verified, err := chain[0].Verify(x509.VerifyOptions{
+	verified, err := leaf.Verify(x509.VerifyOptions{
 		Roots: v.roots, Intermediates: intermediates, CurrentTime: now,
-		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	})
-	if err != nil || len(verified) == 0 || len(chain[0].URIs) != 1 || chain[0].URIs[0].String() != expected.String() {
+	if err != nil || len(verified) == 0 || len(leaf.URIs) != 1 || leaf.URIs[0].String() != expected.String() {
 		return WorkloadPrincipal{}, errors.New("workload identity rejected")
 	}
-	return WorkloadPrincipal{SPIFFEID: expected.String(), NotAfter: chain[0].NotAfter.UTC()}, nil
+	return WorkloadPrincipal{SPIFFEID: expected.String(), NotAfter: leaf.NotAfter.UTC()}, nil
 }
 
 func parseSPIFFE(value, trustDomain string) (*url.URL, error) {

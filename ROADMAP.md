@@ -76,11 +76,16 @@ requirements remain in `docs/`.
   that verifies and runs the exact upstream conformance commit.
 - Fail-closed reference trust adapters for exact SPIFFE workload identities,
   signed artifact provenance, bounded signed evidence requirements, fixed OPA
-  decisions and disconnected static policy. Discovery metadata is not an
-  input to any of these trust roots.
+  decisions and disconnected static policy. Workload leaves require client
+  authentication and digital-signature use; evidence policy uses the exact
+  claim grammar. Discovery metadata is not an input to any of these trust
+  roots.
 - A dependency-free Node.js/TypeScript ARD Registry client with fixed-origin,
   no-redirect, strict duplicate-key, media-type and streaming response bounds,
   exercised as an independent-language CI conformance gate.
+- Registry result metadata is duplicate-key and extension-collision safe, and
+  both server publication identity and client responses reject unsafe origins
+  or cancellation-late success.
 - Canonical lowercase `.tos` name syntax validation that is independent of the
   still-unfrozen registrar contract ABI.
 

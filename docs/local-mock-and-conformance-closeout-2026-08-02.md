@@ -40,9 +40,32 @@ the production-gate ledger.
   no request-selected executable, unit or verb. MOCK timeout, panic and
   injection tests fail closed.
 - Added a separately authenticated bounded reference metrics collector. It
-  uses unique per-terminal credentials, stores one bounded snapshot per
-  privacy-minimized alias, returns defensive sorted copies and performs TTL
-  cleanup without a goroutine or retry queue.
+  uses unique per-terminal credentials, retains only token digests, stores one
+  bounded snapshot per privacy-minimized alias, rejects concurrency overflow
+  before reading another body, returns defensive sorted copies and performs
+  TTL cleanup without a goroutine or retry queue.
+
+## Second adversarial closeout
+
+A post-CI audit closed additional locally reproducible trust and crash windows:
+
+- SPIFFE workload leaves now reject CA certificates, missing digital-signature
+  usage and non-client EKUs. Evidence issuer configuration and requirements use
+  the same canonical type grammar as protocol claims.
+- OPA attributes reject invalid UTF-8 and control characters. OPA, Registry,
+  metrics and GPU boundaries reject a backend response that arrives as a late
+  success after caller cancellation.
+- Registry result decoding rejects duplicate `score`/`source` metadata and
+  extension collisions; the HTTP handler accepts only an exact safe public
+  source URL.
+- The fleet offline queue now commits an atomic pre-execution claim. A process
+  loss after claim and before result persistence becomes durable `uncertain`
+  state on restart and is never automatically executed again. Executor panic
+  and cancellation-late success are contained at the Agent boundary and become
+  the same non-replayable state.
+- The metrics collector has explicit request admission and no longer retains
+  plaintext bearer tokens. Fleet bearer configuration rejects whitespace and
+  control characters.
 
 ## Commands and results
 

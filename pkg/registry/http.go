@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,11 +25,14 @@ func NewHandler(index *Index, registrySource string) (*Handler, error) {
 	if index == nil {
 		return nil, errors.New("nil Registry index")
 	}
-	if registrySource == "" || len(registrySource) > 2048 || strings.ContainsRune(registrySource, '\x00') {
+	parsedSource, err := url.ParseRequestURI(registrySource)
+	if err != nil || parsedSource.Host == "" || parsedSource.User != nil || parsedSource.RawQuery != "" ||
+		parsedSource.Fragment != "" || (parsedSource.Scheme != "https" && !localHTTP(parsedSource)) ||
+		len(registrySource) > 2048 {
 		return nil, errors.New("registry source URL is required")
 	}
 	return &Handler{
-		index: index, registrySource: registrySource,
+		index: index, registrySource: parsedSource.String(),
 		requests: make(chan struct{}, index.limits.MaxConcurrentRequests),
 	}, nil
 }

@@ -45,7 +45,7 @@ func NewEvidenceVerifier(issuers map[string]EvidenceIssuer) (*EvidenceVerifier, 
 		}
 		seenTypes := make(map[string]struct{}, len(copyIssuer.AllowedTypes))
 		for _, claimType := range copyIssuer.AllowedTypes {
-			if !validBoundedID(claimType, 128) {
+			if !protocol.IsValidEvidenceType(claimType) {
 				return nil, errors.New("invalid evidence trust policy")
 			}
 			if _, duplicate := seenTypes[claimType]; duplicate {
@@ -78,7 +78,7 @@ func (v *EvidenceVerifier) Verify(envelope identity.Envelope, requirements []Evi
 	}
 	requirementKeys := make(map[string]struct{}, len(requirements))
 	for _, requirement := range requirements {
-		if !requirement.MinimumLevel.Valid() || !validBoundedID(requirement.Type, 128) || !validBoundedID(requirement.Subject, 512) {
+		if !requirement.MinimumLevel.Valid() || !protocol.IsValidEvidenceType(requirement.Type) || !validBoundedID(requirement.Subject, 512) {
 			return protocol.EvidenceBundle{}, errors.New("evidence rejected")
 		}
 		requirementKey := requirement.Type + "\x00" + requirement.Subject

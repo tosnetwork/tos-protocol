@@ -90,6 +90,18 @@ func TestSearchRejectsDuplicateJSONKeys(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsUnsafePublicSource(t *testing.T) {
+	index, _ := NewIndex(DefaultLimits())
+	for _, source := range []string{
+		"http://registry.example/search", "https://user@registry.example/search",
+		"https://registry.example/search?shadow=1", "not-a-url",
+	} {
+		if _, err := NewHandler(index, source); err == nil {
+			t.Fatalf("unsafe public source accepted: %q", source)
+		}
+	}
+}
+
 func TestSearchRequiresExactJSONMediaType(t *testing.T) {
 	index, err := NewIndex(DefaultLimits())
 	if err != nil {

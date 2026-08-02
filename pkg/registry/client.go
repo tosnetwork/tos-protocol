@@ -131,6 +131,9 @@ func (c *Client) do(request *http.Request, output interface{}) error {
 	if err := jsonstrict.Decode(data, output); err != nil {
 		return errors.New("invalid Registry response")
 	}
+	if err := request.Context().Err(); err != nil {
+		return err
+	}
 	return nil
 }
 

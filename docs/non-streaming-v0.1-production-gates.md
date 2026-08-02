@@ -92,7 +92,8 @@ real containerd/runc CPU lifecycle run.
 The later [MOCK and conformance closeout](local-mock-and-conformance-closeout-2026-08-02.md)
 adds explicit trust adapters, independent-language Registry conformance,
 exclusive GPU lease fault injection, signed benchmark evidence, fixed fleet
-action routing and a bounded reference metrics collector.
+action routing, crash-safe fleet queue claims and a bounded reference metrics
+collector with request admission and token-digest retention.
 
 This closes local engineering sub-gates, not the production rows below. Status
 remains Partial or Open whenever the remaining evidence requires selected
@@ -114,7 +115,7 @@ custody, public infrastructure, an independent review, or release approval.
 | PG-09 | Availability and bounded memory | Partial | Run sustained bounded-concurrency, slow-client, malformed-input, chain/Worker/signer outage, disk-quota and restart tests while recording RSS, heap, goroutines, file descriptors, task store, bbolt, RAM, VRAM and cache behavior to steady state. | Race tests, TLS test and an additional 30,000-request local sample passed with stable RSS, descriptors and database sizes; this is not a long-duration target-host leak certificate. | 2026-08-01 |
 | PG-10 | Public network perimeter | Partial | Certify TLS ingress, connection/rate/body/header limits, firewall policy, private socket ownership, response redaction and supported home/relay reachability. | TLS 1.3 handler load, literal-loopback Edge and private mode-0600 Worker/signer sockets pass locally; no reviewed public TLS perimeter has been deployed. | 2026-08-01 |
 | PG-11 | ARD publication | Partial | Publish the operator-approved catalog under the selected domain or TOS naming path and run the pinned official ARD conformance tool. | The bounded Registry passes local Go/TypeScript tests and the exact pinned upstream ARD v0.9 conformance tool. Canonical `.tos` syntax is implemented; public publication and registrar ABI/governance remain open. | 2026-08-02 |
-| PG-12 | Offline physical terminal and fleet claims | Deferred | Before advertising this product class, complete disconnected soak, bounded journal, reconnect idempotency, real-time priority, safe update rollout, independent actuator safety, delegation/revocation and bounded fleet fan-out. | Local signed fleet commands, bounded offline queue/reconnect, canary rollback, fixed-action execution, authenticated transport and bounded metrics collection pass race/MOCK tests. Physical interlocks, selected TLS/service-manager/policy-loader integration and a real fleet soak remain external. | 2026-08-02 |
+| PG-12 | Offline physical terminal and fleet claims | Deferred | Before advertising this product class, complete disconnected soak, bounded journal, reconnect idempotency, real-time priority, safe update rollout, independent actuator safety, delegation/revocation and bounded fleet fan-out. | Local signed fleet commands, bounded offline queue/reconnect, atomic pre-execution claim, uncertain crash recovery, canary rollback, fixed-action execution, authenticated transport and admission-bounded metrics collection pass race/MOCK tests. Physical interlocks, selected TLS/service-manager/policy-loader integration and a real fleet soak remain external. | 2026-08-02 |
 | PG-13 | Release governance | Partial | Produce reproducible builds, signed source/binary artifacts, compatibility and rollback records, an independent security review, testnet observation and final release approval. | Complete deterministic bundle construction and Ed25519 verification are CI gates, and the rollback procedure is documented. Offline signing, independent review, observation and approval remain open. | 2026-08-02 |
 
 ## Updating and closing gates
