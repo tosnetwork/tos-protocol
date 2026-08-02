@@ -16,6 +16,13 @@ service WorkerService {
   rpc Cancel(CancelRequest) returns (CancelResponse);
 }
 
+// WorkerStreamService is the v0.2 bounded result-streaming extension. Keeping
+// it separate preserves the frozen unary WorkerService v0.1 interface.
+service WorkerStreamService {
+  rpc InvokeStream(InvokeStreamRequest) returns (stream StreamEvent);
+  rpc ResumeStream(ResumeStreamRequest) returns (stream StreamEvent);
+}
+
 enum Priority {
   PRIORITY_UNSPECIFIED = 0;
   PRIORITY_EMERGENCY = 1;
@@ -238,4 +245,38 @@ message CancelResponse {
   string task_id = 2;
   string request_digest = 3;
   bool accepted = 4;
+}
+
+message InvokeStreamRequest {
+  InvokeRequest invocation = 1;
+  uint64 max_chunk_bytes = 2;
+}
+
+message ResumeStreamRequest {
+  GetTaskRequest task = 1;
+  uint64 next_sequence = 2;
+  uint64 max_chunk_bytes = 3;
+  string expected_stream_digest = 4;
+  uint64 next_offset = 5;
+}
+
+// StreamEvent chunks a single durably retained terminal result. Chunks are
+// provisional until the final event. stream_digest commits to the complete
+// ordered output, not merely to a prefix.
+message StreamEvent {
+  string request_id = 1;
+  string task_id = 2;
+  string request_digest = 3;
+  uint64 sequence = 4;
+  bytes chunk = 5;
+  uint64 total_output_bytes = 6;
+  string stream_digest = 7;
+  bool terminal = 8;
+  TaskStatus terminal_status = 9;
+  Usage usage = 10;
+  string model_revision = 11;
+  string runtime_revision = 12;
+  int64 completed_unix_millis = 13;
+  string error_code = 14;
+  uint64 offset = 15;
 }

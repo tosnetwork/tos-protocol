@@ -1,6 +1,5 @@
-// Package registry implements a bounded ARD index. It is deliberately an
-// operator-fed bootstrap backend; hardened crawling and federation are later
-// adapters.
+// Package registry implements a bounded ARD index with local atomic reload and
+// an opt-in cached federation adapter. Query paths never perform network I/O.
 package registry
 
 import (
@@ -245,7 +244,8 @@ func (i *Index) Search(request SearchRequest, registrySource string) (SearchResp
 	if len(request.Query.Text) == 0 || len(request.Query.Text) > i.limits.MaxQueryBytes {
 		return SearchResponse{}, errors.New("query.text is required and bounded")
 	}
-	if request.Federation != "" && request.Federation != "none" {
+	if request.Federation != "" && request.Federation != "none" &&
+		request.Federation != "cached" {
 		return SearchResponse{}, errors.New("federation is not enabled by this Registry")
 	}
 	filters, err := compileFilters(request.Query.Filter)

@@ -30,7 +30,11 @@ The security boundary is intentional:
   public-route dependencies.
 - `tos-ard-registry` provides the mandatory ARD `POST /search` baseline and a
   minimal optional, unfiltered `GET /agents` browsing endpoint over a bounded
-  in-memory index loaded from operator-approved local catalogs. The draft
+  in-memory index loaded either from operator-approved local catalogs or from
+  a cached bounded federation generation. Federation requires explicit HTTPS
+  roots and origins, validates every dial/redirect, bounds compressed and
+  decoded bytes/depth/sources/TTL, and never performs network I/O from search.
+  The draft
   List `filter` and `orderBy` extensions are not advertised by this bootstrap.
   Valid TOS Worker extensions contribute
   bounded model, operation, runtime, digest, and service-ID terms to lexical
@@ -76,6 +80,13 @@ go run ./cmd/tos-ard-registry \
   -listen 127.0.0.1:8090 \
   -catalog ./examples/ai-catalog.json
 
+# Or use cached federation (mutually exclusive with -catalog):
+go run ./cmd/tos-ard-registry \
+  -listen 127.0.0.1:8090 \
+  -federation-root https://registry.example/ai-catalog.json \
+  -federation-origin https://registry.example \
+  -federation-refresh 5m
+
 go run ./cmd/tos-quote-signer \
   -socket /absolute/private/quote-signer.sock \
   -seed-file /absolute/private/quote.seed \
@@ -94,6 +105,13 @@ requests and reject excess work immediately with `503 RESOURCE_EXHAUSTED` and
 Indexed entries are capped at 64 KiB each and 64 MiB in aggregate in addition
 to the entry and per-publisher quotas, so legal but data-heavy catalogs cannot
 turn the process into an unbounded in-memory document store.
+Federation is opt-in and mutually exclusive with local catalog flags. Public
+mode rejects loopback, private, link-local, multicast and unspecified dial
+addresses even after DNS resolution, disables environment proxies, validates
+every redirect against the exact origin list, and expires a stale generation
+when refresh can no longer succeed. `-federation-allow-private` is an explicit
+operator choice for a private federation and must not be enabled accidentally
+on a public Registry.
 
 After replacing the placeholder controller, RPC URLs, and reviewed contract
 code hash, add `-tos-chain-config ./examples/tos-chain.json` to make startup

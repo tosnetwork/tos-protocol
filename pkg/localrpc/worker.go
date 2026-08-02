@@ -73,6 +73,7 @@ func DefaultWorkerClientConfig(socketPath string) WorkerClientConfig {
 // no retries: Edge Core and the durable request journal own idempotency.
 type WorkerClient struct {
 	rpc                   edgev1connect.WorkerServiceClient
+	stream                edgev1connect.WorkerStreamServiceClient
 	controlTimeout        time.Duration
 	maxInvocationDuration time.Duration
 	maxMessageBytes       int
@@ -249,8 +250,14 @@ func newWorkerClient(
 		connect.WithReadMaxBytes(config.MaxMessageBytes),
 		connect.WithSendMaxBytes(config.MaxMessageBytes),
 	)
+	stream := edgev1connect.NewWorkerStreamServiceClient(
+		httpClient,
+		"http://unix",
+		connect.WithReadMaxBytes(config.MaxMessageBytes),
+		connect.WithSendMaxBytes(config.MaxMessageBytes),
+	)
 	return &WorkerClient{
-		rpc: rpc, controlTimeout: config.ControlTimeout,
+		rpc: rpc, stream: stream, controlTimeout: config.ControlTimeout,
 		maxInvocationDuration: config.MaxInvocationDuration,
 		maxMessageBytes:       config.MaxMessageBytes,
 		maxTaskRetention:      config.MaxTaskRetention,

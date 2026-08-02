@@ -36,10 +36,18 @@ requirements remain in `docs/`.
 - Unary WorkerService v0.1: structured readiness/evidence, resource claims,
   capability freshness, requested/committed limits, Quote, digest-bound Invoke,
   retained `GetTask`, and exact Cancel.
+- Separate WorkerStreamService v0.2 candidate with bounded chunks, exact
+  sequence/offset validation, transport backpressure, retained-task-only
+  resume, final stream commitment, usage/Receipt binding, and no re-execution
+  after disconnect.
 - Bounded ARD bootstrap Registry with mandatory `POST /search`, minimal optional
   unfiltered List, privacy-minimized Worker projection, exact TOS extension
   filters, atomic local catalog reload, and per-request/per-entry/aggregate
   memory limits.
+- Cached ARD federation ingestion with exact HTTPS-origin policy, bounded
+  redirects, compressed/decoded bodies, depth, cycles and source count,
+  catalog/publisher/index quotas, TTL expiry, and whole-generation atomic
+  replacement. Search never performs network I/O.
 - Cross-repository compatibility with `tos-ai` text generation, capability-
   derived profile plans, owner-reserved task capacity, and route-identity drift
   readiness.
@@ -83,23 +91,16 @@ remaining work is deployment policy and external evidence:
 
 ## Next
 
-1. Add a bounded remote ARD catalog ingestion pipeline with explicit DNS/IP
-   policy, SSRF defense, redirect rules, compressed/decoded size limits,
-   recursion depth, cycle detection, publisher quotas, expiry, and atomic index
-   replacement.
-2. Add bounded ARD federation and the draft List filter/order behavior only
-   against a pinned upstream version and conformance suite.
-3. Complete the `.tos` registrar application and stable operator/client SDK
+1. Add the draft List filter/order behavior only against a pinned upstream
+   version and authoritative conformance suite; cached federation is complete.
+2. Complete the `.tos` registrar application and stable operator/client SDK
    surfaces needed by independent deployments.
-4. Implement Worker/result streaming as v0.2 after the existing RFC fixes
-   ordering, partial results, backpressure, deadlines, cancellation, resume,
-   idempotency, usage, output limits, and final receipt binding.
-5. Add reference policy adapters only where their trust semantics are explicit:
+3. Add reference policy adapters only where their trust semantics are explicit:
    workload identity, artifact provenance, policy evaluation, and evidence
    verification must not be inferred from discovery metadata.
-6. Extend conformance coverage to independent-language clients and additional
+4. Extend conformance coverage to independent-language clients and additional
    vertical profiles without changing the stable base envelope formats.
-7. Add production relay, subscriptions/channels, multi-region routing, and
+5. Add production relay, subscriptions/channels, multi-region routing, and
    advanced settlement/evidence as later versioned protocol work.
 
 ## External Certification
@@ -122,8 +123,8 @@ This ROADMAP intentionally does not duplicate that ledger.
 | P0: non-streaming foundation | Base schemas, auth/payment/receipt, chain adapters, Edge Core, WorkerService, bounded Registry, conformance and race tests | Completed |
 | P1: AI Edge integration | `tos-ai-edge` uses the frozen interfaces and completes the local discovery-to-receipt flow | Completed |
 | P2: v0.1 production candidate | External gates applicable to the reference deployment have evidence and the compatible repositories are tagged | In Progress |
-| P3: discovery expansion | Bounded crawler/federation plus stable SDK and registrar surfaces | Next |
-| P4: streaming v0.2 | Versioned streaming and receipt semantics pass compatibility and fault-injection tests | Next |
+| P3: discovery expansion | Bounded crawler/federation plus stable SDK and registrar surfaces | In Progress: crawler/federation local gates complete |
+| P4: streaming v0.2 | Versioned result streaming and Receipt semantics pass compatibility and fault-injection tests | Local implementation complete; release pairing pending |
 
 ## Maintenance
 

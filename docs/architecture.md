@@ -114,7 +114,7 @@ discovery-only.
 |---|---|---|
 | Language | Go 1.24+ | implemented |
 | Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, owner-local slot reserve, priority-aware capacity, terminal persistence, lookup, cleanup, startup audit and payload-free active-task pagination; synchronous workers can fail interrupted tasks closed, while durable executor/supervisor recovery remains |
-| Public discovery | ARD v0.9 Draft | mandatory bounded `POST /search`, minimal optional unfiltered `GET /agents`, deterministic privacy-minimized projection of fresh external Worker capabilities, strict known-extension validation, bounded model/operation/runtime lexical and exact-filter indexing, and fail-closed atomic local-catalog reload implemented; draft List filtering/sorting, remote crawling and federation remain disabled |
+| Public discovery | ARD v0.9 Draft | mandatory bounded `POST /search`, minimal optional unfiltered `GET /agents`, deterministic privacy-minimized projection, strict known-extension validation, bounded exact-filter indexing, atomic local reload, and opt-in cached federation with HTTPS-origin/IP/redirect/body/depth/source/TTL controls implemented; draft List filtering/sorting remains disabled |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
@@ -128,7 +128,8 @@ discovery-only.
 | Workload identity | SPIFFE | adapter planned |
 | Artifacts | ORAS + Cosign + TUF | interfaces planned; AI repository starts manifest verification |
 
-The Registry accepts only local operator-approved catalogs in this milestone.
+The Registry accepts either local operator-approved catalogs or one opt-in
+cached federation generation; the two sources cannot be mixed implicitly.
 An operator can derive such a catalog from a fresh validated Worker snapshot.
 The projection creates one service entry with the operator-approved stable ARD
 identifier that its TOS descriptor must bind. A bounded TOS extension carries

@@ -1858,6 +1858,293 @@ func (x *CancelResponse) GetAccepted() bool {
 	return false
 }
 
+type InvokeStreamRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Invocation    *InvokeRequest         `protobuf:"bytes,1,opt,name=invocation,proto3" json:"invocation,omitempty"`
+	MaxChunkBytes uint64                 `protobuf:"varint,2,opt,name=max_chunk_bytes,json=maxChunkBytes,proto3" json:"max_chunk_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvokeStreamRequest) Reset() {
+	*x = InvokeStreamRequest{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvokeStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvokeStreamRequest) ProtoMessage() {}
+
+func (x *InvokeStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvokeStreamRequest.ProtoReflect.Descriptor instead.
+func (*InvokeStreamRequest) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *InvokeStreamRequest) GetInvocation() *InvokeRequest {
+	if x != nil {
+		return x.Invocation
+	}
+	return nil
+}
+
+func (x *InvokeStreamRequest) GetMaxChunkBytes() uint64 {
+	if x != nil {
+		return x.MaxChunkBytes
+	}
+	return 0
+}
+
+type ResumeStreamRequest struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Task                 *GetTaskRequest        `protobuf:"bytes,1,opt,name=task,proto3" json:"task,omitempty"`
+	NextSequence         uint64                 `protobuf:"varint,2,opt,name=next_sequence,json=nextSequence,proto3" json:"next_sequence,omitempty"`
+	MaxChunkBytes        uint64                 `protobuf:"varint,3,opt,name=max_chunk_bytes,json=maxChunkBytes,proto3" json:"max_chunk_bytes,omitempty"`
+	ExpectedStreamDigest string                 `protobuf:"bytes,4,opt,name=expected_stream_digest,json=expectedStreamDigest,proto3" json:"expected_stream_digest,omitempty"`
+	NextOffset           uint64                 `protobuf:"varint,5,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ResumeStreamRequest) Reset() {
+	*x = ResumeStreamRequest{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeStreamRequest) ProtoMessage() {}
+
+func (x *ResumeStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeStreamRequest.ProtoReflect.Descriptor instead.
+func (*ResumeStreamRequest) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ResumeStreamRequest) GetTask() *GetTaskRequest {
+	if x != nil {
+		return x.Task
+	}
+	return nil
+}
+
+func (x *ResumeStreamRequest) GetNextSequence() uint64 {
+	if x != nil {
+		return x.NextSequence
+	}
+	return 0
+}
+
+func (x *ResumeStreamRequest) GetMaxChunkBytes() uint64 {
+	if x != nil {
+		return x.MaxChunkBytes
+	}
+	return 0
+}
+
+func (x *ResumeStreamRequest) GetExpectedStreamDigest() string {
+	if x != nil {
+		return x.ExpectedStreamDigest
+	}
+	return ""
+}
+
+func (x *ResumeStreamRequest) GetNextOffset() uint64 {
+	if x != nil {
+		return x.NextOffset
+	}
+	return 0
+}
+
+// StreamEvent chunks a single durably retained terminal result. Chunks are
+// provisional until the final event. stream_digest commits to the complete
+// ordered output, not merely to a prefix.
+type StreamEvent struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	RequestId           string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TaskId              string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	RequestDigest       string                 `protobuf:"bytes,3,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
+	Sequence            uint64                 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Chunk               []byte                 `protobuf:"bytes,5,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	TotalOutputBytes    uint64                 `protobuf:"varint,6,opt,name=total_output_bytes,json=totalOutputBytes,proto3" json:"total_output_bytes,omitempty"`
+	StreamDigest        string                 `protobuf:"bytes,7,opt,name=stream_digest,json=streamDigest,proto3" json:"stream_digest,omitempty"`
+	Terminal            bool                   `protobuf:"varint,8,opt,name=terminal,proto3" json:"terminal,omitempty"`
+	TerminalStatus      TaskStatus             `protobuf:"varint,9,opt,name=terminal_status,json=terminalStatus,proto3,enum=tos.edge.v1.TaskStatus" json:"terminal_status,omitempty"`
+	Usage               *Usage                 `protobuf:"bytes,10,opt,name=usage,proto3" json:"usage,omitempty"`
+	ModelRevision       string                 `protobuf:"bytes,11,opt,name=model_revision,json=modelRevision,proto3" json:"model_revision,omitempty"`
+	RuntimeRevision     string                 `protobuf:"bytes,12,opt,name=runtime_revision,json=runtimeRevision,proto3" json:"runtime_revision,omitempty"`
+	CompletedUnixMillis int64                  `protobuf:"varint,13,opt,name=completed_unix_millis,json=completedUnixMillis,proto3" json:"completed_unix_millis,omitempty"`
+	ErrorCode           string                 `protobuf:"bytes,14,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	Offset              uint64                 `protobuf:"varint,15,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *StreamEvent) Reset() {
+	*x = StreamEvent{}
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamEvent) ProtoMessage() {}
+
+func (x *StreamEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_api_tos_edge_v1_worker_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamEvent.ProtoReflect.Descriptor instead.
+func (*StreamEvent) Descriptor() ([]byte, []int) {
+	return file_api_tos_edge_v1_worker_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *StreamEvent) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetRequestDigest() string {
+	if x != nil {
+		return x.RequestDigest
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *StreamEvent) GetChunk() []byte {
+	if x != nil {
+		return x.Chunk
+	}
+	return nil
+}
+
+func (x *StreamEvent) GetTotalOutputBytes() uint64 {
+	if x != nil {
+		return x.TotalOutputBytes
+	}
+	return 0
+}
+
+func (x *StreamEvent) GetStreamDigest() string {
+	if x != nil {
+		return x.StreamDigest
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetTerminal() bool {
+	if x != nil {
+		return x.Terminal
+	}
+	return false
+}
+
+func (x *StreamEvent) GetTerminalStatus() TaskStatus {
+	if x != nil {
+		return x.TerminalStatus
+	}
+	return TaskStatus_TASK_STATUS_UNSPECIFIED
+}
+
+func (x *StreamEvent) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *StreamEvent) GetModelRevision() string {
+	if x != nil {
+		return x.ModelRevision
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetRuntimeRevision() string {
+	if x != nil {
+		return x.RuntimeRevision
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetCompletedUnixMillis() int64 {
+	if x != nil {
+		return x.CompletedUnixMillis
+	}
+	return 0
+}
+
+func (x *StreamEvent) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *StreamEvent) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
 var File_api_tos_edge_v1_worker_proto protoreflect.FileDescriptor
 
 const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
@@ -2004,7 +2291,38 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12%\n" +
 	"\x0erequest_digest\x18\x03 \x01(\tR\rrequestDigest\x12\x1a\n" +
-	"\baccepted\x18\x04 \x01(\bR\baccepted*\xc6\x01\n" +
+	"\baccepted\x18\x04 \x01(\bR\baccepted\"y\n" +
+	"\x13InvokeStreamRequest\x12:\n" +
+	"\n" +
+	"invocation\x18\x01 \x01(\v2\x1a.tos.edge.v1.InvokeRequestR\n" +
+	"invocation\x12&\n" +
+	"\x0fmax_chunk_bytes\x18\x02 \x01(\x04R\rmaxChunkBytes\"\xea\x01\n" +
+	"\x13ResumeStreamRequest\x12/\n" +
+	"\x04task\x18\x01 \x01(\v2\x1b.tos.edge.v1.GetTaskRequestR\x04task\x12#\n" +
+	"\rnext_sequence\x18\x02 \x01(\x04R\fnextSequence\x12&\n" +
+	"\x0fmax_chunk_bytes\x18\x03 \x01(\x04R\rmaxChunkBytes\x124\n" +
+	"\x16expected_stream_digest\x18\x04 \x01(\tR\x14expectedStreamDigest\x12\x1f\n" +
+	"\vnext_offset\x18\x05 \x01(\x04R\n" +
+	"nextOffset\"\xb6\x04\n" +
+	"\vStreamEvent\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
+	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12%\n" +
+	"\x0erequest_digest\x18\x03 \x01(\tR\rrequestDigest\x12\x1a\n" +
+	"\bsequence\x18\x04 \x01(\x04R\bsequence\x12\x14\n" +
+	"\x05chunk\x18\x05 \x01(\fR\x05chunk\x12,\n" +
+	"\x12total_output_bytes\x18\x06 \x01(\x04R\x10totalOutputBytes\x12#\n" +
+	"\rstream_digest\x18\a \x01(\tR\fstreamDigest\x12\x1a\n" +
+	"\bterminal\x18\b \x01(\bR\bterminal\x12@\n" +
+	"\x0fterminal_status\x18\t \x01(\x0e2\x17.tos.edge.v1.TaskStatusR\x0eterminalStatus\x12(\n" +
+	"\x05usage\x18\n" +
+	" \x01(\v2\x12.tos.edge.v1.UsageR\x05usage\x12%\n" +
+	"\x0emodel_revision\x18\v \x01(\tR\rmodelRevision\x12)\n" +
+	"\x10runtime_revision\x18\f \x01(\tR\x0fruntimeRevision\x122\n" +
+	"\x15completed_unix_millis\x18\r \x01(\x03R\x13completedUnixMillis\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x0e \x01(\tR\terrorCode\x12\x16\n" +
+	"\x06offset\x18\x0f \x01(\x04R\x06offset*\xc6\x01\n" +
 	"\bPriority\x12\x18\n" +
 	"\x14PRIORITY_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12PRIORITY_EMERGENCY\x10\x01\x12\x14\n" +
@@ -2062,7 +2380,10 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x05Quote\x12\x19.tos.edge.v1.QuoteRequest\x1a\x1a.tos.edge.v1.QuoteResponse\x12A\n" +
 	"\x06Invoke\x12\x1a.tos.edge.v1.InvokeRequest\x1a\x1b.tos.edge.v1.InvokeResponse\x12D\n" +
 	"\aGetTask\x12\x1b.tos.edge.v1.GetTaskRequest\x1a\x1c.tos.edge.v1.GetTaskResponse\x12A\n" +
-	"\x06Cancel\x12\x1a.tos.edge.v1.CancelRequest\x1a\x1b.tos.edge.v1.CancelResponseB;Z9github.com/tosnetwork/tos-protocol/gen/tos/edge/v1;edgev1b\x06proto3"
+	"\x06Cancel\x12\x1a.tos.edge.v1.CancelRequest\x1a\x1b.tos.edge.v1.CancelResponse2\xb1\x01\n" +
+	"\x13WorkerStreamService\x12L\n" +
+	"\fInvokeStream\x12 .tos.edge.v1.InvokeStreamRequest\x1a\x18.tos.edge.v1.StreamEvent0\x01\x12L\n" +
+	"\fResumeStream\x12 .tos.edge.v1.ResumeStreamRequest\x1a\x18.tos.edge.v1.StreamEvent0\x01B;Z9github.com/tosnetwork/tos-protocol/gen/tos/edge/v1;edgev1b\x06proto3"
 
 var (
 	file_api_tos_edge_v1_worker_proto_rawDescOnce sync.Once
@@ -2077,7 +2398,7 @@ func file_api_tos_edge_v1_worker_proto_rawDescGZIP() []byte {
 }
 
 var file_api_tos_edge_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_api_tos_edge_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_api_tos_edge_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_api_tos_edge_v1_worker_proto_goTypes = []any{
 	(Priority)(0),                   // 0: tos.edge.v1.Priority
 	(EvidenceLevel)(0),              // 1: tos.edge.v1.EvidenceLevel
@@ -2103,7 +2424,10 @@ var file_api_tos_edge_v1_worker_proto_goTypes = []any{
 	(*GetTaskResponse)(nil),         // 21: tos.edge.v1.GetTaskResponse
 	(*CancelRequest)(nil),           // 22: tos.edge.v1.CancelRequest
 	(*CancelResponse)(nil),          // 23: tos.edge.v1.CancelResponse
-	nil,                             // 24: tos.edge.v1.ResourceClaim.AttributesEntry
+	(*InvokeStreamRequest)(nil),     // 24: tos.edge.v1.InvokeStreamRequest
+	(*ResumeStreamRequest)(nil),     // 25: tos.edge.v1.ResumeStreamRequest
+	(*StreamEvent)(nil),             // 26: tos.edge.v1.StreamEvent
+	nil,                             // 27: tos.edge.v1.ResourceClaim.AttributesEntry
 }
 var file_api_tos_edge_v1_worker_proto_depIdxs = []int32{
 	1,  // 0: tos.edge.v1.ClaimEvidence.level:type_name -> tos.edge.v1.EvidenceLevel
@@ -2112,7 +2436,7 @@ var file_api_tos_edge_v1_worker_proto_depIdxs = []int32{
 	3,  // 3: tos.edge.v1.ResourceClaim.resource_class:type_name -> tos.edge.v1.ResourceClass
 	4,  // 4: tos.edge.v1.ResourceClaim.unit:type_name -> tos.edge.v1.ResourceUnit
 	6,  // 5: tos.edge.v1.ResourceClaim.evidence:type_name -> tos.edge.v1.ClaimEvidence
-	24, // 6: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
+	27, // 6: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
 	4,  // 7: tos.edge.v1.ResourceLimit.unit:type_name -> tos.edge.v1.ResourceUnit
 	7,  // 8: tos.edge.v1.HealthResponse.readiness:type_name -> tos.edge.v1.ReadinessComponent
 	0,  // 9: tos.edge.v1.Capability.accepted_priorities:type_name -> tos.edge.v1.Priority
@@ -2126,23 +2450,31 @@ var file_api_tos_edge_v1_worker_proto_depIdxs = []int32{
 	18, // 17: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
 	5,  // 18: tos.edge.v1.GetTaskResponse.status:type_name -> tos.edge.v1.TaskStatus
 	19, // 19: tos.edge.v1.GetTaskResponse.result:type_name -> tos.edge.v1.InvokeResponse
-	10, // 20: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
-	12, // 21: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
-	15, // 22: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
-	17, // 23: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
-	20, // 24: tos.edge.v1.WorkerService.GetTask:input_type -> tos.edge.v1.GetTaskRequest
-	22, // 25: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
-	11, // 26: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
-	14, // 27: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
-	16, // 28: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
-	19, // 29: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
-	21, // 30: tos.edge.v1.WorkerService.GetTask:output_type -> tos.edge.v1.GetTaskResponse
-	23, // 31: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
-	26, // [26:32] is the sub-list for method output_type
-	20, // [20:26] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	17, // 20: tos.edge.v1.InvokeStreamRequest.invocation:type_name -> tos.edge.v1.InvokeRequest
+	20, // 21: tos.edge.v1.ResumeStreamRequest.task:type_name -> tos.edge.v1.GetTaskRequest
+	5,  // 22: tos.edge.v1.StreamEvent.terminal_status:type_name -> tos.edge.v1.TaskStatus
+	18, // 23: tos.edge.v1.StreamEvent.usage:type_name -> tos.edge.v1.Usage
+	10, // 24: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
+	12, // 25: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
+	15, // 26: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
+	17, // 27: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
+	20, // 28: tos.edge.v1.WorkerService.GetTask:input_type -> tos.edge.v1.GetTaskRequest
+	22, // 29: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
+	24, // 30: tos.edge.v1.WorkerStreamService.InvokeStream:input_type -> tos.edge.v1.InvokeStreamRequest
+	25, // 31: tos.edge.v1.WorkerStreamService.ResumeStream:input_type -> tos.edge.v1.ResumeStreamRequest
+	11, // 32: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
+	14, // 33: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
+	16, // 34: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
+	19, // 35: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
+	21, // 36: tos.edge.v1.WorkerService.GetTask:output_type -> tos.edge.v1.GetTaskResponse
+	23, // 37: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
+	26, // 38: tos.edge.v1.WorkerStreamService.InvokeStream:output_type -> tos.edge.v1.StreamEvent
+	26, // 39: tos.edge.v1.WorkerStreamService.ResumeStream:output_type -> tos.edge.v1.StreamEvent
+	32, // [32:40] is the sub-list for method output_type
+	24, // [24:32] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_api_tos_edge_v1_worker_proto_init() }
@@ -2156,9 +2488,9 @@ func file_api_tos_edge_v1_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_tos_edge_v1_worker_proto_rawDesc), len(file_api_tos_edge_v1_worker_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   19,
+			NumMessages:   22,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_api_tos_edge_v1_worker_proto_goTypes,
 		DependencyIndexes: file_api_tos_edge_v1_worker_proto_depIdxs,

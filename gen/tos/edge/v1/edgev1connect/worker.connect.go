@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// WorkerServiceName is the fully-qualified name of the WorkerService service.
 	WorkerServiceName = "tos.edge.v1.WorkerService"
+	// WorkerStreamServiceName is the fully-qualified name of the WorkerStreamService service.
+	WorkerStreamServiceName = "tos.edge.v1.WorkerStreamService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -46,6 +48,12 @@ const (
 	WorkerServiceGetTaskProcedure = "/tos.edge.v1.WorkerService/GetTask"
 	// WorkerServiceCancelProcedure is the fully-qualified name of the WorkerService's Cancel RPC.
 	WorkerServiceCancelProcedure = "/tos.edge.v1.WorkerService/Cancel"
+	// WorkerStreamServiceInvokeStreamProcedure is the fully-qualified name of the WorkerStreamService's
+	// InvokeStream RPC.
+	WorkerStreamServiceInvokeStreamProcedure = "/tos.edge.v1.WorkerStreamService/InvokeStream"
+	// WorkerStreamServiceResumeStreamProcedure is the fully-qualified name of the WorkerStreamService's
+	// ResumeStream RPC.
+	WorkerStreamServiceResumeStreamProcedure = "/tos.edge.v1.WorkerStreamService/ResumeStream"
 )
 
 // WorkerServiceClient is a client for the tos.edge.v1.WorkerService service.
@@ -246,4 +254,100 @@ func (UnimplementedWorkerServiceHandler) GetTask(context.Context, *connect.Reque
 
 func (UnimplementedWorkerServiceHandler) Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.WorkerService.Cancel is not implemented"))
+}
+
+// WorkerStreamServiceClient is a client for the tos.edge.v1.WorkerStreamService service.
+type WorkerStreamServiceClient interface {
+	InvokeStream(context.Context, *connect.Request[v1.InvokeStreamRequest]) (*connect.ServerStreamForClient[v1.StreamEvent], error)
+	ResumeStream(context.Context, *connect.Request[v1.ResumeStreamRequest]) (*connect.ServerStreamForClient[v1.StreamEvent], error)
+}
+
+// NewWorkerStreamServiceClient constructs a client for the tos.edge.v1.WorkerStreamService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewWorkerStreamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkerStreamServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	workerStreamServiceMethods := v1.File_api_tos_edge_v1_worker_proto.Services().ByName("WorkerStreamService").Methods()
+	return &workerStreamServiceClient{
+		invokeStream: connect.NewClient[v1.InvokeStreamRequest, v1.StreamEvent](
+			httpClient,
+			baseURL+WorkerStreamServiceInvokeStreamProcedure,
+			connect.WithSchema(workerStreamServiceMethods.ByName("InvokeStream")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeStream: connect.NewClient[v1.ResumeStreamRequest, v1.StreamEvent](
+			httpClient,
+			baseURL+WorkerStreamServiceResumeStreamProcedure,
+			connect.WithSchema(workerStreamServiceMethods.ByName("ResumeStream")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// workerStreamServiceClient implements WorkerStreamServiceClient.
+type workerStreamServiceClient struct {
+	invokeStream *connect.Client[v1.InvokeStreamRequest, v1.StreamEvent]
+	resumeStream *connect.Client[v1.ResumeStreamRequest, v1.StreamEvent]
+}
+
+// InvokeStream calls tos.edge.v1.WorkerStreamService.InvokeStream.
+func (c *workerStreamServiceClient) InvokeStream(ctx context.Context, req *connect.Request[v1.InvokeStreamRequest]) (*connect.ServerStreamForClient[v1.StreamEvent], error) {
+	return c.invokeStream.CallServerStream(ctx, req)
+}
+
+// ResumeStream calls tos.edge.v1.WorkerStreamService.ResumeStream.
+func (c *workerStreamServiceClient) ResumeStream(ctx context.Context, req *connect.Request[v1.ResumeStreamRequest]) (*connect.ServerStreamForClient[v1.StreamEvent], error) {
+	return c.resumeStream.CallServerStream(ctx, req)
+}
+
+// WorkerStreamServiceHandler is an implementation of the tos.edge.v1.WorkerStreamService service.
+type WorkerStreamServiceHandler interface {
+	InvokeStream(context.Context, *connect.Request[v1.InvokeStreamRequest], *connect.ServerStream[v1.StreamEvent]) error
+	ResumeStream(context.Context, *connect.Request[v1.ResumeStreamRequest], *connect.ServerStream[v1.StreamEvent]) error
+}
+
+// NewWorkerStreamServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewWorkerStreamServiceHandler(svc WorkerStreamServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	workerStreamServiceMethods := v1.File_api_tos_edge_v1_worker_proto.Services().ByName("WorkerStreamService").Methods()
+	workerStreamServiceInvokeStreamHandler := connect.NewServerStreamHandler(
+		WorkerStreamServiceInvokeStreamProcedure,
+		svc.InvokeStream,
+		connect.WithSchema(workerStreamServiceMethods.ByName("InvokeStream")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workerStreamServiceResumeStreamHandler := connect.NewServerStreamHandler(
+		WorkerStreamServiceResumeStreamProcedure,
+		svc.ResumeStream,
+		connect.WithSchema(workerStreamServiceMethods.ByName("ResumeStream")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/tos.edge.v1.WorkerStreamService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case WorkerStreamServiceInvokeStreamProcedure:
+			workerStreamServiceInvokeStreamHandler.ServeHTTP(w, r)
+		case WorkerStreamServiceResumeStreamProcedure:
+			workerStreamServiceResumeStreamHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedWorkerStreamServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedWorkerStreamServiceHandler struct{}
+
+func (UnimplementedWorkerStreamServiceHandler) InvokeStream(context.Context, *connect.Request[v1.InvokeStreamRequest], *connect.ServerStream[v1.StreamEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.WorkerStreamService.InvokeStream is not implemented"))
+}
+
+func (UnimplementedWorkerStreamServiceHandler) ResumeStream(context.Context, *connect.Request[v1.ResumeStreamRequest], *connect.ServerStream[v1.StreamEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.WorkerStreamService.ResumeStream is not implemented"))
 }
