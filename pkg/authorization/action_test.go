@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,6 +41,7 @@ type recordingAuthorityResolver struct {
 	snapshot AuthoritySnapshot
 	refs     []Reference
 	panicNow bool
+	cancel   context.CancelFunc
 }
 
 func TestPaidActionAuthorizerRejectsTypedNilAuthorityDependency(t *testing.T) {
@@ -66,10 +68,39 @@ func (r *recordingAuthorityResolver) ResolveAuthority(
 	if r.panicNow {
 		panic("mock paid-action authority secret")
 	}
+	if r.cancel != nil {
+		r.cancel()
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.refs = append(r.refs, reference)
 	return r.snapshot, nil
+}
+
+func TestPaidActionAuthorizerRejectsCancellationLateAuthoritySuccess(t *testing.T) {
+	fixture := newSessionAuthFixture(t)
+	intent := []byte("paid action intent")
+	ctx, cancel := context.WithCancel(context.Background())
+	authorizer, err := NewPaidActionAuthorizer(PaidActionAuthorizerConfig{
+		Verifier: newTestVerifier(t),
+		AuthorityResolver: &recordingAuthorityResolver{
+			snapshot: fixture.snapshot, cancel: cancel,
+		},
+		ClientKeyResolver: fixture.resolver,
+		Reference: Reference{
+			Network: fixture.manifest.Network, Address: "tos:test:service-contract",
+			ServiceID: fixture.manifest.ServiceID,
+		},
+		ManifestEnvelope: fixture.manifestEnvelope,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authorizer.Authorize(
+		ctx, paidActionCredentials(t, fixture, intent), intent, fixture.now,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation-late authority success accepted: %v", err)
+	}
 }
 
 func TestPaidActionAuthorizerContainsAuthorityResolverPanic(t *testing.T) {

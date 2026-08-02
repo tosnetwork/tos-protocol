@@ -113,7 +113,14 @@ func authorizeActionStatus(
 			err = errors.New("action status authorizer panicked")
 		}
 	}()
-	return authorizer.AuthorizeActionStatus(ctx, request, actionID)
+	scope, err = authorizer.AuthorizeActionStatus(ctx, request, actionID)
+	if err != nil {
+		return journal.Scope{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return journal.Scope{}, err
+	}
+	return scope, nil
 }
 
 func validPublicActionID(value string) bool {

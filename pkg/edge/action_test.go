@@ -29,11 +29,34 @@ type fixedPaidActionHTTPAuthorizer struct {
 	action authorization.AuthorizedPaidAction
 }
 
+type cancellationLatePaidActionAuthorizer struct {
+	cancel context.CancelFunc
+}
+
+func (a cancellationLatePaidActionAuthorizer) AuthorizePaidAction(
+	context.Context,
+	*http.Request,
+) (authorization.AuthorizedPaidAction, error) {
+	a.cancel()
+	return authorization.AuthorizedPaidAction{}, nil
+}
+
 func (a fixedPaidActionHTTPAuthorizer) AuthorizePaidAction(
 	context.Context,
 	*http.Request,
 ) (authorization.AuthorizedPaidAction, error) {
 	return a.action, nil
+}
+
+func TestPaidActionHTTPAuthorizerRejectsCancellationLateSuccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err := callPaidActionAuthorizer(
+		ctx, cancellationLatePaidActionAuthorizer{cancel: cancel},
+		httptest.NewRequest(http.MethodPost, "/tos/v1/actions", nil),
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation-late paid action accepted: %v", err)
+	}
 }
 
 func (r actionAuthorityResolver) ResolveAuthority(

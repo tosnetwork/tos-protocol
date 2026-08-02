@@ -12,6 +12,9 @@ import (
 )
 
 func HTTP(server *http.Server) error {
+	if server == nil {
+		return errors.New("nil HTTP server")
+	}
 	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errorChannel := make(chan error, 1)

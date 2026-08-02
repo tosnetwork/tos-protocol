@@ -96,6 +96,11 @@ requirements remain in `docs/`.
   Authority, client-key, chain-reader and payment resolver panics are also
   converted into bounded fail-closed errors without exposing implementation
   panic details.
+- Resolver, readiness and read-authorizer calls reject a backend that reports
+  success after caller cancellation, including chain, paid-action, Receipt and
+  Action-status paths. Strict file loading now rejects invalid caller bounds
+  before I/O, and shared HTTP serving rejects a nil server before launching a
+  goroutine; both base utilities have direct race-tested coverage.
 
 ## In Progress
 

@@ -10,6 +10,9 @@ import (
 )
 
 func DecodeJSON(path string, maxBytes int64, output interface{}) error {
+	if path == "" || maxBytes <= 0 || output == nil {
+		return errors.New("invalid JSON file decode request")
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return err

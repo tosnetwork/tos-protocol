@@ -386,6 +386,7 @@ type staticResolver struct {
 	snapshot AuthoritySnapshot
 	err      error
 	panicNow bool
+	cancel   context.CancelFunc
 }
 
 func (r staticResolver) ResolveAuthority(
@@ -394,6 +395,9 @@ func (r staticResolver) ResolveAuthority(
 ) (AuthoritySnapshot, error) {
 	if r.panicNow {
 		panic("mock authority resolver secret")
+	}
+	if r.cancel != nil {
+		r.cancel()
 	}
 	return r.snapshot, r.err
 }
@@ -434,6 +438,13 @@ func TestResolveAndVerifyManifestBindsReferenceAndPropagatesErrors(t *testing.T)
 	); err == nil || !strings.Contains(err.Error(), "authority resolver panicked") ||
 		strings.Contains(err.Error(), "mock authority resolver secret") {
 		t.Fatalf("resolver panic was not safely converted: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	if _, err := verifier.ResolveAndVerifyManifest(
+		ctx, staticResolver{snapshot: fixture.snapshot, cancel: cancel},
+		reference, fixture.manifestEnvelope, fixture.now,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation-late resolver success accepted: %v", err)
 	}
 }
 

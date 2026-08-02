@@ -106,6 +106,33 @@ temporary, untracked `go.work` then linked both current working-tree candidates
 and the complete `tos-ai` race suite passed against the current local protocol
 instead of its previously pinned revision.
 
+## Fourth cancellation, persistence and base-coverage closeout
+
+The final host-executable audit closed the remaining locally reproducible
+failure cases rather than assigning them to deployment certification:
+
+- protocol authority, chain-reader, paid-action, readiness, Receipt-read and
+  Action-status authorizers now discard a backend success returned after the
+  caller context was canceled;
+- strict bounded file decoding rejects empty paths, invalid byte limits and nil
+  destinations before opening a file, while the common HTTP lifecycle helper
+  rejects a nil server synchronously instead of allowing a background panic;
+- the NVIDIA probe treats backend shutdown failure as degraded evidence, with
+  panic containment still applied to the complete backend lifecycle;
+- deterministic `ENOSPC` injection at both software-update manifest and state
+  writes proves fail-closed durable state, no temporary-file residue and a
+  successful subsequent retry; and
+- exhaustive runtime capability, request-identity, byte-limit, error-category,
+  unwrapping and elapsed-time tests bring the public runtime package to 100%
+  statement coverage.
+
+Ten consecutive race-enabled targeted runs passed for all changed packages.
+The complete repository local gates then passed, followed by a fresh
+working-tree cross-repository race run. Three additional 10-second fuzz runs
+processed more than 5.8 million strict JSON, ARD Entry and fleet transport
+inputs without a panic or invariant failure. Only deprecation warnings from the
+pinned NVIDIA headers were emitted.
+
 ## Commands and results
 
 The following gates passed on the local host:
@@ -115,10 +142,14 @@ cd /home/tomi/tos-protocol
 make local-gates
 make ard-conformance
 go test -race -count=10 ./pkg/authorization ./pkg/payment
+go test -race -count=10 ./pkg/edge ./internal/files ./internal/serve
+go test ./internal/jsonstrict -run '^$' -fuzz FuzzDecode -fuzztime=10s
+go test ./pkg/ard -run '^$' -fuzz FuzzEntryUnmarshalJSON -fuzztime=10s
 
 cd /home/tomi/tos-ai
 make local-gates
-go test -race -count=10 ./internal/worker
+go test -race -count=10 ./internal/worker ./pkg/probe ./pkg/softwareupdate ./pkg/runtime
+go test ./pkg/fleetcontrol -run '^$' -fuzz FuzzValidateTransportJSON -fuzztime=10s
 
 # With a temporary go.work using both current working trees:
 GOWORK=/tmp/tos-cross-repo.<run>/go.work go test -race -count=1 ./...

@@ -149,7 +149,10 @@ func callReadinessChecker(
 			err = errors.New("readiness checker panicked")
 		}
 	}()
-	return checker.CheckReady(ctx)
+	if err := checker.CheckReady(ctx); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 type Server struct {
@@ -486,7 +489,14 @@ func authorizeReceiptAccess(
 			err = errors.New("receipt authorizer panicked")
 		}
 	}()
-	return authorizer.AuthorizeReceiptAccess(ctx, request, receiptID)
+	scope, err = authorizer.AuthorizeReceiptAccess(ctx, request, receiptID)
+	if err != nil {
+		return journal.Scope{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return journal.Scope{}, err
+	}
+	return scope, nil
 }
 
 func readReceipt(

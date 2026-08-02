@@ -342,7 +342,14 @@ func callPaidActionAuthorizer(
 			err = errors.New("paid-action authorizer panicked")
 		}
 	}()
-	return authorizer.AuthorizePaidAction(ctx, request)
+	authorized, err = authorizer.AuthorizePaidAction(ctx, request)
+	if err != nil {
+		return authorization.AuthorizedPaidAction{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return authorization.AuthorizedPaidAction{}, err
+	}
+	return authorized, nil
 }
 
 func clonePublicEnvelope(envelope identity.Envelope) identity.Envelope {

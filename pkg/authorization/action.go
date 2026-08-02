@@ -139,6 +139,9 @@ func (a *PaidActionAuthorizer) Authorize(
 			"resolve paid-action authority: %w", err,
 		)
 	}
+	if err := ctx.Err(); err != nil {
+		return AuthorizedPaidAction{}, err
+	}
 	if snapshot.Network != reference.Network ||
 		snapshot.ServiceID != reference.ServiceID ||
 		snapshot.ObservedMasterSeqno < reference.MinimumMasterSeqno {

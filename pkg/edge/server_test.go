@@ -36,6 +36,15 @@ func (panickingReadinessChecker) CheckReady(context.Context) error {
 	panic("readiness panic")
 }
 
+type cancellationLateReadinessChecker struct {
+	cancel context.CancelFunc
+}
+
+func (checker cancellationLateReadinessChecker) CheckReady(context.Context) error {
+	checker.cancel()
+	return nil
+}
+
 func TestServerRejectsTypedNilInterfaceDependency(t *testing.T) {
 	now, descriptor, catalog, _, _, _ := receiptDeliveryFixture(t)
 	var checker *testReadinessChecker
@@ -48,11 +57,12 @@ func TestServerRejectsTypedNilInterfaceDependency(t *testing.T) {
 }
 
 type testReceiptAuthorizer struct {
-	scope journal.Scope
-	err   error
-	panic bool
-	calls int
-	bound bool
+	scope  journal.Scope
+	err    error
+	panic  bool
+	calls  int
+	bound  bool
+	cancel context.CancelFunc
 }
 
 func (authorizer *testReceiptAuthorizer) AuthorizeReceiptAccess(
@@ -67,6 +77,9 @@ func (authorizer *testReceiptAuthorizer) AuthorizeReceiptAccess(
 	if authorizer.panic {
 		panic("private receipt authorizer failure")
 	}
+	if authorizer.cancel != nil {
+		authorizer.cancel()
+	}
 	return authorizer.scope, authorizer.err
 }
 
@@ -78,11 +91,12 @@ type testReceiptSource struct {
 }
 
 type testActionStatusAuthorizer struct {
-	scope journal.Scope
-	err   error
-	panic bool
-	calls int
-	bound bool
+	scope  journal.Scope
+	err    error
+	panic  bool
+	calls  int
+	bound  bool
+	cancel context.CancelFunc
 }
 
 type testPaidActionErrorReporter struct {
@@ -127,7 +141,46 @@ func (authorizer *testActionStatusAuthorizer) AuthorizeActionStatus(
 	if authorizer.panic {
 		panic("private action status authorization failure")
 	}
+	if authorizer.cancel != nil {
+		authorizer.cancel()
+	}
 	return authorizer.scope, authorizer.err
+}
+
+func TestPublicAuthorizersRejectCancellationLateSuccess(t *testing.T) {
+	scope := journal.Scope{
+		Network: "testnet", ServiceID: "edge.example.ai",
+		SessionID: "session-0001", RequestID: "request-0001",
+	}
+	for name, call := range map[string]func(context.Context, context.CancelFunc) error{
+		"receipt": func(ctx context.Context, cancel context.CancelFunc) error {
+			_, err := authorizeReceiptAccess(
+				ctx, &testReceiptAuthorizer{scope: scope, cancel: cancel},
+				httptest.NewRequest(http.MethodGet, "/", nil), "receipt-0001",
+			)
+			return err
+		},
+		"action-status": func(ctx context.Context, cancel context.CancelFunc) error {
+			_, err := authorizeActionStatus(
+				ctx, &testActionStatusAuthorizer{scope: scope, cancel: cancel},
+				httptest.NewRequest(http.MethodGet, "/", nil), scope.RequestID,
+			)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			if err := call(ctx, cancel); !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation-late success accepted: %v", err)
+			}
+		})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := callReadinessChecker(
+		cancellationLateReadinessChecker{cancel: cancel}, ctx,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation-late readiness success accepted: %v", err)
+	}
 }
 
 func (source *testReceiptSource) Receipt(journal.Scope) (journal.ReceiptRecord, error) {

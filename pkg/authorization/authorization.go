@@ -149,6 +149,9 @@ func (v *Verifier) ResolveAndVerifyManifest(
 	if err != nil {
 		return nil, fmt.Errorf("resolve service authority: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if snapshot.Network != reference.Network ||
 		snapshot.ServiceID != reference.ServiceID {
 		return nil, errors.New("resolved authority does not match reference")

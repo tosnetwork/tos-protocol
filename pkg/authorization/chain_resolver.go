@@ -105,6 +105,9 @@ func (r *ChainResolver) ResolveAuthority(
 	if err != nil {
 		return AuthoritySnapshot{}, fmt.Errorf("read chain service authority: %w", err)
 	}
+	if err := queryContext.Err(); err != nil {
+		return AuthoritySnapshot{}, err
+	}
 	if state.Network != reference.Network ||
 		state.Address != reference.Address ||
 		state.ServiceID != reference.ServiceID {

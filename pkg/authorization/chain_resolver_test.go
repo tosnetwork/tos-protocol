@@ -197,6 +197,25 @@ func TestChainResolverContainsReaderPanic(t *testing.T) {
 	}
 }
 
+func TestChainResolverRejectsCancellationLateReaderSuccess(t *testing.T) {
+	fixture := newAuthFixture(t)
+	reference := Reference{
+		Network: fixture.manifest.Network, Address: "tos:test:service-actor",
+		ServiceID: fixture.manifest.ServiceID,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	resolver := newTestChainResolver(t, chainReaderFunc(func(
+		context.Context,
+		chain.ServiceReference,
+	) (chain.ServiceState, error) {
+		cancel()
+		return fixtureServiceState(fixture, reference), nil
+	}))
+	if _, err := resolver.ResolveAuthority(ctx, reference); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation-late chain success accepted: %v", err)
+	}
+}
+
 func TestChainResolverDefensivelyCopiesAuthorityState(t *testing.T) {
 	fixture := newAuthFixture(t)
 	reference := Reference{
