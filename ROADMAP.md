@@ -1,7 +1,7 @@
 # tos-protocol Roadmap
 
 Status: non-streaming v0.1 M1 integration-complete candidate
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 This is the repository-level delivery roadmap for the generic TOS Service
 Protocol. The cross-repository program view lives in
@@ -59,6 +59,10 @@ requirements remain in `docs/`.
   builds; session issuance/revocation; signer rotation identity drift; TLS
   malformed-input load; and the complete local closure matrix recorded in
   `docs/local-production-gate-closure-2026-08-01.md`.
+- Deterministic complete protocol release bundles containing all commands,
+  normative specifications and GPL license, with internal/external SHA-256
+  manifests, archive safety checks, optional detached Ed25519 verification,
+  tamper tests, and CI enforcement.
 
 ## In Progress
 
