@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
@@ -98,7 +99,7 @@ func (m *VerifiedManifest) IssueReceipt(
 	if ctx == nil {
 		return VerifiedReceipt{}, errors.New("nil receipt signing context")
 	}
-	if signer == nil {
+	if nilcheck.IsNil(signer) {
 		return VerifiedReceipt{}, errors.New("nil receipt signer")
 	}
 	issuedAt, err := validateNow(issuedAt)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
@@ -40,7 +41,7 @@ func (m *VerifiedManifest) IssueSessionGrant(
 	signer SessionSigner,
 	issuedAt time.Time,
 ) (*VerifiedSessionGrant, identity.Envelope, error) {
-	if ctx == nil || signer == nil || m == nil || m.runtimeKeys == nil {
+	if ctx == nil || nilcheck.IsNil(signer) || m == nil || m.runtimeKeys == nil {
 		return nil, identity.Envelope{}, errors.New("invalid session issuance dependencies")
 	}
 	issuedAt, err := validateNow(issuedAt)

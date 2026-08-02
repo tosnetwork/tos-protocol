@@ -88,6 +88,14 @@ requirements remain in `docs/`.
   or cancellation-late success.
 - Canonical lowercase `.tos` name syntax validation that is independent of the
   still-unfrozen registrar contract ABI.
+- Strict direct ARD `Entry` decoding plus fuzz coverage for the shared JSON
+  ambiguity/depth scanner and extension-preserving entry decoder.
+- Construction-time typed-nil rejection across authority, client-key,
+  payment, chain-reader, issuance-signer and Edge dependency interfaces, so a
+  miswired Go interface cannot survive startup and fail only on first use.
+  Authority, client-key, chain-reader and payment resolver panics are also
+  converted into bounded fail-closed errors without exposing implementation
+  panic details.
 
 ## In Progress
 

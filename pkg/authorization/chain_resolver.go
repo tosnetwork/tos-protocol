@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
+
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 )
 
@@ -52,7 +54,7 @@ func NewChainResolver(
 	reader ChainServiceReader,
 	policy ChainResolverPolicy,
 ) (*ChainResolver, error) {
-	if reader == nil {
+	if nilcheck.IsNil(reader) {
 		return nil, errors.New("nil chain service reader")
 	}
 	if policy.QueryTimeout < minChainQueryTimeout ||
@@ -85,7 +87,7 @@ func (r *ChainResolver) ResolveAuthority(
 	ctx context.Context,
 	reference Reference,
 ) (AuthoritySnapshot, error) {
-	if r == nil || r.reader == nil {
+	if r == nil || nilcheck.IsNil(r.reader) {
 		return AuthoritySnapshot{}, errors.New("invalid chain authority resolver")
 	}
 	if ctx == nil {
@@ -96,7 +98,7 @@ func (r *ChainResolver) ResolveAuthority(
 	}
 	queryContext, cancel := context.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
-	state, err := r.reader.ResolveService(queryContext, chain.ServiceReference{
+	state, err := safeResolveService(r.reader, queryContext, chain.ServiceReference{
 		Network: reference.Network, Address: reference.Address,
 		ServiceID: reference.ServiceID,
 	})

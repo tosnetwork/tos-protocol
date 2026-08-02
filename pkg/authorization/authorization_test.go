@@ -385,12 +385,16 @@ func TestManifestCoverageUsesEnvelopeMillisecondPrecision(t *testing.T) {
 type staticResolver struct {
 	snapshot AuthoritySnapshot
 	err      error
+	panicNow bool
 }
 
 func (r staticResolver) ResolveAuthority(
 	context.Context,
 	Reference,
 ) (AuthoritySnapshot, error) {
+	if r.panicNow {
+		panic("mock authority resolver secret")
+	}
 	return r.snapshot, r.err
 }
 
@@ -423,6 +427,13 @@ func TestResolveAndVerifyManifestBindsReferenceAndPropagatesErrors(t *testing.T)
 		reference, fixture.manifestEnvelope, fixture.now,
 	); !errors.Is(err, sentinel) {
 		t.Fatalf("resolver error = %v", err)
+	}
+	if _, err := verifier.ResolveAndVerifyManifest(
+		context.Background(), staticResolver{panicNow: true},
+		reference, fixture.manifestEnvelope, fixture.now,
+	); err == nil || !strings.Contains(err.Error(), "authority resolver panicked") ||
+		strings.Contains(err.Error(), "mock authority resolver secret") {
+		t.Fatalf("resolver panic was not safely converted: %v", err)
 	}
 }
 

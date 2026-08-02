@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/ard"
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/journal"
@@ -109,7 +110,7 @@ type readinessGate struct {
 }
 
 func newReadinessGate(checker ReadinessChecker) *readinessGate {
-	if checker == nil {
+	if nilcheck.IsNil(checker) {
 		return nil
 	}
 	return &readinessGate{checker: checker}
@@ -208,27 +209,49 @@ func newServer(
 	now time.Time,
 	dependencies ServerDependencies,
 ) (*Server, error) {
-	if (dependencies.ReceiptAuthorizer == nil) !=
-		(dependencies.ReceiptSource == nil) {
+	for _, dependency := range []any{
+		dependencies.ChainReadiness,
+		dependencies.ReceiptSignerReadiness,
+		dependencies.ProfileReadiness,
+		dependencies.ReceiptAuthorizer,
+		dependencies.ReceiptSource,
+		dependencies.ActionStatusAuthorizer,
+		dependencies.PaidActionAuthorizer,
+		dependencies.ReceiptSigner,
+		dependencies.PaidActionErrorReporter,
+	} {
+		if dependency != nil && nilcheck.IsNil(dependency) {
+			return nil, errors.New("typed-nil Edge server dependency")
+		}
+	}
+	receiptAuthorizerConfigured := !nilcheck.IsNil(dependencies.ReceiptAuthorizer)
+	receiptSourceConfigured := !nilcheck.IsNil(dependencies.ReceiptSource)
+	actionStatusConfigured := !nilcheck.IsNil(dependencies.ActionStatusAuthorizer)
+	paidAuthorizerConfigured := !nilcheck.IsNil(dependencies.PaidActionAuthorizer)
+	chainReadinessConfigured := !nilcheck.IsNil(dependencies.ChainReadiness)
+	receiptReadinessConfigured := !nilcheck.IsNil(dependencies.ReceiptSignerReadiness)
+	profileReadinessConfigured := !nilcheck.IsNil(dependencies.ProfileReadiness)
+	receiptSignerConfigured := !nilcheck.IsNil(dependencies.ReceiptSigner)
+	if receiptAuthorizerConfigured != receiptSourceConfigured {
 		return nil, errors.New("partial receipt delivery dependencies")
 	}
-	if dependencies.ActionStatusAuthorizer != nil && dependencies.Core == nil {
+	if actionStatusConfigured && dependencies.Core == nil {
 		return nil, errors.New("action status requires Edge Core")
 	}
-	paidConfigured := dependencies.PaidActionAuthorizer != nil ||
+	paidConfigured := paidAuthorizerConfigured ||
 		dependencies.PaymentObserver != nil || dependencies.ProfilePlan != nil ||
-		dependencies.ProfileReadiness != nil ||
-		dependencies.Worker != nil || dependencies.ReceiptSigner != nil ||
+		profileReadinessConfigured ||
+		dependencies.Worker != nil || receiptSignerConfigured ||
 		dependencies.PaidActionRetention != 0 ||
 		dependencies.ReceiptLifetime != 0 ||
 		dependencies.PaidActionMaxConcurrent != 0
 	if paidConfigured && (dependencies.Core == nil ||
-		dependencies.ChainReadiness == nil ||
-		dependencies.ReceiptSignerReadiness == nil ||
-		dependencies.ProfileReadiness == nil ||
-		dependencies.PaidActionAuthorizer == nil ||
+		!chainReadinessConfigured ||
+		!receiptReadinessConfigured ||
+		!profileReadinessConfigured ||
+		!paidAuthorizerConfigured ||
 		dependencies.PaymentObserver == nil || dependencies.ProfilePlan == nil ||
-		dependencies.Worker == nil || dependencies.ReceiptSigner == nil ||
+		dependencies.Worker == nil || !receiptSignerConfigured ||
 		dependencies.PaidActionRetention <= 0 ||
 		dependencies.PaidActionRetention > localrpc.MaximumWorkerTaskRetention ||
 		dependencies.ReceiptLifetime < minReceiptLifetime ||

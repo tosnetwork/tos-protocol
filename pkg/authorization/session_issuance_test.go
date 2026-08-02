@@ -78,6 +78,7 @@ func TestIssueSessionGrantDerivesAuthorityAndContainsSignerFailures(t *testing.T
 		t.Fatal(err)
 	}
 	tests := map[string]SessionSigner{
+		"typed-nil": sessionSignerFunc(nil),
 		"payload substitution": sessionSignerFunc(func(
 			_ context.Context, payload []byte, issuedAt, expiresAt time.Time,
 		) (identity.Envelope, error) {

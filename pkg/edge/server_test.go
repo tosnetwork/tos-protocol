@@ -36,6 +36,17 @@ func (panickingReadinessChecker) CheckReady(context.Context) error {
 	panic("readiness panic")
 }
 
+func TestServerRejectsTypedNilInterfaceDependency(t *testing.T) {
+	now, descriptor, catalog, _, _, _ := receiptDeliveryFixture(t)
+	var checker *testReadinessChecker
+	server, err := NewServerWithDependencies(
+		descriptor, catalog, now, ServerDependencies{ChainReadiness: checker},
+	)
+	if err == nil || server != nil {
+		t.Fatal("typed-nil Edge dependency accepted")
+	}
+}
+
 type testReceiptAuthorizer struct {
 	scope journal.Scope
 	err   error

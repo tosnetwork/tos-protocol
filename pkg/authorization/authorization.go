@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
@@ -138,13 +139,13 @@ func (v *Verifier) ResolveAndVerifyManifest(
 	if ctx == nil {
 		return nil, errors.New("nil authorization context")
 	}
-	if resolver == nil {
+	if nilcheck.IsNil(resolver) {
 		return nil, errors.New("nil authority resolver")
 	}
 	if err := reference.validate(); err != nil {
 		return nil, err
 	}
-	snapshot, err := resolver.ResolveAuthority(ctx, reference)
+	snapshot, err := safeResolveAuthority(resolver, ctx, reference)
 	if err != nil {
 		return nil, fmt.Errorf("resolve service authority: %w", err)
 	}

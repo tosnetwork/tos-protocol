@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
@@ -77,7 +78,7 @@ type ApplicationMaterial struct {
 }
 
 func NewObserver(resolver Resolver, policy Policy) (*Observer, error) {
-	if resolver == nil {
+	if nilcheck.IsNil(resolver) {
 		return nil, errors.New("nil payment resolver")
 	}
 	if policy.QueryTimeout <= 0 || policy.QueryTimeout > maxQueryTimeout ||
@@ -97,7 +98,7 @@ func (o *Observer) Observe(
 	minimumMasterSeqno uint64,
 	now time.Time,
 ) (VerifiedObservation, error) {
-	if o == nil || o.resolver == nil {
+	if o == nil || nilcheck.IsNil(o.resolver) {
 		return VerifiedObservation{}, errors.New("invalid payment observer")
 	}
 	if ctx == nil {
@@ -127,7 +128,7 @@ func (o *Observer) Observe(
 	}
 	queryContext, cancel := context.WithTimeout(ctx, o.policy.QueryTimeout)
 	defer cancel()
-	state, err := o.resolver.ObservePayment(queryContext, reference)
+	state, err := safeObservePayment(o.resolver, queryContext, reference)
 	if err != nil {
 		return VerifiedObservation{}, fmt.Errorf("observe payment: %w", err)
 	}

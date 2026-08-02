@@ -101,6 +101,13 @@ func TestIssueQuoteRejectsUnsafeSignerAndSessionDrift(t *testing.T) {
 			payload, issuedAt, expiresAt,
 		)
 	})
+	var typedNilSigner quoteSignerFunc
+	if _, err := manifest.IssueQuote(
+		context.Background(), fixture.verified, draft,
+		typedNilSigner, fixture.now,
+	); err == nil {
+		t.Fatal("typed-nil quote signer accepted")
+	}
 	for name, mutate := range map[string]func(*QuoteDraft){
 		"operation": func(value *QuoteDraft) { value.Operation = "not-authorized" },
 		"expiry": func(value *QuoteDraft) {

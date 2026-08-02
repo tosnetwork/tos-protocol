@@ -14,15 +14,19 @@ import (
 )
 
 type testClientKeyResolver struct {
-	keys map[string]ClientKeySnapshot
-	refs []ClientKeyReference
-	err  error
+	keys     map[string]ClientKeySnapshot
+	refs     []ClientKeyReference
+	err      error
+	panicNow bool
 }
 
 func (r *testClientKeyResolver) ResolveClientKey(
 	_ context.Context,
 	reference ClientKeyReference,
 ) (ClientKeySnapshot, error) {
+	if r.panicNow {
+		panic("mock client-key resolver secret")
+	}
 	r.refs = append(r.refs, reference)
 	if r.err != nil {
 		return ClientKeySnapshot{}, r.err
@@ -36,6 +40,21 @@ func (r *testClientKeyResolver) ResolveClientKey(
 		[]string(nil), snapshot.RevokedDelegationIDs...,
 	)
 	return snapshot, nil
+}
+
+func TestSessionContainsClientKeyResolverPanic(t *testing.T) {
+	fixture := newSessionAuthFixture(t)
+	fixture.resolver.panicNow = true
+	_, err := fixture.verified.AuthorizeClientEnvelope(
+		context.Background(), fixture.resolver, 100, nil,
+		fixture.clientEnvelope, runtimeDomain, "",
+		fixture.now, fixture.admissionBinding, 4,
+		validateSessionPayload(fixture.payload, fixture.admissionBinding, 4),
+	)
+	if err == nil || !strings.Contains(err.Error(), "client-key resolver panicked") ||
+		strings.Contains(err.Error(), "mock client-key resolver secret") {
+		t.Fatalf("client-key resolver panic was not safely converted: %v", err)
+	}
 }
 
 type sessionAuthFixture struct {

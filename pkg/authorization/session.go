@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
@@ -176,7 +177,7 @@ func (s *VerifiedSessionGrant) AuthorizeClientEnvelope(
 	if ctx == nil {
 		return AuthorizedSessionEnvelope{}, errors.New("nil client-key context")
 	}
-	if resolver == nil {
+	if nilcheck.IsNil(resolver) {
 		return AuthorizedSessionEnvelope{}, errors.New("nil client-key resolver")
 	}
 	if err := ctx.Err(); err != nil {
@@ -211,7 +212,7 @@ func (s *VerifiedSessionGrant) AuthorizeClientEnvelope(
 		if cached, ok := keyCache[keyID]; ok {
 			return cached, nil
 		}
-		snapshot, err := resolver.ResolveClientKey(ctx, ClientKeyReference{
+		snapshot, err := safeResolveClientKey(resolver, ctx, ClientKeyReference{
 			Network: s.network, ServiceID: s.grant.ServiceID,
 			KeyID: keyID, MinimumMasterSeqno: minimumMasterSeqno,
 		})

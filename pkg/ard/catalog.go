@@ -111,13 +111,15 @@ type ProvenanceItem struct {
 }
 
 func (e *Entry) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	// Entry is also a public json.Unmarshaler, so enforce the same ambiguity
+	// checks even when a caller decodes one entry outside DecodeCatalog.
+	if err := jsonstrict.Decode(data, &fields); err != nil {
+		return err
+	}
 	type entryAlias Entry
 	var decoded entryAlias
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
 	for _, known := range []string{

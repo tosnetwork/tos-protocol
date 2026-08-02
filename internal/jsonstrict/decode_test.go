@@ -40,3 +40,22 @@ func TestDecodeAcceptsBoundedDocument(t *testing.T) {
 		t.Fatalf("value = %d", output.Value)
 	}
 }
+
+func FuzzDecode(f *testing.F) {
+	for _, seed := range []string{
+		`{"value":1}`,
+		`{"value":1,"value":2}`,
+		`[[[[0]]]]`,
+		`{"nested":{"array":[true,false,null]}}`,
+		`null`,
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
+		var output interface{}
+		_ = Decode(data, &output)
+	})
+}

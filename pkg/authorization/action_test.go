@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,16 +39,65 @@ type recordingAuthorityResolver struct {
 	mu       sync.Mutex
 	snapshot AuthoritySnapshot
 	refs     []Reference
+	panicNow bool
+}
+
+func TestPaidActionAuthorizerRejectsTypedNilAuthorityDependency(t *testing.T) {
+	fixture := newSessionAuthFixture(t)
+	var resolver *recordingAuthorityResolver
+	authorizer, err := NewPaidActionAuthorizer(PaidActionAuthorizerConfig{
+		Verifier: newTestVerifier(t), AuthorityResolver: resolver,
+		ClientKeyResolver: fixture.resolver,
+		Reference: Reference{
+			Network: fixture.manifest.Network, Address: "tos:test:service-contract",
+			ServiceID: fixture.manifest.ServiceID,
+		},
+		ManifestEnvelope: fixture.manifestEnvelope,
+	})
+	if err == nil || authorizer != nil {
+		t.Fatal("typed-nil authority dependency accepted")
+	}
 }
 
 func (r *recordingAuthorityResolver) ResolveAuthority(
 	_ context.Context,
 	reference Reference,
 ) (AuthoritySnapshot, error) {
+	if r.panicNow {
+		panic("mock paid-action authority secret")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.refs = append(r.refs, reference)
 	return r.snapshot, nil
+}
+
+func TestPaidActionAuthorizerContainsAuthorityResolverPanic(t *testing.T) {
+	fixture := newSessionAuthFixture(t)
+	intent := []byte("paid action intent")
+	authorizer, err := NewPaidActionAuthorizer(PaidActionAuthorizerConfig{
+		Verifier: newTestVerifier(t),
+		AuthorityResolver: &recordingAuthorityResolver{
+			panicNow: true,
+		},
+		ClientKeyResolver: fixture.resolver,
+		Reference: Reference{
+			Network: fixture.manifest.Network, Address: "tos:test:service-contract",
+			ServiceID: fixture.manifest.ServiceID,
+		},
+		ManifestEnvelope: fixture.manifestEnvelope,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = authorizer.Authorize(
+		context.Background(), paidActionCredentials(t, fixture, intent),
+		intent, fixture.now,
+	)
+	if err == nil || !strings.Contains(err.Error(), "authority resolver panicked") ||
+		strings.Contains(err.Error(), "mock paid-action authority secret") {
+		t.Fatalf("authority resolver panic was not safely converted: %v", err)
+	}
 }
 
 func TestPaidActionAuthorizerBindsEntireCredentialChain(t *testing.T) {

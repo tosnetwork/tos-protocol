@@ -18,22 +18,58 @@ import (
 )
 
 type testPaymentResolver struct {
-	state chain.PaymentState
-	ref   chain.PaymentReference
-	err   error
-	wait  bool
+	state    chain.PaymentState
+	ref      chain.PaymentReference
+	err      error
+	wait     bool
+	panicNow bool
+}
+
+func TestNewObserverRejectsTypedNilResolver(t *testing.T) {
+	var resolver *testPaymentResolver
+	observer, err := NewObserver(resolver, DefaultPolicy())
+	if err == nil || observer != nil {
+		t.Fatal("typed-nil payment resolver accepted")
+	}
 }
 
 func (r *testPaymentResolver) ObservePayment(
 	ctx context.Context,
 	reference chain.PaymentReference,
 ) (chain.PaymentState, error) {
+	if r.panicNow {
+		panic("mock payment resolver secret")
+	}
 	r.ref = reference
 	if r.wait {
 		<-ctx.Done()
 		return chain.PaymentState{}, ctx.Err()
 	}
 	return r.state, r.err
+}
+
+func TestObserverContainsResolverPanicAcrossObservationPaths(t *testing.T) {
+	fixture := newObserverFixture(t)
+	observer, err := NewObserver(
+		&testPaymentResolver{panicNow: true}, DefaultPolicy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, observeErr := observer.Observe(
+		context.Background(), fixture.authorized, 100, fixture.now,
+	)
+	_, reconcileErr := observer.Reconcile(
+		context.Background(), reconciliationBinding(fixture), 101, fixture.now,
+	)
+	for name, got := range map[string]error{
+		"observe": observeErr, "reconcile": reconcileErr,
+	} {
+		if got == nil || !strings.Contains(got.Error(), "payment resolver panicked") ||
+			strings.Contains(got.Error(), "mock payment resolver secret") {
+			t.Fatalf("%s resolver panic was not safely converted: %v", name, got)
+		}
+	}
 }
 
 type testClientResolver struct {

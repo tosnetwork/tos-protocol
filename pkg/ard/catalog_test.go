@@ -89,3 +89,32 @@ func TestCatalogRejectsEmptyTrustManifest(t *testing.T) {
 		t.Fatal("empty trust manifest accepted")
 	}
 }
+
+func TestEntryDirectDecodeRejectsDuplicateFields(t *testing.T) {
+	var entry Entry
+	if err := json.Unmarshal([]byte(`{
+		"identifier":"urn:air:example.com:x:y",
+		"displayName":"first","displayName":"substituted",
+		"type":"application/json","url":"https://example.com/x"
+	}`), &entry); err == nil {
+		t.Fatal("direct Entry decode accepted a duplicate field")
+	}
+}
+
+func FuzzEntryUnmarshalJSON(f *testing.F) {
+	for _, seed := range []string{
+		`{"identifier":"urn:air:example.com:x:y","displayName":"x","type":"application/json","url":"https://example.com/x"}`,
+		`{"displayName":"first","displayName":"second"}`,
+		`{"x-extension":{"nested":true}}`,
+		`null`,
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
+		var entry Entry
+		_ = json.Unmarshal(data, &entry)
+	})
+}

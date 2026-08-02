@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
@@ -55,7 +56,7 @@ func (m *VerifiedManifest) IssueQuote(
 	if ctx == nil {
 		return nil, errors.New("nil quote signing context")
 	}
-	if signer == nil {
+	if nilcheck.IsNil(signer) {
 		return nil, errors.New("nil quote signer")
 	}
 	if m == nil || m.runtimeKeys == nil {

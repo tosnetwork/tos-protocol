@@ -667,6 +667,13 @@ func TestReceiptIssuanceRejectsSignerDeviationAndCancellation(t *testing.T) {
 	) (identity.Envelope, error) {
 		panic("custody panic")
 	})
+	var typedNilSigner receiptSignerFunc
+	if _, err := fixture.manifest.IssueReceipt(
+		context.Background(), fixture.authorized, draft, typedNilSigner,
+		receiptNow, receiptNow.Add(time.Minute),
+	); err == nil {
+		t.Fatal("typed-nil receipt signer accepted")
+	}
 	if _, err := fixture.manifest.IssueReceipt(
 		context.Background(), fixture.authorized, draft, panickingSigner,
 		receiptNow, receiptNow.Add(time.Minute),

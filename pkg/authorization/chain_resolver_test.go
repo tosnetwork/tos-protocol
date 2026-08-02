@@ -180,6 +180,23 @@ func TestChainResolverEnforcesTimeoutAndPropagatesCancellation(t *testing.T) {
 	}
 }
 
+func TestChainResolverContainsReaderPanic(t *testing.T) {
+	resolver := newTestChainResolver(t, chainReaderFunc(func(
+		context.Context,
+		chain.ServiceReference,
+	) (chain.ServiceState, error) {
+		panic("mock chain reader secret")
+	}))
+	_, err := resolver.ResolveAuthority(context.Background(), Reference{
+		Network: "testnet", Address: "tos:test:service-actor",
+		ServiceID: "edge.example.ai",
+	})
+	if err == nil || !strings.Contains(err.Error(), "chain service reader panicked") ||
+		strings.Contains(err.Error(), "mock chain reader secret") {
+		t.Fatalf("chain reader panic was not safely converted: %v", err)
+	}
+}
+
 func TestChainResolverDefensivelyCopiesAuthorityState(t *testing.T) {
 	fixture := newAuthFixture(t)
 	reference := Reference{
@@ -231,5 +248,11 @@ func TestChainResolverPolicyIsStrictAndBounded(t *testing.T) {
 		if _, err := NewChainResolver(reader, policy); err == nil {
 			t.Fatalf("invalid policy %d accepted", index)
 		}
+	}
+	var typedNil chainReaderFunc
+	if resolver, err := NewChainResolver(
+		typedNil, DefaultChainResolverPolicy([]string{testServiceCodeHash}),
+	); err == nil || resolver != nil {
+		t.Fatal("typed-nil chain reader accepted")
 	}
 }

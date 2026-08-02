@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 )
@@ -68,7 +69,7 @@ func (o *Observer) Reconcile(
 	minimumMasterSeqno uint64,
 	now time.Time,
 ) (VerifiedReconciliation, error) {
-	if o == nil || o.resolver == nil {
+	if o == nil || nilcheck.IsNil(o.resolver) {
 		return VerifiedReconciliation{}, errors.New("invalid payment observer")
 	}
 	if ctx == nil {
@@ -96,7 +97,7 @@ func (o *Observer) Reconcile(
 	}
 	queryContext, cancel := context.WithTimeout(ctx, o.policy.QueryTimeout)
 	defer cancel()
-	state, err := o.resolver.ObservePayment(queryContext, reference)
+	state, err := safeObservePayment(o.resolver, queryContext, reference)
 	if err != nil {
 		return VerifiedReconciliation{}, fmt.Errorf("reconcile payment: %w", err)
 	}

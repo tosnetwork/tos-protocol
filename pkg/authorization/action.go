@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/nilcheck"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/protocol"
 )
@@ -77,8 +78,8 @@ type PaidActionMaterial struct {
 func NewPaidActionAuthorizer(
 	config PaidActionAuthorizerConfig,
 ) (*PaidActionAuthorizer, error) {
-	if config.Verifier == nil || config.AuthorityResolver == nil ||
-		config.ClientKeyResolver == nil {
+	if config.Verifier == nil || nilcheck.IsNil(config.AuthorityResolver) ||
+		nilcheck.IsNil(config.ClientKeyResolver) {
 		return nil, errors.New("incomplete paid-action authority dependencies")
 	}
 	if err := config.Reference.validate(); err != nil {
@@ -113,8 +114,8 @@ func (a *PaidActionAuthorizer) Authorize(
 	intent []byte,
 	now time.Time,
 ) (AuthorizedPaidAction, error) {
-	if a == nil || a.verifier == nil || a.authorityResolver == nil ||
-		a.clientKeys == nil {
+	if a == nil || a.verifier == nil || nilcheck.IsNil(a.authorityResolver) ||
+		nilcheck.IsNil(a.clientKeys) {
 		return AuthorizedPaidAction{}, errors.New("invalid paid-action authorizer")
 	}
 	if ctx == nil {
@@ -132,7 +133,7 @@ func (a *PaidActionAuthorizer) Authorize(
 	reference.MinimumMasterSeqno = max(
 		reference.MinimumMasterSeqno, a.highWater.Load(),
 	)
-	snapshot, err := a.authorityResolver.ResolveAuthority(ctx, reference)
+	snapshot, err := safeResolveAuthority(a.authorityResolver, ctx, reference)
 	if err != nil {
 		return AuthorizedPaidAction{}, fmt.Errorf(
 			"resolve paid-action authority: %w", err,

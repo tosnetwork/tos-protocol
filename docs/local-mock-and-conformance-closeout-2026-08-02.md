@@ -19,9 +19,10 @@ the production-gate ledger.
 - Added a dependency-free Node.js/TypeScript Registry client. It fixes one
   origin, rejects redirects and duplicate JSON keys, incrementally bounds the
   response body and validates the stable Search/List result boundary.
-- The exact pinned upstream ARD v0.9 conformance suite passed for the Registry
-  manifest and endpoints. The custom TOS media type produced only the
-  upstream tool's informational unknown-media warning.
+- The exact pinned upstream ARD v0.9 conformance suite passed strict JSON
+  Schema, semantic manifest and live Registry endpoint validation. The custom
+  TOS media type produced only the upstream tool's informational unknown-media
+  warning.
 
 ## AI terminal closure using MOCK dependencies
 
@@ -67,19 +68,60 @@ A post-CI audit closed additional locally reproducible trust and crash windows:
   plaintext bearer tokens. Fleet bearer configuration rejects whitespace and
   control characters.
 
+## Third dependency-boundary and parser closeout
+
+A further independent audit after the second closeout found one Go-specific
+configuration class that ordinary `interface != nil` checks do not catch: an
+interface may contain a typed nil pointer or function. The compatible pair now
+uses one tested internal check at injected trust boundaries.
+
+On the protocol side, current authority, client-key, chain-reader, payment,
+Quote/Session/Receipt signer, paid-action and Edge server dependencies reject
+typed nil values before use. Authority, paid-action authority, client-key,
+chain-reader and both payment-observation paths additionally contain injected
+resolver panics, return only bounded generic errors and discard panic details.
+Direct `json.Unmarshal` of a public ARD `Entry` now receives the same
+duplicate-key and structure scan as a complete catalog, while retaining
+bounded extension support.
+
+On the terminal side, administrator lifecycle, runtime resolver/dialer and TLS
+key material, containerd engines, model activation/approval, benchmark,
+exclusive GPU, fleet, systemd and AI Edge composition reject typed nil
+dependencies at construction. The private Worker additionally rejects typed
+nil runtime adapters and resource-health providers, contains runtime
+capability/close and provider-shutdown panics, and permits a clean shutdown
+retry after a contained provider failure. The NVIDIA probe also contains
+backend/SDK panics and publishes only a cleared, degraded observation. MOCK
+tests cover each changed production boundary, including startup failure, panic
+conversion and resource cleanup.
+
+The final short local fuzz rerun executed more than 7.1 million combined inputs
+against strict JSON decoding, direct ARD entry decoding and fleet transport
+JSON validation without a panic or failing invariant. The seed corpora remain
+ordinary regression tests; longer fuzz campaigns may run independently of CI.
+
+The changed concurrent and persistence-sensitive packages also passed ten
+consecutive race-enabled runs before the full repository gates below. A
+temporary, untracked `go.work` then linked both current working-tree candidates
+and the complete `tos-ai` race suite passed against the current local protocol
+instead of its previously pinned revision.
+
 ## Commands and results
 
 The following gates passed on the local host:
 
 ```text
 cd /home/tomi/tos-protocol
-GOWORK=off go test -race -count=1 ./...
-GOWORK=off go vet ./...
-node --test sdk/typescript/client.test.mjs
+make local-gates
+make ard-conformance
+go test -race -count=10 ./pkg/authorization ./pkg/payment
 
 cd /home/tomi/tos-ai
-GOWORK=off go test -race -count=1 ./...
-GOWORK=off go vet ./...
+make local-gates
+go test -race -count=10 ./internal/worker
+
+# With a temporary go.work using both current working trees:
+GOWORK=/tmp/tos-cross-repo.<run>/go.work go test -race -count=1 ./...
 ```
 
 The `tos-ai` commands emitted only compiler warnings from deprecated symbols in
