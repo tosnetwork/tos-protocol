@@ -88,11 +88,9 @@ func (d ServiceDescriptor) Validate(now time.Time) error {
 		}
 	}
 	if d.TOSName != "" {
-		if err := boundedString("tosName", d.TOSName, 5, 256); err != nil {
-			return err
-		}
-		if !strings.HasSuffix(strings.ToLower(d.TOSName), ".tos") {
-			return errors.New("tosName must end in .tos")
+		canonical, err := NormalizeTOSName(d.TOSName)
+		if err != nil || canonical != d.TOSName {
+			return errors.New("tosName must be a canonical lowercase .tos name")
 		}
 	}
 	if d.ADNLAddress != "" {
@@ -101,6 +99,31 @@ func (d ServiceDescriptor) Validate(now time.Time) error {
 		}
 	}
 	return nil
+}
+
+// NormalizeTOSName validates the DNS-compatible discovery name syntax that is
+// stable independently of a future registrar contract ABI. It deliberately
+// does not resolve the name or treat it as authority.
+func NormalizeTOSName(value string) (string, error) {
+	if len(value) < 5 || len(value) > 253 || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") {
+		return "", errors.New("invalid .tos name")
+	}
+	canonical := strings.ToLower(value)
+	labels := strings.Split(canonical, ".")
+	if len(labels) < 2 || labels[len(labels)-1] != "tos" {
+		return "", errors.New("invalid .tos name")
+	}
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", errors.New("invalid .tos name")
+		}
+		for _, character := range label {
+			if !(character >= 'a' && character <= 'z') && !(character >= '0' && character <= '9') && character != '-' {
+				return "", errors.New("invalid .tos name")
+			}
+		}
+	}
+	return canonical, nil
 }
 
 func (p ProfileReference) Validate() error {

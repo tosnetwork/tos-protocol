@@ -1,4 +1,4 @@
-.PHONY: all build test test-race vet fmt-check generate reproducible-builds release-gates local-gates
+.PHONY: all build test test-race vet fmt-check generate reproducible-builds release-gates ard-conformance conformance-typescript local-gates
 
 all: fmt-check vet test build
 
@@ -30,4 +30,13 @@ reproducible-builds:
 release-gates:
 	./scripts/test-release-bundle.sh
 
-local-gates: fmt-check vet test-race reproducible-builds release-gates
+# Networked opt-in gate: fetches and verifies the exact pinned upstream ARD
+# commit before running its authoritative tool. It is intentionally separate
+# from ordinary offline CI.
+ard-conformance:
+	./scripts/test-ard-conformance.sh
+
+conformance-typescript:
+	node --test sdk/typescript/client.test.mjs
+
+local-gates: fmt-check vet test-race reproducible-builds release-gates conformance-typescript

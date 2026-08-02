@@ -71,6 +71,18 @@ requirements remain in `docs/`.
   normative specifications and GPL license, with internal/external SHA-256
   manifests, archive safety checks, optional detached Ed25519 verification,
   tamper tests, and CI enforcement.
+- Pinned ARD v0.9 deterministic List filtering/sorting with view-bound
+  pagination, a bounded fixed-origin Go Registry client, and an opt-in gate
+  that verifies and runs the exact upstream conformance commit.
+- Fail-closed reference trust adapters for exact SPIFFE workload identities,
+  signed artifact provenance, bounded signed evidence requirements, fixed OPA
+  decisions and disconnected static policy. Discovery metadata is not an
+  input to any of these trust roots.
+- A dependency-free Node.js/TypeScript ARD Registry client with fixed-origin,
+  no-redirect, strict duplicate-key, media-type and streaming response bounds,
+  exercised as an independent-language CI conformance gate.
+- Canonical lowercase `.tos` name syntax validation that is independent of the
+  still-unfrozen registrar contract ABI.
 
 ## In Progress
 
@@ -91,17 +103,17 @@ remaining work is deployment policy and external evidence:
 
 ## Next
 
-1. Add the draft List filter/order behavior only against a pinned upstream
-   version and authoritative conformance suite; cached federation is complete.
-2. Complete the `.tos` registrar application and stable operator/client SDK
-   surfaces needed by independent deployments.
-3. Add reference policy adapters only where their trust semantics are explicit:
-   workload identity, artifact provenance, policy evaluation, and evidence
-   verification must not be inferred from discovery metadata.
-4. Extend conformance coverage to independent-language clients and additional
-   vertical profiles without changing the stable base envelope formats.
-5. Add production relay, subscriptions/channels, multi-region routing, and
-   advanced settlement/evidence as later versioned protocol work.
+1. Freeze the `.tos` registrar chain ABI and deployment governance, then build
+   and audit the contract/application against that real ABI. Local name syntax
+   and bounded Registry clients are complete; inventing an ABI in this
+   repository would create a false compatibility claim.
+2. Select concrete deployment trust roots and run the implemented workload,
+   provenance, policy and evidence adapters against their real issuers.
+3. Add production relay, subscriptions/channels, multi-region routing and
+   advanced settlement only as separately reviewed, versioned protocol work.
+4. Add more SDK languages or vertical profiles when a consumer exists; the
+   first independent-language Registry gate is complete and base envelopes
+   remain frozen.
 
 ## External Certification
 
@@ -123,7 +135,7 @@ This ROADMAP intentionally does not duplicate that ledger.
 | P0: non-streaming foundation | Base schemas, auth/payment/receipt, chain adapters, Edge Core, WorkerService, bounded Registry, conformance and race tests | Completed |
 | P1: AI Edge integration | `tos-ai-edge` uses the frozen interfaces and completes the local discovery-to-receipt flow | Completed |
 | P2: v0.1 production candidate | External gates applicable to the reference deployment have evidence and the compatible repositories are tagged | In Progress |
-| P3: discovery expansion | Bounded crawler/federation plus stable SDK and registrar surfaces | In Progress: crawler/federation local gates complete |
+| P3: discovery expansion | Bounded crawler/federation plus stable SDK and registrar surfaces | Local Registry/Go/TypeScript/name gates complete; registrar ABI/governance external |
 | P4: streaming v0.2 | Versioned result streaming and Receipt semantics pass compatibility and fault-injection tests | Local implementation complete; release pairing pending |
 
 ## Maintenance

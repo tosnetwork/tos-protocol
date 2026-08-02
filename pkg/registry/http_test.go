@@ -1,12 +1,73 @@
 package registry
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestListImplementsPinnedFilterOrderAndViewBoundPagination(t *testing.T) {
+	index, err := NewIndex(DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := testCatalog()
+	catalog.Entries[0].UpdatedAt = "2026-08-02T10:00:00Z"
+	catalog.Entries[1].UpdatedAt = "2026-08-01T10:00:00Z"
+	if err := index.AddCatalog("file:///catalog.json", catalog); err != nil {
+		t.Fatal(err)
+	}
+	handler, _ := NewHandler(index, "https://registry.example/search")
+	target := "/agents?filter=" + url.QueryEscape("publisherId = 'example.com' AND updatedAfter > '2026-08-01T12:00:00Z'") +
+		"&orderBy=" + url.QueryEscape("displayName DESC") + "&pageSize=1"
+	response := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var listed ListResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed.Total != 1 || len(listed.Items) != 1 || listed.Items[0].DisplayName != "Factory Vision" {
+		t.Fatalf("unexpected list response: %#v", listed)
+	}
+
+	first := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/agents?pageSize=1", nil))
+	if err := json.Unmarshal(first.Body.Bytes(), &listed); err != nil || listed.PageToken == "" {
+		t.Fatalf("missing page token: %#v err=%v", listed, err)
+	}
+	mismatch := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(mismatch, httptest.NewRequest(
+		http.MethodGet, "/agents?pageSize=1&orderBy=displayName&pageToken="+url.QueryEscape(listed.PageToken), nil,
+	))
+	if mismatch.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched token status=%d body=%s", mismatch.Code, mismatch.Body.String())
+	}
+}
+
+func TestListRejectsUnsupportedOrAmbiguousGrammar(t *testing.T) {
+	index, _ := NewIndex(DefaultLimits())
+	handler, _ := NewHandler(index, "https://registry.example/search")
+	for _, query := range []string{
+		"filter=" + url.QueryEscape("createdAfter > '2026-01-01T00:00:00Z'"),
+		"filter=" + url.QueryEscape("type = 'a' OR type = 'b'"),
+		"filter=" + url.QueryEscape("metadata.owner = 'alice'"),
+		"orderBy=" + url.QueryEscape("score DESC"),
+		"orderBy=" + url.QueryEscape("displayName SIDEWAYS"),
+	} {
+		response := httptest.NewRecorder()
+		handler.Routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/agents?"+query, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("query=%q status=%d body=%s", query, response.Code, response.Body.String())
+		}
+	}
+}
 
 func TestSearchRejectsDuplicateJSONKeys(t *testing.T) {
 	index, err := NewIndex(DefaultLimits())

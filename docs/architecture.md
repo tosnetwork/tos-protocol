@@ -114,7 +114,7 @@ discovery-only.
 |---|---|---|
 | Language | Go 1.24+ | implemented |
 | Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, owner-local slot reserve, priority-aware capacity, terminal persistence, lookup, cleanup, startup audit and payload-free active-task pagination; synchronous workers can fail interrupted tasks closed, while durable executor/supervisor recovery remains |
-| Public discovery | ARD v0.9 Draft | mandatory bounded `POST /search`, minimal optional unfiltered `GET /agents`, deterministic privacy-minimized projection, strict known-extension validation, bounded exact-filter indexing, atomic local reload, and opt-in cached federation with HTTPS-origin/IP/redirect/body/depth/source/TTL controls implemented; draft List filtering/sorting remains disabled |
+| Public discovery | ARD v0.9 Draft | mandatory bounded `POST /search`, deterministic optional `GET /agents` with pinned List filter/order grammar and view-bound pagination, stable bounded Go client, deterministic privacy-minimized projection, strict known-extension validation, bounded exact-filter indexing, atomic local reload, opt-in cached federation with HTTPS-origin/IP/redirect/body/depth/source/TTL controls, and an opt-in pinned-upstream conformance gate implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |
 | Manifest authorization | fresh authority snapshot + Ed25519/CBOR verifier | controller/current-digest/runtime-role/revocation, opaque admission result, strict chain-resolver boundary, Agent Account decoder, majority JSON-RPC composition and startup authority preflight implemented; public signed-manifest request wiring remains |
 | Session/delegation authorization | runtime session grant + fresh client-key resolver + bounded signed chain | exact profile/runtime binding, key/delegation revocation, high-water checks, semantic charge binding, atomic cumulative budget admission and current Agent Account controller source implemented |
@@ -124,9 +124,9 @@ discovery-only.
 | Durable request state | bbolt-backed local journal | atomic nonce/request/budget admission, exact-once payment plus bounded execution-authorization persistence, reorganization dispatch gate, exact paid execution claim, quote-expiry-safe Worker recovery, full signed-receipt terminal application/replay, persistent CAS payment-scan cursor, bounded replay state, restart recovery and cleanup implemented as an Edge Core library |
 | Distributed Registry backend | AGNTCY Directory | adapter planned; no fork |
 | Chain access | TOS JSON-RPC/lite APIs | bounded TOS success/error envelopes plus strict-majority authority, key and native-payment adapters, startup preflight and freshness-bounded readiness implemented and three-node tested |
-| Policy | OPA | adapter planned after policy vocabulary is normative |
-| Workload identity | SPIFFE | adapter planned |
-| Artifacts | ORAS + Cosign + TUF | interfaces planned; AI repository starts manifest verification |
+| Policy | OPA | bounded fixed-endpoint HTTPS/loopback adapter plus exact disconnected static evaluator implemented; operator policy vocabulary and deployment remain external |
+| Workload identity | SPIFFE | exact URI-SAN verifier under a cloned operator X.509 root pool implemented; ARD/DNS identity is never accepted |
+| Artifacts | signed provenance plus exact SHA-256 | bounded canonical Ed25519 provenance/evidence verifiers and complete-artifact hashing implemented; repository/transport and production trust ceremony remain external |
 
 The Registry accepts either local operator-approved catalogs or one opt-in
 cached federation generation; the two sources cannot be mixed implicitly.
@@ -155,10 +155,14 @@ replacement. A malformed file, cross-source identifier collision, publisher
 quota, entry limit, or projection limit rejects the complete reload and leaves
 the previous generation intact. There is one fixed signal goroutine, no file
 watcher, polling loop, historical generation cache, or remote mutation API.
-Search and the minimal unfiltered list execution share a fixed 16-request
-non-queuing admission gate. ARD v0.9 makes List optional; this bootstrap does
-not advertise its draft `filter` or `orderBy` extensions and returns a bounded
-`501` if either is requested.
+Search and deterministic List execution share a fixed 16-request non-queuing
+admission gate. List implements only fields actually represented by the pinned
+ARD catalog schema: exact case-insensitive `displayName`, `type`, and
+`publisherId`, plus RFC3339 `updatedAfter`; `createdAfter` is rejected because
+the same pinned schema has no `createdAt` value. Sorting supports identifier,
+displayName, and updatedAt with a stable identifier tie-breaker. Pagination
+tokens bind the index generation, normalized filter, and normalized order, so
+they cannot be replayed across views.
 Every indexed entry is capped at 64 KiB and the complete index at 64 MiB,
 including the precomputed Worker search projection. These byte quotas compose
 with entry and per-publisher quotas and are checked before an atomic generation
@@ -169,3 +173,27 @@ remain the responsibility of the front proxy or service manager.
 Remote crawling is withheld until DNS rebinding, redirect, IP range,
 decompression, recursion, federation, retry, and per-publisher limits are all
 enforced.
+
+The stable client surface includes both Go and a dependency-free
+Node.js/TypeScript implementation. Both pin one Registry origin, reject
+redirects, require the exact JSON response media type, bound decoded response
+bytes before parsing, reject duplicate JSON keys and validate returned entry
+identity fields. The independent client runs in CI and does not infer an
+authority, payment destination or runtime endpoint from search output.
+
+`pkg/trustpolicy` supplies explicit deployment trust adapters rather than
+another discovery layer. Workload certificates require one exact SPIFFE URI
+SAN under an operator-owned X.509 root. Artifact provenance binds an allowed
+subject, builder and source/material digests to the complete artifact hash.
+Evidence bundles are accepted only from configured keys, issuer identities,
+claim types and maximum assertion levels. OPA decisions use a fixed endpoint,
+bounded non-queuing concurrency, strict JSON and a maximum 24-hour lifetime;
+disconnected rules compare complete scalar tuples and fail closed on unknown
+inputs. None of these adapters consults ARD metadata.
+
+Canonical `.tos` syntax is now independently reusable through
+`NormalizeTOSName`: lowercase DNS labels, no empty/overlong/edge-hyphen labels,
+and an exact `.tos` suffix. This intentionally does not specify a registrar
+message, fee, ownership transition or contract address. Those values require
+the actual frozen chain ABI and governance decision and cannot be completed by
+a MOCK without misrepresenting on-chain compatibility.

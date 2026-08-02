@@ -24,7 +24,7 @@ func NewHandler(index *Index, registrySource string) (*Handler, error) {
 	if index == nil {
 		return nil, errors.New("nil Registry index")
 	}
-	if registrySource == "" {
+	if registrySource == "" || len(registrySource) > 2048 || strings.ContainsRune(registrySource, '\x00') {
 		return nil, errors.New("registry source URL is required")
 	}
 	return &Handler{
@@ -93,19 +93,17 @@ func (h *Handler) list(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
 		return
 	}
-	// ARD v0.9 makes List optional. This bootstrap deliberately exposes only
-	// deterministic unfiltered browsing; implementing the draft filter grammar
-	// partially would create a misleading interoperability claim.
-	if request.URL.Query().Get("filter") != "" || request.URL.Query().Get("orderBy") != "" {
-		writeError(writer, http.StatusNotImplemented, "NOT_IMPLEMENTED", "filter and orderBy are not implemented")
-		return
-	}
 	pageSize, err := ParsePageSize(request.URL.Query().Get("pageSize"))
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
 		return
 	}
-	response, err := h.index.List(pageSize, request.URL.Query().Get("pageToken"))
+	response, err := h.index.ListQuery(ListRequest{
+		Filter:    request.URL.Query().Get("filter"),
+		OrderBy:   request.URL.Query().Get("orderBy"),
+		PageSize:  pageSize,
+		PageToken: request.URL.Query().Get("pageToken"),
+	})
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
 		return

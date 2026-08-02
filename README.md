@@ -354,6 +354,8 @@ pkg/localrpc/         validated private Worker RPC client and durable bounded ta
 pkg/payment/          strict signed quote/payment chain observation
 pkg/protocol/         v0.1 manifests, profiles, sessions, quotes and receipts
 pkg/registry/         bounded ARD index and HTTP API
+pkg/trustpolicy/      explicit workload, provenance, evidence and policy trust adapters
+sdk/typescript/       bounded fixed-origin independent ARD Registry client
 spec/base/            normative draft schemas, rules, and test vectors
 spec/profile-registry profile registration requirements
 tests/conformance/    schema and cross-language vector checks
@@ -365,8 +367,10 @@ tests/conformance/    schema and cross-language vector checks
 - AGNTCY Directory is the preferred distributed indexing/storage foundation
   for a later production Registry backend.
 - ConnectRPC is the local process API.
-- OPA, SPIFFE, ORAS, Cosign, and TUF are planned adapters; they are not pulled
-  into the bootstrap binaries before their authority and update policies are
-  specified.
+- Reference OPA and SPIFFE-compatible trust adapters plus canonical signed
+  provenance/evidence verification are implemented as opt-in libraries. They
+  are not activated by discovery metadata; deployments must supply explicit
+  roots, issuers, endpoints and policy. ORAS, Cosign and TUF remain external
+  distribution systems rather than embedded control planes.
 
 Licensed under the [GNU General Public License v3.0](LICENSE).

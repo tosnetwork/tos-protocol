@@ -3,6 +3,7 @@
 package registry
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
@@ -229,6 +231,43 @@ type SearchResult struct {
 	Source string `json:"source"`
 }
 
+func (r SearchResult) MarshalJSON() ([]byte, error) {
+	entry, err := json.Marshal(r.Entry)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(entry, &fields); err != nil {
+		return nil, err
+	}
+	fields["score"], _ = json.Marshal(r.Score)
+	fields["source"], _ = json.Marshal(r.Source)
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON keeps ARD entry extensions separate from Registry result
+// metadata. ard.Entry has its own extension-aware unmarshaler, so ordinary
+// embedding would otherwise consume score/source as entry extensions.
+func (r *SearchResult) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(fields["score"], &r.Score); err != nil {
+		return errors.New("invalid search result score")
+	}
+	if err := json.Unmarshal(fields["source"], &r.Source); err != nil {
+		return errors.New("invalid search result source")
+	}
+	delete(fields, "score")
+	delete(fields, "source")
+	entry, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(entry, &r.Entry)
+}
+
 type SearchResponse struct {
 	Results   []SearchResult `json:"results"`
 	PageToken string         `json:"pageToken,omitempty"`
@@ -238,6 +277,28 @@ type ListResponse struct {
 	Items     []ard.Entry `json:"items"`
 	Total     int         `json:"total"`
 	PageToken string      `json:"pageToken,omitempty"`
+}
+
+// ListRequest is the deterministic ARD v0.9 List query. Filter and OrderBy
+// retain their wire representations so pagination tokens can be bound to the
+// exact view that produced them.
+type ListRequest struct {
+	Filter    string
+	OrderBy   string
+	PageSize  int
+	PageToken string
+}
+
+type listFilter struct {
+	displayNames []string
+	types        []string
+	publishers   []string
+	updatedAfter *time.Time
+}
+
+type listOrder struct {
+	field string
+	desc  bool
 }
 
 func (i *Index) Search(request SearchRequest, registrySource string) (SearchResponse, error) {
@@ -305,7 +366,24 @@ func (i *Index) Search(request SearchRequest, registrySource string) (SearchResp
 }
 
 func (i *Index) List(pageSize int, pageToken string) (ListResponse, error) {
-	size, err := i.pageSize(pageSize, 20)
+	return i.ListQuery(ListRequest{PageSize: pageSize, PageToken: pageToken})
+}
+
+// ListQuery implements the bounded, deterministic subset of the pinned ARD
+// v0.9 List grammar for fields represented by the pinned catalog schema.
+func (i *Index) ListQuery(request ListRequest) (ListResponse, error) {
+	if len(request.Filter) > i.limits.MaxQueryBytes || len(request.OrderBy) > 256 {
+		return ListResponse{}, errors.New("list filter or orderBy exceeds limit")
+	}
+	filter, canonicalFilter, err := parseListFilter(request.Filter)
+	if err != nil {
+		return ListResponse{}, err
+	}
+	order, canonicalOrder, err := parseListOrder(request.OrderBy)
+	if err != nil {
+		return ListResponse{}, err
+	}
+	size, err := i.pageSize(request.PageSize, 20)
 	if err != nil {
 		return ListResponse{}, err
 	}
@@ -313,11 +391,23 @@ func (i *Index) List(pageSize int, pageToken string) (ListResponse, error) {
 	generation := i.generation
 	items := make([]ard.Entry, 0, len(i.records))
 	for _, item := range i.records {
-		items = append(items, cloneEntry(item.entry))
+		if matchesListFilter(item, filter) {
+			items = append(items, cloneEntry(item.entry))
+		}
 	}
 	i.mu.RUnlock()
-	sort.Slice(items, func(a, b int) bool { return items[a].Identifier < items[b].Identifier })
-	offset, err := decodePageToken(pageToken, generation)
+	sort.Slice(items, func(a, b int) bool {
+		comparison := compareListEntries(items[a], items[b], order.field)
+		if comparison == 0 {
+			comparison = strings.Compare(items[a].Identifier, items[b].Identifier)
+		}
+		if order.desc {
+			return comparison > 0
+		}
+		return comparison < 0
+	})
+	view := listViewDigest(canonicalFilter, canonicalOrder)
+	offset, err := decodeListPageToken(request.PageToken, generation, view)
 	if err != nil {
 		return ListResponse{}, err
 	}
@@ -327,9 +417,175 @@ func (i *Index) List(pageSize int, pageToken string) (ListResponse, error) {
 	end := min(offset+size, len(items))
 	response := ListResponse{Items: items[offset:end], Total: len(items)}
 	if end < len(items) {
-		response.PageToken = encodePageToken(end, generation)
+		response.PageToken = encodeListPageToken(end, generation, view)
 	}
 	return response, nil
+}
+
+func parseListFilter(expression string) (listFilter, string, error) {
+	expression = strings.TrimSpace(expression)
+	if expression == "" {
+		return listFilter{}, "", nil
+	}
+	if strings.IndexFunc(expression, unicode.IsControl) >= 0 {
+		return listFilter{}, "", errors.New("filter contains control characters")
+	}
+	parts := strings.Split(expression, " AND ")
+	if len(parts) > 8 {
+		return listFilter{}, "", errors.New("filter has too many clauses")
+	}
+	var result listFilter
+	canonical := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		operator := " = "
+		position := strings.Index(part, operator)
+		if position < 0 {
+			operator = " > "
+			position = strings.Index(part, operator)
+		}
+		if position <= 0 {
+			return listFilter{}, "", errors.New("invalid filter expression")
+		}
+		field := strings.TrimSpace(part[:position])
+		raw := strings.TrimSpace(part[position+len(operator):])
+		if len(raw) < 2 || raw[0] != '\'' || raw[len(raw)-1] != '\'' || strings.Contains(raw[1:len(raw)-1], "'") {
+			return listFilter{}, "", errors.New("filter values must be single-quoted")
+		}
+		if _, duplicate := seen[field]; duplicate {
+			return listFilter{}, "", fmt.Errorf("duplicate filter field %q", field)
+		}
+		seen[field] = struct{}{}
+		value := raw[1 : len(raw)-1]
+		if len(value) == 0 || len(value) > 1024 {
+			return listFilter{}, "", errors.New("filter value has invalid length")
+		}
+		values := strings.Split(value, ",")
+		for index := range values {
+			values[index] = strings.TrimSpace(values[index])
+			if values[index] == "" {
+				return listFilter{}, "", errors.New("filter contains an empty value")
+			}
+		}
+		switch field {
+		case "displayName":
+			if operator != " = " {
+				return listFilter{}, "", errors.New("displayName only supports =")
+			}
+			result.displayNames = values
+		case "type":
+			if operator != " = " {
+				return listFilter{}, "", errors.New("type only supports =")
+			}
+			result.types = values
+		case "publisherId":
+			if operator != " = " {
+				return listFilter{}, "", errors.New("publisherId only supports =")
+			}
+			result.publishers = values
+		case "updatedAfter":
+			if operator != " > " || len(values) != 1 {
+				return listFilter{}, "", errors.New("updatedAfter requires one > timestamp")
+			}
+			parsed, err := time.Parse(time.RFC3339, values[0])
+			if err != nil {
+				return listFilter{}, "", errors.New("updatedAfter must be an RFC3339 timestamp")
+			}
+			result.updatedAfter = &parsed
+		case "createdAfter":
+			return listFilter{}, "", errors.New("createdAfter is unsupported because ARD v0.9 catalog entries have no createdAt field")
+		default:
+			return listFilter{}, "", fmt.Errorf("unsupported list filter field %q", field)
+		}
+		canonical = append(canonical, field+operator+"'"+strings.Join(values, ",")+"'")
+	}
+	sort.Strings(canonical)
+	return result, strings.Join(canonical, " AND "), nil
+}
+
+func parseListOrder(expression string) (listOrder, string, error) {
+	fields := strings.Fields(expression)
+	if len(fields) == 0 {
+		return listOrder{field: "identifier"}, "identifier ASC", nil
+	}
+	if len(fields) > 2 {
+		return listOrder{}, "", errors.New("orderBy accepts one field and optional direction")
+	}
+	field := fields[0]
+	switch field {
+	case "identifier", "displayName", "updatedAt":
+	default:
+		return listOrder{}, "", fmt.Errorf("unsupported orderBy field %q", field)
+	}
+	direction := "ASC"
+	if len(fields) == 2 {
+		direction = strings.ToUpper(fields[1])
+		if direction != "ASC" && direction != "DESC" {
+			return listOrder{}, "", errors.New("orderBy direction must be ASC or DESC")
+		}
+	}
+	return listOrder{field: field, desc: direction == "DESC"}, field + " " + direction, nil
+}
+
+func matchesListFilter(item record, filter listFilter) bool {
+	if len(filter.displayNames) != 0 && !intersects([]string{item.entry.DisplayName}, filter.displayNames) {
+		return false
+	}
+	if len(filter.types) != 0 && !intersects([]string{item.entry.Type}, filter.types) {
+		return false
+	}
+	if len(filter.publishers) != 0 && !intersects([]string{item.publisher}, filter.publishers) {
+		return false
+	}
+	if filter.updatedAfter != nil {
+		updated, err := time.Parse(time.RFC3339, item.entry.UpdatedAt)
+		if err != nil || !updated.After(*filter.updatedAfter) {
+			return false
+		}
+	}
+	return true
+}
+
+func compareListEntries(left, right ard.Entry, field string) int {
+	switch field {
+	case "displayName":
+		return strings.Compare(strings.ToLower(left.DisplayName), strings.ToLower(right.DisplayName))
+	case "updatedAt":
+		return strings.Compare(left.UpdatedAt, right.UpdatedAt)
+	default:
+		return strings.Compare(left.Identifier, right.Identifier)
+	}
+}
+
+func listViewDigest(filter, order string) string {
+	digest := sha256.Sum256([]byte(filter + "\x00" + order))
+	return base64.RawURLEncoding.EncodeToString(digest[:12])
+}
+
+func encodeListPageToken(offset int, generation uint64, view string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(
+		strconv.FormatUint(generation, 10) + ":" + strconv.Itoa(offset) + ":" + view,
+	))
+}
+
+func decodeListPageToken(token string, generation uint64, view string) (int, error) {
+	if token == "" {
+		return 0, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(decoded) > 256 {
+		return 0, errors.New("invalid pageToken")
+	}
+	parts := strings.Split(string(decoded), ":")
+	if len(parts) != 3 || parts[0] != strconv.FormatUint(generation, 10) || parts[2] != view {
+		return 0, errors.New("stale or mismatched pageToken")
+	}
+	offset, err := strconv.Atoi(parts[1])
+	if err != nil || offset < 0 {
+		return 0, errors.New("invalid pageToken")
+	}
+	return offset, nil
 }
 
 func (i *Index) pageSize(requested, fallback int) (int, error) {

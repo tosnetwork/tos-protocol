@@ -49,3 +49,24 @@ func TestServiceDescriptorValidate(t *testing.T) {
 		t.Fatal("short ADNL address accepted")
 	}
 }
+
+func TestNormalizeTOSName(t *testing.T) {
+	for input, expected := range map[string]string{
+		"name.tos": "name.tos", "Shop.Name.TOS": "shop.name.tos", "a-b.tos": "a-b.tos",
+	} {
+		actual, err := NormalizeTOSName(input)
+		if err != nil || actual != expected {
+			t.Fatalf("NormalizeTOSName(%q)=%q,%v", input, actual, err)
+		}
+	}
+	for _, input := range []string{".tos", "name..tos", "-name.tos", "name-.tos", "name.example", "名.tos", "name.tos."} {
+		if _, err := NormalizeTOSName(input); err == nil {
+			t.Fatalf("invalid name accepted: %q", input)
+		}
+	}
+	descriptor := validDescriptor(time.Now().UTC())
+	descriptor.TOSName = "Name.TOS"
+	if err := descriptor.Validate(time.Now().UTC()); err == nil {
+		t.Fatal("noncanonical descriptor name accepted")
+	}
+}
