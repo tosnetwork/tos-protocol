@@ -101,6 +101,10 @@ requirements remain in `docs/`.
   Action-status paths. Strict file loading now rejects invalid caller bounds
   before I/O, and shared HTTP serving rejects a nil server before launching a
   goroutine; both base utilities have direct race-tested coverage.
+- The paired `tos-ai` production containerd path now binds operator-fixed GPU
+  aliases through exclusive leases to qualified CDI injection. Exact
+  MOCK-device injection and cleanup passed through real local containerd/runc;
+  the canonical gate ledger keeps physical NVIDIA certification open.
 
 ## In Progress
 
