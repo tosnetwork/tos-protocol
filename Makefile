@@ -23,6 +23,17 @@ generate:
 		--go_out=. --go_opt=module=github.com/tosnetwork/tos-protocol \
 		--connect-go_out=. --connect-go_opt=module=github.com/tosnetwork/tos-protocol \
 		api/tos/edge/v1/worker.proto
+	protoc \
+		--proto_path=api \
+		--go_out=. --go_opt=module=github.com/tosnetwork/tos-protocol \
+		--connect-go_out=. --connect-go_opt=module=github.com/tosnetwork/tos-protocol \
+		atos/tos/v1/common.proto \
+		atos/tos/v1/identity.proto \
+		atos/tos/v1/capability.proto \
+		atos/tos/v1/trust.proto \
+		atos/tos/v1/settlement.proto \
+		atos/tos/v1/proof.proto \
+		atos/tos/v1/execution.proto
 
 reproducible-builds:
 	./scripts/verify-reproducible-builds.sh
@@ -30,9 +41,6 @@ reproducible-builds:
 release-gates:
 	./scripts/test-release-bundle.sh
 
-# Networked opt-in gate: fetches and verifies the exact pinned upstream ARD
-# commit before running its authoritative tool. It is intentionally separate
-# from ordinary offline CI.
 ard-conformance:
 	./scripts/test-ard-conformance.sh
 

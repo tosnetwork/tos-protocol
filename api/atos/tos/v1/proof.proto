@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+import "atos/tos/v1/common.proto";
+
+service ProofService {
+  rpc CommitExecutionReceipt(CommitExecutionReceiptRequest) returns (CommitExecutionReceiptResponse);
+  rpc VerifyExecutionReceipt(VerifyExecutionReceiptRequest) returns (VerifyExecutionReceiptResponse);
+  rpc CommitProofOfServiceEvidence(CommitProofOfServiceEvidenceRequest) returns (CommitProofOfServiceEvidenceResponse);
+  rpc ReadProofOfService(ReadProofOfServiceRequest) returns (ReadProofOfServiceResponse);
+  rpc ReadReputation(ReadReputationRequest) returns (ReadReputationResponse);
+  rpc ReadProof(ReadProofRequest) returns (ReadProofResponse);
+}
+
+enum ExecutionResult {
+  EXECUTION_RESULT_UNSPECIFIED = 0;
+  EXECUTION_RESULT_SUCCESS = 1;
+  EXECUTION_RESULT_FAILED = 2;
+  EXECUTION_RESULT_CANCELED = 3;
+  EXECUTION_RESULT_TIMED_OUT = 4;
+  EXECUTION_RESULT_REJECTED = 5;
+}
+
+message ExecutionReceiptEnvelope {
+  string receipt_id = 1;
+  string quote_id = 2;
+  string escrow_id = 3;
+  string job_id = 4;
+  string principal_id = 5;
+  string provider_id = 6;
+  string capability_id = 7;
+  string capability_version = 8;
+  TrustMode trust_mode = 9;
+  ProofProfile proof_profile = 10;
+  ExecutionResult result = 11;
+  Digest input_commitment = 12;
+  Digest output_commitment = 13;
+  Digest usage_commitment = 14;
+  repeated ArtifactCommitment artifacts = 15;
+  Usage usage = 16;
+  Money client_charge = 17;
+  NetworkAmount network_charge = 18;
+  string execution_signer_id = 19;
+  string signer_authorization_id = 20;
+  bytes signature = 21;
+  string signature_algorithm = 22;
+  int64 completed_unix_millis = 23;
+  string error_code = 24;
+}
+
+message CommittedExecutionReceipt {
+  ExecutionReceiptEnvelope receipt = 1;
+  NetworkReference receipt_ref = 2;
+  VerificationStatus verification_status = 3;
+  int64 committed_unix_millis = 4;
+}
+
+message CommitExecutionReceiptRequest {
+  RequestContext context = 1;
+  ExecutionReceiptEnvelope receipt = 2;
+}
+
+message CommitExecutionReceiptResponse {
+  CommittedExecutionReceipt receipt = 1;
+  bool created = 2;
+}
+
+message VerifyExecutionReceiptRequest {
+  RequestContext context = 1;
+  ExecutionReceiptEnvelope receipt = 2;
+  string expected_quote_id = 3;
+  string expected_job_id = 4;
+  ProofProfile required_profile = 5;
+}
+
+message VerifyExecutionReceiptResponse {
+  bool verified = 1;
+  string reason_code = 2;
+  VerificationStatus status = 3;
+  NetworkReference proof_ref = 4;
+}
+
+message ProofOfServiceEvidenceInput {
+  string evidence_id = 1;
+  string receipt_id = 2;
+  string provider_id = 3;
+  string capability_id = 4;
+  string capability_version = 5;
+  ExecutionResult result = 6;
+  uint64 latency_millis = 7;
+  NetworkAmount settlement_volume = 8;
+  bool disputed = 9;
+  string dispute_outcome = 10;
+  Digest evidence_digest = 11;
+  int64 observed_unix_millis = 12;
+}
+
+message ProofOfServiceEvidence {
+  ProofOfServiceEvidenceInput value = 1;
+  NetworkReference evidence_ref = 2;
+  int64 committed_unix_millis = 3;
+}
+
+message CommitProofOfServiceEvidenceRequest {
+  RequestContext context = 1;
+  ProofOfServiceEvidenceInput evidence = 2;
+}
+
+message CommitProofOfServiceEvidenceResponse {
+  ProofOfServiceEvidence evidence = 1;
+  bool created = 2;
+}
+
+message ReadProofOfServiceRequest {
+  RequestContext context = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+  PageRequest page = 4;
+}
+
+message ReadProofOfServiceResponse {
+  repeated ProofOfServiceEvidence evidence = 1;
+  PageResponse page = 2;
+}
+
+message ReputationSummary {
+  string provider_id = 1;
+  string capability_id = 2;
+  double score = 3;
+  uint64 verified_executions = 4;
+  uint64 successful_executions = 5;
+  uint64 disputed_executions = 6;
+  uint64 settled_executions = 7;
+  uint64 p50_latency_millis = 8;
+  uint64 p95_latency_millis = 9;
+  int64 updated_unix_millis = 10;
+  NetworkReference summary_ref = 11;
+}
+
+message ReadReputationRequest {
+  RequestContext context = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+}
+
+message ReadReputationResponse {
+  ReputationSummary reputation = 1;
+  bool found = 2;
+}
+
+message ReadProofRequest {
+  RequestContext context = 1;
+  string proof_ref = 2;
+}
+
+message ReadProofResponse {
+  string proof_ref = 1;
+  string proof_type = 2;
+  bytes proof_bytes = 3;
+  Digest proof_digest = 4;
+  NetworkReference network_ref = 5;
+  bool found = 6;
+}

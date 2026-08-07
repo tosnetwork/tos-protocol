@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+import "atos/tos/v1/common.proto";
+
+service TrustService {
+  rpc CommitQuote(CommitQuoteRequest) returns (CommitQuoteResponse);
+  rpc GetQuoteCommitment(GetQuoteCommitmentRequest) returns (GetQuoteCommitmentResponse);
+  rpc AuthorizeExecutionSigner(AuthorizeExecutionSignerRequest) returns (AuthorizeExecutionSignerResponse);
+  rpc RevokeExecutionSigner(RevokeExecutionSignerRequest) returns (RevokeExecutionSignerResponse);
+  rpc ResolveExecutionSignerAuthorization(ResolveExecutionSignerAuthorizationRequest) returns (ResolveExecutionSignerAuthorizationResponse);
+}
+
+message QuoteCommitmentInput {
+  string quote_id = 1;
+  string principal_id = 2;
+  string provider_id = 3;
+  string capability_id = 4;
+  string capability_version = 5;
+  TrustMode trust_mode = 6;
+  ProofProfile proof_profile = 7;
+  Money total_max = 8;
+  Digest terms_digest = 9;
+  Digest dispute_policy_digest = 10;
+  int64 expires_unix_millis = 11;
+  string settlement_backend = 12;
+  string settlement_asset = 13;
+  string underlying_service_quote_ref = 14;
+}
+
+message QuoteCommitment {
+  QuoteCommitmentInput value = 1;
+  NetworkReference commitment_ref = 2;
+  int64 committed_unix_millis = 3;
+}
+
+message CommitQuoteRequest {
+  RequestContext context = 1;
+  QuoteCommitmentInput quote = 2;
+}
+
+message CommitQuoteResponse {
+  QuoteCommitment quote = 1;
+  bool created = 2;
+}
+
+message GetQuoteCommitmentRequest {
+  RequestContext context = 1;
+  string quote_id = 2;
+}
+
+message GetQuoteCommitmentResponse {
+  QuoteCommitment quote = 1;
+  bool found = 2;
+}
+
+message ExecutionSignerAuthorizationInput {
+  string authorization_id = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+  string capability_version = 4;
+  string execution_signer_id = 5;
+  bytes signer_public_key = 6;
+  string signature_algorithm = 7;
+  int64 valid_from_unix_millis = 8;
+  int64 valid_until_unix_millis = 9;
+}
+
+message ExecutionSignerAuthorization {
+  ExecutionSignerAuthorizationInput value = 1;
+  NetworkReference authorization_ref = 2;
+  bool revoked = 3;
+  NetworkReference revocation_ref = 4;
+}
+
+message AuthorizeExecutionSignerRequest {
+  RequestContext context = 1;
+  ExecutionSignerAuthorizationInput authorization = 2;
+}
+
+message AuthorizeExecutionSignerResponse {
+  ExecutionSignerAuthorization authorization = 1;
+  bool created = 2;
+}
+
+message RevokeExecutionSignerRequest {
+  RequestContext context = 1;
+  string authorization_id = 2;
+  string reason_code = 3;
+}
+
+message RevokeExecutionSignerResponse {
+  ExecutionSignerAuthorization authorization = 1;
+  bool revoked = 2;
+}
+
+message ResolveExecutionSignerAuthorizationRequest {
+  RequestContext context = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+  string capability_version = 4;
+  string execution_signer_id = 5;
+  int64 at_unix_millis = 6;
+}
+
+message ResolveExecutionSignerAuthorizationResponse {
+  bool authorized = 1;
+  ExecutionSignerAuthorization authorization = 2;
+  string reason_code = 3;
+}

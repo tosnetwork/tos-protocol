@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+import "atos/tos/v1/common.proto";
+
+service SettlementService {
+  rpc CreateEscrow(CreateEscrowRequest) returns (CreateEscrowResponse);
+  rpc GetEscrow(GetEscrowRequest) returns (GetEscrowResponse);
+  rpc ReleaseEscrow(ReleaseEscrowRequest) returns (ReleaseEscrowResponse);
+  rpc SettleJob(SettleJobRequest) returns (SettleJobResponse);
+  rpc GetSettlement(GetSettlementRequest) returns (GetSettlementResponse);
+}
+
+enum EscrowState {
+  ESCROW_STATE_UNSPECIFIED = 0;
+  ESCROW_STATE_RESERVED = 1;
+  ESCROW_STATE_DISPUTED = 2;
+  ESCROW_STATE_SETTLED = 3;
+  ESCROW_STATE_RELEASED = 4;
+}
+
+enum SettlementState {
+  SETTLEMENT_STATE_UNSPECIFIED = 0;
+  SETTLEMENT_STATE_PENDING = 1;
+  SETTLEMENT_STATE_SETTLED = 2;
+  SETTLEMENT_STATE_RELEASED = 3;
+  SETTLEMENT_STATE_DISPUTED = 4;
+  SETTLEMENT_STATE_FAILED = 5;
+}
+
+message Escrow {
+  string escrow_id = 1;
+  string quote_id = 2;
+  string principal_id = 3;
+  string provider_id = 4;
+  string capability_id = 5;
+  TrustMode trust_mode = 6;
+  ProofProfile proof_profile = 7;
+  NetworkAmount reserved = 8;
+  EscrowState state = 9;
+  int64 created_unix_millis = 10;
+  int64 expires_unix_millis = 11;
+  NetworkReference escrow_ref = 12;
+  string funding_model = 13;
+}
+
+message CreateEscrowRequest {
+  RequestContext context = 1;
+  string quote_id = 2;
+  string principal_id = 3;
+  string provider_id = 4;
+  string capability_id = 5;
+  TrustMode trust_mode = 6;
+  ProofProfile proof_profile = 7;
+  NetworkAmount reserve = 8;
+  string funding_model = 9;
+  int64 expires_unix_millis = 10;
+}
+
+message CreateEscrowResponse {
+  Escrow escrow = 1;
+  bool created = 2;
+}
+
+message GetEscrowRequest {
+  RequestContext context = 1;
+  string escrow_id = 2;
+  string quote_id = 3;
+}
+
+message GetEscrowResponse {
+  Escrow escrow = 1;
+  bool found = 2;
+}
+
+message ReleaseEscrowRequest {
+  RequestContext context = 1;
+  string escrow_id = 2;
+  string quote_id = 3;
+  string job_id = 4;
+  string reason_code = 5;
+}
+
+message ReleaseEscrowResponse {
+  Escrow escrow = 1;
+  NetworkReference release_ref = 2;
+  bool released = 3;
+}
+
+message Settlement {
+  string settlement_id = 1;
+  string escrow_id = 2;
+  string quote_id = 3;
+  string job_id = 4;
+  string receipt_id = 5;
+  NetworkAmount charged = 6;
+  NetworkAmount refunded = 7;
+  SettlementState state = 8;
+  NetworkReference settlement_ref = 9;
+  int64 settled_unix_millis = 10;
+}
+
+message SettleJobRequest {
+  RequestContext context = 1;
+  string escrow_id = 2;
+  string quote_id = 3;
+  string job_id = 4;
+  string receipt_id = 5;
+  NetworkAmount requested_charge = 6;
+}
+
+message SettleJobResponse {
+  Settlement settlement = 1;
+  Escrow escrow = 2;
+  bool created = 3;
+}
+
+message GetSettlementRequest {
+  RequestContext context = 1;
+  string settlement_id = 2;
+  string job_id = 3;
+  string receipt_id = 4;
+}
+
+message GetSettlementResponse {
+  Settlement settlement = 1;
+  bool found = 2;
+}

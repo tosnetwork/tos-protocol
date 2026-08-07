@@ -1,0 +1,215 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+import "atos/tos/v1/common.proto";
+
+service ExecutionGatewayService {
+  rpc GetProviderStatus(GetProviderStatusRequest) returns (GetProviderStatusResponse);
+  rpc QuoteExecution(QuoteExecutionRequest) returns (QuoteExecutionResponse);
+  rpc SubmitJob(SubmitJobRequest) returns (SubmitJobResponse);
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+  rpc StreamJob(StreamJobRequest) returns (stream JobEvent);
+  rpc FetchResult(FetchResultRequest) returns (FetchResultResponse);
+  rpc FetchExecutionReceipt(FetchExecutionReceiptRequest) returns (FetchExecutionReceiptResponse);
+}
+
+enum ProviderReadiness {
+  PROVIDER_READINESS_UNSPECIFIED = 0;
+  PROVIDER_READINESS_READY = 1;
+  PROVIDER_READINESS_DEGRADED = 2;
+  PROVIDER_READINESS_UNAVAILABLE = 3;
+  PROVIDER_READINESS_DRAINING = 4;
+}
+
+message GetProviderStatusRequest {
+  RequestContext context = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+}
+
+message GetProviderStatusResponse {
+  string provider_id = 1;
+  string capability_id = 2;
+  ProviderReadiness readiness = 3;
+  string capacity_revision = 4;
+  repeated TrustMode available_trust_modes = 5;
+  int64 observed_unix_millis = 6;
+  int64 expires_unix_millis = 7;
+  string reason_code = 8;
+}
+
+message QuoteExecutionRequest {
+  RequestContext context = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+  string capability_version = 4;
+  Digest input_commitment = 5;
+  uint64 input_bytes = 6;
+  uint64 max_output_bytes = 7;
+  int64 execution_deadline_unix_millis = 8;
+  TrustMode intended_trust_mode = 9;
+  ProofProfile intended_proof_profile = 10;
+  map<string, string> execution_constraints = 11;
+}
+
+message ServiceExecutionQuote {
+  string service_quote_id = 1;
+  string provider_id = 2;
+  string capability_id = 3;
+  string capability_version = 4;
+  NetworkAmount provider_price = 5;
+  int64 expires_unix_millis = 6;
+  int64 execution_deadline_unix_millis = 7;
+  string capacity_revision = 8;
+  string runtime_revision = 9;
+  string model_revision = 10;
+  Digest signed_quote_digest = 11;
+  NetworkReference quote_ref = 12;
+}
+
+message QuoteExecutionResponse {
+  ServiceExecutionQuote quote = 1;
+}
+
+message SubmitJobRequest {
+  RequestContext context = 1;
+  string job_id = 2;
+  string invocation_id = 3;
+  string principal_id = 4;
+  string provider_id = 5;
+  string capability_id = 6;
+  string capability_version = 7;
+  string quote_id = 8;
+  string service_quote_id = 9;
+  string escrow_id = 10;
+  TrustMode trust_mode = 11;
+  ProofProfile proof_profile = 12;
+  bytes input = 13;
+  Digest input_commitment = 14;
+  uint64 max_output_bytes = 15;
+  int64 execution_deadline_unix_millis = 16;
+  int64 retain_until_unix_millis = 17;
+  repeated ArtifactCommitment input_artifacts = 18;
+  map<string, string> execution_constraints = 19;
+}
+
+message SubmitJobResponse {
+  string job_id = 1;
+  string edge_action_id = 2;
+  string worker_task_id = 3;
+  JobState state = 4;
+  TrustMode trust_mode = 5;
+  ProofProfile proof_profile = 6;
+  ProofStatus proof_status = 7;
+  int64 created_unix_millis = 8;
+  int64 estimated_completion_unix_millis = 9;
+}
+
+message GetJobRequest {
+  RequestContext context = 1;
+  string job_id = 2;
+}
+
+message JobRecord {
+  string job_id = 1;
+  string edge_action_id = 2;
+  string worker_task_id = 3;
+  string quote_id = 4;
+  string service_quote_id = 5;
+  string escrow_id = 6;
+  string provider_id = 7;
+  string capability_id = 8;
+  string capability_version = 9;
+  TrustMode trust_mode = 10;
+  ProofProfile proof_profile = 11;
+  JobState state = 12;
+  ProofStatus proof_status = 13;
+  int64 created_unix_millis = 14;
+  int64 updated_unix_millis = 15;
+  int64 completed_unix_millis = 16;
+  string error_code = 17;
+}
+
+message GetJobResponse {
+  JobRecord job = 1;
+  bool found = 2;
+}
+
+message CancelJobRequest {
+  RequestContext context = 1;
+  string job_id = 2;
+  string reason_code = 3;
+}
+
+message CancelJobResponse {
+  JobRecord job = 1;
+  bool accepted = 2;
+}
+
+message StreamJobRequest {
+  RequestContext context = 1;
+  string job_id = 2;
+  uint64 next_sequence = 3;
+  uint64 max_chunk_bytes = 4;
+  Digest expected_stream_digest = 5;
+  uint64 next_offset = 6;
+}
+
+enum JobEventType {
+  JOB_EVENT_TYPE_UNSPECIFIED = 0;
+  JOB_EVENT_TYPE_STATE = 1;
+  JOB_EVENT_TYPE_OUTPUT_CHUNK = 2;
+  JOB_EVENT_TYPE_INPUT_REQUIRED = 3;
+  JOB_EVENT_TYPE_PROOF_STATUS = 4;
+  JOB_EVENT_TYPE_TERMINAL = 5;
+}
+
+message JobEvent {
+  string job_id = 1;
+  uint64 sequence = 2;
+  JobEventType event_type = 3;
+  JobState state = 4;
+  bytes chunk = 5;
+  uint64 offset = 6;
+  uint64 total_output_bytes = 7;
+  Digest stream_digest = 8;
+  bool terminal = 9;
+  Usage usage = 10;
+  ProofStatus proof_status = 11;
+  int64 event_unix_millis = 12;
+  string error_code = 13;
+}
+
+message FetchResultRequest {
+  RequestContext context = 1;
+  string job_id = 2;
+}
+
+message FetchResultResponse {
+  string job_id = 1;
+  JobState state = 2;
+  bytes output = 3;
+  Digest output_commitment = 4;
+  repeated ArtifactCommitment artifacts = 5;
+  Usage usage = 6;
+  int64 completed_unix_millis = 7;
+  string error_code = 8;
+}
+
+message FetchExecutionReceiptRequest {
+  RequestContext context = 1;
+  string job_id = 2;
+}
+
+message FetchExecutionReceiptResponse {
+  string job_id = 1;
+  string receipt_id = 2;
+  bytes canonical_receipt = 3;
+  Digest receipt_digest = 4;
+  VerificationStatus verification_status = 5;
+  NetworkReference receipt_ref = 6;
+}

@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+import "atos/tos/v1/common.proto";
+
+service CapabilityService {
+  rpc ResolveCapability(ResolveCapabilityRequest) returns (ResolveCapabilityResponse);
+  rpc VerifyCapabilityOwnership(VerifyCapabilityOwnershipRequest) returns (VerifyCapabilityOwnershipResponse);
+  rpc CommitCapabilityManifest(CommitCapabilityManifestRequest) returns (CommitCapabilityManifestResponse);
+}
+
+message CapabilityIdentity {
+  string capability_id = 1;
+  string canonical_uri = 2;
+  string provider_id = 3;
+  string version = 4;
+  Digest manifest_digest = 5;
+  NetworkReference manifest_ref = 6;
+  NetworkReference ownership_ref = 7;
+  repeated TrustMode active_trust_modes = 8;
+  repeated string endpoints = 9;
+  int64 updated_unix_millis = 10;
+}
+
+message ResolveCapabilityRequest {
+  RequestContext context = 1;
+  string capability_id = 2;
+  string canonical_uri = 3;
+  string version = 4;
+}
+
+message ResolveCapabilityResponse {
+  CapabilityIdentity capability = 1;
+  bool found = 2;
+}
+
+message VerifyCapabilityOwnershipRequest {
+  RequestContext context = 1;
+  string capability_id = 2;
+  string provider_id = 3;
+  string version = 4;
+  Digest expected_manifest_digest = 5;
+}
+
+message VerifyCapabilityOwnershipResponse {
+  bool verified = 1;
+  NetworkReference ownership_ref = 2;
+  NetworkReference manifest_ref = 3;
+  string reason_code = 4;
+}
+
+message CommitCapabilityManifestRequest {
+  RequestContext context = 1;
+  string capability_id = 2;
+  string provider_id = 3;
+  string version = 4;
+  Digest manifest_digest = 5;
+  repeated TrustMode requested_trust_modes = 6;
+}
+
+message CommitCapabilityManifestResponse {
+  CapabilityIdentity capability = 1;
+  bool created = 2;
+  NetworkReference commitment_ref = 3;
+}

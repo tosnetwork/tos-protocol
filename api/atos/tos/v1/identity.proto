@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+import "atos/tos/v1/common.proto";
+
+service IdentityService {
+  rpc ResolveAgentIdentity(ResolveAgentIdentityRequest) returns (ResolveAgentIdentityResponse);
+  rpc ResolvePrincipalBinding(ResolvePrincipalBindingRequest) returns (ResolvePrincipalBindingResponse);
+}
+
+message AgentIdentity {
+  string agent_id = 1;
+  string canonical_uri = 2;
+  repeated string controllers = 3;
+  string assurance = 4;
+  NetworkReference identity_ref = 5;
+  int64 updated_unix_millis = 6;
+  map<string, string> public_attributes = 7;
+}
+
+message ResolveAgentIdentityRequest {
+  RequestContext context = 1;
+  string agent_id = 2;
+  string canonical_uri = 3;
+}
+
+message ResolveAgentIdentityResponse {
+  AgentIdentity identity = 1;
+  bool found = 2;
+}
+
+message ResolvePrincipalBindingRequest {
+  RequestContext context = 1;
+  string principal_id = 2;
+}
+
+message ResolvePrincipalBindingResponse {
+  string principal_id = 1;
+  AgentIdentity identity = 2;
+  bool bound = 3;
+  NetworkReference binding_ref = 4;
+}
