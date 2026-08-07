@@ -1,0 +1,35 @@
+name: apply-atosrpc-source
+
+on:
+  push:
+    branches:
+      - agent/atos-rpc-v0.2
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Materialize implementation sources
+        run: |
+          cat .dev/atosrpc.part.* > /tmp/atosrpc-source.tar.gz
+          tar -xzf /tmp/atosrpc-source.tar.gz
+          rm -rf .dev .github/workflows/apply-atosrpc-source.yml
+          gofmt -w pkg/atosrpc cmd/tos-atos-rpc
+      - name: Commit implementation sources
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: implement ATOS-facing TOS RPC services"
+          git push origin HEAD:${{ github.ref_name }}
