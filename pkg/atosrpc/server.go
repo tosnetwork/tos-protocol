@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/gen/atos/tos/v1/atostosv1connect"
 )
 
@@ -142,5 +141,6 @@ func (s *Server) boundedContext(ctx context.Context, requestedDeadlineMS int64) 
 	if !s.now().Before(deadline) {
 		return nil, nil, rpcError(connect.CodeDeadlineExceeded, "DEADLINE_EXCEEDED", "request deadline has elapsed")
 	}
-	return context.WithDeadline(ctx, deadline)
+	bounded, cancel := context.WithDeadline(ctx, deadline)
+	return bounded, cancel, nil
 }
