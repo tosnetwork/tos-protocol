@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"sort"
 	"strings"
 
@@ -15,12 +16,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (s *Server) putProofTx(tx *bolt.Tx, ref NetworkReference, proofType string, value proto.Message) error {
+func (s *Server) putProofTx(tx *bolt.Tx, ref *NetworkReference, proofType string, value proto.Message) error {
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(value)
 	if err != nil {
 		return err
 	}
 	digest := bytesDigest("ATOS-TOS-PROOF-BYTES-V1", encoded)
+	if ref == nil {
+		return errors.New("nil network reference")
+	}
 	key := ref.Reference
 	if key == "" {
 		key = digest
@@ -202,7 +206,7 @@ func (s *Server) CommitExecutionReceipt(
 		if err := tx.Bucket(bucketReceiptByJob).Put([]byte(req.Msg.Receipt.JobId), []byte(req.Msg.Receipt.ReceiptId)); err != nil {
 			return err
 		}
-		if err := s.putProofTx(tx, ref, "execution_receipt", req.Msg.Receipt); err != nil {
+		if err := s.putProofTx(tx, &ref, "execution_receipt", req.Msg.Receipt); err != nil {
 			return err
 		}
 		response.Receipt = committed
@@ -254,7 +258,7 @@ func (s *Server) VerifyExecutionReceipt(
 			}
 		}
 		if verified && proofRef != nil {
-			return s.putProofTx(tx, *proofRef, "verified_execution_receipt", req.Msg.Receipt)
+			return s.putProofTx(tx, proofRef, "verified_execution_receipt", req.Msg.Receipt)
 		}
 		return nil
 	})
@@ -324,7 +328,7 @@ func (s *Server) CommitProofOfServiceEvidence(
 		if err := s.store.putProto(tx, bucketEvidence, value.EvidenceId, evidence); err != nil {
 			return err
 		}
-		if err := s.putProofTx(tx, ref, "proof_of_service", value); err != nil {
+		if err := s.putProofTx(tx, &ref, "proof_of_service", value); err != nil {
 			return err
 		}
 		response.Evidence = evidence

@@ -94,7 +94,7 @@ func (s *Server) CreateEscrow(
 		if err := tx.Bucket(bucketEscrowByQuote).Put([]byte(req.Msg.QuoteId), []byte(escrowID)); err != nil {
 			return err
 		}
-		if err := s.putProofTx(tx, ref, "escrow", escrow); err != nil {
+		if err := s.putProofTx(tx, &ref, "escrow", escrow); err != nil {
 			return err
 		}
 		response.Escrow = escrow
@@ -298,7 +298,7 @@ func (s *Server) SettleJob(
 		if err := tx.Bucket(bucketSettlementByRcpt).Put([]byte(req.Msg.ReceiptId), []byte(settlementID)); err != nil {
 			return err
 		}
-		if err := s.putProofTx(tx, ref, "settlement", settlement); err != nil {
+		if err := s.putProofTx(tx, &ref, "settlement", settlement); err != nil {
 			return err
 		}
 		response.Settlement = settlement

@@ -91,7 +91,7 @@ func (s *Server) CommitQuote(
 		if err := s.store.putProto(tx, bucketQuoteCommitments, quote.QuoteId, committed); err != nil {
 			return err
 		}
-		if err := s.putProofTx(tx, ref, "quote_commitment", quote); err != nil {
+		if err := s.putProofTx(tx, &ref, "quote_commitment", quote); err != nil {
 			return err
 		}
 		response.Quote = committed
@@ -199,7 +199,7 @@ func (s *Server) AuthorizeExecutionSigner(
 		if err := s.store.putProto(tx, bucketSignerAuths, key, authorization); err != nil {
 			return err
 		}
-		if err := s.putProofTx(tx, ref, "execution_signer_authorization", value); err != nil {
+		if err := s.putProofTx(tx, &ref, "execution_signer_authorization", value); err != nil {
 			return err
 		}
 		response.Authorization = authorization
