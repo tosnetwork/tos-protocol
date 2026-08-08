@@ -152,10 +152,11 @@ func (a *chainAuthority) Network() string {
 }
 
 func (a *chainAuthority) Supports(mode TrustMode) bool {
-	// A finalized data anchor does not provide custody, refund, or provider
-	// payment guarantees. Do not activate Verified merely because the chain is
-	// reachable and commitments can be observed.
-	return a != nil && mode == TrustModeManaged
+	// The chain Authority supplies the finalized commitment half of Verified.
+	// Server.supportsMode additionally requires a contract-backed economic
+	// driver before Verified can become active. Native still requires global
+	// resolution and federation guarantees that this Authority does not claim.
+	return a != nil && (mode == TrustModeManaged || mode == TrustModeVerified)
 }
 
 func (a *chainAuthority) CheckReady(ctx context.Context) error {

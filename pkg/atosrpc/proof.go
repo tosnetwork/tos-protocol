@@ -82,7 +82,7 @@ func (s *Server) verifyReceiptTx(tx *bolt.Tx, receipt *atostosv1.ExecutionReceip
 	if err := validateModeProfile(receipt.TrustMode, receipt.ProofProfile); err != nil {
 		return false, "TRUST_MODE_MISMATCH", nil, nil
 	}
-	if !s.authority.Supports(receipt.TrustMode) {
+	if !s.supportsMode(receipt.TrustMode) {
 		return false, "TRUST_MODE_UNAVAILABLE", nil, nil
 	}
 	quote := new(atostosv1.QuoteCommitment)
@@ -172,7 +172,7 @@ func (s *Server) CommitExecutionReceipt(
 	if err := validateModeProfile(req.Msg.Receipt.TrustMode, req.Msg.Receipt.ProofProfile); err != nil {
 		return nil, err
 	}
-	if err := ensureSupported(s.authority, req.Msg.Receipt.TrustMode); err != nil {
+	if err := s.ensureSupported(req.Msg.Receipt.TrustMode); err != nil {
 		return nil, err
 	}
 	response := new(atostosv1.CommitExecutionReceiptResponse)

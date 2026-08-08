@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/tosnetwork/tos-protocol/gen/atos/tos/v1/atostosv1connect"
+	"github.com/tosnetwork/tos-protocol/pkg/economic"
 )
 
 // Server implements Identity, Capability, Trust, Settlement, Proof, and
@@ -23,6 +24,7 @@ type Server struct {
 	config     Config
 	store      *store
 	authority  Authority
+	economy    economic.Driver
 	worker     Worker
 	router     Router
 	privateKey ed25519.PrivateKey
@@ -43,24 +45,43 @@ func Open(config Config) (*Server, error) {
 	cancel()
 	if err != nil {
 		_ = config.Authority.Close()
+		if config.EconomicDriver != nil {
+			_ = config.EconomicDriver.Close()
+		}
 		return nil, fmt.Errorf("ATOS RPC authority is not ready: %w", err)
+	}
+	if config.EconomicDriver != nil {
+		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
+		err = config.EconomicDriver.CheckReady(readyContext)
+		cancel()
+		if err != nil {
+			_ = config.Authority.Close()
+			_ = config.EconomicDriver.Close()
+			return nil, fmt.Errorf("ATOS RPC economic driver is not ready: %w", err)
+		}
 	}
 	state, err := openStore(config.StatePath, config.MaxRecordBytes)
 	if err != nil {
 		_ = config.Authority.Close()
+		if config.EconomicDriver != nil {
+			_ = config.EconomicDriver.Close()
+		}
 		return nil, err
 	}
 	privateKey, err := state.signingKey()
 	if err != nil {
 		_ = state.Close()
 		_ = config.Authority.Close()
+		if config.EconomicDriver != nil {
+			_ = config.EconomicDriver.Close()
+		}
 		return nil, err
 	}
 	publicKey := append(ed25519.PublicKey(nil), privateKey.Public().(ed25519.PublicKey)...)
 	digest := sha256.Sum256(publicKey)
 	return &Server{
 		config: config, store: state, authority: config.Authority,
-		worker: config.Worker, router: config.Router,
+		economy: config.EconomicDriver, worker: config.Worker, router: config.Router,
 		privateKey: privateKey, publicKey: publicKey,
 		signerID: "edge-signer-" + hex.EncodeToString(digest[:8]),
 		now:      config.Now,
@@ -71,14 +92,40 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
-	var storeErr, authorityErr error
+	var storeErr, authorityErr, economyErr error
 	if s.store != nil {
 		storeErr = s.store.Close()
 	}
 	if s.authority != nil {
 		authorityErr = s.authority.Close()
 	}
-	return errors.Join(storeErr, authorityErr)
+	if s.economy != nil {
+		economyErr = s.economy.Close()
+	}
+	return errors.Join(storeErr, authorityErr, economyErr)
+}
+
+func (s *Server) supportsMode(mode TrustMode) bool {
+	if s == nil || s.authority == nil || !s.authority.Supports(mode) {
+		return false
+	}
+	switch mode {
+	case TrustModeManaged:
+		return true
+	case TrustModeVerified:
+		return s.economy != nil && s.economy.Supports(economic.TrustModeVerified)
+	case TrustModeNative:
+		return s.economy != nil && s.economy.Supports(economic.TrustModeNative)
+	default:
+		return false
+	}
+}
+
+func (s *Server) ensureSupported(mode TrustMode) error {
+	if !s.supportsMode(mode) {
+		return failedPrecondition("TRUST_MODE_UNAVAILABLE", "requested trust mode is not active on this TOS authority and economic driver")
+	}
+	return nil
 }
 
 func (s *Server) jobLock(jobID string) *sync.Mutex {

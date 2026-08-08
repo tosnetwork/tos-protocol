@@ -101,13 +101,6 @@ func validateModeProfile(mode atostosv1.TrustMode, profile atostosv1.ProofProfil
 	return nil
 }
 
-func ensureSupported(authority Authority, mode atostosv1.TrustMode) error {
-	if authority == nil || !authority.Supports(mode) {
-		return failedPrecondition("TRUST_MODE_UNAVAILABLE", "requested trust mode is not active on this TOS authority")
-	}
-	return nil
-}
-
 func parseAtomic(value string) (*big.Int, error) {
 	if value == "" || strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
 		return nil, errors.New("invalid atomic amount")

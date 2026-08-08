@@ -32,7 +32,7 @@ func (s *Server) CommitQuote(
 	if err := validateModeProfile(quote.TrustMode, quote.ProofProfile); err != nil {
 		return nil, err
 	}
-	if err := ensureSupported(s.authority, quote.TrustMode); err != nil {
+	if err := s.ensureSupported(quote.TrustMode); err != nil {
 		return nil, err
 	}
 	if quote.ExpiresUnixMillis <= s.now().UnixMilli() {

@@ -110,7 +110,7 @@ func TestChainAuthorityPublishesAndIndependentlyVerifiesFinalizedCommitment(t *t
 		t.Fatal(err)
 	}
 	defer authority.Close()
-	if !authority.Supports(TrustModeManaged) || authority.Supports(TrustModeVerified) ||
+	if !authority.Supports(TrustModeManaged) || !authority.Supports(TrustModeVerified) ||
 		authority.Supports(TrustModeNative) {
 		t.Fatal("chain commitment Authority activated an unsupported trust mode")
 	}

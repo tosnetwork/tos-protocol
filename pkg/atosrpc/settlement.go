@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -29,14 +30,18 @@ func (s *Server) CreateEscrow(
 	if err := validateModeProfile(req.Msg.TrustMode, req.Msg.ProofProfile); err != nil {
 		return nil, err
 	}
-	if err := ensureSupported(s.authority, req.Msg.TrustMode); err != nil {
+	if err := s.ensureSupported(req.Msg.TrustMode); err != nil {
 		return nil, err
 	}
 	if req.Msg.Reserve == nil || strings.TrimSpace(req.Msg.Reserve.Asset) == "" {
 		return nil, invalid("INVALID_ARGUMENT", "reserve asset and amount are required")
 	}
-	if _, err := parseAtomic(req.Msg.Reserve.AtomicAmount); err != nil {
-		return nil, invalid("INVALID_ARGUMENT", "reserve atomic_amount is invalid")
+	reserveAmount, err := parseAtomic(req.Msg.Reserve.AtomicAmount)
+	if err != nil || !reserveAmount.IsUint64() {
+		return nil, invalid("INVALID_ARGUMENT", "reserve atomic_amount is invalid or outside uint64")
+	}
+	if req.Msg.TrustMode == TrustModeVerified && req.Msg.Reserve.Asset != "TOS" {
+		return nil, invalid("INVALID_ARGUMENT", "Verified Task Escrow requires native TOS")
 	}
 	if req.Msg.ExpiresUnixMillis <= s.now().UnixMilli() {
 		return nil, invalid("INVALID_ARGUMENT", "escrow expiry must be in the future")
@@ -44,7 +49,7 @@ func (s *Server) CreateEscrow(
 	response := new(atostosv1.CreateEscrowResponse)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
-	err := s.atomicMutation("CreateEscrow", req.Msg.Context, req.Msg, response, func(tx *bolt.Tx) error {
+	err = s.atomicMutation("CreateEscrow", req.Msg.Context, req.Msg, response, func(tx *bolt.Tx) error {
 		quote := new(atostosv1.QuoteCommitment)
 		found, err := s.store.getProto(tx, bucketQuoteCommitments, req.Msg.QuoteId, quote)
 		if err != nil {
@@ -75,9 +80,47 @@ func (s *Server) CreateEscrow(
 			return err
 		}
 		escrowID := shortID("esc-", digest)
-		ref, err := s.authority.Commit(ctx, "escrow", escrowID, digest)
-		if err != nil {
-			return unavailable("NETWORK_UNAVAILABLE", "escrow authority is unavailable")
+		var ref NetworkReference
+		switch req.Msg.TrustMode {
+		case TrustModeManaged:
+			ref, err = s.authority.Commit(ctx, "escrow", escrowID, digest)
+			if err != nil {
+				return unavailable("NETWORK_UNAVAILABLE", "escrow authority is unavailable")
+			}
+		case TrustModeVerified:
+			creator, agent, partyErr := s.economicPartiesTx(
+				tx, req.Msg.PrincipalId, req.Msg.ProviderId,
+			)
+			if partyErr != nil {
+				return partyErr
+			}
+			policyHash, policyErr := protoDigest("ATOS-TOS-TASK-ESCROW-POLICY-V1", value)
+			if policyErr != nil {
+				return policyErr
+			}
+			permissionHash := bytesDigest(
+				"ATOS-TOS-TASK-ESCROW-PERMISSION-V1",
+				[]byte(strings.Join([]string{
+					"principal_id", req.Msg.PrincipalId,
+					"provider_id", req.Msg.ProviderId,
+					"capability_id", req.Msg.CapabilityId,
+					"quote_id", req.Msg.QuoteId,
+				}, "\x00")),
+			)
+			result, economicErr := s.economy.ReserveEscrow(ctx, economic.ReserveEscrowRequest{
+				EscrowID: escrowID, Creator: creator, Agent: agent,
+				BudgetNanoTOS: reserveAmount.Uint64(),
+				DeadlineUnix:  uint64(req.Msg.ExpiresUnixMillis / 1000),
+				PolicyHash:    policyHash, PermissionHash: permissionHash,
+			})
+			if economicErr != nil {
+				return economicRPCError(economicErr, "reserve TOS Task Escrow")
+			}
+			ref = NetworkReference{
+				Network: s.economy.Network(), Reference: result.ContractReference,
+			}
+		default:
+			return failedPrecondition("TRUST_MODE_UNAVAILABLE", "economic escrow mode is unavailable")
 		}
 		escrow := &atostosv1.Escrow{
 			EscrowId: escrowID, QuoteId: req.Msg.QuoteId,
@@ -184,9 +227,35 @@ func (s *Server) ReleaseEscrow(
 		if err != nil {
 			return err
 		}
-		ref, err := s.authority.Commit(ctx, "escrow-release", escrow.EscrowId, digest)
-		if err != nil {
-			return unavailable("NETWORK_UNAVAILABLE", "escrow release authority is unavailable")
+		var ref NetworkReference
+		switch escrow.TrustMode {
+		case TrustModeManaged:
+			ref, err = s.authority.Commit(ctx, "escrow-release", escrow.EscrowId, digest)
+			if err != nil {
+				return unavailable("NETWORK_UNAVAILABLE", "escrow release authority is unavailable")
+			}
+		case TrustModeVerified:
+			contractAddress, addressErr := economicContractAddress(escrow.EscrowRef)
+			if addressErr != nil {
+				return failedPrecondition("ESCROW_MISMATCH", addressErr.Error())
+			}
+			reserved, parseErr := parseAtomic(escrow.Reserved.AtomicAmount)
+			if parseErr != nil || !reserved.IsUint64() {
+				return failedPrecondition("ESCROW_MISMATCH", "escrow reserve is outside uint64")
+			}
+			result, economicErr := s.economy.ReleaseEscrow(ctx, economic.ReleaseEscrowRequest{
+				EscrowID: escrow.EscrowId, ContractAddress: contractAddress,
+				BudgetNanoTOS: reserved.Uint64(), ReasonCode: req.Msg.ReasonCode,
+			})
+			if economicErr != nil {
+				return economicRPCError(economicErr, "release TOS Task Escrow")
+			}
+			if result.TransitionReference == "" {
+				return failedPrecondition("ECONOMIC_TRANSITION_FAILED", "released Task Escrow has no finalized transition reference")
+			}
+			ref = NetworkReference{Network: s.economy.Network(), Reference: result.TransitionReference}
+		default:
+			return failedPrecondition("TRUST_MODE_UNAVAILABLE", "economic escrow mode is unavailable")
 		}
 		escrow.State = atostosv1.EscrowState_ESCROW_STATE_RELEASED
 		if err := s.store.putProto(tx, bucketEscrows, escrow.EscrowId, escrow); err != nil {
@@ -219,8 +288,8 @@ func (s *Server) SettleJob(
 		}
 	}
 	charge, err := parseAtomic(req.Msg.RequestedCharge.AtomicAmount)
-	if err != nil || strings.TrimSpace(req.Msg.RequestedCharge.Asset) == "" {
-		return nil, invalid("INVALID_ARGUMENT", "requested charge is invalid")
+	if err != nil || !charge.IsUint64() || strings.TrimSpace(req.Msg.RequestedCharge.Asset) == "" {
+		return nil, invalid("INVALID_ARGUMENT", "requested charge is invalid or outside uint64")
 	}
 	response := new(atostosv1.SettleJobResponse)
 	s.mutationMu.Lock()
@@ -273,9 +342,41 @@ func (s *Server) SettleJob(
 			return err
 		}
 		settlementID := shortID("set-", digest)
-		ref, err := s.authority.Commit(ctx, "settlement", settlementID, digest)
-		if err != nil {
-			return unavailable("NETWORK_UNAVAILABLE", "settlement authority is unavailable")
+		var ref NetworkReference
+		switch escrow.TrustMode {
+		case TrustModeManaged:
+			ref, err = s.authority.Commit(ctx, "settlement", settlementID, digest)
+			if err != nil {
+				return unavailable("NETWORK_UNAVAILABLE", "settlement authority is unavailable")
+			}
+		case TrustModeVerified:
+			contractAddress, addressErr := economicContractAddress(escrow.EscrowRef)
+			if addressErr != nil {
+				return failedPrecondition("ESCROW_MISMATCH", addressErr.Error())
+			}
+			resultHash, hashErr := digestString(receipt.Receipt.OutputCommitment)
+			if hashErr != nil {
+				return failedPrecondition("RECEIPT_INVALID", "receipt output commitment is invalid")
+			}
+			evidenceHash, evidenceErr := protoDigest("ATOS-TOS-TASK-EVIDENCE-V1", receipt.Receipt)
+			if evidenceErr != nil {
+				return evidenceErr
+			}
+			result, economicErr := s.economy.SettleProvider(ctx, economic.SettleProviderRequest{
+				EscrowID: escrow.EscrowId, ContractAddress: contractAddress,
+				BudgetNanoTOS: reserved.Uint64(),
+				ResultHash:    resultHash, EvidenceHash: evidenceHash,
+				PayoutNanoTOS: charge.Uint64(),
+			})
+			if economicErr != nil {
+				return economicRPCError(economicErr, "settle TOS Task Escrow")
+			}
+			if result.TransitionReference == "" || result.AgentPaidNanoTOS != charge.Uint64() {
+				return failedPrecondition("SETTLEMENT_FAILED", "Task Escrow payout is not finalized")
+			}
+			ref = NetworkReference{Network: s.economy.Network(), Reference: result.TransitionReference}
+		default:
+			return failedPrecondition("TRUST_MODE_UNAVAILABLE", "economic settlement mode is unavailable")
 		}
 		settlement := &atostosv1.Settlement{
 			SettlementId: settlementID, EscrowId: req.Msg.EscrowId,
