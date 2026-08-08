@@ -12,6 +12,7 @@ targets=(
   tos-receipt-signer
   tos-service-material
   tos-session-signer
+  tos-task-escrow-publisher
 )
 
 build_set() {
