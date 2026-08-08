@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
+	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/tosnetwork/tos-protocol/pkg/payment"
 )
@@ -50,6 +51,19 @@ func (runtime *Runtime) CheckServiceReady(
 		ObservedAt:          authority.ObservedAt,
 		QuorumEndpoints:     runtime.Chain.quorum,
 	}, nil
+}
+
+// ObservePayment exposes the runtime's shared strict-majority, finalized
+// transaction observer to higher-level trust boundaries. Callers must still
+// validate every application-specific binding in the returned state.
+func (runtime *Runtime) ObservePayment(
+	ctx context.Context,
+	reference chain.PaymentReference,
+) (chain.PaymentState, error) {
+	if runtime == nil || runtime.Chain == nil {
+		return chain.PaymentState{}, errors.New("invalid TOS payment runtime")
+	}
+	return runtime.Chain.ObservePayment(ctx, reference)
 }
 
 // NewRuntime assembles live authority, client-key, and payment resolution.

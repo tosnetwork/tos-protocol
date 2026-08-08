@@ -293,6 +293,14 @@ func requireCanonicalAddress(value string) (string, error) {
 	return normalized, nil
 }
 
+// CanonicalAddress validates that value is an exact raw standard TOS address
+// and returns that canonical value. It is exposed for components that need to
+// construct independently verifiable chain expectations before querying the
+// adapter.
+func CanonicalAddress(value string) (string, error) {
+	return requireCanonicalAddress(value)
+}
+
 var (
 	_ chain.Adapter                   = (*Adapter)(nil)
 	_ authorization.ClientKeyResolver = (*Adapter)(nil)

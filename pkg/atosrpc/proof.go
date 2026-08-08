@@ -464,14 +464,9 @@ func (s *Server) ReadReputation(
 			P50LatencyMillis: percentile(latencies, 0.50), P95LatencyMillis: percentile(latencies, 0.95),
 			UpdatedUnixMillis: s.now().UnixMilli(),
 		}
-		digest, err := protoDigest("ATOS-TOS-REPUTATION-SUMMARY-V1", summary)
-		if err != nil {
-			return err
-		}
-		ref, err := s.authority.Commit(context.Background(), "reputation", req.Msg.ProviderId, digest)
-		if err == nil {
-			summary.SummaryRef = &ref
-		}
+		// ReputationSummary is a derived gateway/indexer projection, not a
+		// consensus-critical fact. A read must not publish a chain transaction.
+		// Portable evidence remains available through Proof-of-Service records.
 		response.Reputation = summary
 		response.Found = true
 		return nil
