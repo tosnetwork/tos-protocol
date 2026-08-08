@@ -18,9 +18,14 @@ import (
 )
 
 const (
-	TaskEscrowActionPath                   = "/v1/economic/task-escrow/action"
-	TaskEscrowActionHealthPath             = "/healthz"
-	DefaultTaskEscrowActionTimeout         = 20 * time.Second
+	TaskEscrowActionPath       = "/v1/economic/task-escrow/action"
+	TaskEscrowActionHealthPath = "/healthz"
+	// DefaultTaskEscrowActionTimeout must exceed the publisher's default
+	// publish wait budget (taskescrowpublisher.DefaultPublishTimeout, 90s):
+	// the server legitimately blocks the HTTP response until it observes the
+	// published transaction on chain, so a shorter client timeout aborts
+	// every slow-but-successful publish.
+	DefaultTaskEscrowActionTimeout         = 100 * time.Second
 	DefaultTaskEscrowActionMaxMessageBytes = 512 << 10
 	DefaultTaskEscrowActionMaxConcurrent   = 8
 	maxTaskEscrowActionTimeout             = 2 * time.Minute
