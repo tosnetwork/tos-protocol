@@ -7,6 +7,8 @@ import (
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
+	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	"github.com/xssnick/tonutils-go/address"
 )
 
 func TestTosctlArgumentsPreserveAtomicEconomics(t *testing.T) {
@@ -84,5 +86,29 @@ func TestStableRecordNameDoesNotExposeActionID(t *testing.T) {
 	second := recordName("secret/action/id")
 	if first != second || strings.Contains(first, "secret") || len(first) != len("atos-")+16 {
 		t.Fatalf("unexpected record name %q", first)
+	}
+}
+
+func TestCanonicalWalletAddressAcceptsTosctlPresentationWithoutWeakeningReferences(t *testing.T) {
+	raw := "0:" + strings.Repeat("11", 32)
+	parsed, err := address.ParseRawAddr(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	friendly := parsed.String()
+	if friendly == raw {
+		t.Fatal("expected a user-friendly tosctl presentation")
+	}
+	for _, input := range []string{raw, friendly} {
+		got, err := canonicalWalletAddress(input)
+		if err != nil {
+			t.Fatalf("normalize %q: %v", input, err)
+		}
+		if got != raw {
+			t.Fatalf("normalize %q = %q, want %q", input, got, raw)
+		}
+	}
+	if _, err := toschain.CanonicalAddress(friendly); err == nil {
+		t.Fatal("public chain references must continue rejecting user-friendly addresses")
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	"github.com/xssnick/tonutils-go/address"
 )
 
 const (
@@ -168,7 +169,7 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 		if strings.TrimSpace(wallet.Address) == "" {
 			continue
 		}
-		canonical, err := toschain.CanonicalAddress(wallet.Address)
+		canonical, err := canonicalWalletAddress(wallet.Address)
 		if err == nil {
 			actual[canonical] = wallet.Name
 		}
@@ -430,6 +431,24 @@ func minDuration(left, right time.Duration) time.Duration {
 		return left
 	}
 	return right
+}
+
+// canonicalWalletAddress normalizes the local tosctl presentation format to
+// the raw address used for immutable action bindings. Public chain references
+// remain strict: toschain.CanonicalAddress still rejects non-raw addresses.
+func canonicalWalletAddress(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 128 {
+		return "", errors.New("invalid tosctl wallet address")
+	}
+	parsed, err := address.ParseAddr(value)
+	if err != nil {
+		parsed, err = address.ParseRawAddr(value)
+	}
+	if err != nil || parsed == nil || parsed.Type() != address.StdAddress || parsed.BitsLen() != 256 {
+		return "", errors.New("invalid standard tosctl wallet address")
+	}
+	return parsed.StringRaw(), nil
 }
 
 func validateExecutable(path string) (string, error) {
