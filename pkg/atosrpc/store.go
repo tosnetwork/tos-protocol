@@ -190,8 +190,10 @@ const (
 )
 
 type storedServiceQuote struct {
-	Quote []byte `json:"quote"`
-	Route Route  `json:"route"`
+	Quote           []byte `json:"quote"`
+	Route           Route  `json:"route"`
+	InputCommitment []byte `json:"input_commitment"`
+	MaxOutputBytes  uint64 `json:"max_output_bytes"`
 }
 
 type storedExecutionJob struct {

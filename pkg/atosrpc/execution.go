@@ -178,7 +178,14 @@ func (s *Server) QuoteExecution(
 		return nil, err
 	}
 	if err := s.store.update(func(tx *bolt.Tx) error {
-		return s.store.putJSON(tx, bucketServiceQuotes, quote.ServiceQuoteId, storedServiceQuote{Quote: encoded, Route: route})
+		inputCommitment, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req.Msg.InputCommitment)
+		if err != nil {
+			return err
+		}
+		return s.store.putJSON(tx, bucketServiceQuotes, quote.ServiceQuoteId, storedServiceQuote{
+			Quote: encoded, Route: route, InputCommitment: inputCommitment,
+			MaxOutputBytes: maxOutput,
+		})
 	}); err != nil {
 		return nil, err
 	}
@@ -302,14 +309,16 @@ func (s *Server) SubmitJob(
 				CreatedAtMS: s.now().UnixMilli(), UpdatedAtMS: s.now().UnixMilli(),
 			})
 		}
-		serviceQuote, route, err := s.loadServiceQuoteTx(tx, req.Msg.ServiceQuoteId)
+		serviceQuote, route, quotedInput, quotedMaxOutput, err := s.loadServiceQuoteTx(tx, req.Msg.ServiceQuoteId)
 		if err != nil {
 			return err
 		}
 		if serviceQuote.ProviderId != req.Msg.ProviderId || serviceQuote.CapabilityId != req.Msg.CapabilityId ||
 			serviceQuote.CapabilityVersion != req.Msg.CapabilityVersion ||
 			serviceQuote.ExpiresUnixMillis <= s.now().UnixMilli() ||
-			serviceQuote.ExecutionDeadlineUnixMillis != req.Msg.ExecutionDeadlineUnixMillis {
+			serviceQuote.ExecutionDeadlineUnixMillis != req.Msg.ExecutionDeadlineUnixMillis ||
+			!proto.Equal(quotedInput, req.Msg.InputCommitment) ||
+			(req.Msg.MaxOutputBytes > 0 && req.Msg.MaxOutputBytes > quotedMaxOutput) {
 			return failedPrecondition("QUOTE_MISMATCH", "service execution quote does not match job")
 		}
 		quote := new(atostosv1.QuoteCommitment)
@@ -320,7 +329,8 @@ func (s *Server) SubmitJob(
 		if !found || quote.Value == nil || quote.Value.PrincipalId != req.Msg.PrincipalId ||
 			quote.Value.ProviderId != req.Msg.ProviderId || quote.Value.CapabilityId != req.Msg.CapabilityId ||
 			quote.Value.CapabilityVersion != req.Msg.CapabilityVersion || quote.Value.TrustMode != req.Msg.TrustMode ||
-			quote.Value.ProofProfile != req.Msg.ProofProfile {
+			quote.Value.ProofProfile != req.Msg.ProofProfile ||
+			quote.Value.UnderlyingServiceQuoteRef != req.Msg.ServiceQuoteId {
 			return failedPrecondition("QUOTE_MISMATCH", "ATOS quote commitment does not match job")
 		}
 		escrow := new(atostosv1.Escrow)
@@ -403,20 +413,27 @@ func (s *Server) SubmitJob(
 	return connect.NewResponse(response), nil
 }
 
-func (s *Server) loadServiceQuoteTx(tx *bolt.Tx, id string) (*atostosv1.ServiceExecutionQuote, Route, error) {
+func (s *Server) loadServiceQuoteTx(tx *bolt.Tx, id string) (*atostosv1.ServiceExecutionQuote, Route, *atostosv1.Digest, uint64, error) {
 	var stored storedServiceQuote
 	found, err := s.store.getJSON(tx, bucketServiceQuotes, id, &stored)
 	if err != nil {
-		return nil, Route{}, err
+		return nil, Route{}, nil, 0, err
 	}
 	if !found {
-		return nil, Route{}, notFound("QUOTE_MISMATCH", "service execution quote not found")
+		return nil, Route{}, nil, 0, notFound("QUOTE_MISMATCH", "service execution quote not found")
 	}
 	quote := new(atostosv1.ServiceExecutionQuote)
 	if err := proto.Unmarshal(stored.Quote, quote); err != nil {
-		return nil, Route{}, err
+		return nil, Route{}, nil, 0, err
 	}
-	return quote, stored.Route, nil
+	inputCommitment := new(atostosv1.Digest)
+	if len(stored.InputCommitment) == 0 {
+		return nil, Route{}, nil, 0, failedPrecondition("QUOTE_MISMATCH", "service quote is missing its input commitment")
+	}
+	if err := proto.Unmarshal(stored.InputCommitment, inputCommitment); err != nil {
+		return nil, Route{}, nil, 0, err
+	}
+	return quote, stored.Route, inputCommitment, stored.MaxOutputBytes, nil
 }
 
 func initialExecutionProofStatus(mode atostosv1.TrustMode) *atostosv1.ProofStatus {
@@ -594,17 +611,30 @@ func (s *Server) completeDurableJob(jobID string, stored *storedExecutionJob, re
 		SignerAuthorizationId: authorization.Value.AuthorizationId,
 		CompletedUnixMillis:   completion.CompletedAt.UnixMilli(),
 	}
-	// Principal ID is recovered from the immutable quote commitment.
+	// Principal identity and the client-visible maximum charge are recovered
+	// from the immutable ATOS quote commitment before the receipt is signed.
+	// A caller must never need to mutate these signed bytes merely to settle
+	// the job; doing so would invalidate the execution-signature chain.
 	if err := s.store.view(func(tx *bolt.Tx) error {
 		quote := new(atostosv1.QuoteCommitment)
 		found, err := s.store.getProto(tx, bucketQuoteCommitments, record.QuoteId, quote)
 		if err != nil {
 			return err
 		}
-		if !found || quote.Value == nil {
-			return failedPrecondition("QUOTE_MISMATCH", "quote commitment disappeared before receipt issuance")
+		if !found || quote.Value == nil || quote.Value.TotalMax == nil {
+			return failedPrecondition("QUOTE_MISMATCH", "quote commitment disappeared or has no charge before receipt issuance")
 		}
 		receipt.PrincipalId = quote.Value.PrincipalId
+		receipt.ClientCharge = cloneMessage(quote.Value.TotalMax)
+		escrow := new(atostosv1.Escrow)
+		found, err = s.store.getProto(tx, bucketEscrows, record.EscrowId, escrow)
+		if err != nil {
+			return err
+		}
+		if !found || escrow.Reserved == nil || escrow.QuoteId != record.QuoteId {
+			return failedPrecondition("ESCROW_MISMATCH", "escrow disappeared before receipt issuance")
+		}
+		receipt.NetworkCharge = cloneMessage(escrow.Reserved)
 		return nil
 	}); err != nil {
 		return nil, err
