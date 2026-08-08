@@ -322,6 +322,15 @@ interrupted by a crash. None of these internal boundaries enable a public
 action unless the complete opt-in HTTP dependency set is installed; partial
 configuration prevents server construction.
 
+The ATOS-facing RPC Authority is now explicitly selectable. Its chain-backed
+implementation keeps transaction keys in a private Unix-socket publisher,
+then independently verifies the exact transaction, purpose comment, quorum,
+and finality through `pkg/toschain`. It intentionally remains Managed-only
+until a contract-backed escrow/settlement driver exists; a chain anchor is not
+misrepresented as economic escrow. Configuration and the publisher contract
+are documented in
+[`docs/atos-chain-authority.md`](docs/atos-chain-authority.md).
+
 The chain mapping, quorum rules, canonical references, startup composition,
 and local rehearsal are documented in
 [`docs/tos-chain-adapters.md`](docs/tos-chain-adapters.md).

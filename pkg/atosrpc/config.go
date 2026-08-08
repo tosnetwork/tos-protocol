@@ -31,7 +31,9 @@ var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@/-]{1,255}
 type Authority interface {
 	Network() string
 	Supports(mode TrustMode) bool
+	CheckReady(context.Context) error
 	Commit(ctx context.Context, kind, id, digest string) (NetworkReference, error)
+	Close() error
 }
 
 // Worker is the narrow Edge Core -> private Worker dependency used by
@@ -154,7 +156,7 @@ func (c Config) withDefaults() (Config, error) {
 		return Config{}, errors.New("ATOS RPC bearer token is required")
 	}
 	if c.Authority == nil {
-		c.Authority = NewLocalAuthority("tos-local")
+		return Config{}, errors.New("ATOS RPC authority is required")
 	}
 	if strings.TrimSpace(c.Authority.Network()) == "" {
 		return Config{}, errors.New("ATOS RPC authority network is required")

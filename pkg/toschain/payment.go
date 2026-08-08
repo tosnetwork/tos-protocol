@@ -42,6 +42,7 @@ type paymentQuorumState struct {
 	Payer         string `json:"payer,omitempty"`
 	Payee         string `json:"payee,omitempty"`
 	AmountNanoTOS uint64 `json:"amount_nano_tos,omitempty"`
+	Comment       string `json:"comment,omitempty"`
 }
 
 // FormatTransactionReference returns the canonical settlement identifier
@@ -106,7 +107,7 @@ func (a *Adapter) ObservePayment(
 	}
 	if reference.Network != a.network || !boundedReference(reference.AuthorizationID) ||
 		!boundedReference(reference.QuoteID) || !boundedReference(reference.RequestID) ||
-		reference.AmountNanoTOS == 0 {
+		reference.AmountNanoTOS == 0 || !boundedComment(reference.Comment) {
 		return chain.PaymentState{}, errors.New("invalid TOS payment observation reference")
 	}
 	payer, err := requireCanonicalAddress(reference.Payer)
@@ -162,6 +163,7 @@ func (a *Adapter) ObservePayment(
 		result.Payer = state.Payer
 		result.Payee = state.Payee
 		result.AmountNanoTOS = state.AmountNanoTOS
+		result.Comment = state.Comment
 	} else {
 		// Echoing the authenticated expectations keeps the negative result
 		// stateless. No claim about an observed transfer is made: Confirmed is
@@ -169,6 +171,7 @@ func (a *Adapter) ObservePayment(
 		result.Payer = payer
 		result.Payee = payee
 		result.AmountNanoTOS = reference.AmountNanoTOS
+		result.Comment = reference.Comment
 	}
 	return result, nil
 }
@@ -199,77 +202,78 @@ func readPayment(
 	if len(transactions) != 1 {
 		return paymentQuorumState{}, errors.New("exact TOS transaction query returned an unexpected count")
 	}
-	payer, payee, amount, err := decodePaymentTransaction(transactions[0], target)
+	payer, payee, amount, comment, err := decodePaymentTransaction(transactions[0], target)
 	if err != nil {
 		return paymentQuorumState{}, err
 	}
 	return paymentQuorumState{
 		Found: true, Payer: payer, Payee: payee, AmountNanoTOS: amount,
+		Comment: comment,
 	}, nil
 }
 
 func decodePaymentTransaction(
 	raw rawTransaction,
 	target transactionReference,
-) (payer string, payee string, amount uint64, err error) {
+) (payer string, payee string, amount uint64, comment string, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			payer, payee, amount = "", "", 0
+			payer, payee, amount, comment = "", "", 0, ""
 			err = fmt.Errorf("invalid transaction BOC: %v", recovered)
 		}
 	}()
 	if raw.Type != "raw.transaction" || raw.BlockID.Type != "tos.blockIdExt" ||
 		raw.TransactionID.Type != "internal.transactionId" ||
 		raw.BlockID.Workchain != target.workchain || raw.BlockID.Seqno == 0 || raw.Data == "" {
-		return "", "", 0, errors.New("invalid raw TOS transaction response")
+		return "", "", 0, "", errors.New("invalid raw TOS transaction response")
 	}
 	if _, parseErr := decodeBase64Hash(raw.BlockID.RootHash); parseErr != nil {
-		return "", "", 0, errors.New("invalid transaction block root hash")
+		return "", "", 0, "", errors.New("invalid transaction block root hash")
 	}
 	if _, parseErr := decodeBase64Hash(raw.BlockID.FileHash); parseErr != nil {
-		return "", "", 0, errors.New("invalid transaction block file hash")
+		return "", "", 0, "", errors.New("invalid transaction block file hash")
 	}
 	lt, parseErr := strconv.ParseUint(raw.TransactionID.LT, 10, 64)
 	if parseErr != nil || lt != target.lt {
-		return "", "", 0, errors.New("transaction logical time does not match reference")
+		return "", "", 0, "", errors.New("transaction logical time does not match reference")
 	}
 	responseHash, parseErr := base64.StdEncoding.DecodeString(raw.TransactionID.Hash)
 	if parseErr != nil || !bytes.Equal(responseHash, target.hash) {
-		return "", "", 0, errors.New("transaction hash does not match reference")
+		return "", "", 0, "", errors.New("transaction hash does not match reference")
 	}
 	boc, parseErr := base64.StdEncoding.DecodeString(raw.Data)
 	if parseErr != nil {
-		return "", "", 0, errors.New("invalid transaction BOC encoding")
+		return "", "", 0, "", errors.New("invalid transaction BOC encoding")
 	}
 	root, parseErr := cell.FromBOC(boc)
 	if parseErr != nil || !bytes.Equal(root.Hash(), target.hash) {
-		return "", "", 0, errors.New("transaction BOC hash does not match reference")
+		return "", "", 0, "", errors.New("transaction BOC hash does not match reference")
 	}
 	var transaction tlb.Transaction
 	if parseErr := tlb.LoadFromCell(&transaction, root.BeginParse()); parseErr != nil {
-		return "", "", 0, fmt.Errorf("decode TOS transaction: %w", parseErr)
+		return "", "", 0, "", fmt.Errorf("decode TOS transaction: %w", parseErr)
 	}
 	if transaction.LT != target.lt || !bytes.Equal(transaction.AccountAddr, target.account) ||
 		transaction.Now != raw.Utime ||
 		!strings.EqualFold(raw.Account, hex.EncodeToString(target.account)) || transaction.IO.In == nil ||
 		transaction.IO.In.MsgType != tlb.MsgTypeInternal {
-		return "", "", 0, errors.New("transaction does not identify an inbound internal payment")
+		return "", "", 0, "", errors.New("transaction does not identify an inbound internal payment")
 	}
 	message := transaction.IO.In.AsInternal()
 	if message == nil || message.Bounced || message.SrcAddr == nil || message.DstAddr == nil ||
 		message.SrcAddr.Type() != address.StdAddress || message.DstAddr.Type() != address.StdAddress {
-		return "", "", 0, errors.New("transaction inbound message is not a non-bounced standard transfer")
+		return "", "", 0, "", errors.New("transaction inbound message is not a non-bounced standard transfer")
 	}
 	payer = message.SrcAddr.StringRaw()
 	payee = message.DstAddr.StringRaw()
 	if payee != target.payee {
-		return "", "", 0, errors.New("transaction destination does not match payment reference")
+		return "", "", 0, "", errors.New("transaction destination does not match payment reference")
 	}
 	nano := message.Amount.Nano()
 	if nano.Sign() <= 0 || !nano.IsUint64() {
-		return "", "", 0, errors.New("transaction payment amount is outside uint64")
+		return "", "", 0, "", errors.New("transaction payment amount is outside uint64")
 	}
-	return payer, payee, nano.Uint64(), nil
+	return payer, payee, nano.Uint64(), message.Comment(), nil
 }
 
 func decodeBase64Hash(value string) ([]byte, error) {
@@ -282,4 +286,9 @@ func decodeBase64Hash(value string) ([]byte, error) {
 
 func boundedReference(value string) bool {
 	return len(value) >= 1 && len(value) <= 128 && strings.TrimSpace(value) == value
+}
+
+func boundedComment(value string) bool {
+	return len(value) <= 512 && strings.TrimSpace(value) == value &&
+		!strings.ContainsRune(value, '\x00')
 }

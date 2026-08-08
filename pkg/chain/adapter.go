@@ -50,9 +50,14 @@ type PaymentReference struct {
 	// expectations. Supplying them lets a stateless chain adapter return an
 	// exact negative observation without retaining an unbounded
 	// process-local transaction cache.
-	Payer              string
-	Payee              string
-	AmountNanoTOS      uint64
+	Payer         string
+	Payee         string
+	AmountNanoTOS uint64
+	// Comment, when non-empty, is the exact inbound internal-message comment
+	// expected for this transaction. It binds a finalized transfer to a
+	// purpose-specific application commitment rather than only to parties and
+	// amount.
+	Comment            string
 	MinimumMasterSeqno uint64
 }
 
@@ -68,6 +73,7 @@ type PaymentState struct {
 	AmountNanoTOS       uint64
 	Payer               string
 	Payee               string
+	Comment             string
 	ObservedMasterSeqno uint64
 	ObservedAt          time.Time
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -37,13 +38,22 @@ func Open(config Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	readyContext, cancel := context.WithTimeout(context.Background(), config.CallTimeout)
+	err = config.Authority.CheckReady(readyContext)
+	cancel()
+	if err != nil {
+		_ = config.Authority.Close()
+		return nil, fmt.Errorf("ATOS RPC authority is not ready: %w", err)
+	}
 	state, err := openStore(config.StatePath, config.MaxRecordBytes)
 	if err != nil {
+		_ = config.Authority.Close()
 		return nil, err
 	}
 	privateKey, err := state.signingKey()
 	if err != nil {
-		state.Close()
+		_ = state.Close()
+		_ = config.Authority.Close()
 		return nil, err
 	}
 	publicKey := append(ed25519.PublicKey(nil), privateKey.Public().(ed25519.PublicKey)...)
@@ -61,7 +71,14 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
-	return s.store.Close()
+	var storeErr, authorityErr error
+	if s.store != nil {
+		storeErr = s.store.Close()
+	}
+	if s.authority != nil {
+		authorityErr = s.authority.Close()
+	}
+	return errors.Join(storeErr, authorityErr)
 }
 
 func (s *Server) jobLock(jobID string) *sync.Mutex {
