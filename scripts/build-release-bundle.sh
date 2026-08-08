@@ -43,6 +43,7 @@ targets=(
   tos-receipt-signer
   tos-service-material
   tos-session-signer
+  tos-task-escrow-publisher
 )
 for target in "${targets[@]}"; do
   (

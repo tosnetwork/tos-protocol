@@ -388,3 +388,15 @@ tests/conformance/    schema and cross-language vector checks
   distribution systems rather than embedded control planes.
 
 Licensed under the [GNU General Public License v3.0](LICENSE).
+
+## TaskEscrow key-custody publisher
+
+Contract-backed Verified settlement uses the separate
+`tos-task-escrow-publisher` process. It keeps wallet/vault access outside
+`tos-atos-rpc`, exposes only an owner-private Unix socket, persists Action-ID
+deduplication, invokes `tosctl` with exact nanoTOS amounts, and returns a
+candidate transaction reference that `tos-protocol` independently verifies.
+
+See `docs/task-escrow-publisher.md`,
+`examples/tos-task-escrow-publisher.json`, and
+`deploy/systemd/tos-task-escrow-publisher.service`.

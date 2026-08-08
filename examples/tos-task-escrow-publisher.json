@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "network": "tos-mainnet",
+  "socketPath": "/run/tos/task-escrow-publisher.sock",
+  "statePath": "/var/lib/tos/task-escrow-publisher/state.db",
+  "maxBodyBytes": 524288,
+  "backend": {
+    "network": "tos-mainnet",
+    "tosctlBinary": "/usr/local/bin/tosctl",
+    "tosctlConfig": "/etc/tos/tosctl.json",
+    "vaultUrl": "file:///var/lib/tos/key-vault.json?master_key=REPLACE_ME",
+    "rpcUrl": "https://rpc-operator.example/jsonRPC",
+    "wallets": {
+      "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "atos-principal",
+      "0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": "atos-provider",
+      "0:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": "atos-verifier"
+    },
+    "executorWallet": "atos-verifier",
+    "workchain": 0,
+    "operationAmountNanoTOS": 10000000,
+    "commandTimeoutMillis": 120000,
+    "publishTimeoutMillis": 90000,
+    "recoveryWaitMillis": 30000,
+    "pollIntervalMillis": 1000,
+    "transactionLookback": 32
+  }
+}
