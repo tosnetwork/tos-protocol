@@ -4,11 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"flag"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +30,9 @@ func main() {
 		bearerToken  = flag.String("token", os.Getenv("TOS_ATOS_RPC_TOKEN"), "shared bearer token (or TOS_ATOS_RPC_TOKEN)")
 		workerSocket = flag.String("worker-socket", os.Getenv("TOS_WORKER_SOCKET"), "private tos-ai Worker Unix socket")
 		routeFile    = flag.String("routes", os.Getenv("TOS_ATOS_RPC_ROUTES"), "JSON array of public capability to Worker routes")
+		tlsCert      = flag.String("tls-cert", os.Getenv("TOS_ATOS_RPC_TLS_CERT"), "TLS server certificate PEM")
+		tlsKey       = flag.String("tls-key", os.Getenv("TOS_ATOS_RPC_TLS_KEY"), "TLS server private key PEM")
+		clientCA     = flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA PEM; enables required mTLS")
 	)
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -63,8 +69,13 @@ func main() {
 	}
 	defer server.Close()
 
+	tlsConfig, useTLS, err := buildServerTLS(*listen, *tlsCert, *tlsKey, *clientCA)
+	if err != nil {
+		logger.Error("configure ATOS RPC transport", "error", err)
+		os.Exit(2)
+	}
 	httpServer := &http.Server{
-		Addr: *listen, Handler: server.Handler(),
+		Addr: *listen, Handler: server.Handler(), TLSConfig: tlsConfig,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       35 * time.Second, WriteTimeout: 35 * time.Second,
 		IdleTimeout: 2 * time.Minute,
@@ -72,9 +83,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
-		logger.Info("ATOS TOS RPC listening", "address", *listen, "network", "tos-local", "worker_configured", worker != nil)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("ATOS RPC server failed", "error", err)
+		logger.Info("ATOS TOS RPC listening", "address", *listen, "network", "tos-local", "worker_configured", worker != nil, "tls", useTLS, "mtls", strings.TrimSpace(*clientCA) != "")
+		var serveErr error
+		if useTLS {
+			serveErr = httpServer.ListenAndServeTLS(*tlsCert, *tlsKey)
+		} else {
+			serveErr = httpServer.ListenAndServe()
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			logger.Error("ATOS RPC server failed", "error", serveErr)
 			stop()
 		}
 	}()
@@ -116,4 +133,48 @@ func envOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func buildServerTLS(listen, certFile, keyFile, clientCAFile string) (*tls.Config, bool, error) {
+	certFile = strings.TrimSpace(certFile)
+	keyFile = strings.TrimSpace(keyFile)
+	clientCAFile = strings.TrimSpace(clientCAFile)
+	if (certFile == "") != (keyFile == "") {
+		return nil, false, errors.New("TLS certificate and key must be configured together")
+	}
+	if certFile == "" {
+		if clientCAFile != "" {
+			return nil, false, errors.New("client CA requires TLS certificate and key")
+		}
+		if !loopbackListen(listen) {
+			return nil, false, errors.New("plain HTTP ATOS RPC may listen only on loopback")
+		}
+		return nil, false, nil
+	}
+	config := &tls.Config{MinVersion: tls.VersionTLS12}
+	if clientCAFile != "" {
+		pem, err := os.ReadFile(clientCAFile)
+		if err != nil {
+			return nil, false, err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, false, errors.New("client CA file contains no certificates")
+		}
+		config.ClientCAs = pool
+		config.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+	return config, true, nil
+}
+
+func loopbackListen(address string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

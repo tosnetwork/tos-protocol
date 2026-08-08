@@ -95,7 +95,10 @@ func (s *Server) verifyReceiptTx(tx *bolt.Tx, receipt *atostosv1.ExecutionReceip
 	}
 	if quote.Value.PrincipalId != receipt.PrincipalId || quote.Value.ProviderId != receipt.ProviderId ||
 		quote.Value.CapabilityId != receipt.CapabilityId || quote.Value.CapabilityVersion != receipt.CapabilityVersion ||
-		quote.Value.TrustMode != receipt.TrustMode || quote.Value.ProofProfile != receipt.ProofProfile {
+		quote.Value.TrustMode != receipt.TrustMode || quote.Value.ProofProfile != receipt.ProofProfile ||
+		quote.Value.TotalMax == nil || receipt.ClientCharge == nil ||
+		quote.Value.TotalMax.Amount != receipt.ClientCharge.Amount ||
+		quote.Value.TotalMax.Currency != receipt.ClientCharge.Currency {
 		return false, "QUOTE_BINDING_MISMATCH", nil, nil
 	}
 	escrow := new(atostosv1.Escrow)
@@ -105,7 +108,10 @@ func (s *Server) verifyReceiptTx(tx *bolt.Tx, receipt *atostosv1.ExecutionReceip
 	}
 	if !found || escrow.QuoteId != receipt.QuoteId || escrow.PrincipalId != receipt.PrincipalId ||
 		escrow.ProviderId != receipt.ProviderId || escrow.CapabilityId != receipt.CapabilityId ||
-		escrow.TrustMode != receipt.TrustMode || escrow.ProofProfile != receipt.ProofProfile {
+		escrow.TrustMode != receipt.TrustMode || escrow.ProofProfile != receipt.ProofProfile ||
+		escrow.Reserved == nil || receipt.NetworkCharge == nil ||
+		escrow.Reserved.Asset != receipt.NetworkCharge.Asset ||
+		escrow.Reserved.AtomicAmount != receipt.NetworkCharge.AtomicAmount {
 		return false, "ESCROW_BINDING_MISMATCH", nil, nil
 	}
 	authorization := new(atostosv1.ExecutionSignerAuthorization)
