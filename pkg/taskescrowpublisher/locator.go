@@ -41,9 +41,14 @@ type accountInformation struct {
 	FrozenHash        any           `json:"frozen_hash"`
 }
 
+// blockID mirrors every field the TOS JSON-RPC daemon's format_block_id_json
+// emits (validator-engine/json-rpc-server-shared.cpp). jsonstrict.Decode
+// rejects unknown fields, so shard must stay declared even though nothing
+// here reads it.
 type blockID struct {
 	Type      string `json:"@type"`
 	Workchain int32  `json:"workchain"`
+	Shard     string `json:"shard"`
 	Seqno     uint64 `json:"seqno"`
 	RootHash  string `json:"root_hash"`
 	FileHash  string `json:"file_hash"`

@@ -154,7 +154,7 @@ func TestAccountInformationAcceptsFullGetAddressInformationShape(t *testing.T) {
 		"code": "te6cckEB",
 		"data": "te6cckEB",
 		"last_transaction_id": {"@type": "internal.transactionId", "lt": "123", "hash": "aGFzaA=="},
-		"block_id": {"@type": "tos.blockIdExt", "workchain": 0, "seqno": 1, "root_hash": "r", "file_hash": "f"},
+		"block_id": {"@type": "tos.blockIdExt", "workchain": 0, "shard": "-9223372036854775808", "seqno": 1, "root_hash": "r", "file_hash": "f"},
 		"sync_utime": 1700000000,
 		"extra_currencies": [],
 		"state": "active",
@@ -176,7 +176,7 @@ func TestRawTransactionAcceptsFullGetTransactionsShape(t *testing.T) {
 	// rawTransaction drifting out of sync with that response.
 	payload := []byte(`[{
 		"@type": "raw.transaction",
-		"block_id": {"@type": "tos.blockIdExt", "workchain": 0, "seqno": 1, "root_hash": "r", "file_hash": "f"},
+		"block_id": {"@type": "tos.blockIdExt", "workchain": 0, "shard": "-9223372036854775808", "seqno": 1, "root_hash": "r", "file_hash": "f"},
 		"data": "te6cckEB",
 		"utime": 1700000000,
 		"transaction_id": {"@type": "internal.transactionId", "lt": "123", "hash": "aGFzaA=="},
