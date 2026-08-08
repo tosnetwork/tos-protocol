@@ -49,13 +49,20 @@ type blockID struct {
 	FileHash  string `json:"file_hash"`
 }
 
+// rawTransaction mirrors every field the TOS JSON-RPC getTransactions method
+// emits per transaction. jsonstrict.Decode rejects unknown fields, and fee/
+// in_msg_hash are only present when the daemon can parse the fee or the
+// transaction has an inbound message, so both must still be declared even
+// though matchTaskEscrowTransaction doesn't read them.
 type rawTransaction struct {
 	Type          string        `json:"@type"`
 	BlockID       blockID       `json:"block_id"`
 	Data          string        `json:"data"`
 	Utime         uint32        `json:"utime"`
 	TransactionID transactionID `json:"transaction_id"`
+	Fee           any           `json:"fee"`
 	Account       string        `json:"account"`
+	InMsgHash     any           `json:"in_msg_hash"`
 }
 
 type transactionCursor struct {

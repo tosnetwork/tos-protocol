@@ -168,3 +168,27 @@ func TestAccountInformationAcceptsFullGetAddressInformationShape(t *testing.T) {
 		t.Fatalf("unexpected decode result: %+v", info)
 	}
 }
+
+func TestRawTransactionAcceptsFullGetTransactionsShape(t *testing.T) {
+	// TOS JSON-RPC getTransactions includes fee and in_msg_hash whenever the
+	// daemon can parse the fee or the transaction carries an inbound message;
+	// jsonstrict.Decode rejects unknown fields, so this guards against
+	// rawTransaction drifting out of sync with that response.
+	payload := []byte(`[{
+		"@type": "raw.transaction",
+		"block_id": {"@type": "tos.blockIdExt", "workchain": 0, "seqno": 1, "root_hash": "r", "file_hash": "f"},
+		"data": "te6cckEB",
+		"utime": 1700000000,
+		"transaction_id": {"@type": "internal.transactionId", "lt": "123", "hash": "aGFzaA=="},
+		"fee": "1000000",
+		"account": "` + strings.Repeat("11", 32) + `",
+		"in_msg_hash": "aGFzaA=="
+	}]`)
+	var transactions []rawTransaction
+	if err := jsonstrict.Decode(payload, &transactions); err != nil {
+		t.Fatalf("decode getTransactions payload: %v", err)
+	}
+	if len(transactions) != 1 || transactions[0].TransactionID.LT != "123" {
+		t.Fatalf("unexpected decode result: %+v", transactions)
+	}
+}
