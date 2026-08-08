@@ -24,10 +24,21 @@ type transactionID struct {
 	Hash string `json:"hash"`
 }
 
+// accountInformation mirrors every field the TOS JSON-RPC getAddressInformation
+// method returns. jsonstrict.Decode rejects unknown fields, so this must stay
+// in sync with that response even though latest() only reads State and
+// LastTransactionID.
 type accountInformation struct {
 	Type              string        `json:"@type"`
-	State             string        `json:"state"`
+	Balance           any           `json:"balance"`
+	Code              any           `json:"code"`
+	Data              any           `json:"data"`
 	LastTransactionID transactionID `json:"last_transaction_id"`
+	BlockID           any           `json:"block_id"`
+	SyncUtime         any           `json:"sync_utime"`
+	ExtraCurrencies   any           `json:"extra_currencies"`
+	State             string        `json:"state"`
+	FrozenHash        any           `json:"frozen_hash"`
 }
 
 type blockID struct {

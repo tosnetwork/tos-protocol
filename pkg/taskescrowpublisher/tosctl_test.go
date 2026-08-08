@@ -142,3 +142,29 @@ func TestTaskStateViewAcceptsTosctlOutputFields(t *testing.T) {
 		t.Fatalf("unexpected decode result: %+v", state)
 	}
 }
+
+func TestAccountInformationAcceptsFullGetAddressInformationShape(t *testing.T) {
+	// TOS JSON-RPC getAddressInformation returns balance/code/data/block_id/
+	// sync_utime/extra_currencies/frozen_hash alongside @type/state/
+	// last_transaction_id; jsonstrict.Decode rejects unknown fields, so this
+	// guards against accountInformation drifting out of sync with that response.
+	payload := []byte(`{
+		"@type": "raw.fullAccountState",
+		"balance": "5000000000",
+		"code": "te6cckEB",
+		"data": "te6cckEB",
+		"last_transaction_id": {"@type": "internal.transactionId", "lt": "123", "hash": "aGFzaA=="},
+		"block_id": {"@type": "tos.blockIdExt", "workchain": 0, "seqno": 1, "root_hash": "r", "file_hash": "f"},
+		"sync_utime": 1700000000,
+		"extra_currencies": [],
+		"state": "active",
+		"frozen_hash": ""
+	}`)
+	var info accountInformation
+	if err := jsonstrict.Decode(payload, &info); err != nil {
+		t.Fatalf("decode getAddressInformation payload: %v", err)
+	}
+	if info.State != "active" || info.LastTransactionID.LT != "123" {
+		t.Fatalf("unexpected decode result: %+v", info)
+	}
+}
