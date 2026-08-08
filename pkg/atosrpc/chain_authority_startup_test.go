@@ -17,7 +17,7 @@ func TestChainAuthorityStartupConfigBuildsWithoutPrivateKeys(t *testing.T) {
 	}
 	defer authority.Close()
 	if authority.Network() != "tos-test" || !authority.Supports(TrustModeManaged) ||
-		authority.Supports(TrustModeVerified) {
+		!authority.Supports(TrustModeVerified) || authority.Supports(TrustModeNative) {
 		t.Fatalf("unexpected chain Authority mode support: network=%q", authority.Network())
 	}
 }

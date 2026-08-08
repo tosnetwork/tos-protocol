@@ -80,7 +80,56 @@ func TestBuildAuthorityLoadsStrictChainConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer authority.Close()
-	if authority.Network() != "tos-test" || authority.Supports(atosrpc.TrustModeVerified) {
-		t.Fatalf("unsafe chain Authority mode support: network=%q", authority.Network())
+	if authority.Network() != "tos-test" || !authority.Supports(atosrpc.TrustModeVerified) ||
+		authority.Supports(atosrpc.TrustModeNative) {
+		t.Fatalf("unexpected chain Authority mode support: network=%q", authority.Network())
+	}
+}
+
+func TestBuildEconomicDriverSelectsExplicitBackend(t *testing.T) {
+	if driver, err := buildEconomicDriver("disabled", ""); err != nil || driver != nil {
+		t.Fatalf("disabled driver rejected: driver=%v err=%v", driver, err)
+	}
+	if _, err := buildEconomicDriver("disabled", "/unused/config.json"); err == nil {
+		t.Fatal("disabled driver silently ignored a config")
+	}
+	if _, err := buildEconomicDriver("task-escrow", ""); err == nil {
+		t.Fatal("task-escrow driver without config was accepted")
+	}
+	if _, err := buildEconomicDriver("unknown", ""); err == nil {
+		t.Fatal("unknown economic driver was accepted")
+	}
+}
+
+func TestBuildEconomicDriverLoadsStrictTaskEscrowConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "economic.json")
+	config := `{
+	  "version":"1",
+	  "chain":{
+	    "version":"1",
+	    "network":"tos-test",
+	    "endpoints":[
+	      "https://rpc-one.example/jsonRPC",
+	      "https://rpc-two.example/jsonRPC",
+	      "https://rpc-three.example/jsonRPC"
+	    ],
+	    "quorum":2,
+	    "allowedServiceCodeHashes":["tvm-cell-sha256:1111111111111111111111111111111111111111111111111111111111111111"]
+	  },
+	  "allowedTaskEscrowCodeHashes":["tvm-cell-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+	  "verifierAddress":"0:3333333333333333333333333333333333333333333333333333333333333333",
+	  "publisherSocket":"` + filepath.Join(t.TempDir(), "task-escrow-publisher.sock") + `",
+	  "fundingOverheadNanoTOS":50
+	}`
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	driver, err := buildEconomicDriver("task-escrow", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+	if driver.Network() != "tos-test" {
+		t.Fatalf("unexpected economic driver network: %q", driver.Network())
 	}
 }

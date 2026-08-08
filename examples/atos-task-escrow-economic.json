@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "chain": {
+    "version": "1",
+    "network": "tos-mainnet",
+    "endpoints": [
+      "https://rpc-1.example/jsonRPC",
+      "https://rpc-2.example/jsonRPC",
+      "https://rpc-3.example/jsonRPC"
+    ],
+    "quorum": 2,
+    "allowedServiceCodeHashes": [
+      "tvm-cell-sha256:REPLACE_WITH_REVIEWED_AGENT_ACCOUNT_CODE_HASH"
+    ]
+  },
+  "allowedTaskEscrowCodeHashes": [
+    "tvm-cell-sha256:REPLACE_WITH_REVIEWED_TASK_ESCROW_CODE_HASH"
+  ],
+  "verifierAddress": "0:REPLACE_WITH_64_HEX_CHARACTERS",
+  "publisherSocket": "/run/tos/atos-task-escrow-publisher.sock",
+  "publisherTimeoutMillis": 20000,
+  "publisherMaxMessageBytes": 524288,
+  "publisherMaxConcurrent": 8,
+  "fundingOverheadNanoTOS": 50000000,
+  "reviewPeriodSeconds": 3600,
+  "driverCallTimeoutMillis": 30000,
+  "actionLifetimeSeconds": 300
+}

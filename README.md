@@ -322,14 +322,18 @@ interrupted by a crash. None of these internal boundaries enable a public
 action unless the complete opt-in HTTP dependency set is installed; partial
 configuration prevents server construction.
 
-The ATOS-facing RPC Authority is now explicitly selectable. Its chain-backed
+The ATOS-facing RPC Authority is explicitly selectable. Its chain-backed
 implementation keeps transaction keys in a private Unix-socket publisher,
 then independently verifies the exact transaction, purpose comment, quorum,
-and finality through `pkg/toschain`. It intentionally remains Managed-only
-until a contract-backed escrow/settlement driver exists; a chain anchor is not
-misrepresented as economic escrow. Configuration and the publisher contract
-are documented in
-[`docs/atos-chain-authority.md`](docs/atos-chain-authority.md).
+and finality through `pkg/toschain`. The separate Task Escrow Economic Driver
+maps Verified reserve, acceptance, result, provider settlement, refund, and
+dispute transitions onto the reviewed `tosnetwork/tos` Task Escrow contract.
+It verifies exact contract code, transactions, senders, message bodies,
+payouts, post-state, quorum, and finality without loading wallet keys into
+`tos-protocol`. A chain anchor is never misrepresented as economic escrow.
+Configuration and deployment boundaries are documented in
+[`docs/atos-chain-authority.md`](docs/atos-chain-authority.md) and
+[`docs/atos-contract-economic-driver.md`](docs/atos-contract-economic-driver.md).
 
 The chain mapping, quorum rules, canonical references, startup composition,
 and local rehearsal are documented in
@@ -352,8 +356,9 @@ cmd/tos-ard-registry/ ARD HTTP Registry entry point
 cmd/tos-quote-signer/ independent purpose-specific quote key process
 cmd/tos-receipt-signer/ independent purpose-specific receipt key process
 pkg/ard/              pinned ARD model, Worker catalog projection and validation
-pkg/chain/            bounded JSON-RPC adapter
-pkg/toschain/         quorum TOS authority, client-key and payment composition
+pkg/chain/            bounded JSON-RPC and typed chain action/state contracts
+pkg/economic/         contract-backed ATOS escrow/settlement driver
+pkg/toschain/         quorum TOS authority, payment, Task Escrow and finality composition
 pkg/edge/             safe public discovery server
 pkg/authorization/    controller manifest and runtime-envelope authorization
 pkg/identity/         domain-separated Ed25519 envelopes

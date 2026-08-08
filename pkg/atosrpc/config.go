@@ -12,6 +12,7 @@ import (
 	"time"
 
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
 )
 
@@ -139,6 +140,7 @@ type Config struct {
 	StatePath       string
 	BearerToken     string
 	Authority       Authority
+	EconomicDriver  economic.Driver
 	Worker          Worker
 	Router          Router
 	MaxMessageBytes int
@@ -160,6 +162,16 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if strings.TrimSpace(c.Authority.Network()) == "" {
 		return Config{}, errors.New("ATOS RPC authority network is required")
+	}
+	if c.EconomicDriver != nil {
+		if strings.TrimSpace(c.EconomicDriver.Network()) == "" ||
+			c.EconomicDriver.Network() != c.Authority.Network() {
+			return Config{}, errors.New("ATOS RPC economic driver network must match authority")
+		}
+		if !c.Authority.Supports(TrustModeVerified) ||
+			!c.EconomicDriver.Supports(economic.TrustModeVerified) {
+			return Config{}, errors.New("ATOS RPC economic driver requires a Verified-capable authority")
+		}
 	}
 	if c.MaxMessageBytes == 0 {
 		c.MaxMessageBytes = DefaultMaxMessageBytes

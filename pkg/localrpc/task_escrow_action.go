@@ -1,0 +1,323 @@
+package localrpc
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-protocol/pkg/chain"
+)
+
+const (
+	TaskEscrowActionPath                   = "/v1/economic/task-escrow/action"
+	TaskEscrowActionHealthPath             = "/healthz"
+	DefaultTaskEscrowActionTimeout         = 20 * time.Second
+	DefaultTaskEscrowActionMaxMessageBytes = 512 << 10
+	DefaultTaskEscrowActionMaxConcurrent   = 8
+	maxTaskEscrowActionTimeout             = 2 * time.Minute
+	maxTaskEscrowActionMessageBytes        = 2 << 20
+	maxTaskEscrowActionConcurrent          = 64
+)
+
+type TaskEscrowActionPublisherClientConfig struct {
+	SocketPath      string
+	Network         string
+	Timeout         time.Duration
+	MaxMessageBytes int
+	MaxConcurrent   int
+}
+
+func DefaultTaskEscrowActionPublisherClientConfig(
+	socketPath, network string,
+) TaskEscrowActionPublisherClientConfig {
+	return TaskEscrowActionPublisherClientConfig{
+		SocketPath: socketPath, Network: network,
+		Timeout:         DefaultTaskEscrowActionTimeout,
+		MaxMessageBytes: DefaultTaskEscrowActionMaxMessageBytes,
+		MaxConcurrent:   DefaultTaskEscrowActionMaxConcurrent,
+	}
+}
+
+type TaskEscrowActionPublisherClient struct {
+	httpClient      *http.Client
+	network         string
+	maxMessageBytes int
+	slots           chan struct{}
+
+	mutex     sync.Mutex
+	active    map[uint64]context.CancelFunc
+	nextID    uint64
+	closed    bool
+	requests  sync.WaitGroup
+	closeOnce sync.Once
+}
+
+type taskEscrowActionHealth struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	Network string `json:"network"`
+	Path    string `json:"path"`
+}
+
+func NewTaskEscrowActionPublisherClient(
+	config TaskEscrowActionPublisherClientConfig,
+) (*TaskEscrowActionPublisherClient, error) {
+	if strings.TrimSpace(config.Network) == "" || len(config.Network) > 64 ||
+		config.Timeout <= 0 || config.Timeout > maxTaskEscrowActionTimeout ||
+		config.MaxMessageBytes <= 0 || config.MaxMessageBytes > maxTaskEscrowActionMessageBytes ||
+		config.MaxConcurrent <= 0 || config.MaxConcurrent > maxTaskEscrowActionConcurrent {
+		return nil, errors.New("invalid task escrow action publisher configuration")
+	}
+	httpClient, err := HTTPClient(config.SocketPath, config.Timeout)
+	if err != nil {
+		return nil, fmt.Errorf("configure task escrow publisher transport: %w", err)
+	}
+	httpClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &TaskEscrowActionPublisherClient{
+		httpClient: httpClient, network: config.Network,
+		maxMessageBytes: config.MaxMessageBytes,
+		slots:           make(chan struct{}, config.MaxConcurrent),
+		active:          make(map[uint64]context.CancelFunc, config.MaxConcurrent),
+	}, nil
+}
+
+func (c *TaskEscrowActionPublisherClient) Publish(
+	ctx context.Context,
+	action chain.TaskEscrowAction,
+) (chain.TaskEscrowActionReceipt, error) {
+	if c == nil || c.httpClient == nil || c.maxMessageBytes <= 0 ||
+		c.slots == nil || c.active == nil {
+		return chain.TaskEscrowActionReceipt{}, errors.New("invalid task escrow action publisher client")
+	}
+	if ctx == nil {
+		return chain.TaskEscrowActionReceipt{}, errors.New("nil task escrow action context")
+	}
+	if err := validateTaskEscrowAction(action, c.network); err != nil {
+		return chain.TaskEscrowActionReceipt{}, err
+	}
+	encoded, err := json.Marshal(action)
+	if err != nil || len(encoded) > c.maxMessageBytes {
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action request exceeds message limit")
+	}
+	requestContext, finish, err := c.beginRequest(ctx)
+	if err != nil {
+		return chain.TaskEscrowActionReceipt{}, err
+	}
+	defer finish()
+	request, err := http.NewRequestWithContext(
+		requestContext, http.MethodPost, "http://unix"+TaskEscrowActionPath,
+		bytes.NewReader(encoded),
+	)
+	if err != nil {
+		return chain.TaskEscrowActionReceipt{}, errors.New("construct task escrow action request")
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return chain.TaskEscrowActionReceipt{}, contextErr
+		}
+		if requestContext.Err() != nil {
+			return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action publisher client is closed")
+		}
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action publisher unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action publisher rejected request")
+	}
+	if err := requireTaskEscrowJSON(response.Header.Get("Content-Type")); err != nil {
+		return chain.TaskEscrowActionReceipt{}, err
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(c.maxMessageBytes)+1))
+	if err != nil || len(data) > c.maxMessageBytes {
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action response exceeds message limit")
+	}
+	var receipt chain.TaskEscrowActionReceipt
+	if err := jsonstrict.Decode(data, &receipt); err != nil {
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action publisher returned an invalid receipt")
+	}
+	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
+		receipt.Network != action.Network || receipt.Kind != action.Kind ||
+		receipt.EscrowID != action.EscrowID || strings.TrimSpace(receipt.ContractAddress) == "" ||
+		strings.TrimSpace(receipt.Reference) == "" ||
+		(action.ContractAddress != "" && receipt.ContractAddress != action.ContractAddress) {
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action publisher changed the immutable request")
+	}
+	return receipt, nil
+}
+
+func (c *TaskEscrowActionPublisherClient) CheckReady(ctx context.Context) error {
+	if c == nil || c.httpClient == nil || c.slots == nil || c.active == nil {
+		return errors.New("invalid task escrow action publisher client")
+	}
+	requestContext, finish, err := c.beginRequest(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	request, err := http.NewRequestWithContext(
+		requestContext, http.MethodGet, "http://unix"+TaskEscrowActionHealthPath, nil,
+	)
+	if err != nil {
+		return errors.New("construct task escrow readiness request")
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return errors.New("task escrow action publisher unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return errors.New("task escrow action publisher is not ready")
+	}
+	if err := requireTaskEscrowJSON(response.Header.Get("Content-Type")); err != nil {
+		return err
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(c.maxMessageBytes)+1))
+	if err != nil || len(data) > c.maxMessageBytes {
+		return errors.New("task escrow readiness response exceeds message limit")
+	}
+	var health taskEscrowActionHealth
+	if err := jsonstrict.Decode(data, &health); err != nil ||
+		health.Status != "ready" || health.Version != chain.TaskEscrowActionVersion ||
+		health.Network != c.network || health.Path != TaskEscrowActionPath {
+		return errors.New("task escrow action publisher returned an invalid readiness response")
+	}
+	return nil
+}
+
+func validateTaskEscrowAction(action chain.TaskEscrowAction, network string) error {
+	if action.Version != chain.TaskEscrowActionVersion || action.Network != network ||
+		strings.TrimSpace(action.ActionID) == "" || strings.TrimSpace(action.EscrowID) == "" ||
+		strings.TrimSpace(action.Creator) == "" || strings.TrimSpace(action.Agent) == "" ||
+		action.BudgetNanoTOS == 0 || action.DeadlineUnix == 0 || action.ReviewPeriod < 3600 ||
+		strings.TrimSpace(action.PolicyHash) == "" || strings.TrimSpace(action.PermissionHash) == "" ||
+		action.ExpiresUnixMillis <= 0 {
+		return errors.New("invalid task escrow action")
+	}
+	switch action.Kind {
+	case chain.TaskEscrowActionDeploy:
+		if action.ContractAddress != "" || action.BudgetNanoTOS == 0 ||
+			action.FundingNanoTOS < action.BudgetNanoTOS {
+			return errors.New("invalid task escrow deployment action")
+		}
+	case chain.TaskEscrowActionAccept, chain.TaskEscrowActionCancel,
+		chain.TaskEscrowActionTimeout, chain.TaskEscrowActionReject:
+		if action.ContractAddress == "" || action.QueryID == 0 || action.ExpectedBodyHash == "" {
+			return errors.New("invalid task escrow operation action")
+		}
+	case chain.TaskEscrowActionResult:
+		if action.ContractAddress == "" || action.QueryID == 0 || action.ResultHash == "" ||
+			action.EvidenceHash == "" || action.ExpectedBodyHash == "" {
+			return errors.New("invalid task escrow result action")
+		}
+	case chain.TaskEscrowActionSettle, chain.TaskEscrowActionResolve:
+		if action.ContractAddress == "" || action.QueryID == 0 || action.ExpectedBodyHash == "" ||
+			action.PayoutNanoTOS > action.BudgetNanoTOS {
+			return errors.New("invalid task escrow payout action")
+		}
+	case chain.TaskEscrowActionDispute:
+		if action.ContractAddress == "" || action.QueryID == 0 || action.DisputeHash == "" ||
+			action.ExpectedBodyHash == "" {
+			return errors.New("invalid task escrow dispute action")
+		}
+	default:
+		return errors.New("unsupported task escrow action")
+	}
+	return nil
+}
+
+func requireTaskEscrowJSON(value string) error {
+	mediaType, parameters, err := mime.ParseMediaType(value)
+	charset := strings.ToLower(parameters["charset"])
+	if err != nil || mediaType != "application/json" ||
+		(len(parameters) > 1 || (len(parameters) == 1 && charset != "utf-8")) {
+		return errors.New("task escrow action publisher returned an invalid content type")
+	}
+	return nil
+}
+
+func (c *TaskEscrowActionPublisherClient) beginRequest(
+	ctx context.Context,
+) (context.Context, func(), error) {
+	if ctx == nil {
+		return nil, nil, errors.New("nil task escrow request context")
+	}
+	select {
+	case c.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+	requestContext, cancel := context.WithCancel(ctx)
+	c.mutex.Lock()
+	if c.closed {
+		c.mutex.Unlock()
+		cancel()
+		<-c.slots
+		return nil, nil, errors.New("task escrow action publisher client is closed")
+	}
+	var id uint64
+	for {
+		c.nextID++
+		if c.nextID == 0 {
+			c.nextID++
+		}
+		id = c.nextID
+		if _, exists := c.active[id]; !exists {
+			break
+		}
+	}
+	c.active[id] = cancel
+	c.requests.Add(1)
+	c.mutex.Unlock()
+	var once sync.Once
+	finish := func() {
+		once.Do(func() {
+			c.mutex.Lock()
+			delete(c.active, id)
+			c.mutex.Unlock()
+			cancel()
+			<-c.slots
+			c.requests.Done()
+		})
+	}
+	return requestContext, finish, nil
+}
+
+func (c *TaskEscrowActionPublisherClient) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeOnce.Do(func() {
+		c.mutex.Lock()
+		c.closed = true
+		cancels := make([]context.CancelFunc, 0, len(c.active))
+		for _, cancel := range c.active {
+			cancels = append(cancels, cancel)
+		}
+		c.mutex.Unlock()
+		for _, cancel := range cancels {
+			cancel()
+		}
+		if c.httpClient != nil {
+			c.httpClient.CloseIdleConnections()
+		}
+		c.requests.Wait()
+	})
+	return nil
+}
+
+var _ chain.TaskEscrowActionPublisher = (*TaskEscrowActionPublisherClient)(nil)

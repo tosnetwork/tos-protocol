@@ -159,6 +159,29 @@ func (s *Server) CommitCapabilityManifest(
 			response.CommitmentRef = cloneMessage(existing.ManifestRef)
 			return nil
 		}
+		// Resolve the provider identity before activating economic modes. A
+		// self-asserted provider can publish a Managed capability, but it cannot
+		// advertise Verified merely because the server has a chain driver.
+		providerIdentity := new(atostosv1.AgentIdentity)
+		providerFound, err := s.store.getProto(tx, bucketIdentities, req.Msg.ProviderId, providerIdentity)
+		if err != nil {
+			return err
+		}
+		if !providerFound {
+			providerIdentity = &atostosv1.AgentIdentity{
+				AgentId:      req.Msg.ProviderId,
+				CanonicalUri: "tos://agent/" + req.Msg.ProviderId,
+				Controllers:  []string{req.Msg.ProviderId}, Assurance: "self_asserted",
+				UpdatedUnixMillis: s.now().UnixMilli(),
+				IdentityRef:       &NetworkReference{Network: s.authority.Network(), Reference: "atosrpc:self-asserted:" + req.Msg.ProviderId},
+			}
+			if err := s.store.putProto(tx, bucketIdentities, req.Msg.ProviderId, providerIdentity); err != nil {
+				return err
+			}
+			if err := tx.Bucket(bucketIdentityURIs).Put([]byte(providerIdentity.CanonicalUri), []byte(providerIdentity.AgentId)); err != nil {
+				return err
+			}
+		}
 		activeModes := make([]atostosv1.TrustMode, 0, len(req.Msg.RequestedTrustModes))
 		seenModes := make(map[atostosv1.TrustMode]struct{})
 		for _, mode := range req.Msg.RequestedTrustModes {
@@ -169,9 +192,15 @@ func (s *Server) CommitCapabilityManifest(
 				continue
 			}
 			seenModes[mode] = struct{}{}
-			if s.authority.Supports(mode) {
-				activeModes = append(activeModes, mode)
+			if !s.supportsMode(mode) {
+				continue
 			}
+			if mode != TrustModeManaged {
+				if _, err := verifiedTOSController(providerIdentity, s.authority.Network()); err != nil {
+					continue
+				}
+			}
+			activeModes = append(activeModes, mode)
 		}
 		manifestDigest, err := protoDigest("ATOS-TOS-CAPABILITY-MANIFEST-V1", req.Msg)
 		if err != nil {
@@ -193,36 +222,16 @@ func (s *Server) CommitCapabilityManifest(
 			ManifestRef:    &manifestRef, OwnershipRef: &ownershipRef,
 			ActiveTrustModes: activeModes, UpdatedUnixMillis: s.now().UnixMilli(),
 		}
-		if route, found := s.router.Resolve(req.Msg.ProviderId, req.Msg.CapabilityId, req.Msg.Version); found {
-			identity.Endpoints = []string{"worker://" + route.ServiceID + "/" + route.Operation + "?model=" + route.Model}
+		if s.router != nil {
+			if route, found := s.router.Resolve(req.Msg.ProviderId, req.Msg.CapabilityId, req.Msg.Version); found {
+				identity.Endpoints = []string{"worker://" + route.ServiceID + "/" + route.Operation + "?model=" + route.Model}
+			}
 		}
 		if err := s.store.putProto(tx, bucketCapabilities, key, identity); err != nil {
 			return err
 		}
 		if err := tx.Bucket(bucketCapabilityLatest).Put([]byte(req.Msg.CapabilityId), []byte(req.Msg.Version)); err != nil {
 			return err
-		}
-		// A committed provider capability creates only a self-asserted local
-		// identity unless startup configuration supplied stronger assurance.
-		providerIdentity := new(atostosv1.AgentIdentity)
-		providerFound, err := s.store.getProto(tx, bucketIdentities, req.Msg.ProviderId, providerIdentity)
-		if err != nil {
-			return err
-		}
-		if !providerFound {
-			providerIdentity = &atostosv1.AgentIdentity{
-				AgentId:      req.Msg.ProviderId,
-				CanonicalUri: "tos://agent/" + req.Msg.ProviderId,
-				Controllers:  []string{req.Msg.ProviderId}, Assurance: "self_asserted",
-				UpdatedUnixMillis: s.now().UnixMilli(),
-				IdentityRef:       &NetworkReference{Network: s.authority.Network(), Reference: "atosrpc:self-asserted:" + req.Msg.ProviderId},
-			}
-			if err := s.store.putProto(tx, bucketIdentities, req.Msg.ProviderId, providerIdentity); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketIdentityURIs).Put([]byte(providerIdentity.CanonicalUri), []byte(providerIdentity.AgentId)); err != nil {
-				return err
-			}
 		}
 		response.Capability = identity
 		response.Created = true

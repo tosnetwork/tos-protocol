@@ -106,18 +106,19 @@ The v1 chain-backed Authority proves finalized **non-economic commitment
 anchors**. Managed `escrow`, `escrow-release`, and `settlement` transitions keep
 explicit `tos-local` references and are never published as TOS anchors; a chain
 transaction in those fields would misleadingly imply custody or payment
-finality. Therefore the Authority currently advertises:
+finality.
+
+The Authority supplies the commitment half of Verified, but the server enables
+Verified only when it is paired with a contract-backed Economic Driver on the
+same network. The Task Escrow driver is documented in
+[`atos-contract-economic-driver.md`](atos-contract-economic-driver.md). A
+generic transaction anchor remains insufficient by itself.
 
 ```text
-managed  -> supported
-verified -> fail closed
-native   -> fail closed
+chain Authority only                    -> managed
+chain Authority + Task Escrow driver    -> managed + verified
+native                                  -> fail closed
 ```
-
-This distinction is mandatory. Activating `tos_verified_v1` requires a
-contract-backed economic driver that independently verifies reserve, release,
-provider settlement, and refund transitions. A generic transaction anchor is
-not a substitute for those guarantees.
 
 The next economic extension should reuse the same pattern:
 

@@ -85,7 +85,7 @@ func (s *Server) GetProviderStatus(
 			response.CapacityRevision = capabilities.CapacityRevision
 			if capability != nil {
 				response.AvailableTrustModes = append([]atostosv1.TrustMode(nil), capability.ActiveTrustModes...)
-			} else if s.authority.Supports(atostosv1.TrustMode_TRUST_MODE_MANAGED) {
+			} else if s.supportsMode(atostosv1.TrustMode_TRUST_MODE_MANAGED) {
 				response.AvailableTrustModes = []atostosv1.TrustMode{atostosv1.TrustMode_TRUST_MODE_MANAGED}
 			}
 			return connect.NewResponse(response), nil
@@ -119,7 +119,7 @@ func (s *Server) QuoteExecution(
 	if err := validateModeProfile(req.Msg.IntendedTrustMode, req.Msg.IntendedProofProfile); err != nil {
 		return nil, err
 	}
-	if err := ensureSupported(s.authority, req.Msg.IntendedTrustMode); err != nil {
+	if err := s.ensureSupported(req.Msg.IntendedTrustMode); err != nil {
 		return nil, err
 	}
 	if req.Msg.ExecutionDeadlineUnixMillis <= s.now().UnixMilli() {
@@ -247,7 +247,7 @@ func (s *Server) SubmitJob(
 	if err := validateModeProfile(req.Msg.TrustMode, req.Msg.ProofProfile); err != nil {
 		return nil, err
 	}
-	if err := ensureSupported(s.authority, req.Msg.TrustMode); err != nil {
+	if err := s.ensureSupported(req.Msg.TrustMode); err != nil {
 		return nil, err
 	}
 	if !digestEqual(req.Msg.InputCommitment, req.Msg.Input) {
@@ -398,6 +398,22 @@ func (s *Server) SubmitJob(
 	}
 	if response.JobId != "" {
 		return connect.NewResponse(response), nil
+	}
+	if req.Msg.TrustMode == TrustModeVerified {
+		if err := s.acceptEconomicEscrow(ctx, req.Msg.EscrowId, req.Msg.ProviderId); err != nil {
+			return nil, err
+		}
+		_, record, decodeErr := decodeExecutionJob(stored)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if record.ProofStatus == nil {
+			record.ProofStatus = initialExecutionProofStatus(record.TrustMode)
+		}
+		record.ProofStatus.Escrow = atostosv1.VerificationStatus_VERIFICATION_STATUS_VERIFIED
+		if err := s.updateStoredJobRecord(req.Msg.JobId, &stored, record); err != nil {
+			return nil, err
+		}
 	}
 	if newSubmission {
 		response, err = s.invokeDurableJob(ctx, req.Msg.JobId, stored)

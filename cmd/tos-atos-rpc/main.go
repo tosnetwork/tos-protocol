@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/atosrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
 )
 
@@ -35,6 +36,8 @@ func main() {
 		clientCA        = flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA PEM; enables required mTLS")
 		authorityMode   = flag.String("authority", envOr("TOS_ATOS_RPC_AUTHORITY", "local"), "Authority backend: local or chain")
 		authorityConfig = flag.String("authority-config", os.Getenv("TOS_ATOS_RPC_AUTHORITY_CONFIG"), "strict JSON chain Authority configuration")
+		economicMode    = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
+		economicConfig  = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
 	)
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -66,9 +69,16 @@ func main() {
 		logger.Error("configure ATOS RPC authority", "error", err)
 		os.Exit(2)
 	}
+	economicDriver, err := buildEconomicDriver(*economicMode, *economicConfig)
+	if err != nil {
+		_ = authority.Close()
+		logger.Error("configure ATOS RPC economic driver", "error", err)
+		os.Exit(2)
+	}
 	server, err := atosrpc.Open(atosrpc.Config{
 		StatePath: *statePath, BearerToken: *bearerToken,
-		Authority: authority, Worker: worker, Router: router,
+		Authority: authority, EconomicDriver: economicDriver,
+		Worker: worker, Router: router,
 	})
 	if err != nil {
 		logger.Error("open ATOS RPC server", "error", err)
@@ -90,7 +100,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
-		logger.Info("ATOS TOS RPC listening", "address", *listen, "network", authority.Network(), "authority", strings.ToLower(strings.TrimSpace(*authorityMode)), "worker_configured", worker != nil, "tls", useTLS, "mtls", strings.TrimSpace(*clientCA) != "")
+		logger.Info("ATOS TOS RPC listening", "address", *listen, "network", authority.Network(),
+			"authority", strings.ToLower(strings.TrimSpace(*authorityMode)),
+			"economic_driver", strings.ToLower(strings.TrimSpace(*economicMode)),
+			"worker_configured", worker != nil, "tls", useTLS,
+			"mtls", strings.TrimSpace(*clientCA) != "")
 		var serveErr error
 		if useTLS {
 			serveErr = httpServer.ListenAndServeTLS(*tlsCert, *tlsKey)
@@ -167,6 +181,41 @@ func buildAuthority(mode, configPath string) (atosrpc.Authority, error) {
 		return config.Build()
 	default:
 		return nil, errors.New("unsupported ATOS RPC authority backend")
+	}
+}
+
+func buildEconomicDriver(mode, configPath string) (economic.Driver, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	configPath = strings.TrimSpace(configPath)
+	switch mode {
+	case "disabled":
+		if configPath != "" {
+			return nil, errors.New("economic-config requires task-escrow economic driver")
+		}
+		return nil, nil
+	case "task-escrow":
+		if configPath == "" {
+			return nil, errors.New("task-escrow economic driver requires economic-config")
+		}
+		info, err := os.Stat(configPath)
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() || info.Size() <= 0 ||
+			info.Size() > economic.MaxTaskEscrowConfigBytes {
+			return nil, errors.New("Task Escrow economic config file is outside bounds")
+		}
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+		config, err := economic.DecodeTaskEscrowStartupConfigJSON(data)
+		if err != nil {
+			return nil, err
+		}
+		return config.Build()
+	default:
+		return nil, errors.New("unsupported ATOS RPC economic driver")
 	}
 }
 
