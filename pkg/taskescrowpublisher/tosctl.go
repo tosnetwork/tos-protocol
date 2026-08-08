@@ -135,6 +135,18 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 	}, nil
 }
 
+// walletLsEntry mirrors every field tosctl's `wallet ls --format json` emits.
+// jsonstrict.Decode rejects unknown fields, so this must stay in sync with
+// tosctl's WalletLsView even though CheckReady only reads Name and Address.
+type walletLsEntry struct {
+	Name       string `json:"name"`
+	Address    string `json:"address"`
+	Balance    any    `json:"balance"`
+	State      any    `json:"state"`
+	WalletType any    `json:"wallet_type"`
+	Seqno      any    `json:"seqno"`
+}
+
 func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if b == nil || b.locator == nil || b.locator.client == nil {
 		return errors.New("invalid tosctl publisher backend")
@@ -147,10 +159,7 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list tosctl wallets: %w", err)
 	}
-	var listed []struct {
-		Name    string `json:"name"`
-		Address string `json:"address"`
-	}
+	var listed []walletLsEntry
 	if err := jsonstrict.Decode(output, &listed); err != nil {
 		return errors.New("tosctl wallet list is not valid JSON")
 	}

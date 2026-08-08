@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 )
 
@@ -44,6 +45,37 @@ func TestTosctlArgumentsPreserveAtomicEconomics(t *testing.T) {
 		if !strings.Contains(settle, required) {
 			t.Fatalf("settle args missing %q: %s", required, settle)
 		}
+	}
+}
+
+func TestWalletLsEntryAcceptsTosctlOutputFields(t *testing.T) {
+	// tosctl's `wallet ls --format json` emits balance/state/wallet_type/seqno
+	// alongside name/address; jsonstrict.Decode rejects unknown fields, so this
+	// guards against walletLsEntry drifting out of sync with that output.
+	payload := []byte(`[
+		{
+			"name": "creator",
+			"address": "0:` + strings.Repeat("11", 32) + `",
+			"balance": "12.5",
+			"state": "active",
+			"wallet_type": "V3R2",
+			"seqno": 3
+		},
+		{
+			"name": "provider",
+			"address": null,
+			"balance": null,
+			"state": null,
+			"wallet_type": null,
+			"seqno": null
+		}
+	]`)
+	var listed []walletLsEntry
+	if err := jsonstrict.Decode(payload, &listed); err != nil {
+		t.Fatalf("decode tosctl wallet ls payload: %v", err)
+	}
+	if len(listed) != 2 || listed[0].Name != "creator" || listed[1].Address != "" {
+		t.Fatalf("unexpected decode result: %+v", listed)
 	}
 }
 
