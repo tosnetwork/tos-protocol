@@ -53,7 +53,7 @@ func main() {
 	}
 	publisher, err := taskescrowpublisher.Open(taskescrowpublisher.Config{
 		Network: config.Network, StatePath: config.StatePath,
-		Backend: backend, MaxBodyBytes: config.MaxBodyBytes,
+		Backend: backend, MaxBodyBytes: config.MaxBodyBytes, Logger: logger,
 	})
 	if err != nil {
 		_ = backend.Close()

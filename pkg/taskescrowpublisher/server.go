@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"strings"
@@ -29,6 +30,7 @@ type Config struct {
 	Backend      Backend
 	MaxBodyBytes int64
 	Now          Clock
+	Logger       *slog.Logger
 }
 
 type Server struct {
@@ -37,6 +39,7 @@ type Server struct {
 	store   *actionStore
 	maxBody int64
 	now     Clock
+	logger  *slog.Logger
 	mu      sync.Mutex
 	close   sync.Once
 }
@@ -54,13 +57,16 @@ func Open(config Config) (*Server, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
+	if config.Logger == nil {
+		config.Logger = slog.Default()
+	}
 	state, err := openActionStore(config.StatePath)
 	if err != nil {
 		return nil, err
 	}
 	return &Server{
 		network: config.Network, backend: config.Backend, store: state,
-		maxBody: config.MaxBodyBytes, now: config.Now,
+		maxBody: config.MaxBodyBytes, now: config.Now, logger: config.Logger,
 	}, nil
 }
 
@@ -126,7 +132,13 @@ func (s *Server) publish(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var action chain.TaskEscrowAction
-	if err := jsonstrict.Decode(data, &action); err != nil || validateAction(action, s.network, s.now()) != nil {
+	if err := jsonstrict.Decode(data, &action); err != nil {
+		s.logger.Error("publisher rejected malformed action", "error", err)
+		writePublisherError(writer, http.StatusBadRequest)
+		return
+	}
+	if err := validateAction(action, s.network, s.now()); err != nil {
+		s.logger.Error("publisher rejected invalid action", "action_id", action.ActionID, "kind", action.Kind, "error", err)
 		writePublisherError(writer, http.StatusBadRequest)
 		return
 	}
@@ -138,6 +150,7 @@ func (s *Server) publish(writer http.ResponseWriter, request *http.Request) {
 		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			status = http.StatusGatewayTimeout
 		}
+		s.logger.Error("publisher failed to process action", "action_id", action.ActionID, "kind", action.Kind, "error", err)
 		writePublisherError(writer, status)
 		return
 	}
