@@ -41,21 +41,33 @@ type accountInformation struct {
 	FrozenHash        any           `json:"frozen_hash"`
 }
 
+// blockID mirrors every field the TOS JSON-RPC daemon's format_block_id_json
+// emits (validator-engine/json-rpc-server-shared.cpp). jsonstrict.Decode
+// rejects unknown fields, so shard must stay declared even though nothing
+// here reads it.
 type blockID struct {
 	Type      string `json:"@type"`
 	Workchain int32  `json:"workchain"`
+	Shard     string `json:"shard"`
 	Seqno     uint64 `json:"seqno"`
 	RootHash  string `json:"root_hash"`
 	FileHash  string `json:"file_hash"`
 }
 
+// rawTransaction mirrors every field the TOS JSON-RPC getTransactions method
+// emits per transaction. jsonstrict.Decode rejects unknown fields, and fee/
+// in_msg_hash are only present when the daemon can parse the fee or the
+// transaction has an inbound message, so both must still be declared even
+// though matchTaskEscrowTransaction doesn't read them.
 type rawTransaction struct {
 	Type          string        `json:"@type"`
 	BlockID       blockID       `json:"block_id"`
 	Data          string        `json:"data"`
 	Utime         uint32        `json:"utime"`
 	TransactionID transactionID `json:"transaction_id"`
+	Fee           any           `json:"fee"`
 	Account       string        `json:"account"`
+	InMsgHash     any           `json:"in_msg_hash"`
 }
 
 type transactionCursor struct {
