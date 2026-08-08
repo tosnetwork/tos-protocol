@@ -192,6 +192,27 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	return nil
 }
 
+// taskStateView mirrors every field tosctl's `agent task build-state
+// --format json` emits. jsonstrict.Decode rejects unknown fields, so this
+// must stay in sync with tosctl's AgentTaskStateView even though Prepare
+// only reads Address, PermissionHash, and PolicyHash.
+type taskStateView struct {
+	Creator        string `json:"creator"`
+	AssignedAgent  any    `json:"assigned_agent"`
+	Verifier       any    `json:"verifier"`
+	PermissionID   any    `json:"permission_id"`
+	PermissionHash string `json:"permission_hash"`
+	Budget         string `json:"budget"`
+	Deadline       uint64 `json:"deadline"`
+	ReviewPeriod   uint32 `json:"review_period"`
+	Workchain      int32  `json:"workchain"`
+	Address        string `json:"address"`
+	PolicyHash     string `json:"policy_hash"`
+	StateInitBOC   string `json:"state_init_boc"`
+	CodeHash       string `json:"code_hash"`
+	DataHash       string `json:"data_hash"`
+}
+
 func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowAction) (PreparedAction, error) {
 	if b == nil || action.Network != b.network {
 		return PreparedAction{}, errors.New("task escrow action network mismatch")
@@ -205,11 +226,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 		if err != nil {
 			return PreparedAction{}, fmt.Errorf("derive TaskEscrow address: %w", err)
 		}
-		var state struct {
-			Address        string `json:"address"`
-			PermissionHash string `json:"permission_hash"`
-			PolicyHash     string `json:"policy_hash"`
-		}
+		var state taskStateView
 		if err := jsonstrict.Decode(output, &state); err != nil {
 			return PreparedAction{}, errors.New("tosctl build-state returned invalid JSON")
 		}

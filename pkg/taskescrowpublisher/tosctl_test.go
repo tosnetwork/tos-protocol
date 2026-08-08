@@ -112,3 +112,33 @@ func TestCanonicalWalletAddressAcceptsTosctlPresentationWithoutWeakeningReferenc
 		t.Fatal("public chain references must continue rejecting user-friendly addresses")
 	}
 }
+
+func TestTaskStateViewAcceptsTosctlOutputFields(t *testing.T) {
+	// tosctl's `agent task build-state --format json` emits every field of
+	// AgentTaskStateView, not just address/permission_hash/policy_hash;
+	// jsonstrict.Decode rejects unknown fields, so this guards against
+	// taskStateView drifting out of sync with that output.
+	payload := []byte(`{
+		"creator": "0:` + strings.Repeat("11", 32) + `",
+		"assigned_agent": "0:` + strings.Repeat("22", 32) + `",
+		"verifier": null,
+		"permission_id": null,
+		"permission_hash": "` + strings.Repeat("aa", 32) + `",
+		"budget": "5",
+		"deadline": 1900000000,
+		"review_period": 3600,
+		"workchain": 0,
+		"address": "0:` + strings.Repeat("33", 32) + `",
+		"policy_hash": "` + strings.Repeat("bb", 32) + `",
+		"state_init_boc": "base64==",
+		"code_hash": "` + strings.Repeat("cc", 32) + `",
+		"data_hash": "` + strings.Repeat("dd", 32) + `"
+	}`)
+	var state taskStateView
+	if err := jsonstrict.Decode(payload, &state); err != nil {
+		t.Fatalf("decode tosctl build-state payload: %v", err)
+	}
+	if state.Address != "0:"+strings.Repeat("33", 32) || state.PolicyHash != strings.Repeat("bb", 32) {
+		t.Fatalf("unexpected decode result: %+v", state)
+	}
+}
