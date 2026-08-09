@@ -844,6 +844,8 @@ func (s *Server) CancelJob(
 	return connect.NewResponse(&atostosv1.CancelJobResponse{Job: record, Accepted: accepted}), nil
 }
 
+const maxStreamChunkBytes = uint64(256 << 10)
+
 func (s *Server) StreamJob(
 	ctx context.Context,
 	req *connect.Request[atostosv1.StreamJobRequest],
@@ -854,6 +856,16 @@ func (s *Server) StreamJob(
 	}
 	if err := validateReadContext(req.Msg.Context, s.now()); err != nil {
 		return err
+	}
+	if err := requiredIdentifier("job_id", req.Msg.JobId); err != nil {
+		return err
+	}
+	chunkSize := req.Msg.MaxChunkBytes
+	if chunkSize == 0 {
+		chunkSize = maxStreamChunkBytes
+	}
+	if chunkSize > maxStreamChunkBytes {
+		return invalid("INVALID_ARGUMENT", "max_chunk_bytes exceeds the stream safety limit")
 	}
 	stored, found, err := s.loadStoredJob(req.Msg.JobId)
 	if err != nil {
@@ -866,44 +878,71 @@ func (s *Server) StreamJob(
 	if err != nil {
 		return err
 	}
+	outputSize := uint64(len(stored.Output))
+	if req.Msg.NextOffset > outputSize {
+		return failedPrecondition("STREAM_CURSOR_MISMATCH", "next_offset is beyond the retained output")
+	}
+	streamDigest := digestMessage(stored.Output)
+	if req.Msg.ExpectedStreamDigest != nil {
+		if err := validateDigest(req.Msg.ExpectedStreamDigest); err != nil {
+			return err
+		}
+		if !proto.Equal(req.Msg.ExpectedStreamDigest, streamDigest) {
+			return failedPrecondition("STREAM_CURSOR_MISMATCH", "expected_stream_digest does not match retained output")
+		}
+	} else if req.Msg.NextOffset > 0 {
+		return failedPrecondition("STREAM_CURSOR_MISMATCH", "expected_stream_digest is required when resuming output")
+	}
+
+	terminal := terminalJob(record.State)
+	chunkCount := uint64(0)
+	if terminal && req.Msg.NextOffset < outputSize {
+		remaining := outputSize - req.Msg.NextOffset
+		chunkCount = (remaining + chunkSize - 1) / chunkSize
+	}
+	eventCount := uint64(1) + chunkCount
+	if terminal {
+		eventCount++
+	}
+	if eventCount > 0 && req.Msg.NextSequence > ^uint64(0)-(eventCount-1) {
+		return invalid("INVALID_ARGUMENT", "next_sequence overflows the stream event range")
+	}
+
 	sequence := req.Msg.NextSequence
 	if err := stream.Send(&atostosv1.JobEvent{
 		JobId: record.JobId, Sequence: sequence,
 		EventType: atostosv1.JobEventType_JOB_EVENT_TYPE_STATE,
 		State:     record.State, ProofStatus: cloneMessage(record.ProofStatus),
-		EventUnixMillis: s.now().UnixMilli(),
+		StreamDigest: cloneMessage(streamDigest), EventUnixMillis: s.now().UnixMilli(),
 	}); err != nil {
 		return err
 	}
 	sequence++
-	if len(stored.Output) > 0 {
-		chunkSize := req.Msg.MaxChunkBytes
-		if chunkSize == 0 || chunkSize > 256<<10 {
-			chunkSize = 256 << 10
+	if !terminal {
+		return nil
+	}
+	for offset := req.Msg.NextOffset; offset < outputSize; offset += chunkSize {
+		end := offset + chunkSize
+		if end > outputSize {
+			end = outputSize
 		}
-		for offset := uint64(0); offset < uint64(len(stored.Output)); offset += chunkSize {
-			end := offset + chunkSize
-			if end > uint64(len(stored.Output)) {
-				end = uint64(len(stored.Output))
-			}
-			if err := stream.Send(&atostosv1.JobEvent{
-				JobId: record.JobId, Sequence: sequence,
-				EventType: atostosv1.JobEventType_JOB_EVENT_TYPE_OUTPUT_CHUNK,
-				State:     record.State, Chunk: append([]byte(nil), stored.Output[offset:end]...),
-				Offset: offset, TotalOutputBytes: uint64(len(stored.Output)),
-				StreamDigest: digestMessage(stored.Output), EventUnixMillis: s.now().UnixMilli(),
-			}); err != nil {
-				return err
-			}
-			sequence++
+		if err := stream.Send(&atostosv1.JobEvent{
+			JobId: record.JobId, Sequence: sequence,
+			EventType: atostosv1.JobEventType_JOB_EVENT_TYPE_OUTPUT_CHUNK,
+			State:     record.State, Chunk: append([]byte(nil), stored.Output[offset:end]...),
+			Offset: offset, TotalOutputBytes: outputSize,
+			StreamDigest: cloneMessage(streamDigest), EventUnixMillis: s.now().UnixMilli(),
+		}); err != nil {
+			return err
 		}
+		sequence++
 	}
 	return stream.Send(&atostosv1.JobEvent{
 		JobId: record.JobId, Sequence: sequence,
 		EventType: atostosv1.JobEventType_JOB_EVENT_TYPE_TERMINAL,
-		State:     record.State, Terminal: terminalJob(record.State),
-		ProofStatus: cloneMessage(record.ProofStatus), EventUnixMillis: s.now().UnixMilli(),
-		ErrorCode: record.ErrorCode,
+		State:     record.State, Terminal: true,
+		StreamDigest: cloneMessage(streamDigest), ProofStatus: cloneMessage(record.ProofStatus),
+		EventUnixMillis: s.now().UnixMilli(), ErrorCode: record.ErrorCode,
 	})
 }
 
