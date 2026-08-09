@@ -21,7 +21,7 @@ func (s *Server) atomicMutation(
 	if err := validateMutationContext(context, s.now()); err != nil {
 		return err
 	}
-	requestDigest, err := protoDigest("ATOS-RPC-IDEMPOTENCY-V1:"+method, request)
+	requestDigest, err := mutationRequestDigest(method, request)
 	if err != nil {
 		return invalid("INVALID_ARGUMENT", "request cannot be canonicalized")
 	}
@@ -57,4 +57,28 @@ func (s *Server) atomicMutation(
 			Status: idempotencyCompleted, CreatedAtMS: nowMS, UpdatedAtMS: nowMS,
 		})
 	})
+}
+
+type mutationRequestWithContext interface {
+	GetContext() *atostosv1.RequestContext
+}
+
+// mutationRequestDigest binds the business request while excluding transport
+// metadata that legitimately changes across retries. The idempotency record key
+// already binds caller_id, method, and idempotency_key; keeping caller_id and
+// idempotency_key in the normalized message is deliberate defense in depth.
+func mutationRequestDigest(method string, request proto.Message) (string, error) {
+	if request == nil {
+		return "", fmt.Errorf("mutation request is required")
+	}
+	normalized := proto.Clone(request)
+	withContext, ok := normalized.(mutationRequestWithContext)
+	if !ok || withContext.GetContext() == nil {
+		return "", fmt.Errorf("mutation request context is required")
+	}
+	requestContext := withContext.GetContext()
+	requestContext.RequestId = ""
+	requestContext.TraceId = ""
+	requestContext.DeadlineUnixMillis = 0
+	return protoDigest("ATOS-RPC-IDEMPOTENCY-V1:"+method, normalized)
 }
