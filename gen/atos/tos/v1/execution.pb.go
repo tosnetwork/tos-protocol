@@ -340,8 +340,13 @@ type GetProviderStatusResponse struct {
 	ObservedUnixMillis  int64                  `protobuf:"varint,6,opt,name=observed_unix_millis,json=observedUnixMillis,proto3" json:"observed_unix_millis,omitempty"`
 	ExpiresUnixMillis   int64                  `protobuf:"varint,7,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
 	ReasonCode          string                 `protobuf:"bytes,8,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// deep_probe and latency_unix_millis are populated only for a
+	// ThirdPartyBinding-carrying request -- see atos-spec docs/
+	// THIRD_PARTY_EXECUTION_PLANE.md.
+	DeepProbe         bool  `protobuf:"varint,9,opt,name=deep_probe,json=deepProbe,proto3" json:"deep_probe,omitempty"`
+	LatencyUnixMillis int64 `protobuf:"varint,10,opt,name=latency_unix_millis,json=latencyUnixMillis,proto3" json:"latency_unix_millis,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetProviderStatusResponse) Reset() {
@@ -428,6 +433,20 @@ func (x *GetProviderStatusResponse) GetReasonCode() string {
 		return x.ReasonCode
 	}
 	return ""
+}
+
+func (x *GetProviderStatusResponse) GetDeepProbe() bool {
+	if x != nil {
+		return x.DeepProbe
+	}
+	return false
+}
+
+func (x *GetProviderStatusResponse) GetLatencyUnixMillis() int64 {
+	if x != nil {
+		return x.LatencyUnixMillis
+	}
+	return 0
 }
 
 type QuoteExecutionRequest struct {
@@ -1973,7 +1992,7 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
 	"providerId\x12#\n" +
 	"\rcapability_id\x18\x03 \x01(\tR\fcapabilityId\x12N\n" +
-	"\x13third_party_binding\x18\x04 \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\"\x9b\x03\n" +
+	"\x13third_party_binding\x18\x04 \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\"\xea\x03\n" +
 	"\x19GetProviderStatusResponse\x12\x1f\n" +
 	"\vprovider_id\x18\x01 \x01(\tR\n" +
 	"providerId\x12#\n" +
@@ -1984,7 +2003,11 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x14observed_unix_millis\x18\x06 \x01(\x03R\x12observedUnixMillis\x12.\n" +
 	"\x13expires_unix_millis\x18\a \x01(\x03R\x11expiresUnixMillis\x12\x1f\n" +
 	"\vreason_code\x18\b \x01(\tR\n" +
-	"reasonCode\"\xb8\x06\n" +
+	"reasonCode\x12\x1d\n" +
+	"\n" +
+	"deep_probe\x18\t \x01(\bR\tdeepProbe\x12.\n" +
+	"\x13latency_unix_millis\x18\n" +
+	" \x01(\x03R\x11latencyUnixMillis\"\xb8\x06\n" +
 	"\x15QuoteExecutionRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +

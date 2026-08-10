@@ -121,6 +121,8 @@ func (s *Server) getThirdPartyProviderStatus(
 		response.ReasonCode = "THIRD_PARTY_WORKER_UNAVAILABLE"
 		return connect.NewResponse(response), nil
 	}
+	response.DeepProbe = health.DeepProbe
+	response.LatencyUnixMillis = health.LatencyMillis
 	if !health.Healthy {
 		response.ReasonCode = "CAPABILITY_UNAVAILABLE"
 		if health.FailureReason != "" {

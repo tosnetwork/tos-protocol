@@ -70,6 +70,11 @@ message GetProviderStatusResponse {
   int64 observed_unix_millis = 6;
   int64 expires_unix_millis = 7;
   string reason_code = 8;
+  // deep_probe and latency_unix_millis are populated only for a
+  // ThirdPartyBinding-carrying request -- see atos-spec docs/
+  // THIRD_PARTY_EXECUTION_PLANE.md.
+  bool deep_probe = 9;
+  int64 latency_unix_millis = 10;
 }
 
 message QuoteExecutionRequest {

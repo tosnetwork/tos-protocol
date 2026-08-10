@@ -18,12 +18,16 @@ import (
 type fakeThirdPartyWorker struct {
 	mu          sync.Mutex
 	invokeCalls int
+	healthFunc  func(*edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error)
 	invokeFunc  func(*edgev1.ThirdPartyInvokeRequest) (*edgev1.ThirdPartyInvokeResponse, error)
 	queryFunc   func(*edgev1.ThirdPartyQueryRequest) (*edgev1.ThirdPartyQueryResponse, error)
 	cancelFunc  func(*edgev1.ThirdPartyCancelRequest) (*edgev1.ThirdPartyCancelResponse, error)
 }
 
-func (f *fakeThirdPartyWorker) Health(context.Context, *edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error) {
+func (f *fakeThirdPartyWorker) Health(_ context.Context, req *edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error) {
+	if f.healthFunc != nil {
+		return f.healthFunc(req)
+	}
 	return &edgev1.ThirdPartyHealthResponse{Healthy: true}, nil
 }
 
@@ -348,5 +352,71 @@ func TestSubmitThirdPartyJob_RejectsOutputExceedingQuotedMaxOutputBytes(t *testi
 	}))
 	if err == nil && receipt.Msg != nil && len(receipt.Msg.CanonicalReceipt) > 0 {
 		t.Fatal("an oversized third-party result must never produce a signed execution receipt")
+	}
+}
+
+// TestGetProviderStatus_ThirdPartyBinding_PopulatesDeepProbeAndLatency proves
+// GetProviderStatusResponse.deep_probe/latency_unix_millis are carried
+// through from tos.edge.v1.ThirdPartyExecutionService.Health's own
+// deep_probe/latency_millis, so ATOS's HealthService/CertificationService
+// can record the same evidence fidelity through this remote path as local
+// probing already captures (atos-spec docs/THIRD_PARTY_EXECUTION_PLANE.md
+// §3.1).
+func TestGetProviderStatus_ThirdPartyBinding_PopulatesDeepProbeAndLatency(t *testing.T) {
+	worker := &fakeThirdPartyWorker{
+		healthFunc: func(*edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error) {
+			return &edgev1.ThirdPartyHealthResponse{Healthy: true, DeepProbe: true, LatencyMillis: 42}, nil
+		},
+	}
+	srv := newThirdPartyTestServer(t, worker)
+
+	resp, err := srv.GetProviderStatus(context.Background(), connect.NewRequest(&atostosv1.GetProviderStatusRequest{
+		Context: readContext("provider-status-1"), ProviderId: "agt_provider_1", CapabilityId: "cap_http_1",
+		ThirdPartyBinding: &atostosv1.ThirdPartyBinding{
+			Transport: atostosv1.EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_HTTP, EndpointRef: "https://provider.example.com/invoke",
+			BindingCommitment: &atostosv1.Digest{Algorithm: "sha256", Value: make([]byte, 32)},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("GetProviderStatus: %v", err)
+	}
+	if !resp.Msg.DeepProbe {
+		t.Fatal("deep_probe = false, want true from the worker's Health response")
+	}
+	if resp.Msg.LatencyUnixMillis != 42 {
+		t.Fatalf("latency_unix_millis = %d, want 42", resp.Msg.LatencyUnixMillis)
+	}
+	if resp.Msg.Readiness != atostosv1.ProviderReadiness_PROVIDER_READINESS_READY {
+		t.Fatalf("readiness = %s, want READY", resp.Msg.Readiness)
+	}
+}
+
+// TestGetProviderStatus_ThirdPartyBinding_PopulatesLatencyOnUnhealthy proves
+// latency_unix_millis is still recorded when the probe completes but reports
+// unhealthy -- latency is meaningful evidence on a failed probe too, not
+// only a successful one.
+func TestGetProviderStatus_ThirdPartyBinding_PopulatesLatencyOnUnhealthy(t *testing.T) {
+	worker := &fakeThirdPartyWorker{
+		healthFunc: func(*edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error) {
+			return &edgev1.ThirdPartyHealthResponse{Healthy: false, FailureReason: "TOOL_NOT_FOUND", LatencyMillis: 17}, nil
+		},
+	}
+	srv := newThirdPartyTestServer(t, worker)
+
+	resp, err := srv.GetProviderStatus(context.Background(), connect.NewRequest(&atostosv1.GetProviderStatusRequest{
+		Context: readContext("provider-status-2"), ProviderId: "agt_provider_1", CapabilityId: "cap_http_1",
+		ThirdPartyBinding: &atostosv1.ThirdPartyBinding{
+			Transport: atostosv1.EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_HTTP, EndpointRef: "https://provider.example.com/invoke",
+			BindingCommitment: &atostosv1.Digest{Algorithm: "sha256", Value: make([]byte, 32)},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("GetProviderStatus: %v", err)
+	}
+	if resp.Msg.LatencyUnixMillis != 17 {
+		t.Fatalf("latency_unix_millis = %d, want 17 even on an unhealthy probe", resp.Msg.LatencyUnixMillis)
+	}
+	if resp.Msg.ReasonCode != "TOOL_NOT_FOUND" {
+		t.Fatalf("reason_code = %q, want the worker's failure_reason", resp.Msg.ReasonCode)
 	}
 }
