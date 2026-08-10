@@ -59,6 +59,12 @@ message GetProviderStatusRequest {
   string provider_id = 2;
   string capability_id = 3;
   ThirdPartyBinding third_party_binding = 4;
+  // capability_version scopes a ThirdPartyBinding-carrying probe to the
+  // exact Capability version being probed -- a worker-operator allowlist
+  // entry MAY be version-scoped, so omitting this silently probes as if
+  // no version were requested at all. Unset for an ordinary native/model
+  // request.
+  string capability_version = 5;
 }
 
 message GetProviderStatusResponse {

@@ -107,7 +107,7 @@ func (s *Server) getThirdPartyProviderStatus(
 		response.ReasonCode = "THIRD_PARTY_WORKER_NOT_CONFIGURED"
 		return connect.NewResponse(response), nil
 	}
-	binding, err := toEdgeBindingRef(req.Msg.ThirdPartyBinding, req.Msg.CapabilityId, "")
+	binding, err := toEdgeBindingRef(req.Msg.ThirdPartyBinding, req.Msg.CapabilityId, req.Msg.CapabilityVersion)
 	if err != nil {
 		return nil, err
 	}

@@ -420,3 +420,40 @@ func TestGetProviderStatus_ThirdPartyBinding_PopulatesLatencyOnUnhealthy(t *test
 		t.Fatalf("reason_code = %q, want the worker's failure_reason", resp.Msg.ReasonCode)
 	}
 }
+
+// TestGetProviderStatus_ThirdPartyBinding_ForwardsCapabilityVersion proves
+// GetProviderStatusRequest.capability_version reaches the private Worker's
+// ThirdPartyHealthRequest.Binding.CapabilityVersion instead of being
+// silently dropped as "" -- a worker-operator allowlist entry may be
+// version-scoped (atos-spec docs/THIRD_PARTY_EXECUTION_PLANE.md §4), so a
+// probe that doesn't say which version it means cannot actually ask "is
+// THIS version's binding allowlisted and healthy".
+func TestGetProviderStatus_ThirdPartyBinding_ForwardsCapabilityVersion(t *testing.T) {
+	worker := &fakeThirdPartyWorker{
+		healthFunc: func(req *edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error) {
+			if req.Binding.CapabilityVersion != "1.2.3" {
+				return &edgev1.ThirdPartyHealthResponse{Healthy: false, FailureReason: "VERSION_MISMATCH"}, nil
+			}
+			return &edgev1.ThirdPartyHealthResponse{Healthy: true}, nil
+		},
+	}
+	srv := newThirdPartyTestServer(t, worker)
+
+	resp, err := srv.GetProviderStatus(context.Background(), connect.NewRequest(&atostosv1.GetProviderStatusRequest{
+		Context: readContext("provider-status-3"), ProviderId: "agt_provider_1", CapabilityId: "cap_http_1",
+		CapabilityVersion: "1.2.3",
+		ThirdPartyBinding: &atostosv1.ThirdPartyBinding{
+			Transport: atostosv1.EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_HTTP, EndpointRef: "https://provider.example.com/invoke",
+			BindingCommitment: &atostosv1.Digest{Algorithm: "sha256", Value: make([]byte, 32)},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("GetProviderStatus: %v", err)
+	}
+	if resp.Msg.ReasonCode == "VERSION_MISMATCH" {
+		t.Fatal("capability_version was dropped before reaching the private Worker's Health request")
+	}
+	if resp.Msg.Readiness != atostosv1.ProviderReadiness_PROVIDER_READINESS_READY {
+		t.Fatalf("readiness = %s, want READY", resp.Msg.Readiness)
+	}
+}

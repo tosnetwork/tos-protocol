@@ -268,6 +268,12 @@ type GetProviderStatusRequest struct {
 	ProviderId        string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
 	CapabilityId      string                 `protobuf:"bytes,3,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
 	ThirdPartyBinding *ThirdPartyBinding     `protobuf:"bytes,4,opt,name=third_party_binding,json=thirdPartyBinding,proto3" json:"third_party_binding,omitempty"`
+	// capability_version scopes a ThirdPartyBinding-carrying probe to the
+	// exact Capability version being probed -- a worker-operator allowlist
+	// entry MAY be version-scoped, so omitting this silently probes as if
+	// no version were requested at all. Unset for an ordinary native/model
+	// request.
+	CapabilityVersion string `protobuf:"bytes,5,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -328,6 +334,13 @@ func (x *GetProviderStatusRequest) GetThirdPartyBinding() *ThirdPartyBinding {
 		return x.ThirdPartyBinding
 	}
 	return nil
+}
+
+func (x *GetProviderStatusRequest) GetCapabilityVersion() string {
+	if x != nil {
+		return x.CapabilityVersion
+	}
+	return ""
 }
 
 type GetProviderStatusResponse struct {
@@ -1986,13 +1999,14 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x11ThirdPartyBinding\x12>\n" +
 	"\ttransport\x18\x01 \x01(\x0e2 .atos.tos.v1.EndpointAdapterTypeR\ttransport\x12!\n" +
 	"\fendpoint_ref\x18\x02 \x01(\tR\vendpointRef\x12B\n" +
-	"\x12binding_commitment\x18\x03 \x01(\v2\x13.atos.tos.v1.DigestR\x11bindingCommitment\"\xe7\x01\n" +
+	"\x12binding_commitment\x18\x03 \x01(\v2\x13.atos.tos.v1.DigestR\x11bindingCommitment\"\x96\x02\n" +
 	"\x18GetProviderStatusRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
 	"providerId\x12#\n" +
 	"\rcapability_id\x18\x03 \x01(\tR\fcapabilityId\x12N\n" +
-	"\x13third_party_binding\x18\x04 \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\"\xea\x03\n" +
+	"\x13third_party_binding\x18\x04 \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\x12-\n" +
+	"\x12capability_version\x18\x05 \x01(\tR\x11capabilityVersion\"\xea\x03\n" +
 	"\x19GetProviderStatusResponse\x12\x1f\n" +
 	"\vprovider_id\x18\x01 \x01(\tR\n" +
 	"providerId\x12#\n" +
