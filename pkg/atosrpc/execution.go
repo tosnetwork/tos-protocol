@@ -33,6 +33,9 @@ func (s *Server) GetProviderStatus(
 	if err := requiredIdentifier("capability_id", req.Msg.CapabilityId); err != nil {
 		return nil, err
 	}
+	if req.Msg.ThirdPartyBinding != nil {
+		return s.getThirdPartyProviderStatus(ctx, req)
+	}
 	response := &atostosv1.GetProviderStatusResponse{
 		ProviderId: req.Msg.ProviderId, CapabilityId: req.Msg.CapabilityId,
 		Readiness:          atostosv1.ProviderReadiness_PROVIDER_READINESS_UNAVAILABLE,

@@ -23,6 +23,123 @@ service WorkerStreamService {
   rpc ResumeStream(ResumeStreamRequest) returns (stream StreamEvent);
 }
 
+// ThirdPartyExecutionService is a v0.3 extension alongside WorkerService,
+// kept as its own service for the same reason WorkerStreamService is kept
+// separate from WorkerService: it does not touch the frozen existing
+// interfaces. It dispatches to a third-party provider endpoint (HTTP/MCP/A2A)
+// instead of this worker's own model-serving runtime.
+//
+// See atos-spec docs/THIRD_PARTY_EXECUTION_PLANE.md for the cross-repository
+// design. The load-bearing invariant this service exists to enforce: a
+// caller names a binding, it never grants one. Every RPC here MUST reject
+// any (transport, endpoint_ref, capability_id) combination not present in
+// this worker's own operator-curated allowlist before performing any
+// outbound network call -- an inbound request payload must never be able to
+// select a destination its operator did not already approve, preserving the
+// same "task payloads cannot select the endpoint" invariant the existing
+// model-serving adapters (e.g. the openai adapter) already enforce.
+service ThirdPartyExecutionService {
+  rpc Health(ThirdPartyHealthRequest) returns (ThirdPartyHealthResponse);
+  rpc Invoke(ThirdPartyInvokeRequest) returns (ThirdPartyInvokeResponse);
+  rpc Query(ThirdPartyQueryRequest) returns (ThirdPartyQueryResponse);
+  rpc Cancel(ThirdPartyCancelRequest) returns (ThirdPartyCancelResponse);
+}
+
+enum ThirdPartyTransport {
+  THIRD_PARTY_TRANSPORT_UNSPECIFIED = 0;
+  THIRD_PARTY_TRANSPORT_HTTP = 1;
+  THIRD_PARTY_TRANSPORT_MCP = 2;
+  THIRD_PARTY_TRANSPORT_A2A = 3;
+}
+
+enum ThirdPartyInvokeStatus {
+  THIRD_PARTY_INVOKE_STATUS_UNSPECIFIED = 0;
+  THIRD_PARTY_INVOKE_STATUS_COMPLETED = 1;
+  THIRD_PARTY_INVOKE_STATUS_FAILED = 2;
+  THIRD_PARTY_INVOKE_STATUS_PENDING = 3;
+}
+
+// ThirdPartyBindingRef names a binding the caller wants dispatched or
+// probed. binding_commitment lets the worker detect a replay whose semantic
+// binding changed (an idempotency_conflict) without needing to know how the
+// caller derived its own binding-freeze/selection logic.
+message ThirdPartyBindingRef {
+  ThirdPartyTransport transport = 1;
+  string endpoint_ref = 2;
+  string capability_id = 3;
+  string capability_version = 4;
+  string binding_commitment = 5;
+}
+
+message ThirdPartyHealthRequest {
+  ThirdPartyBindingRef binding = 1;
+}
+
+message ThirdPartyHealthResponse {
+  bool healthy = 1;
+  int64 latency_millis = 2;
+  string failure_reason = 3;
+  // deep_probe distinguishes bare reachability from a transport-specific
+  // deeper check (see atos-spec docs/THIRD_PARTY_EXECUTION_PLANE.md and the
+  // interim ATOS-side provideradapter.CertificationProbe precedent this
+  // mirrors) -- callers must not treat every healthy=true the same way
+  // regardless of this flag.
+  bool deep_probe = 4;
+  map<string, string> evidence = 5;
+}
+
+message ThirdPartyInvokeRequest {
+  // request_id is the stable idempotency identity for this exact semantic
+  // operation -- mirrors InvokeRequest.request_id and MUST NOT be
+  // regenerated across a caller's own retries after a timeout or restart.
+  string request_id = 1;
+  string job_id = 2;
+  string provider_id = 3;
+  ThirdPartyBindingRef binding = 4;
+  bytes input = 5;
+  int64 deadline_unix_millis = 6;
+  // Worker task state and any terminal result must remain queryable until
+  // this retention boundary, mirroring InvokeRequest.retain_until_unix_millis.
+  int64 retain_until_unix_millis = 7;
+  string request_digest = 8;
+}
+
+message ThirdPartyInvokeResponse {
+  string request_id = 1;
+  ThirdPartyInvokeStatus status = 2;
+  bytes output = 3;
+  string failure_reason = 4;
+  // Worker-owned durable completion time. Invoke and Query MUST return the
+  // same millisecond value so receipt replay is independent of RPC latency,
+  // mirroring InvokeResponse.completed_unix_millis.
+  int64 completed_unix_millis = 5;
+}
+
+message ThirdPartyQueryRequest {
+  string request_id = 1;
+  ThirdPartyBindingRef binding = 2;
+}
+
+// ThirdPartyQueryResponse's found=false means this worker has no record of
+// ever attempting request_id -- a safe signal that Invoke was never called,
+// or never reached the provider, for it. Some transports (MCP has no
+// protocol-level lookup-by-id operation) may legitimately always report
+// found=false; callers must not treat that as an error.
+message ThirdPartyQueryResponse {
+  bool found = 1;
+  ThirdPartyInvokeResponse result = 2;
+}
+
+message ThirdPartyCancelRequest {
+  string request_id = 1;
+  ThirdPartyBindingRef binding = 2;
+  string reason = 3;
+}
+
+message ThirdPartyCancelResponse {
+  bool accepted = 1;
+}
+
 enum Priority {
   PRIORITY_UNSPECIFIED = 0;
   PRIORITY_EMERGENCY = 1;

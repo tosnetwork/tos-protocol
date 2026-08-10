@@ -25,6 +25,9 @@ const (
 	WorkerServiceName = "tos.edge.v1.WorkerService"
 	// WorkerStreamServiceName is the fully-qualified name of the WorkerStreamService service.
 	WorkerStreamServiceName = "tos.edge.v1.WorkerStreamService"
+	// ThirdPartyExecutionServiceName is the fully-qualified name of the ThirdPartyExecutionService
+	// service.
+	ThirdPartyExecutionServiceName = "tos.edge.v1.ThirdPartyExecutionService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -54,6 +57,18 @@ const (
 	// WorkerStreamServiceResumeStreamProcedure is the fully-qualified name of the WorkerStreamService's
 	// ResumeStream RPC.
 	WorkerStreamServiceResumeStreamProcedure = "/tos.edge.v1.WorkerStreamService/ResumeStream"
+	// ThirdPartyExecutionServiceHealthProcedure is the fully-qualified name of the
+	// ThirdPartyExecutionService's Health RPC.
+	ThirdPartyExecutionServiceHealthProcedure = "/tos.edge.v1.ThirdPartyExecutionService/Health"
+	// ThirdPartyExecutionServiceInvokeProcedure is the fully-qualified name of the
+	// ThirdPartyExecutionService's Invoke RPC.
+	ThirdPartyExecutionServiceInvokeProcedure = "/tos.edge.v1.ThirdPartyExecutionService/Invoke"
+	// ThirdPartyExecutionServiceQueryProcedure is the fully-qualified name of the
+	// ThirdPartyExecutionService's Query RPC.
+	ThirdPartyExecutionServiceQueryProcedure = "/tos.edge.v1.ThirdPartyExecutionService/Query"
+	// ThirdPartyExecutionServiceCancelProcedure is the fully-qualified name of the
+	// ThirdPartyExecutionService's Cancel RPC.
+	ThirdPartyExecutionServiceCancelProcedure = "/tos.edge.v1.ThirdPartyExecutionService/Cancel"
 )
 
 // WorkerServiceClient is a client for the tos.edge.v1.WorkerService service.
@@ -350,4 +365,154 @@ func (UnimplementedWorkerStreamServiceHandler) InvokeStream(context.Context, *co
 
 func (UnimplementedWorkerStreamServiceHandler) ResumeStream(context.Context, *connect.Request[v1.ResumeStreamRequest], *connect.ServerStream[v1.StreamEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.WorkerStreamService.ResumeStream is not implemented"))
+}
+
+// ThirdPartyExecutionServiceClient is a client for the tos.edge.v1.ThirdPartyExecutionService
+// service.
+type ThirdPartyExecutionServiceClient interface {
+	Health(context.Context, *connect.Request[v1.ThirdPartyHealthRequest]) (*connect.Response[v1.ThirdPartyHealthResponse], error)
+	Invoke(context.Context, *connect.Request[v1.ThirdPartyInvokeRequest]) (*connect.Response[v1.ThirdPartyInvokeResponse], error)
+	Query(context.Context, *connect.Request[v1.ThirdPartyQueryRequest]) (*connect.Response[v1.ThirdPartyQueryResponse], error)
+	Cancel(context.Context, *connect.Request[v1.ThirdPartyCancelRequest]) (*connect.Response[v1.ThirdPartyCancelResponse], error)
+}
+
+// NewThirdPartyExecutionServiceClient constructs a client for the
+// tos.edge.v1.ThirdPartyExecutionService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewThirdPartyExecutionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ThirdPartyExecutionServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	thirdPartyExecutionServiceMethods := v1.File_api_tos_edge_v1_worker_proto.Services().ByName("ThirdPartyExecutionService").Methods()
+	return &thirdPartyExecutionServiceClient{
+		health: connect.NewClient[v1.ThirdPartyHealthRequest, v1.ThirdPartyHealthResponse](
+			httpClient,
+			baseURL+ThirdPartyExecutionServiceHealthProcedure,
+			connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Health")),
+			connect.WithClientOptions(opts...),
+		),
+		invoke: connect.NewClient[v1.ThirdPartyInvokeRequest, v1.ThirdPartyInvokeResponse](
+			httpClient,
+			baseURL+ThirdPartyExecutionServiceInvokeProcedure,
+			connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Invoke")),
+			connect.WithClientOptions(opts...),
+		),
+		query: connect.NewClient[v1.ThirdPartyQueryRequest, v1.ThirdPartyQueryResponse](
+			httpClient,
+			baseURL+ThirdPartyExecutionServiceQueryProcedure,
+			connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Query")),
+			connect.WithClientOptions(opts...),
+		),
+		cancel: connect.NewClient[v1.ThirdPartyCancelRequest, v1.ThirdPartyCancelResponse](
+			httpClient,
+			baseURL+ThirdPartyExecutionServiceCancelProcedure,
+			connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Cancel")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// thirdPartyExecutionServiceClient implements ThirdPartyExecutionServiceClient.
+type thirdPartyExecutionServiceClient struct {
+	health *connect.Client[v1.ThirdPartyHealthRequest, v1.ThirdPartyHealthResponse]
+	invoke *connect.Client[v1.ThirdPartyInvokeRequest, v1.ThirdPartyInvokeResponse]
+	query  *connect.Client[v1.ThirdPartyQueryRequest, v1.ThirdPartyQueryResponse]
+	cancel *connect.Client[v1.ThirdPartyCancelRequest, v1.ThirdPartyCancelResponse]
+}
+
+// Health calls tos.edge.v1.ThirdPartyExecutionService.Health.
+func (c *thirdPartyExecutionServiceClient) Health(ctx context.Context, req *connect.Request[v1.ThirdPartyHealthRequest]) (*connect.Response[v1.ThirdPartyHealthResponse], error) {
+	return c.health.CallUnary(ctx, req)
+}
+
+// Invoke calls tos.edge.v1.ThirdPartyExecutionService.Invoke.
+func (c *thirdPartyExecutionServiceClient) Invoke(ctx context.Context, req *connect.Request[v1.ThirdPartyInvokeRequest]) (*connect.Response[v1.ThirdPartyInvokeResponse], error) {
+	return c.invoke.CallUnary(ctx, req)
+}
+
+// Query calls tos.edge.v1.ThirdPartyExecutionService.Query.
+func (c *thirdPartyExecutionServiceClient) Query(ctx context.Context, req *connect.Request[v1.ThirdPartyQueryRequest]) (*connect.Response[v1.ThirdPartyQueryResponse], error) {
+	return c.query.CallUnary(ctx, req)
+}
+
+// Cancel calls tos.edge.v1.ThirdPartyExecutionService.Cancel.
+func (c *thirdPartyExecutionServiceClient) Cancel(ctx context.Context, req *connect.Request[v1.ThirdPartyCancelRequest]) (*connect.Response[v1.ThirdPartyCancelResponse], error) {
+	return c.cancel.CallUnary(ctx, req)
+}
+
+// ThirdPartyExecutionServiceHandler is an implementation of the
+// tos.edge.v1.ThirdPartyExecutionService service.
+type ThirdPartyExecutionServiceHandler interface {
+	Health(context.Context, *connect.Request[v1.ThirdPartyHealthRequest]) (*connect.Response[v1.ThirdPartyHealthResponse], error)
+	Invoke(context.Context, *connect.Request[v1.ThirdPartyInvokeRequest]) (*connect.Response[v1.ThirdPartyInvokeResponse], error)
+	Query(context.Context, *connect.Request[v1.ThirdPartyQueryRequest]) (*connect.Response[v1.ThirdPartyQueryResponse], error)
+	Cancel(context.Context, *connect.Request[v1.ThirdPartyCancelRequest]) (*connect.Response[v1.ThirdPartyCancelResponse], error)
+}
+
+// NewThirdPartyExecutionServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewThirdPartyExecutionServiceHandler(svc ThirdPartyExecutionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	thirdPartyExecutionServiceMethods := v1.File_api_tos_edge_v1_worker_proto.Services().ByName("ThirdPartyExecutionService").Methods()
+	thirdPartyExecutionServiceHealthHandler := connect.NewUnaryHandler(
+		ThirdPartyExecutionServiceHealthProcedure,
+		svc.Health,
+		connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Health")),
+		connect.WithHandlerOptions(opts...),
+	)
+	thirdPartyExecutionServiceInvokeHandler := connect.NewUnaryHandler(
+		ThirdPartyExecutionServiceInvokeProcedure,
+		svc.Invoke,
+		connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Invoke")),
+		connect.WithHandlerOptions(opts...),
+	)
+	thirdPartyExecutionServiceQueryHandler := connect.NewUnaryHandler(
+		ThirdPartyExecutionServiceQueryProcedure,
+		svc.Query,
+		connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Query")),
+		connect.WithHandlerOptions(opts...),
+	)
+	thirdPartyExecutionServiceCancelHandler := connect.NewUnaryHandler(
+		ThirdPartyExecutionServiceCancelProcedure,
+		svc.Cancel,
+		connect.WithSchema(thirdPartyExecutionServiceMethods.ByName("Cancel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/tos.edge.v1.ThirdPartyExecutionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ThirdPartyExecutionServiceHealthProcedure:
+			thirdPartyExecutionServiceHealthHandler.ServeHTTP(w, r)
+		case ThirdPartyExecutionServiceInvokeProcedure:
+			thirdPartyExecutionServiceInvokeHandler.ServeHTTP(w, r)
+		case ThirdPartyExecutionServiceQueryProcedure:
+			thirdPartyExecutionServiceQueryHandler.ServeHTTP(w, r)
+		case ThirdPartyExecutionServiceCancelProcedure:
+			thirdPartyExecutionServiceCancelHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedThirdPartyExecutionServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedThirdPartyExecutionServiceHandler struct{}
+
+func (UnimplementedThirdPartyExecutionServiceHandler) Health(context.Context, *connect.Request[v1.ThirdPartyHealthRequest]) (*connect.Response[v1.ThirdPartyHealthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.ThirdPartyExecutionService.Health is not implemented"))
+}
+
+func (UnimplementedThirdPartyExecutionServiceHandler) Invoke(context.Context, *connect.Request[v1.ThirdPartyInvokeRequest]) (*connect.Response[v1.ThirdPartyInvokeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.ThirdPartyExecutionService.Invoke is not implemented"))
+}
+
+func (UnimplementedThirdPartyExecutionServiceHandler) Query(context.Context, *connect.Request[v1.ThirdPartyQueryRequest]) (*connect.Response[v1.ThirdPartyQueryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.ThirdPartyExecutionService.Query is not implemented"))
+}
+
+func (UnimplementedThirdPartyExecutionServiceHandler) Cancel(context.Context, *connect.Request[v1.ThirdPartyCancelRequest]) (*connect.Response[v1.ThirdPartyCancelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.edge.v1.ThirdPartyExecutionService.Cancel is not implemented"))
 }

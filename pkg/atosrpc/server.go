@@ -21,18 +21,19 @@ import (
 // Server implements Identity, Capability, Trust, Settlement, Proof, and
 // ExecutionGateway services over one authenticated durable Edge boundary.
 type Server struct {
-	config     Config
-	store      *store
-	authority  Authority
-	economy    economic.Driver
-	worker     Worker
-	router     Router
-	privateKey ed25519.PrivateKey
-	publicKey  ed25519.PublicKey
-	signerID   string
-	now        func() time.Time
-	mutationMu sync.Mutex
-	jobLocks   sync.Map // job_id -> *sync.Mutex
+	config           Config
+	store            *store
+	authority        Authority
+	economy          economic.Driver
+	worker           Worker
+	router           Router
+	thirdPartyWorker ThirdPartyWorker
+	privateKey       ed25519.PrivateKey
+	publicKey        ed25519.PublicKey
+	signerID         string
+	now              func() time.Time
+	mutationMu       sync.Mutex
+	jobLocks         sync.Map // job_id -> *sync.Mutex
 }
 
 func Open(config Config) (*Server, error) {
@@ -82,7 +83,8 @@ func Open(config Config) (*Server, error) {
 	return &Server{
 		config: config, store: state, authority: config.Authority,
 		economy: config.EconomicDriver, worker: config.Worker, router: config.Router,
-		privateKey: privateKey, publicKey: publicKey,
+		thirdPartyWorker: config.ThirdPartyWorker,
+		privateKey:       privateKey, publicKey: publicKey,
 		signerID: "edge-signer-" + hex.EncodeToString(digest[:8]),
 		now:      config.Now,
 	}, nil

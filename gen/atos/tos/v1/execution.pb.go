@@ -76,6 +76,60 @@ func (ProviderReadiness) EnumDescriptor() ([]byte, []int) {
 	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{0}
 }
 
+// EndpointAdapterType names the transport a ThirdPartyBinding executes or
+// probes over. Mirrors atos's domain.EndpointAdapterType.
+type EndpointAdapterType int32
+
+const (
+	EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_UNSPECIFIED EndpointAdapterType = 0
+	EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_HTTP        EndpointAdapterType = 1
+	EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_MCP         EndpointAdapterType = 2
+	EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_A2A         EndpointAdapterType = 3
+)
+
+// Enum value maps for EndpointAdapterType.
+var (
+	EndpointAdapterType_name = map[int32]string{
+		0: "ENDPOINT_ADAPTER_TYPE_UNSPECIFIED",
+		1: "ENDPOINT_ADAPTER_TYPE_HTTP",
+		2: "ENDPOINT_ADAPTER_TYPE_MCP",
+		3: "ENDPOINT_ADAPTER_TYPE_A2A",
+	}
+	EndpointAdapterType_value = map[string]int32{
+		"ENDPOINT_ADAPTER_TYPE_UNSPECIFIED": 0,
+		"ENDPOINT_ADAPTER_TYPE_HTTP":        1,
+		"ENDPOINT_ADAPTER_TYPE_MCP":         2,
+		"ENDPOINT_ADAPTER_TYPE_A2A":         3,
+	}
+)
+
+func (x EndpointAdapterType) Enum() *EndpointAdapterType {
+	p := new(EndpointAdapterType)
+	*p = x
+	return p
+}
+
+func (x EndpointAdapterType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EndpointAdapterType) Descriptor() protoreflect.EnumDescriptor {
+	return file_atos_tos_v1_execution_proto_enumTypes[1].Descriptor()
+}
+
+func (EndpointAdapterType) Type() protoreflect.EnumType {
+	return &file_atos_tos_v1_execution_proto_enumTypes[1]
+}
+
+func (x EndpointAdapterType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EndpointAdapterType.Descriptor instead.
+func (EndpointAdapterType) EnumDescriptor() ([]byte, []int) {
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{1}
+}
+
 type JobEventType int32
 
 const (
@@ -118,11 +172,11 @@ func (x JobEventType) String() string {
 }
 
 func (JobEventType) Descriptor() protoreflect.EnumDescriptor {
-	return file_atos_tos_v1_execution_proto_enumTypes[1].Descriptor()
+	return file_atos_tos_v1_execution_proto_enumTypes[2].Descriptor()
 }
 
 func (JobEventType) Type() protoreflect.EnumType {
-	return &file_atos_tos_v1_execution_proto_enumTypes[1]
+	return &file_atos_tos_v1_execution_proto_enumTypes[2]
 }
 
 func (x JobEventType) Number() protoreflect.EnumNumber {
@@ -131,21 +185,96 @@ func (x JobEventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use JobEventType.Descriptor instead.
 func (JobEventType) EnumDescriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{1}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{2}
+}
+
+// ThirdPartyBinding describes a third-party provider transport binding for
+// GetProviderStatus/QuoteExecution/SubmitJob -- see atos-spec
+// docs/THIRD_PARTY_EXECUTION_PLANE.md. Absent (unset) means an ordinary
+// tos-native/model Job; this Server routes a request carrying this to
+// tos.edge.v1.ThirdPartyExecutionService instead of the model-serving
+// WorkerService path, and MUST NOT let endpoint_ref be dialed unless a
+// worker-operator-curated allowlist permits it -- an invocation names a
+// binding, it never grants a new one.
+type ThirdPartyBinding struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Transport EndpointAdapterType    `protobuf:"varint,1,opt,name=transport,proto3,enum=atos.tos.v1.EndpointAdapterType" json:"transport,omitempty"`
+	// Opaque identifier/configuration reference, never a bearer credential --
+	// the same rule as atos's CapabilityBinding.endpoint_ref.
+	EndpointRef string `protobuf:"bytes,2,opt,name=endpoint_ref,json=endpointRef,proto3" json:"endpoint_ref,omitempty"`
+	// Commitment to the frozen CapabilityBinding this Job's Quote resolved,
+	// so a replay whose semantic binding changed can be detected as an
+	// idempotency_conflict without re-deriving ATOS's own binding-freeze/
+	// selection logic downstream.
+	BindingCommitment *Digest `protobuf:"bytes,3,opt,name=binding_commitment,json=bindingCommitment,proto3" json:"binding_commitment,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ThirdPartyBinding) Reset() {
+	*x = ThirdPartyBinding{}
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ThirdPartyBinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ThirdPartyBinding) ProtoMessage() {}
+
+func (x *ThirdPartyBinding) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ThirdPartyBinding.ProtoReflect.Descriptor instead.
+func (*ThirdPartyBinding) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ThirdPartyBinding) GetTransport() EndpointAdapterType {
+	if x != nil {
+		return x.Transport
+	}
+	return EndpointAdapterType_ENDPOINT_ADAPTER_TYPE_UNSPECIFIED
+}
+
+func (x *ThirdPartyBinding) GetEndpointRef() string {
+	if x != nil {
+		return x.EndpointRef
+	}
+	return ""
+}
+
+func (x *ThirdPartyBinding) GetBindingCommitment() *Digest {
+	if x != nil {
+		return x.BindingCommitment
+	}
+	return nil
 }
 
 type GetProviderStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	ProviderId    string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	CapabilityId  string                 `protobuf:"bytes,3,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Context           *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderId        string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	CapabilityId      string                 `protobuf:"bytes,3,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	ThirdPartyBinding *ThirdPartyBinding     `protobuf:"bytes,4,opt,name=third_party_binding,json=thirdPartyBinding,proto3" json:"third_party_binding,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetProviderStatusRequest) Reset() {
 	*x = GetProviderStatusRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[0]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -157,7 +286,7 @@ func (x *GetProviderStatusRequest) String() string {
 func (*GetProviderStatusRequest) ProtoMessage() {}
 
 func (x *GetProviderStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[0]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -170,7 +299,7 @@ func (x *GetProviderStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProviderStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetProviderStatusRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{0}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *GetProviderStatusRequest) GetContext() *RequestContext {
@@ -194,6 +323,13 @@ func (x *GetProviderStatusRequest) GetCapabilityId() string {
 	return ""
 }
 
+func (x *GetProviderStatusRequest) GetThirdPartyBinding() *ThirdPartyBinding {
+	if x != nil {
+		return x.ThirdPartyBinding
+	}
+	return nil
+}
+
 type GetProviderStatusResponse struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	ProviderId          string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
@@ -210,7 +346,7 @@ type GetProviderStatusResponse struct {
 
 func (x *GetProviderStatusResponse) Reset() {
 	*x = GetProviderStatusResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[1]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +358,7 @@ func (x *GetProviderStatusResponse) String() string {
 func (*GetProviderStatusResponse) ProtoMessage() {}
 
 func (x *GetProviderStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[1]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +371,7 @@ func (x *GetProviderStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProviderStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetProviderStatusResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{1}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetProviderStatusResponse) GetProviderId() string {
@@ -307,13 +443,14 @@ type QuoteExecutionRequest struct {
 	IntendedTrustMode           TrustMode              `protobuf:"varint,9,opt,name=intended_trust_mode,json=intendedTrustMode,proto3,enum=atos.tos.v1.TrustMode" json:"intended_trust_mode,omitempty"`
 	IntendedProofProfile        ProofProfile           `protobuf:"varint,10,opt,name=intended_proof_profile,json=intendedProofProfile,proto3,enum=atos.tos.v1.ProofProfile" json:"intended_proof_profile,omitempty"`
 	ExecutionConstraints        map[string]string      `protobuf:"bytes,11,rep,name=execution_constraints,json=executionConstraints,proto3" json:"execution_constraints,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ThirdPartyBinding           *ThirdPartyBinding     `protobuf:"bytes,12,opt,name=third_party_binding,json=thirdPartyBinding,proto3" json:"third_party_binding,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *QuoteExecutionRequest) Reset() {
 	*x = QuoteExecutionRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[2]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -325,7 +462,7 @@ func (x *QuoteExecutionRequest) String() string {
 func (*QuoteExecutionRequest) ProtoMessage() {}
 
 func (x *QuoteExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[2]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -338,7 +475,7 @@ func (x *QuoteExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuoteExecutionRequest.ProtoReflect.Descriptor instead.
 func (*QuoteExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{2}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *QuoteExecutionRequest) GetContext() *RequestContext {
@@ -418,6 +555,13 @@ func (x *QuoteExecutionRequest) GetExecutionConstraints() map[string]string {
 	return nil
 }
 
+func (x *QuoteExecutionRequest) GetThirdPartyBinding() *ThirdPartyBinding {
+	if x != nil {
+		return x.ThirdPartyBinding
+	}
+	return nil
+}
+
 type ServiceExecutionQuote struct {
 	state                       protoimpl.MessageState `protogen:"open.v1"`
 	ServiceQuoteId              string                 `protobuf:"bytes,1,opt,name=service_quote_id,json=serviceQuoteId,proto3" json:"service_quote_id,omitempty"`
@@ -438,7 +582,7 @@ type ServiceExecutionQuote struct {
 
 func (x *ServiceExecutionQuote) Reset() {
 	*x = ServiceExecutionQuote{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[3]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -450,7 +594,7 @@ func (x *ServiceExecutionQuote) String() string {
 func (*ServiceExecutionQuote) ProtoMessage() {}
 
 func (x *ServiceExecutionQuote) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[3]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -463,7 +607,7 @@ func (x *ServiceExecutionQuote) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceExecutionQuote.ProtoReflect.Descriptor instead.
 func (*ServiceExecutionQuote) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{3}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ServiceExecutionQuote) GetServiceQuoteId() string {
@@ -559,7 +703,7 @@ type QuoteExecutionResponse struct {
 
 func (x *QuoteExecutionResponse) Reset() {
 	*x = QuoteExecutionResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[4]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -571,7 +715,7 @@ func (x *QuoteExecutionResponse) String() string {
 func (*QuoteExecutionResponse) ProtoMessage() {}
 
 func (x *QuoteExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[4]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -584,7 +728,7 @@ func (x *QuoteExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuoteExecutionResponse.ProtoReflect.Descriptor instead.
 func (*QuoteExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{4}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *QuoteExecutionResponse) GetQuote() *ServiceExecutionQuote {
@@ -615,13 +759,14 @@ type SubmitJobRequest struct {
 	RetainUntilUnixMillis       int64                  `protobuf:"varint,17,opt,name=retain_until_unix_millis,json=retainUntilUnixMillis,proto3" json:"retain_until_unix_millis,omitempty"`
 	InputArtifacts              []*ArtifactCommitment  `protobuf:"bytes,18,rep,name=input_artifacts,json=inputArtifacts,proto3" json:"input_artifacts,omitempty"`
 	ExecutionConstraints        map[string]string      `protobuf:"bytes,19,rep,name=execution_constraints,json=executionConstraints,proto3" json:"execution_constraints,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ThirdPartyBinding           *ThirdPartyBinding     `protobuf:"bytes,20,opt,name=third_party_binding,json=thirdPartyBinding,proto3" json:"third_party_binding,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *SubmitJobRequest) Reset() {
 	*x = SubmitJobRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[5]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -633,7 +778,7 @@ func (x *SubmitJobRequest) String() string {
 func (*SubmitJobRequest) ProtoMessage() {}
 
 func (x *SubmitJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[5]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -646,7 +791,7 @@ func (x *SubmitJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitJobRequest.ProtoReflect.Descriptor instead.
 func (*SubmitJobRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{5}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SubmitJobRequest) GetContext() *RequestContext {
@@ -782,6 +927,13 @@ func (x *SubmitJobRequest) GetExecutionConstraints() map[string]string {
 	return nil
 }
 
+func (x *SubmitJobRequest) GetThirdPartyBinding() *ThirdPartyBinding {
+	if x != nil {
+		return x.ThirdPartyBinding
+	}
+	return nil
+}
+
 type SubmitJobResponse struct {
 	state                         protoimpl.MessageState `protogen:"open.v1"`
 	JobId                         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
@@ -799,7 +951,7 @@ type SubmitJobResponse struct {
 
 func (x *SubmitJobResponse) Reset() {
 	*x = SubmitJobResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[6]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -811,7 +963,7 @@ func (x *SubmitJobResponse) String() string {
 func (*SubmitJobResponse) ProtoMessage() {}
 
 func (x *SubmitJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[6]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -824,7 +976,7 @@ func (x *SubmitJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitJobResponse.ProtoReflect.Descriptor instead.
 func (*SubmitJobResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{6}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SubmitJobResponse) GetJobId() string {
@@ -900,7 +1052,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[7]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1064,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[7]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1077,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{7}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetJobRequest) GetContext() *RequestContext {
@@ -967,7 +1119,7 @@ type JobRecord struct {
 
 func (x *JobRecord) Reset() {
 	*x = JobRecord{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[8]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -979,7 +1131,7 @@ func (x *JobRecord) String() string {
 func (*JobRecord) ProtoMessage() {}
 
 func (x *JobRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[8]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -992,7 +1144,7 @@ func (x *JobRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobRecord.ProtoReflect.Descriptor instead.
 func (*JobRecord) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{8}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *JobRecord) GetJobId() string {
@@ -1124,7 +1276,7 @@ type GetJobResponse struct {
 
 func (x *GetJobResponse) Reset() {
 	*x = GetJobResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[9]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1136,7 +1288,7 @@ func (x *GetJobResponse) String() string {
 func (*GetJobResponse) ProtoMessage() {}
 
 func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[9]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1149,7 +1301,7 @@ func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
 func (*GetJobResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{9}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetJobResponse) GetJob() *JobRecord {
@@ -1177,7 +1329,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[10]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1189,7 +1341,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[10]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1202,7 +1354,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{10}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CancelJobRequest) GetContext() *RequestContext {
@@ -1236,7 +1388,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[11]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1248,7 +1400,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[11]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1261,7 +1413,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{11}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CancelJobResponse) GetJob() *JobRecord {
@@ -1295,7 +1447,7 @@ type StreamJobRequest struct {
 
 func (x *StreamJobRequest) Reset() {
 	*x = StreamJobRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[12]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1307,7 +1459,7 @@ func (x *StreamJobRequest) String() string {
 func (*StreamJobRequest) ProtoMessage() {}
 
 func (x *StreamJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[12]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1320,7 +1472,7 @@ func (x *StreamJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamJobRequest.ProtoReflect.Descriptor instead.
 func (*StreamJobRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{12}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StreamJobRequest) GetContext() *RequestContext {
@@ -1400,7 +1552,7 @@ type JobEvent struct {
 
 func (x *JobEvent) Reset() {
 	*x = JobEvent{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[13]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1412,7 +1564,7 @@ func (x *JobEvent) String() string {
 func (*JobEvent) ProtoMessage() {}
 
 func (x *JobEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[13]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1425,7 +1577,7 @@ func (x *JobEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobEvent.ProtoReflect.Descriptor instead.
 func (*JobEvent) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{13}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *JobEvent) GetJobId() string {
@@ -1529,7 +1681,7 @@ type FetchResultRequest struct {
 
 func (x *FetchResultRequest) Reset() {
 	*x = FetchResultRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[14]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1541,7 +1693,7 @@ func (x *FetchResultRequest) String() string {
 func (*FetchResultRequest) ProtoMessage() {}
 
 func (x *FetchResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[14]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1554,7 +1706,7 @@ func (x *FetchResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchResultRequest.ProtoReflect.Descriptor instead.
 func (*FetchResultRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{14}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *FetchResultRequest) GetContext() *RequestContext {
@@ -1587,7 +1739,7 @@ type FetchResultResponse struct {
 
 func (x *FetchResultResponse) Reset() {
 	*x = FetchResultResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[15]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1599,7 +1751,7 @@ func (x *FetchResultResponse) String() string {
 func (*FetchResultResponse) ProtoMessage() {}
 
 func (x *FetchResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[15]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1612,7 +1764,7 @@ func (x *FetchResultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchResultResponse.ProtoReflect.Descriptor instead.
 func (*FetchResultResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{15}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *FetchResultResponse) GetJobId() string {
@@ -1681,7 +1833,7 @@ type FetchExecutionReceiptRequest struct {
 
 func (x *FetchExecutionReceiptRequest) Reset() {
 	*x = FetchExecutionReceiptRequest{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[16]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1693,7 +1845,7 @@ func (x *FetchExecutionReceiptRequest) String() string {
 func (*FetchExecutionReceiptRequest) ProtoMessage() {}
 
 func (x *FetchExecutionReceiptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[16]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1706,7 +1858,7 @@ func (x *FetchExecutionReceiptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchExecutionReceiptRequest.ProtoReflect.Descriptor instead.
 func (*FetchExecutionReceiptRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{16}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *FetchExecutionReceiptRequest) GetContext() *RequestContext {
@@ -1737,7 +1889,7 @@ type FetchExecutionReceiptResponse struct {
 
 func (x *FetchExecutionReceiptResponse) Reset() {
 	*x = FetchExecutionReceiptResponse{}
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[17]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1749,7 +1901,7 @@ func (x *FetchExecutionReceiptResponse) String() string {
 func (*FetchExecutionReceiptResponse) ProtoMessage() {}
 
 func (x *FetchExecutionReceiptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_execution_proto_msgTypes[17]
+	mi := &file_atos_tos_v1_execution_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,7 +1914,7 @@ func (x *FetchExecutionReceiptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchExecutionReceiptResponse.ProtoReflect.Descriptor instead.
 func (*FetchExecutionReceiptResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{17}
+	return file_atos_tos_v1_execution_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *FetchExecutionReceiptResponse) GetJobId() string {
@@ -1811,12 +1963,17 @@ var File_atos_tos_v1_execution_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\n" +
-	"\x1batos/tos/v1/execution.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\x97\x01\n" +
+	"\x1batos/tos/v1/execution.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\xba\x01\n" +
+	"\x11ThirdPartyBinding\x12>\n" +
+	"\ttransport\x18\x01 \x01(\x0e2 .atos.tos.v1.EndpointAdapterTypeR\ttransport\x12!\n" +
+	"\fendpoint_ref\x18\x02 \x01(\tR\vendpointRef\x12B\n" +
+	"\x12binding_commitment\x18\x03 \x01(\v2\x13.atos.tos.v1.DigestR\x11bindingCommitment\"\xe7\x01\n" +
 	"\x18GetProviderStatusRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
 	"providerId\x12#\n" +
-	"\rcapability_id\x18\x03 \x01(\tR\fcapabilityId\"\x9b\x03\n" +
+	"\rcapability_id\x18\x03 \x01(\tR\fcapabilityId\x12N\n" +
+	"\x13third_party_binding\x18\x04 \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\"\x9b\x03\n" +
 	"\x19GetProviderStatusResponse\x12\x1f\n" +
 	"\vprovider_id\x18\x01 \x01(\tR\n" +
 	"providerId\x12#\n" +
@@ -1827,7 +1984,7 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x14observed_unix_millis\x18\x06 \x01(\x03R\x12observedUnixMillis\x12.\n" +
 	"\x13expires_unix_millis\x18\a \x01(\x03R\x11expiresUnixMillis\x12\x1f\n" +
 	"\vreason_code\x18\b \x01(\tR\n" +
-	"reasonCode\"\xe8\x05\n" +
+	"reasonCode\"\xb8\x06\n" +
 	"\x15QuoteExecutionRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
@@ -1842,7 +1999,8 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x13intended_trust_mode\x18\t \x01(\x0e2\x16.atos.tos.v1.TrustModeR\x11intendedTrustMode\x12O\n" +
 	"\x16intended_proof_profile\x18\n" +
 	" \x01(\x0e2\x19.atos.tos.v1.ProofProfileR\x14intendedProofProfile\x12q\n" +
-	"\x15execution_constraints\x18\v \x03(\v2<.atos.tos.v1.QuoteExecutionRequest.ExecutionConstraintsEntryR\x14executionConstraints\x1aG\n" +
+	"\x15execution_constraints\x18\v \x03(\v2<.atos.tos.v1.QuoteExecutionRequest.ExecutionConstraintsEntryR\x14executionConstraints\x12N\n" +
+	"\x13third_party_binding\x18\f \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\x1aG\n" +
 	"\x19ExecutionConstraintsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x04\n" +
@@ -1862,7 +2020,7 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x13signed_quote_digest\x18\v \x01(\v2\x13.atos.tos.v1.DigestR\x11signedQuoteDigest\x12:\n" +
 	"\tquote_ref\x18\f \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\bquoteRef\"R\n" +
 	"\x16QuoteExecutionResponse\x128\n" +
-	"\x05quote\x18\x01 \x01(\v2\".atos.tos.v1.ServiceExecutionQuoteR\x05quote\"\xf5\a\n" +
+	"\x05quote\x18\x01 \x01(\v2\".atos.tos.v1.ServiceExecutionQuoteR\x05quote\"\xc5\b\n" +
 	"\x10SubmitJobRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x15\n" +
 	"\x06job_id\x18\x02 \x01(\tR\x05jobId\x12#\n" +
@@ -1885,7 +2043,8 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x1eexecution_deadline_unix_millis\x18\x10 \x01(\x03R\x1bexecutionDeadlineUnixMillis\x127\n" +
 	"\x18retain_until_unix_millis\x18\x11 \x01(\x03R\x15retainUntilUnixMillis\x12H\n" +
 	"\x0finput_artifacts\x18\x12 \x03(\v2\x1f.atos.tos.v1.ArtifactCommitmentR\x0einputArtifacts\x12l\n" +
-	"\x15execution_constraints\x18\x13 \x03(\v27.atos.tos.v1.SubmitJobRequest.ExecutionConstraintsEntryR\x14executionConstraints\x1aG\n" +
+	"\x15execution_constraints\x18\x13 \x03(\v27.atos.tos.v1.SubmitJobRequest.ExecutionConstraintsEntryR\x14executionConstraints\x12N\n" +
+	"\x13third_party_binding\x18\x14 \x01(\v2\x1e.atos.tos.v1.ThirdPartyBindingR\x11thirdPartyBinding\x1aG\n" +
 	"\x19ExecutionConstraintsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd0\x03\n" +
@@ -1991,7 +2150,12 @@ const file_atos_tos_v1_execution_proto_rawDesc = "" +
 	"\x18PROVIDER_READINESS_READY\x10\x01\x12\x1f\n" +
 	"\x1bPROVIDER_READINESS_DEGRADED\x10\x02\x12\"\n" +
 	"\x1ePROVIDER_READINESS_UNAVAILABLE\x10\x03\x12\x1f\n" +
-	"\x1bPROVIDER_READINESS_DRAINING\x10\x04*\xca\x01\n" +
+	"\x1bPROVIDER_READINESS_DRAINING\x10\x04*\x9a\x01\n" +
+	"\x13EndpointAdapterType\x12%\n" +
+	"!ENDPOINT_ADAPTER_TYPE_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aENDPOINT_ADAPTER_TYPE_HTTP\x10\x01\x12\x1d\n" +
+	"\x19ENDPOINT_ADAPTER_TYPE_MCP\x10\x02\x12\x1d\n" +
+	"\x19ENDPOINT_ADAPTER_TYPE_A2A\x10\x03*\xca\x01\n" +
 	"\fJobEventType\x12\x1e\n" +
 	"\x1aJOB_EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14JOB_EVENT_TYPE_STATE\x10\x01\x12\x1f\n" +
@@ -2021,111 +2185,118 @@ func file_atos_tos_v1_execution_proto_rawDescGZIP() []byte {
 	return file_atos_tos_v1_execution_proto_rawDescData
 }
 
-var file_atos_tos_v1_execution_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_atos_tos_v1_execution_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_atos_tos_v1_execution_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_atos_tos_v1_execution_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_atos_tos_v1_execution_proto_goTypes = []any{
 	(ProviderReadiness)(0),                // 0: atos.tos.v1.ProviderReadiness
-	(JobEventType)(0),                     // 1: atos.tos.v1.JobEventType
-	(*GetProviderStatusRequest)(nil),      // 2: atos.tos.v1.GetProviderStatusRequest
-	(*GetProviderStatusResponse)(nil),     // 3: atos.tos.v1.GetProviderStatusResponse
-	(*QuoteExecutionRequest)(nil),         // 4: atos.tos.v1.QuoteExecutionRequest
-	(*ServiceExecutionQuote)(nil),         // 5: atos.tos.v1.ServiceExecutionQuote
-	(*QuoteExecutionResponse)(nil),        // 6: atos.tos.v1.QuoteExecutionResponse
-	(*SubmitJobRequest)(nil),              // 7: atos.tos.v1.SubmitJobRequest
-	(*SubmitJobResponse)(nil),             // 8: atos.tos.v1.SubmitJobResponse
-	(*GetJobRequest)(nil),                 // 9: atos.tos.v1.GetJobRequest
-	(*JobRecord)(nil),                     // 10: atos.tos.v1.JobRecord
-	(*GetJobResponse)(nil),                // 11: atos.tos.v1.GetJobResponse
-	(*CancelJobRequest)(nil),              // 12: atos.tos.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),             // 13: atos.tos.v1.CancelJobResponse
-	(*StreamJobRequest)(nil),              // 14: atos.tos.v1.StreamJobRequest
-	(*JobEvent)(nil),                      // 15: atos.tos.v1.JobEvent
-	(*FetchResultRequest)(nil),            // 16: atos.tos.v1.FetchResultRequest
-	(*FetchResultResponse)(nil),           // 17: atos.tos.v1.FetchResultResponse
-	(*FetchExecutionReceiptRequest)(nil),  // 18: atos.tos.v1.FetchExecutionReceiptRequest
-	(*FetchExecutionReceiptResponse)(nil), // 19: atos.tos.v1.FetchExecutionReceiptResponse
-	nil,                                   // 20: atos.tos.v1.QuoteExecutionRequest.ExecutionConstraintsEntry
-	nil,                                   // 21: atos.tos.v1.SubmitJobRequest.ExecutionConstraintsEntry
-	(*RequestContext)(nil),                // 22: atos.tos.v1.RequestContext
-	(TrustMode)(0),                        // 23: atos.tos.v1.TrustMode
+	(EndpointAdapterType)(0),              // 1: atos.tos.v1.EndpointAdapterType
+	(JobEventType)(0),                     // 2: atos.tos.v1.JobEventType
+	(*ThirdPartyBinding)(nil),             // 3: atos.tos.v1.ThirdPartyBinding
+	(*GetProviderStatusRequest)(nil),      // 4: atos.tos.v1.GetProviderStatusRequest
+	(*GetProviderStatusResponse)(nil),     // 5: atos.tos.v1.GetProviderStatusResponse
+	(*QuoteExecutionRequest)(nil),         // 6: atos.tos.v1.QuoteExecutionRequest
+	(*ServiceExecutionQuote)(nil),         // 7: atos.tos.v1.ServiceExecutionQuote
+	(*QuoteExecutionResponse)(nil),        // 8: atos.tos.v1.QuoteExecutionResponse
+	(*SubmitJobRequest)(nil),              // 9: atos.tos.v1.SubmitJobRequest
+	(*SubmitJobResponse)(nil),             // 10: atos.tos.v1.SubmitJobResponse
+	(*GetJobRequest)(nil),                 // 11: atos.tos.v1.GetJobRequest
+	(*JobRecord)(nil),                     // 12: atos.tos.v1.JobRecord
+	(*GetJobResponse)(nil),                // 13: atos.tos.v1.GetJobResponse
+	(*CancelJobRequest)(nil),              // 14: atos.tos.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),             // 15: atos.tos.v1.CancelJobResponse
+	(*StreamJobRequest)(nil),              // 16: atos.tos.v1.StreamJobRequest
+	(*JobEvent)(nil),                      // 17: atos.tos.v1.JobEvent
+	(*FetchResultRequest)(nil),            // 18: atos.tos.v1.FetchResultRequest
+	(*FetchResultResponse)(nil),           // 19: atos.tos.v1.FetchResultResponse
+	(*FetchExecutionReceiptRequest)(nil),  // 20: atos.tos.v1.FetchExecutionReceiptRequest
+	(*FetchExecutionReceiptResponse)(nil), // 21: atos.tos.v1.FetchExecutionReceiptResponse
+	nil,                                   // 22: atos.tos.v1.QuoteExecutionRequest.ExecutionConstraintsEntry
+	nil,                                   // 23: atos.tos.v1.SubmitJobRequest.ExecutionConstraintsEntry
 	(*Digest)(nil),                        // 24: atos.tos.v1.Digest
-	(ProofProfile)(0),                     // 25: atos.tos.v1.ProofProfile
-	(*NetworkAmount)(nil),                 // 26: atos.tos.v1.NetworkAmount
-	(*NetworkReference)(nil),              // 27: atos.tos.v1.NetworkReference
-	(*ArtifactCommitment)(nil),            // 28: atos.tos.v1.ArtifactCommitment
-	(JobState)(0),                         // 29: atos.tos.v1.JobState
-	(*ProofStatus)(nil),                   // 30: atos.tos.v1.ProofStatus
-	(*Usage)(nil),                         // 31: atos.tos.v1.Usage
-	(VerificationStatus)(0),               // 32: atos.tos.v1.VerificationStatus
+	(*RequestContext)(nil),                // 25: atos.tos.v1.RequestContext
+	(TrustMode)(0),                        // 26: atos.tos.v1.TrustMode
+	(ProofProfile)(0),                     // 27: atos.tos.v1.ProofProfile
+	(*NetworkAmount)(nil),                 // 28: atos.tos.v1.NetworkAmount
+	(*NetworkReference)(nil),              // 29: atos.tos.v1.NetworkReference
+	(*ArtifactCommitment)(nil),            // 30: atos.tos.v1.ArtifactCommitment
+	(JobState)(0),                         // 31: atos.tos.v1.JobState
+	(*ProofStatus)(nil),                   // 32: atos.tos.v1.ProofStatus
+	(*Usage)(nil),                         // 33: atos.tos.v1.Usage
+	(VerificationStatus)(0),               // 34: atos.tos.v1.VerificationStatus
 }
 var file_atos_tos_v1_execution_proto_depIdxs = []int32{
-	22, // 0: atos.tos.v1.GetProviderStatusRequest.context:type_name -> atos.tos.v1.RequestContext
-	0,  // 1: atos.tos.v1.GetProviderStatusResponse.readiness:type_name -> atos.tos.v1.ProviderReadiness
-	23, // 2: atos.tos.v1.GetProviderStatusResponse.available_trust_modes:type_name -> atos.tos.v1.TrustMode
-	22, // 3: atos.tos.v1.QuoteExecutionRequest.context:type_name -> atos.tos.v1.RequestContext
-	24, // 4: atos.tos.v1.QuoteExecutionRequest.input_commitment:type_name -> atos.tos.v1.Digest
-	23, // 5: atos.tos.v1.QuoteExecutionRequest.intended_trust_mode:type_name -> atos.tos.v1.TrustMode
-	25, // 6: atos.tos.v1.QuoteExecutionRequest.intended_proof_profile:type_name -> atos.tos.v1.ProofProfile
-	20, // 7: atos.tos.v1.QuoteExecutionRequest.execution_constraints:type_name -> atos.tos.v1.QuoteExecutionRequest.ExecutionConstraintsEntry
-	26, // 8: atos.tos.v1.ServiceExecutionQuote.provider_price:type_name -> atos.tos.v1.NetworkAmount
-	24, // 9: atos.tos.v1.ServiceExecutionQuote.signed_quote_digest:type_name -> atos.tos.v1.Digest
-	27, // 10: atos.tos.v1.ServiceExecutionQuote.quote_ref:type_name -> atos.tos.v1.NetworkReference
-	5,  // 11: atos.tos.v1.QuoteExecutionResponse.quote:type_name -> atos.tos.v1.ServiceExecutionQuote
-	22, // 12: atos.tos.v1.SubmitJobRequest.context:type_name -> atos.tos.v1.RequestContext
-	23, // 13: atos.tos.v1.SubmitJobRequest.trust_mode:type_name -> atos.tos.v1.TrustMode
-	25, // 14: atos.tos.v1.SubmitJobRequest.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	24, // 15: atos.tos.v1.SubmitJobRequest.input_commitment:type_name -> atos.tos.v1.Digest
-	28, // 16: atos.tos.v1.SubmitJobRequest.input_artifacts:type_name -> atos.tos.v1.ArtifactCommitment
-	21, // 17: atos.tos.v1.SubmitJobRequest.execution_constraints:type_name -> atos.tos.v1.SubmitJobRequest.ExecutionConstraintsEntry
-	29, // 18: atos.tos.v1.SubmitJobResponse.state:type_name -> atos.tos.v1.JobState
-	23, // 19: atos.tos.v1.SubmitJobResponse.trust_mode:type_name -> atos.tos.v1.TrustMode
-	25, // 20: atos.tos.v1.SubmitJobResponse.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	30, // 21: atos.tos.v1.SubmitJobResponse.proof_status:type_name -> atos.tos.v1.ProofStatus
-	22, // 22: atos.tos.v1.GetJobRequest.context:type_name -> atos.tos.v1.RequestContext
-	23, // 23: atos.tos.v1.JobRecord.trust_mode:type_name -> atos.tos.v1.TrustMode
-	25, // 24: atos.tos.v1.JobRecord.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	29, // 25: atos.tos.v1.JobRecord.state:type_name -> atos.tos.v1.JobState
-	30, // 26: atos.tos.v1.JobRecord.proof_status:type_name -> atos.tos.v1.ProofStatus
-	10, // 27: atos.tos.v1.GetJobResponse.job:type_name -> atos.tos.v1.JobRecord
-	22, // 28: atos.tos.v1.CancelJobRequest.context:type_name -> atos.tos.v1.RequestContext
-	10, // 29: atos.tos.v1.CancelJobResponse.job:type_name -> atos.tos.v1.JobRecord
-	22, // 30: atos.tos.v1.StreamJobRequest.context:type_name -> atos.tos.v1.RequestContext
-	24, // 31: atos.tos.v1.StreamJobRequest.expected_stream_digest:type_name -> atos.tos.v1.Digest
-	1,  // 32: atos.tos.v1.JobEvent.event_type:type_name -> atos.tos.v1.JobEventType
-	29, // 33: atos.tos.v1.JobEvent.state:type_name -> atos.tos.v1.JobState
-	24, // 34: atos.tos.v1.JobEvent.stream_digest:type_name -> atos.tos.v1.Digest
-	31, // 35: atos.tos.v1.JobEvent.usage:type_name -> atos.tos.v1.Usage
-	30, // 36: atos.tos.v1.JobEvent.proof_status:type_name -> atos.tos.v1.ProofStatus
-	22, // 37: atos.tos.v1.FetchResultRequest.context:type_name -> atos.tos.v1.RequestContext
-	29, // 38: atos.tos.v1.FetchResultResponse.state:type_name -> atos.tos.v1.JobState
-	24, // 39: atos.tos.v1.FetchResultResponse.output_commitment:type_name -> atos.tos.v1.Digest
-	28, // 40: atos.tos.v1.FetchResultResponse.artifacts:type_name -> atos.tos.v1.ArtifactCommitment
-	31, // 41: atos.tos.v1.FetchResultResponse.usage:type_name -> atos.tos.v1.Usage
-	22, // 42: atos.tos.v1.FetchExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
-	24, // 43: atos.tos.v1.FetchExecutionReceiptResponse.receipt_digest:type_name -> atos.tos.v1.Digest
-	32, // 44: atos.tos.v1.FetchExecutionReceiptResponse.verification_status:type_name -> atos.tos.v1.VerificationStatus
-	27, // 45: atos.tos.v1.FetchExecutionReceiptResponse.receipt_ref:type_name -> atos.tos.v1.NetworkReference
-	2,  // 46: atos.tos.v1.ExecutionGatewayService.GetProviderStatus:input_type -> atos.tos.v1.GetProviderStatusRequest
-	4,  // 47: atos.tos.v1.ExecutionGatewayService.QuoteExecution:input_type -> atos.tos.v1.QuoteExecutionRequest
-	7,  // 48: atos.tos.v1.ExecutionGatewayService.SubmitJob:input_type -> atos.tos.v1.SubmitJobRequest
-	9,  // 49: atos.tos.v1.ExecutionGatewayService.GetJob:input_type -> atos.tos.v1.GetJobRequest
-	12, // 50: atos.tos.v1.ExecutionGatewayService.CancelJob:input_type -> atos.tos.v1.CancelJobRequest
-	14, // 51: atos.tos.v1.ExecutionGatewayService.StreamJob:input_type -> atos.tos.v1.StreamJobRequest
-	16, // 52: atos.tos.v1.ExecutionGatewayService.FetchResult:input_type -> atos.tos.v1.FetchResultRequest
-	18, // 53: atos.tos.v1.ExecutionGatewayService.FetchExecutionReceipt:input_type -> atos.tos.v1.FetchExecutionReceiptRequest
-	3,  // 54: atos.tos.v1.ExecutionGatewayService.GetProviderStatus:output_type -> atos.tos.v1.GetProviderStatusResponse
-	6,  // 55: atos.tos.v1.ExecutionGatewayService.QuoteExecution:output_type -> atos.tos.v1.QuoteExecutionResponse
-	8,  // 56: atos.tos.v1.ExecutionGatewayService.SubmitJob:output_type -> atos.tos.v1.SubmitJobResponse
-	11, // 57: atos.tos.v1.ExecutionGatewayService.GetJob:output_type -> atos.tos.v1.GetJobResponse
-	13, // 58: atos.tos.v1.ExecutionGatewayService.CancelJob:output_type -> atos.tos.v1.CancelJobResponse
-	15, // 59: atos.tos.v1.ExecutionGatewayService.StreamJob:output_type -> atos.tos.v1.JobEvent
-	17, // 60: atos.tos.v1.ExecutionGatewayService.FetchResult:output_type -> atos.tos.v1.FetchResultResponse
-	19, // 61: atos.tos.v1.ExecutionGatewayService.FetchExecutionReceipt:output_type -> atos.tos.v1.FetchExecutionReceiptResponse
-	54, // [54:62] is the sub-list for method output_type
-	46, // [46:54] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	1,  // 0: atos.tos.v1.ThirdPartyBinding.transport:type_name -> atos.tos.v1.EndpointAdapterType
+	24, // 1: atos.tos.v1.ThirdPartyBinding.binding_commitment:type_name -> atos.tos.v1.Digest
+	25, // 2: atos.tos.v1.GetProviderStatusRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 3: atos.tos.v1.GetProviderStatusRequest.third_party_binding:type_name -> atos.tos.v1.ThirdPartyBinding
+	0,  // 4: atos.tos.v1.GetProviderStatusResponse.readiness:type_name -> atos.tos.v1.ProviderReadiness
+	26, // 5: atos.tos.v1.GetProviderStatusResponse.available_trust_modes:type_name -> atos.tos.v1.TrustMode
+	25, // 6: atos.tos.v1.QuoteExecutionRequest.context:type_name -> atos.tos.v1.RequestContext
+	24, // 7: atos.tos.v1.QuoteExecutionRequest.input_commitment:type_name -> atos.tos.v1.Digest
+	26, // 8: atos.tos.v1.QuoteExecutionRequest.intended_trust_mode:type_name -> atos.tos.v1.TrustMode
+	27, // 9: atos.tos.v1.QuoteExecutionRequest.intended_proof_profile:type_name -> atos.tos.v1.ProofProfile
+	22, // 10: atos.tos.v1.QuoteExecutionRequest.execution_constraints:type_name -> atos.tos.v1.QuoteExecutionRequest.ExecutionConstraintsEntry
+	3,  // 11: atos.tos.v1.QuoteExecutionRequest.third_party_binding:type_name -> atos.tos.v1.ThirdPartyBinding
+	28, // 12: atos.tos.v1.ServiceExecutionQuote.provider_price:type_name -> atos.tos.v1.NetworkAmount
+	24, // 13: atos.tos.v1.ServiceExecutionQuote.signed_quote_digest:type_name -> atos.tos.v1.Digest
+	29, // 14: atos.tos.v1.ServiceExecutionQuote.quote_ref:type_name -> atos.tos.v1.NetworkReference
+	7,  // 15: atos.tos.v1.QuoteExecutionResponse.quote:type_name -> atos.tos.v1.ServiceExecutionQuote
+	25, // 16: atos.tos.v1.SubmitJobRequest.context:type_name -> atos.tos.v1.RequestContext
+	26, // 17: atos.tos.v1.SubmitJobRequest.trust_mode:type_name -> atos.tos.v1.TrustMode
+	27, // 18: atos.tos.v1.SubmitJobRequest.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	24, // 19: atos.tos.v1.SubmitJobRequest.input_commitment:type_name -> atos.tos.v1.Digest
+	30, // 20: atos.tos.v1.SubmitJobRequest.input_artifacts:type_name -> atos.tos.v1.ArtifactCommitment
+	23, // 21: atos.tos.v1.SubmitJobRequest.execution_constraints:type_name -> atos.tos.v1.SubmitJobRequest.ExecutionConstraintsEntry
+	3,  // 22: atos.tos.v1.SubmitJobRequest.third_party_binding:type_name -> atos.tos.v1.ThirdPartyBinding
+	31, // 23: atos.tos.v1.SubmitJobResponse.state:type_name -> atos.tos.v1.JobState
+	26, // 24: atos.tos.v1.SubmitJobResponse.trust_mode:type_name -> atos.tos.v1.TrustMode
+	27, // 25: atos.tos.v1.SubmitJobResponse.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	32, // 26: atos.tos.v1.SubmitJobResponse.proof_status:type_name -> atos.tos.v1.ProofStatus
+	25, // 27: atos.tos.v1.GetJobRequest.context:type_name -> atos.tos.v1.RequestContext
+	26, // 28: atos.tos.v1.JobRecord.trust_mode:type_name -> atos.tos.v1.TrustMode
+	27, // 29: atos.tos.v1.JobRecord.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	31, // 30: atos.tos.v1.JobRecord.state:type_name -> atos.tos.v1.JobState
+	32, // 31: atos.tos.v1.JobRecord.proof_status:type_name -> atos.tos.v1.ProofStatus
+	12, // 32: atos.tos.v1.GetJobResponse.job:type_name -> atos.tos.v1.JobRecord
+	25, // 33: atos.tos.v1.CancelJobRequest.context:type_name -> atos.tos.v1.RequestContext
+	12, // 34: atos.tos.v1.CancelJobResponse.job:type_name -> atos.tos.v1.JobRecord
+	25, // 35: atos.tos.v1.StreamJobRequest.context:type_name -> atos.tos.v1.RequestContext
+	24, // 36: atos.tos.v1.StreamJobRequest.expected_stream_digest:type_name -> atos.tos.v1.Digest
+	2,  // 37: atos.tos.v1.JobEvent.event_type:type_name -> atos.tos.v1.JobEventType
+	31, // 38: atos.tos.v1.JobEvent.state:type_name -> atos.tos.v1.JobState
+	24, // 39: atos.tos.v1.JobEvent.stream_digest:type_name -> atos.tos.v1.Digest
+	33, // 40: atos.tos.v1.JobEvent.usage:type_name -> atos.tos.v1.Usage
+	32, // 41: atos.tos.v1.JobEvent.proof_status:type_name -> atos.tos.v1.ProofStatus
+	25, // 42: atos.tos.v1.FetchResultRequest.context:type_name -> atos.tos.v1.RequestContext
+	31, // 43: atos.tos.v1.FetchResultResponse.state:type_name -> atos.tos.v1.JobState
+	24, // 44: atos.tos.v1.FetchResultResponse.output_commitment:type_name -> atos.tos.v1.Digest
+	30, // 45: atos.tos.v1.FetchResultResponse.artifacts:type_name -> atos.tos.v1.ArtifactCommitment
+	33, // 46: atos.tos.v1.FetchResultResponse.usage:type_name -> atos.tos.v1.Usage
+	25, // 47: atos.tos.v1.FetchExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
+	24, // 48: atos.tos.v1.FetchExecutionReceiptResponse.receipt_digest:type_name -> atos.tos.v1.Digest
+	34, // 49: atos.tos.v1.FetchExecutionReceiptResponse.verification_status:type_name -> atos.tos.v1.VerificationStatus
+	29, // 50: atos.tos.v1.FetchExecutionReceiptResponse.receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	4,  // 51: atos.tos.v1.ExecutionGatewayService.GetProviderStatus:input_type -> atos.tos.v1.GetProviderStatusRequest
+	6,  // 52: atos.tos.v1.ExecutionGatewayService.QuoteExecution:input_type -> atos.tos.v1.QuoteExecutionRequest
+	9,  // 53: atos.tos.v1.ExecutionGatewayService.SubmitJob:input_type -> atos.tos.v1.SubmitJobRequest
+	11, // 54: atos.tos.v1.ExecutionGatewayService.GetJob:input_type -> atos.tos.v1.GetJobRequest
+	14, // 55: atos.tos.v1.ExecutionGatewayService.CancelJob:input_type -> atos.tos.v1.CancelJobRequest
+	16, // 56: atos.tos.v1.ExecutionGatewayService.StreamJob:input_type -> atos.tos.v1.StreamJobRequest
+	18, // 57: atos.tos.v1.ExecutionGatewayService.FetchResult:input_type -> atos.tos.v1.FetchResultRequest
+	20, // 58: atos.tos.v1.ExecutionGatewayService.FetchExecutionReceipt:input_type -> atos.tos.v1.FetchExecutionReceiptRequest
+	5,  // 59: atos.tos.v1.ExecutionGatewayService.GetProviderStatus:output_type -> atos.tos.v1.GetProviderStatusResponse
+	8,  // 60: atos.tos.v1.ExecutionGatewayService.QuoteExecution:output_type -> atos.tos.v1.QuoteExecutionResponse
+	10, // 61: atos.tos.v1.ExecutionGatewayService.SubmitJob:output_type -> atos.tos.v1.SubmitJobResponse
+	13, // 62: atos.tos.v1.ExecutionGatewayService.GetJob:output_type -> atos.tos.v1.GetJobResponse
+	15, // 63: atos.tos.v1.ExecutionGatewayService.CancelJob:output_type -> atos.tos.v1.CancelJobResponse
+	17, // 64: atos.tos.v1.ExecutionGatewayService.StreamJob:output_type -> atos.tos.v1.JobEvent
+	19, // 65: atos.tos.v1.ExecutionGatewayService.FetchResult:output_type -> atos.tos.v1.FetchResultResponse
+	21, // 66: atos.tos.v1.ExecutionGatewayService.FetchExecutionReceipt:output_type -> atos.tos.v1.FetchExecutionReceiptResponse
+	59, // [59:67] is the sub-list for method output_type
+	51, // [51:59] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_execution_proto_init() }
@@ -2139,8 +2310,8 @@ func file_atos_tos_v1_execution_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_tos_v1_execution_proto_rawDesc), len(file_atos_tos_v1_execution_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   20,
+			NumEnums:      3,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
