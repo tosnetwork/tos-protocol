@@ -1,7 +1,6 @@
 package atosrpc
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"strings"
@@ -172,22 +171,32 @@ func (s *Server) AuthorizeExecutionSigner(
 			return failedPrecondition("CAPABILITY_OWNERSHIP_FAILED", "signer provider does not own the capability version")
 		}
 		key := signerKey(value.ProviderId, value.CapabilityId, value.CapabilityVersion, value.ExecutionSignerId)
+		digest, err := protoDigest("ATOS-TOS-SIGNER-AUTHORIZATION-V1", value)
+		if err != nil {
+			return err
+		}
 		existing := new(atostosv1.ExecutionSignerAuthorization)
 		exists, err := s.store.getProto(tx, bucketSignerAuths, key, existing)
 		if err != nil {
 			return err
 		}
 		if exists {
-			if existing.Value == nil || existing.Value.AuthorizationId != value.AuthorizationId ||
-				!bytes.Equal(existing.Value.SignerPublicKey, value.SignerPublicKey) {
+			existingDigest, err := protoDigest("ATOS-TOS-SIGNER-AUTHORIZATION-V1", existing.Value)
+			if err != nil {
+				return err
+			}
+			if existingDigest != digest {
 				return conflict("ALREADY_EXISTS", "execution signer is already authorized differently")
 			}
 			response.Authorization = existing
 			return nil
 		}
-		digest, err := protoDigest("ATOS-TOS-SIGNER-AUTHORIZATION-V1", value)
-		if err != nil {
-			return err
+		// authorization_id must not be silently reused across two different
+		// (provider, capability, version, signer_id) keys -- otherwise
+		// RevokeExecutionSigner, which resolves an authorization_id to
+		// exactly one signer, would be ambiguous about which one it means.
+		if ownerKey := tx.Bucket(bucketSignerAuthByAuthID).Get([]byte(value.AuthorizationId)); ownerKey != nil && string(ownerKey) != key {
+			return conflict("ALREADY_EXISTS", "authorization_id is already bound to a different execution signer")
 		}
 		ref, err := s.authority.Commit(ctx, "execution-signer", value.AuthorizationId, digest)
 		if err != nil {
@@ -197,6 +206,9 @@ func (s *Server) AuthorizeExecutionSigner(
 			Value: cloneMessage(value), AuthorizationRef: &ref,
 		}
 		if err := s.store.putProto(tx, bucketSignerAuths, key, authorization); err != nil {
+			return err
+		}
+		if err := tx.Bucket(bucketSignerAuthByAuthID).Put([]byte(value.AuthorizationId), []byte(key)); err != nil {
 			return err
 		}
 		if err := s.putProofTx(tx, &ref, "execution_signer_authorization", value); err != nil {
@@ -226,39 +238,40 @@ func (s *Server) RevokeExecutionSigner(
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 	err := s.atomicMutation("RevokeExecutionSigner", req.Msg.Context, req.Msg, response, func(tx *bolt.Tx) error {
-		cursor := tx.Bucket(bucketSignerAuths).Cursor()
-		for key, _ := cursor.First(); key != nil; key, _ = cursor.Next() {
-			authorization := new(atostosv1.ExecutionSignerAuthorization)
-			found, err := s.store.getProto(tx, bucketSignerAuths, string(key), authorization)
-			if err != nil {
-				return err
-			}
-			if !found || authorization.Value == nil || authorization.Value.AuthorizationId != req.Msg.AuthorizationId {
-				continue
-			}
-			if authorization.Revoked {
-				response.Authorization = authorization
-				response.Revoked = true
-				return nil
-			}
-			digest, err := protoDigest("ATOS-TOS-SIGNER-REVOCATION-V1", req.Msg)
-			if err != nil {
-				return err
-			}
-			ref, err := s.authority.Commit(ctx, "execution-signer-revocation", req.Msg.AuthorizationId, digest)
-			if err != nil {
-				return unavailable("NETWORK_UNAVAILABLE", "signer revocation authority is unavailable")
-			}
-			authorization.Revoked = true
-			authorization.RevocationRef = &ref
-			if err := s.store.putProto(tx, bucketSignerAuths, string(key), authorization); err != nil {
-				return err
-			}
+		ownerKey := tx.Bucket(bucketSignerAuthByAuthID).Get([]byte(req.Msg.AuthorizationId))
+		if ownerKey == nil {
+			return notFound("NOT_FOUND", "execution signer authorization not found")
+		}
+		key := string(ownerKey)
+		authorization := new(atostosv1.ExecutionSignerAuthorization)
+		found, err := s.store.getProto(tx, bucketSignerAuths, key, authorization)
+		if err != nil {
+			return err
+		}
+		if !found || authorization.Value == nil || authorization.Value.AuthorizationId != req.Msg.AuthorizationId {
+			return notFound("NOT_FOUND", "execution signer authorization not found")
+		}
+		if authorization.Revoked {
 			response.Authorization = authorization
 			response.Revoked = true
 			return nil
 		}
-		return notFound("NOT_FOUND", "execution signer authorization not found")
+		digest, err := protoDigest("ATOS-TOS-SIGNER-REVOCATION-V1", withoutTransportContext(req.Msg))
+		if err != nil {
+			return err
+		}
+		ref, err := s.authority.Commit(ctx, "execution-signer-revocation", req.Msg.AuthorizationId, digest)
+		if err != nil {
+			return unavailable("NETWORK_UNAVAILABLE", "signer revocation authority is unavailable")
+		}
+		authorization.Revoked = true
+		authorization.RevocationRef = &ref
+		if err := s.store.putProto(tx, bucketSignerAuths, key, authorization); err != nil {
+			return err
+		}
+		response.Authorization = authorization
+		response.Revoked = true
+		return nil
 	})
 	if err != nil {
 		return nil, err

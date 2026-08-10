@@ -63,6 +63,30 @@ type mutationRequestWithContext interface {
 	GetContext() *atostosv1.RequestContext
 }
 
+// withoutTransportContext returns a clone of msg with the transport-scoped
+// RequestContext fields that a well-behaved caller legitimately varies across
+// retries of the same logical operation -- request_id, trace_id, deadline --
+// zeroed out. caller_id and idempotency_key are left untouched: they are part
+// of the request's durable identity, not its transport envelope.
+//
+// Anything derived from the result (an idempotency digest, or an Authority
+// commitment digest) stays stable across retries of unchanged business
+// content. Skipping this before computing an Authority.Commit digest is what
+// let a retry after a partial local failure mint a second, divergent
+// commitment for what the caller believed was one operation -- msg is not a
+// mutationRequestWithContext, the clone is returned unchanged.
+func withoutTransportContext(msg proto.Message) proto.Message {
+	normalized := proto.Clone(msg)
+	if withContext, ok := normalized.(mutationRequestWithContext); ok {
+		if requestContext := withContext.GetContext(); requestContext != nil {
+			requestContext.RequestId = ""
+			requestContext.TraceId = ""
+			requestContext.DeadlineUnixMillis = 0
+		}
+	}
+	return normalized
+}
+
 // mutationRequestDigest binds the business request while excluding transport
 // metadata that legitimately changes across retries. The idempotency record key
 // already binds caller_id, method, and idempotency_key; keeping caller_id and
@@ -71,14 +95,10 @@ func mutationRequestDigest(method string, request proto.Message) (string, error)
 	if request == nil {
 		return "", fmt.Errorf("mutation request is required")
 	}
-	normalized := proto.Clone(request)
+	normalized := withoutTransportContext(request)
 	withContext, ok := normalized.(mutationRequestWithContext)
 	if !ok || withContext.GetContext() == nil {
 		return "", fmt.Errorf("mutation request context is required")
 	}
-	requestContext := withContext.GetContext()
-	requestContext.RequestId = ""
-	requestContext.TraceId = ""
-	requestContext.DeadlineUnixMillis = 0
 	return protoDigest("ATOS-RPC-IDEMPOTENCY-V1:"+method, normalized)
 }

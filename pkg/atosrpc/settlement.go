@@ -75,7 +75,7 @@ func (s *Server) CreateEscrow(
 				return nil
 			}
 		}
-		digest, err := protoDigest("ATOS-TOS-ESCROW-V1", req.Msg)
+		digest, err := protoDigest("ATOS-TOS-ESCROW-V1", withoutTransportContext(req.Msg))
 		if err != nil {
 			return err
 		}
@@ -223,7 +223,7 @@ func (s *Server) ReleaseEscrow(
 			response.Released = true
 			return nil
 		}
-		digest, err := protoDigest("ATOS-TOS-ESCROW-RELEASE-V1", req.Msg)
+		digest, err := protoDigest("ATOS-TOS-ESCROW-RELEASE-V1", withoutTransportContext(req.Msg))
 		if err != nil {
 			return err
 		}
@@ -337,7 +337,7 @@ func (s *Server) SettleJob(
 			}
 		}
 		refund := new(big.Int).Sub(new(big.Int).Set(reserved), charge)
-		digest, err := protoDigest("ATOS-TOS-SETTLEMENT-V1", req.Msg)
+		digest, err := protoDigest("ATOS-TOS-SETTLEMENT-V1", withoutTransportContext(req.Msg))
 		if err != nil {
 			return err
 		}

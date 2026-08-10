@@ -202,7 +202,7 @@ func (s *Server) CommitCapabilityManifest(
 			}
 			activeModes = append(activeModes, mode)
 		}
-		manifestDigest, err := protoDigest("ATOS-TOS-CAPABILITY-MANIFEST-V1", req.Msg)
+		manifestDigest, err := protoDigest("ATOS-TOS-CAPABILITY-MANIFEST-V1", withoutTransportContext(req.Msg))
 		if err != nil {
 			return err
 		}

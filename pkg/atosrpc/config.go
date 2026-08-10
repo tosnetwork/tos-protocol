@@ -33,6 +33,19 @@ type Authority interface {
 	Network() string
 	Supports(mode TrustMode) bool
 	CheckReady(context.Context) error
+	// Commit anchors (kind, id, digest) and must be idempotent in that exact
+	// triple: every call with the same three values -- whether it is the
+	// original attempt or a retry after the caller never received a response
+	// -- must return an identical NetworkReference and must not produce a
+	// second, divergent side effect on the underlying network. Callers rely
+	// on this to recover from a crash between a successful Commit and the
+	// local write that was meant to record it: they simply replay the exact
+	// same mutation, which recomputes the same digest and lands on the same
+	// commitment instead of minting a new one. A caller that varies id or
+	// digest between what it considers retries of the same logical operation
+	// -- for example by hashing transport-scoped fields like a request ID
+	// into digest -- breaks this guarantee even if Commit itself is correct;
+	// see withoutTransportContext.
 	Commit(ctx context.Context, kind, id, digest string) (NetworkReference, error)
 	Close() error
 }
