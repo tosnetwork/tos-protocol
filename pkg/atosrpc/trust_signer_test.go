@@ -3,7 +3,9 @@ package atosrpc
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -543,5 +545,239 @@ func TestAuthorizeExecutionSigner_RejectsNonEd25519Algorithm(t *testing.T) {
 	request.Authorization.SignatureAlgorithm = "secp256k1"
 	if _, err := server.AuthorizeExecutionSigner(context.Background(), connect.NewRequest(request)); err == nil {
 		t.Fatal("expected a non-Ed25519 signature algorithm to be rejected")
+	}
+}
+
+// lostResponseAuthority simulates the specific failure window
+// scriptedAuthority (mutation_test.go) does not: the underlying Commit
+// actually runs and produces a real, durable NetworkReference, but the RPC
+// caller never receives it -- a timeout or dropped connection after the
+// external side effect landed, not before. The first failFirstN calls per
+// failKind still invoke the real Authority and record what it returned, but
+// report an error to the caller instead of that reference. Every call,
+// lost or not, is recorded so a test can assert a later successful call
+// returned exactly the reference the "lost" call actually produced.
+// lostResponseCommitOutcome is one call through lostResponseAuthority.Commit:
+// what it was called with, and the real Authority's actual outcome -- Ref is
+// nil if the underlying call itself errored (as opposed to succeeding and
+// then having its response dropped).
+type lostResponseCommitOutcome struct {
+	scriptedCommitCall
+	Ref *NetworkReference
+}
+
+type lostResponseAuthority struct {
+	Authority
+	mu         sync.Mutex
+	outcomes   []lostResponseCommitOutcome
+	failKind   string
+	failFirstN int
+	lost       int
+}
+
+func (a *lostResponseAuthority) Commit(ctx context.Context, kind, id, digest string) (NetworkReference, error) {
+	ref, err := a.Authority.Commit(ctx, kind, id, digest)
+	a.mu.Lock()
+	outcome := lostResponseCommitOutcome{scriptedCommitCall: scriptedCommitCall{Kind: kind, ID: id, Digest: digest}}
+	dropResponse := err == nil && kind == a.failKind && a.lost < a.failFirstN
+	if err == nil {
+		outcome.Ref = &NetworkReference{Network: ref.Network, Reference: ref.Reference}
+	}
+	a.outcomes = append(a.outcomes, outcome)
+	if dropResponse {
+		a.lost++
+	}
+	a.mu.Unlock()
+	if err != nil {
+		return NetworkReference{}, err
+	}
+	if dropResponse {
+		return NetworkReference{}, errors.New("simulated: the underlying Commit succeeded but the caller never received this response")
+	}
+	return NetworkReference{Network: ref.Network, Reference: ref.Reference}, nil
+}
+
+// successfulRefsForKind returns the references the underlying Authority
+// actually produced for calls of the given kind, in call order, regardless
+// of whether the caller received that response. Caller must hold a.mu.
+func (a *lostResponseAuthority) successfulRefsForKind(kind string) []*NetworkReference {
+	var refs []*NetworkReference
+	for _, outcome := range a.outcomes {
+		if outcome.Kind == kind && outcome.Ref != nil {
+			refs = append(refs, outcome.Ref)
+		}
+	}
+	return refs
+}
+
+// TestRevokeExecutionSigner_RetryAfterLostResponseConvergesOnOriginalCommitment
+// covers the specific gap a review of this PR flagged in
+// TestCreateEscrowRetryAfterUncertainAuthorityFailureConverges
+// (mutation_test.go): that test's scriptedAuthority never calls the real
+// Authority on the failed attempt, so it only proves recovery from "the
+// authority was never reached." This test drives the more dangerous window
+// -- the authority's Commit genuinely succeeded and produced a durable
+// reference, but the RPC caller never saw it -- for RevokeExecutionSigner
+// specifically, since a lost revoke response is the sharpest case: until the
+// retry converges, ResolveExecutionSignerAuthorization still reports the
+// old signer as authorized even though the revocation already exists on the
+// authority side.
+func TestRevokeExecutionSigner_RetryAfterLostResponseConvergesOnOriginalCommitment(t *testing.T) {
+	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	authority := &lostResponseAuthority{
+		Authority: NewLocalAuthority("tos-local"),
+		failKind:  "execution-signer-revocation", failFirstN: 1,
+	}
+	server, err := Open(Config{
+		StatePath:   filepath.Join(t.TempDir(), "atos-rpc.db"),
+		BearerToken: "test-secret", Authority: authority,
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer server.Close()
+	ctx := context.Background()
+
+	if _, err := server.CommitCapabilityManifest(ctx, connect.NewRequest(
+		capabilityCommitRequest(now, "cap-lost-revoke", "provider-lost-revoke"),
+	)); err != nil {
+		t.Fatalf("CommitCapabilityManifest: %v", err)
+	}
+	if _, err := server.AuthorizeExecutionSigner(ctx, connect.NewRequest(
+		authorizeRequest(now, "provider-lost-revoke", "cap-lost-revoke", "auth-lost-revoke", "signer-lost-revoke", testSignerPublicKey(t)),
+	)); err != nil {
+		t.Fatalf("AuthorizeExecutionSigner: %v", err)
+	}
+
+	revokeRequest := func(requestID string) *atostosv1.RevokeExecutionSignerRequest {
+		return &atostosv1.RevokeExecutionSignerRequest{
+			Context: &atostosv1.RequestContext{
+				RequestId: requestID, TraceId: "trace-" + requestID,
+				CallerId: "caller-lost-revoke", IdempotencyKey: "idem-lost-revoke",
+				DeadlineUnixMillis: now.Add(time.Minute).UnixMilli(),
+			},
+			AuthorizationId: "auth-lost-revoke", ReasonCode: "rotation",
+		}
+	}
+
+	if _, err := server.RevokeExecutionSigner(ctx, connect.NewRequest(revokeRequest("request-revoke-1"))); err == nil {
+		t.Fatal("expected the scripted first attempt to report a lost response")
+	}
+
+	// The local write must have rolled back with the lost response: the
+	// signer is still authorized as far as any caller can observe, even
+	// though the authority side already committed the revocation.
+	resolved, err := server.ResolveExecutionSignerAuthorization(ctx, connect.NewRequest(
+		&atostosv1.ResolveExecutionSignerAuthorizationRequest{
+			Context:    readContext("resolve-after-lost-revoke"),
+			ProviderId: "provider-lost-revoke", CapabilityId: "cap-lost-revoke",
+			CapabilityVersion: "1.0.0", ExecutionSignerId: "signer-lost-revoke",
+		}))
+	if err != nil {
+		t.Fatalf("ResolveExecutionSignerAuthorization after lost response: %v", err)
+	}
+	if !resolved.Msg.Authorized || resolved.Msg.ReasonCode != "" {
+		t.Fatalf("local state must not observe the revocation until the retry converges, got %+v", resolved.Msg)
+	}
+
+	retryResponse, err := server.RevokeExecutionSigner(ctx, connect.NewRequest(revokeRequest("request-revoke-2")))
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if !retryResponse.Msg.Revoked {
+		t.Fatalf("retry did not revoke: %+v", retryResponse.Msg)
+	}
+
+	authority.mu.Lock()
+	revokeRefs := authority.successfulRefsForKind("execution-signer-revocation")
+	authority.mu.Unlock()
+	if len(revokeRefs) != 2 {
+		t.Fatalf("expected 2 successful underlying revocation Commit calls (lost + retry), got %d", len(revokeRefs))
+	}
+	if revokeRefs[0].Network != revokeRefs[1].Network || revokeRefs[0].Reference != revokeRefs[1].Reference {
+		t.Fatalf("retry produced a different commitment than the one the lost response actually committed: lost=%q/%q retry=%q/%q",
+			revokeRefs[0].Network, revokeRefs[0].Reference, revokeRefs[1].Network, revokeRefs[1].Reference)
+	}
+	if retryResponse.Msg.Authorization.RevocationRef.GetReference() != revokeRefs[0].Reference {
+		t.Fatalf("the response returned to the caller does not match the reference the lost attempt actually produced: response=%q original=%q",
+			retryResponse.Msg.Authorization.RevocationRef.GetReference(), revokeRefs[0].Reference)
+	}
+
+	resolved, err = server.ResolveExecutionSignerAuthorization(ctx, connect.NewRequest(
+		&atostosv1.ResolveExecutionSignerAuthorizationRequest{
+			Context:    readContext("resolve-after-retry-revoke"),
+			ProviderId: "provider-lost-revoke", CapabilityId: "cap-lost-revoke",
+			CapabilityVersion: "1.0.0", ExecutionSignerId: "signer-lost-revoke",
+		}))
+	if err != nil {
+		t.Fatalf("ResolveExecutionSignerAuthorization after retry: %v", err)
+	}
+	if resolved.Msg.ReasonCode != "REVOKED" {
+		t.Fatalf("expected the converged state to report REVOKED, got %+v", resolved.Msg)
+	}
+}
+
+// TestAuthorizeExecutionSigner_RetryAfterLostResponseConvergesOnOriginalCommitment
+// is AuthorizeExecutionSigner's counterpart to the revoke test above: the
+// underlying Commit succeeds and produces a real reference on the first
+// attempt, the caller never sees it, and a retry with the same business
+// content and a fresh request_id/trace_id must land on that exact original
+// reference rather than a second, divergent one.
+func TestAuthorizeExecutionSigner_RetryAfterLostResponseConvergesOnOriginalCommitment(t *testing.T) {
+	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	authority := &lostResponseAuthority{
+		Authority: NewLocalAuthority("tos-local"),
+		failKind:  "execution-signer", failFirstN: 1,
+	}
+	server, err := Open(Config{
+		StatePath:   filepath.Join(t.TempDir(), "atos-rpc.db"),
+		BearerToken: "test-secret", Authority: authority,
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer server.Close()
+	ctx := context.Background()
+
+	if _, err := server.CommitCapabilityManifest(ctx, connect.NewRequest(
+		capabilityCommitRequest(now, "cap-lost-authorize", "provider-lost-authorize"),
+	)); err != nil {
+		t.Fatalf("CommitCapabilityManifest: %v", err)
+	}
+
+	pub := testSignerPublicKey(t)
+	request := func(requestID string) *atostosv1.AuthorizeExecutionSignerRequest {
+		built := authorizeRequest(now, "provider-lost-authorize", "cap-lost-authorize", "auth-lost-authorize", "signer-lost-authorize", pub)
+		built.Context.RequestId = requestID
+		built.Context.TraceId = "trace-" + requestID
+		return built
+	}
+
+	if _, err := server.AuthorizeExecutionSigner(ctx, connect.NewRequest(request("request-authorize-1"))); err == nil {
+		t.Fatal("expected the scripted first attempt to report a lost response")
+	}
+	retryResponse, err := server.AuthorizeExecutionSigner(ctx, connect.NewRequest(request("request-authorize-2")))
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if !retryResponse.Msg.Created {
+		t.Fatalf("retry did not report the signer as created: %+v", retryResponse.Msg)
+	}
+
+	authority.mu.Lock()
+	authorizeRefs := authority.successfulRefsForKind("execution-signer")
+	authority.mu.Unlock()
+	if len(authorizeRefs) != 2 {
+		t.Fatalf("expected 2 successful underlying authorization Commit calls (lost + retry), got %d", len(authorizeRefs))
+	}
+	if authorizeRefs[0].Network != authorizeRefs[1].Network || authorizeRefs[0].Reference != authorizeRefs[1].Reference {
+		t.Fatalf("retry produced a different commitment than the one the lost response actually committed: lost=%q/%q retry=%q/%q",
+			authorizeRefs[0].Network, authorizeRefs[0].Reference, authorizeRefs[1].Network, authorizeRefs[1].Reference)
+	}
+	if retryResponse.Msg.Authorization.AuthorizationRef.GetReference() != authorizeRefs[0].Reference {
+		t.Fatalf("the response returned to the caller does not match the reference the lost attempt actually produced: response=%q original=%q",
+			retryResponse.Msg.Authorization.AuthorizationRef.GetReference(), authorizeRefs[0].Reference)
 	}
 }
