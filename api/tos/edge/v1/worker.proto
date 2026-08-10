@@ -102,6 +102,14 @@ message ThirdPartyInvokeRequest {
   // this retention boundary, mirroring InvokeRequest.retain_until_unix_millis.
   int64 retain_until_unix_millis = 7;
   string request_digest = 8;
+  // max_output_bytes is the ATOS-quoted output limit for this exact Job
+  // (mirroring InvokeRequest.max_output_bytes). Unlike the native
+  // model-serving path, a third-party provider has no contractual
+  // obligation to bound its own output, so the caller (Edge Core) is
+  // responsible for enforcing this against the returned output size --
+  // 0 means unbounded (the operator's own MaxResponseBytes wire-envelope
+  // limit still applies independently at the worker).
+  uint64 max_output_bytes = 9;
 }
 
 message ThirdPartyInvokeResponse {

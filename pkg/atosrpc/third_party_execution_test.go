@@ -319,3 +319,34 @@ func TestSubmitThirdPartyJob_RecoversAfterTransientInvokeFailure(t *testing.T) {
 		t.Fatalf("thirdPartyWorker.Invoke called %d times, want still exactly 1 -- GetJob's recovery must stay read-only too", worker.invocations())
 	}
 }
+
+// TestSubmitThirdPartyJob_RejectsOutputExceedingQuotedMaxOutputBytes proves
+// a provider response larger than the Job's own quoted max_output_bytes
+// (independent of the worker operator's own, unrelated wire-envelope
+// MaxResponseBytes) never reaches completeDurableJob/the signed Receipt/
+// settlement -- the fixture quotes 4096 bytes; the fake worker returns
+// more.
+func TestSubmitThirdPartyJob_RejectsOutputExceedingQuotedMaxOutputBytes(t *testing.T) {
+	oversized := make([]byte, 8192)
+	worker := &fakeThirdPartyWorker{
+		invokeFunc: func(req *edgev1.ThirdPartyInvokeRequest) (*edgev1.ThirdPartyInvokeResponse, error) {
+			return &edgev1.ThirdPartyInvokeResponse{
+				RequestId: req.RequestId, Status: edgev1.ThirdPartyInvokeStatus_THIRD_PARTY_INVOKE_STATUS_COMPLETED,
+				Output: oversized, CompletedUnixMillis: time.Now().UnixMilli(),
+			}, nil
+		},
+	}
+	srv := newThirdPartyTestServer(t, worker)
+	fixture := setUpThirdPartyQuote(t, srv, "https://provider.example.com/invoke")
+
+	if _, err := srv.SubmitJob(context.Background(), connect.NewRequest(fixture.submitRequest("job_5", "submit-job-5"))); err == nil {
+		t.Fatal("expected SubmitJob to reject output exceeding the quoted max_output_bytes")
+	}
+
+	receipt, err := srv.FetchExecutionReceipt(context.Background(), connect.NewRequest(&atostosv1.FetchExecutionReceiptRequest{
+		Context: readContext("fetch-receipt-5"), JobId: "job_5",
+	}))
+	if err == nil && receipt.Msg != nil && len(receipt.Msg.CanonicalReceipt) > 0 {
+		t.Fatal("an oversized third-party result must never produce a signed execution receipt")
+	}
+}

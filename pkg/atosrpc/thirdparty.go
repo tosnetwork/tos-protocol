@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -349,10 +350,15 @@ func (s *Server) submitThirdPartyJob(
 		if !found || escrow.QuoteId != req.Msg.QuoteId || escrow.State != atostosv1.EscrowState_ESCROW_STATE_RESERVED {
 			return failedPrecondition("ESCROW_MISMATCH", "reserved escrow does not match job")
 		}
+		maxOutput := req.Msg.MaxOutputBytes
+		if maxOutput == 0 || maxOutput > quotedMaxOutput {
+			maxOutput = quotedMaxOutput
+		}
 		workerRequest := &edgev1.ThirdPartyInvokeRequest{
 			RequestId: req.Msg.JobId, JobId: req.Msg.JobId, ProviderId: req.Msg.ProviderId,
 			Binding: quotedBinding, Input: append([]byte(nil), req.Msg.Input...),
 			DeadlineUnixMillis: req.Msg.ExecutionDeadlineUnixMillis, RetainUntilUnixMillis: req.Msg.RetainUntilUnixMillis,
+			MaxOutputBytes: maxOutput,
 		}
 		boundDigest, err := protoDigest("TOS-THIRD-PARTY-INVOKE-V1", workerRequest)
 		if err != nil {
@@ -453,6 +459,18 @@ func decodeThirdPartyExecutionJob(stored storedExecutionJob) (*edgev1.ThirdParty
 func thirdPartyInvocationCompletion(req *edgev1.ThirdPartyInvokeRequest, resp *edgev1.ThirdPartyInvokeResponse) (localrpc.InvocationCompletion, error) {
 	if resp == nil || resp.RequestId != req.RequestId {
 		return localrpc.InvocationCompletion{}, invalid("INVALID_ARGUMENT", "third-party worker response request_id does not match the invocation")
+	}
+	// A third-party provider has no contractual obligation to bound its own
+	// output the way the native model-serving Worker is expected to (it
+	// receives max_output_bytes too, but this caller does not otherwise
+	// re-validate a native Worker's own self-enforcement). Reject an
+	// oversized result here, before it ever reaches completeDurableJob /
+	// the signed Receipt / settlement -- never silently accept it because
+	// it happened to be under the worker's own wire-envelope
+	// MaxResponseBytes, a smaller and unrelated limit.
+	if req.MaxOutputBytes > 0 && uint64(len(resp.Output)) > req.MaxOutputBytes {
+		return localrpc.InvocationCompletion{}, failedPrecondition("OUTPUT_LIMIT_EXCEEDED",
+			fmt.Sprintf("third-party provider output (%d bytes) exceeds the quoted max_output_bytes (%d)", len(resp.Output), req.MaxOutputBytes))
 	}
 	completedAt := time.UnixMilli(resp.CompletedUnixMillis)
 	if resp.CompletedUnixMillis == 0 {

@@ -717,8 +717,16 @@ type ThirdPartyInvokeRequest struct {
 	// this retention boundary, mirroring InvokeRequest.retain_until_unix_millis.
 	RetainUntilUnixMillis int64  `protobuf:"varint,7,opt,name=retain_until_unix_millis,json=retainUntilUnixMillis,proto3" json:"retain_until_unix_millis,omitempty"`
 	RequestDigest         string `protobuf:"bytes,8,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// max_output_bytes is the ATOS-quoted output limit for this exact Job
+	// (mirroring InvokeRequest.max_output_bytes). Unlike the native
+	// model-serving path, a third-party provider has no contractual
+	// obligation to bound its own output, so the caller (Edge Core) is
+	// responsible for enforcing this against the returned output size --
+	// 0 means unbounded (the operator's own MaxResponseBytes wire-envelope
+	// limit still applies independently at the worker).
+	MaxOutputBytes uint64 `protobuf:"varint,9,opt,name=max_output_bytes,json=maxOutputBytes,proto3" json:"max_output_bytes,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ThirdPartyInvokeRequest) Reset() {
@@ -805,6 +813,13 @@ func (x *ThirdPartyInvokeRequest) GetRequestDigest() string {
 		return x.RequestDigest
 	}
 	return ""
+}
+
+func (x *ThirdPartyInvokeRequest) GetMaxOutputBytes() uint64 {
+	if x != nil {
+		return x.MaxOutputBytes
+	}
+	return 0
 }
 
 type ThirdPartyInvokeResponse struct {
@@ -2883,7 +2898,7 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\bevidence\x18\x05 \x03(\v23.tos.edge.v1.ThirdPartyHealthResponse.EvidenceEntryR\bevidence\x1a;\n" +
 	"\rEvidenceEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd5\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xff\x02\n" +
 	"\x17ThirdPartyInvokeRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -2894,7 +2909,8 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x05input\x18\x05 \x01(\fR\x05input\x120\n" +
 	"\x14deadline_unix_millis\x18\x06 \x01(\x03R\x12deadlineUnixMillis\x127\n" +
 	"\x18retain_until_unix_millis\x18\a \x01(\x03R\x15retainUntilUnixMillis\x12%\n" +
-	"\x0erequest_digest\x18\b \x01(\tR\rrequestDigest\"\x93\x02\n" +
+	"\x0erequest_digest\x18\b \x01(\tR\rrequestDigest\x12(\n" +
+	"\x10max_output_bytes\x18\t \x01(\x04R\x0emaxOutputBytes\"\x93\x02\n" +
 	"\x18ThirdPartyInvokeResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12;\n" +
