@@ -173,14 +173,17 @@ func TestAuthorizeExecutionSigner_DifferentIdempotencyKeySameContentDedupes(t *t
 	}
 }
 
-// TestAuthorizeExecutionSigner_SameAuthorizationIDDifferentKeyConflicts
-// proves a genuinely different authorization body reusing the same
-// (provider, capability, version, signer_id) key is rejected as a
-// conflict rather than silently overwriting the original -- this is the
-// signer-specific business-level idempotency guard in trust.go, layered
-// on top of (and distinct from) the shared idempotency-key machinery
-// exercised above.
-func TestAuthorizeExecutionSigner_SameAuthorizationIDDifferentKeyConflicts(t *testing.T) {
+// TestAuthorizeExecutionSigner_SameSignerIDDifferentContentConflicts proves a
+// genuinely different authorization body reusing the same (provider,
+// capability, version, signer_id) key is rejected as a conflict rather than
+// silently overwriting the original -- this is the signer-specific
+// business-level idempotency guard in trust.go, layered on top of (and
+// distinct from) the shared idempotency-key machinery exercised above. Note
+// this exercises a different authorization_id AND a different public key on
+// the retry; it does not on its own prove authorization_id reuse is rejected
+// -- see TestAuthorizeExecutionSigner_AuthorizationIDReusedAcrossDifferentSignerIDsConflicts
+// for that.
+func TestAuthorizeExecutionSigner_SameSignerIDDifferentContentConflicts(t *testing.T) {
 	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	server := newTrustSignerTestServer(t, now, "provider-conflict", "cap-conflict")
 	firstKey := testSignerPublicKey(t)
@@ -200,6 +203,105 @@ func TestAuthorizeExecutionSigner_SameAuthorizationIDDifferentKeyConflicts(t *te
 	second.Context.IdempotencyKey = "idem-conflict-2"
 	if _, err := server.AuthorizeExecutionSigner(context.Background(), connect.NewRequest(second)); err == nil {
 		t.Fatal("expected a conflict authorizing the same signer_id with a different public key")
+	}
+}
+
+// TestAuthorizeExecutionSigner_AuthorizationIDReusedAcrossDifferentSignerIDsConflicts
+// proves authorization_id identity is global, not scoped to one signer_id:
+// two different signer_ids under the same capability version must not be
+// able to share an authorization_id. Before the secondary
+// bucketSignerAuthByAuthID index this was silently accepted -- both records
+// were written under distinct primary keys -- and RevokeExecutionSigner,
+// which resolves by authorization_id alone, would then revoke whichever of
+// the two a bucket scan happened to reach first, leaving the other one an
+// authorized signer no caller could name or revoke.
+func TestAuthorizeExecutionSigner_AuthorizationIDReusedAcrossDifferentSignerIDsConflicts(t *testing.T) {
+	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	server := newTrustSignerTestServer(t, now, "provider-shared-authid", "cap-shared-authid")
+
+	first := authorizeRequest(now, "provider-shared-authid", "cap-shared-authid", "auth-shared", "signer-a", testSignerPublicKey(t))
+	if _, err := server.AuthorizeExecutionSigner(context.Background(), connect.NewRequest(first)); err != nil {
+		t.Fatalf("first AuthorizeExecutionSigner: %v", err)
+	}
+
+	second := authorizeRequest(now, "provider-shared-authid", "cap-shared-authid", "auth-shared", "signer-b", testSignerPublicKey(t))
+	// A distinct idempotency key is essential here: reusing the first
+	// request's key (as authorizeRequest's default "idem-"+authorizationID
+	// does, since both calls share authorization_id) would make the outer
+	// transport-level idempotency-key guard in mutation.go reject this as a
+	// same-key-different-content conflict before ever reaching the
+	// signer-specific authorization_id check this test means to exercise.
+	second.Context.IdempotencyKey = "idem-shared-authid-2"
+	if resp, err := server.AuthorizeExecutionSigner(context.Background(), connect.NewRequest(second)); err == nil {
+		t.Fatalf("expected a conflict authorizing a different signer_id with an already-used authorization_id, got %+v", resp.Msg)
+	} else if connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("expected ALREADY_EXISTS, got %v", err)
+	}
+
+	// The first signer must still be exactly what it was -- unaffected by
+	// the rejected second attempt.
+	resolved, err := server.ResolveExecutionSignerAuthorization(context.Background(), connect.NewRequest(
+		&atostosv1.ResolveExecutionSignerAuthorizationRequest{
+			Context:    readContext("resolve-shared-authid"),
+			ProviderId: "provider-shared-authid", CapabilityId: "cap-shared-authid",
+			CapabilityVersion: "1.0.0", ExecutionSignerId: "signer-a",
+		}))
+	if err != nil {
+		t.Fatalf("ResolveExecutionSignerAuthorization: %v", err)
+	}
+	if resolved.Msg.ReasonCode != "" || resolved.Msg.Authorization == nil ||
+		resolved.Msg.Authorization.Value.ExecutionSignerId != "signer-a" {
+		t.Fatalf("original signer-a authorization was disturbed by the rejected conflict: %#v", resolved.Msg)
+	}
+}
+
+// TestRevokeExecutionSigner_ResolvesCorrectSignerAmongMultiple proves the
+// bucketSignerAuthByAuthID-indexed lookup in RevokeExecutionSigner (which
+// replaced a full bucket scan matching the first cursor hit) revokes exactly
+// the signer named by authorization_id and leaves every other authorized
+// signer, including ones registered before and after it, untouched.
+func TestRevokeExecutionSigner_ResolvesCorrectSignerAmongMultiple(t *testing.T) {
+	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	server := newTrustSignerTestServer(t, now, "provider-multi-revoke", "cap-multi-revoke")
+
+	for _, spec := range []struct{ authID, signerID string }{
+		{"auth-multi-1", "signer-multi-1"},
+		{"auth-multi-2", "signer-multi-2"},
+		{"auth-multi-3", "signer-multi-3"},
+	} {
+		request := authorizeRequest(now, "provider-multi-revoke", "cap-multi-revoke", spec.authID, spec.signerID, testSignerPublicKey(t))
+		if _, err := server.AuthorizeExecutionSigner(context.Background(), connect.NewRequest(request)); err != nil {
+			t.Fatalf("AuthorizeExecutionSigner(%s): %v", spec.signerID, err)
+		}
+	}
+
+	if _, err := server.RevokeExecutionSigner(context.Background(), connect.NewRequest(&atostosv1.RevokeExecutionSignerRequest{
+		Context: mutationContext("revoke-multi-2"), AuthorizationId: "auth-multi-2", ReasonCode: "test",
+	})); err != nil {
+		t.Fatalf("RevokeExecutionSigner: %v", err)
+	}
+
+	for _, spec := range []struct {
+		signerID    string
+		wantRevoked bool
+	}{
+		{"signer-multi-1", false},
+		{"signer-multi-2", true},
+		{"signer-multi-3", false},
+	} {
+		resolved, err := server.ResolveExecutionSignerAuthorization(context.Background(), connect.NewRequest(
+			&atostosv1.ResolveExecutionSignerAuthorizationRequest{
+				Context:    readContext("resolve-" + spec.signerID),
+				ProviderId: "provider-multi-revoke", CapabilityId: "cap-multi-revoke",
+				CapabilityVersion: "1.0.0", ExecutionSignerId: spec.signerID,
+			}))
+		if err != nil {
+			t.Fatalf("ResolveExecutionSignerAuthorization(%s): %v", spec.signerID, err)
+		}
+		revoked := resolved.Msg.ReasonCode == "REVOKED"
+		if revoked != spec.wantRevoked {
+			t.Fatalf("%s: revoked=%v, want %v (reason_code=%q)", spec.signerID, revoked, spec.wantRevoked, resolved.Msg.ReasonCode)
+		}
 	}
 }
 
