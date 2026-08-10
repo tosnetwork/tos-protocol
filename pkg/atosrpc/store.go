@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -194,18 +195,42 @@ type storedServiceQuote struct {
 	Route           Route  `json:"route"`
 	InputCommitment []byte `json:"input_commitment"`
 	MaxOutputBytes  uint64 `json:"max_output_bytes"`
+	// ThirdPartyBinding is set instead of Route when this quote was produced
+	// by QuoteExecution's third-party branch -- exactly one of Route/
+	// ThirdPartyBinding is meaningful for a given stored quote, mirroring
+	// storedExecutionJob's Kind discriminator.
+	ThirdPartyBinding *edgev1.ThirdPartyBindingRef `json:"third_party_binding,omitempty"`
 }
 
+// jobKind discriminates which durable execution state machine owns a
+// storedExecutionJob: the native model-serving path (invokeDurableJob/
+// recoverDurableJob against Worker) or the third-party path
+// (invokeThirdPartyDurableJob/recoverThirdPartyDurableJob against
+// ThirdPartyWorker). Both share completeDurableJob unchanged -- receipt
+// signing, escrow charge and execution-signer authorization never depend on
+// which one produced the completion.
+type jobKind string
+
+const (
+	jobKindNative     jobKind = ""
+	jobKindThirdParty jobKind = "third_party"
+)
+
 type storedExecutionJob struct {
-	Record           []byte `json:"record"`
-	WorkerRequest    []byte `json:"worker_request"`
-	RequestDigest    string `json:"request_digest"`
-	Input            []byte `json:"input,omitempty"`
-	Output           []byte `json:"output,omitempty"`
-	OutputDigest     string `json:"output_digest,omitempty"`
-	Usage            []byte `json:"usage,omitempty"`
-	CanonicalReceipt []byte `json:"canonical_receipt,omitempty"`
-	ReceiptDigest    string `json:"receipt_digest,omitempty"`
+	Record        []byte  `json:"record"`
+	Kind          jobKind `json:"kind,omitempty"`
+	WorkerRequest []byte  `json:"worker_request,omitempty"`
+	// ThirdPartyWorkerRequest is set instead of WorkerRequest when Kind ==
+	// jobKindThirdParty. Exactly one of the two is populated for a given
+	// stored job.
+	ThirdPartyWorkerRequest []byte `json:"third_party_worker_request,omitempty"`
+	RequestDigest           string `json:"request_digest"`
+	Input                   []byte `json:"input,omitempty"`
+	Output                  []byte `json:"output,omitempty"`
+	OutputDigest            string `json:"output_digest,omitempty"`
+	Usage                   []byte `json:"usage,omitempty"`
+	CanonicalReceipt        []byte `json:"canonical_receipt,omitempty"`
+	ReceiptDigest           string `json:"receipt_digest,omitempty"`
 }
 
 type storedProof struct {

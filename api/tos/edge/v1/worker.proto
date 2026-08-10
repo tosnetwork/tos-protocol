@@ -113,6 +113,9 @@ message ThirdPartyInvokeResponse {
   // same millisecond value so receipt replay is independent of RPC latency,
   // mirroring InvokeResponse.completed_unix_millis.
   int64 completed_unix_millis = 5;
+  // Reuses the same portable receipt-usage vocabulary as InvokeResponse's
+  // Usage -- input/output byte and token counts, execution time.
+  Usage usage = 6;
 }
 
 message ThirdPartyQueryRequest {

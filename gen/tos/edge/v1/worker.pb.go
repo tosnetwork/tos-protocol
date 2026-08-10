@@ -817,8 +817,11 @@ type ThirdPartyInvokeResponse struct {
 	// same millisecond value so receipt replay is independent of RPC latency,
 	// mirroring InvokeResponse.completed_unix_millis.
 	CompletedUnixMillis int64 `protobuf:"varint,5,opt,name=completed_unix_millis,json=completedUnixMillis,proto3" json:"completed_unix_millis,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Reuses the same portable receipt-usage vocabulary as InvokeResponse's
+	// Usage -- input/output byte and token counts, execution time.
+	Usage         *Usage `protobuf:"bytes,6,opt,name=usage,proto3" json:"usage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ThirdPartyInvokeResponse) Reset() {
@@ -884,6 +887,13 @@ func (x *ThirdPartyInvokeResponse) GetCompletedUnixMillis() int64 {
 		return x.CompletedUnixMillis
 	}
 	return 0
+}
+
+func (x *ThirdPartyInvokeResponse) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
 }
 
 type ThirdPartyQueryRequest struct {
@@ -2884,14 +2894,15 @@ const file_api_tos_edge_v1_worker_proto_rawDesc = "" +
 	"\x05input\x18\x05 \x01(\fR\x05input\x120\n" +
 	"\x14deadline_unix_millis\x18\x06 \x01(\x03R\x12deadlineUnixMillis\x127\n" +
 	"\x18retain_until_unix_millis\x18\a \x01(\x03R\x15retainUntilUnixMillis\x12%\n" +
-	"\x0erequest_digest\x18\b \x01(\tR\rrequestDigest\"\xe9\x01\n" +
+	"\x0erequest_digest\x18\b \x01(\tR\rrequestDigest\"\x93\x02\n" +
 	"\x18ThirdPartyInvokeResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12;\n" +
 	"\x06status\x18\x02 \x01(\x0e2#.tos.edge.v1.ThirdPartyInvokeStatusR\x06status\x12\x16\n" +
 	"\x06output\x18\x03 \x01(\fR\x06output\x12%\n" +
 	"\x0efailure_reason\x18\x04 \x01(\tR\rfailureReason\x122\n" +
-	"\x15completed_unix_millis\x18\x05 \x01(\x03R\x13completedUnixMillis\"t\n" +
+	"\x15completed_unix_millis\x18\x05 \x01(\x03R\x13completedUnixMillis\x12(\n" +
+	"\x05usage\x18\x06 \x01(\v2\x12.tos.edge.v1.UsageR\x05usage\"t\n" +
 	"\x16ThirdPartyQueryRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12;\n" +
@@ -3218,62 +3229,63 @@ var file_api_tos_edge_v1_worker_proto_depIdxs = []int32{
 	38, // 2: tos.edge.v1.ThirdPartyHealthResponse.evidence:type_name -> tos.edge.v1.ThirdPartyHealthResponse.EvidenceEntry
 	8,  // 3: tos.edge.v1.ThirdPartyInvokeRequest.binding:type_name -> tos.edge.v1.ThirdPartyBindingRef
 	1,  // 4: tos.edge.v1.ThirdPartyInvokeResponse.status:type_name -> tos.edge.v1.ThirdPartyInvokeStatus
-	8,  // 5: tos.edge.v1.ThirdPartyQueryRequest.binding:type_name -> tos.edge.v1.ThirdPartyBindingRef
-	12, // 6: tos.edge.v1.ThirdPartyQueryResponse.result:type_name -> tos.edge.v1.ThirdPartyInvokeResponse
-	8,  // 7: tos.edge.v1.ThirdPartyCancelRequest.binding:type_name -> tos.edge.v1.ThirdPartyBindingRef
-	3,  // 8: tos.edge.v1.ClaimEvidence.level:type_name -> tos.edge.v1.EvidenceLevel
-	4,  // 9: tos.edge.v1.ReadinessComponent.status:type_name -> tos.edge.v1.ReadinessStatus
-	17, // 10: tos.edge.v1.ReadinessComponent.evidence:type_name -> tos.edge.v1.ClaimEvidence
-	5,  // 11: tos.edge.v1.ResourceClaim.resource_class:type_name -> tos.edge.v1.ResourceClass
-	6,  // 12: tos.edge.v1.ResourceClaim.unit:type_name -> tos.edge.v1.ResourceUnit
-	17, // 13: tos.edge.v1.ResourceClaim.evidence:type_name -> tos.edge.v1.ClaimEvidence
-	39, // 14: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
-	6,  // 15: tos.edge.v1.ResourceLimit.unit:type_name -> tos.edge.v1.ResourceUnit
-	18, // 16: tos.edge.v1.HealthResponse.readiness:type_name -> tos.edge.v1.ReadinessComponent
-	2,  // 17: tos.edge.v1.Capability.accepted_priorities:type_name -> tos.edge.v1.Priority
-	20, // 18: tos.edge.v1.Capability.admission_limits:type_name -> tos.edge.v1.ResourceLimit
-	24, // 19: tos.edge.v1.GetCapabilitiesResponse.capabilities:type_name -> tos.edge.v1.Capability
-	19, // 20: tos.edge.v1.GetCapabilitiesResponse.resources:type_name -> tos.edge.v1.ResourceClaim
-	2,  // 21: tos.edge.v1.QuoteRequest.priority:type_name -> tos.edge.v1.Priority
-	20, // 22: tos.edge.v1.QuoteRequest.requested_limits:type_name -> tos.edge.v1.ResourceLimit
-	20, // 23: tos.edge.v1.QuoteResponse.committed_limits:type_name -> tos.edge.v1.ResourceLimit
-	2,  // 24: tos.edge.v1.InvokeRequest.priority:type_name -> tos.edge.v1.Priority
-	29, // 25: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
-	7,  // 26: tos.edge.v1.GetTaskResponse.status:type_name -> tos.edge.v1.TaskStatus
-	30, // 27: tos.edge.v1.GetTaskResponse.result:type_name -> tos.edge.v1.InvokeResponse
-	28, // 28: tos.edge.v1.InvokeStreamRequest.invocation:type_name -> tos.edge.v1.InvokeRequest
-	31, // 29: tos.edge.v1.ResumeStreamRequest.task:type_name -> tos.edge.v1.GetTaskRequest
-	7,  // 30: tos.edge.v1.StreamEvent.terminal_status:type_name -> tos.edge.v1.TaskStatus
-	29, // 31: tos.edge.v1.StreamEvent.usage:type_name -> tos.edge.v1.Usage
-	21, // 32: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
-	23, // 33: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
-	26, // 34: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
-	28, // 35: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
-	31, // 36: tos.edge.v1.WorkerService.GetTask:input_type -> tos.edge.v1.GetTaskRequest
-	33, // 37: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
-	35, // 38: tos.edge.v1.WorkerStreamService.InvokeStream:input_type -> tos.edge.v1.InvokeStreamRequest
-	36, // 39: tos.edge.v1.WorkerStreamService.ResumeStream:input_type -> tos.edge.v1.ResumeStreamRequest
-	9,  // 40: tos.edge.v1.ThirdPartyExecutionService.Health:input_type -> tos.edge.v1.ThirdPartyHealthRequest
-	11, // 41: tos.edge.v1.ThirdPartyExecutionService.Invoke:input_type -> tos.edge.v1.ThirdPartyInvokeRequest
-	13, // 42: tos.edge.v1.ThirdPartyExecutionService.Query:input_type -> tos.edge.v1.ThirdPartyQueryRequest
-	15, // 43: tos.edge.v1.ThirdPartyExecutionService.Cancel:input_type -> tos.edge.v1.ThirdPartyCancelRequest
-	22, // 44: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
-	25, // 45: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
-	27, // 46: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
-	30, // 47: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
-	32, // 48: tos.edge.v1.WorkerService.GetTask:output_type -> tos.edge.v1.GetTaskResponse
-	34, // 49: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
-	37, // 50: tos.edge.v1.WorkerStreamService.InvokeStream:output_type -> tos.edge.v1.StreamEvent
-	37, // 51: tos.edge.v1.WorkerStreamService.ResumeStream:output_type -> tos.edge.v1.StreamEvent
-	10, // 52: tos.edge.v1.ThirdPartyExecutionService.Health:output_type -> tos.edge.v1.ThirdPartyHealthResponse
-	12, // 53: tos.edge.v1.ThirdPartyExecutionService.Invoke:output_type -> tos.edge.v1.ThirdPartyInvokeResponse
-	14, // 54: tos.edge.v1.ThirdPartyExecutionService.Query:output_type -> tos.edge.v1.ThirdPartyQueryResponse
-	16, // 55: tos.edge.v1.ThirdPartyExecutionService.Cancel:output_type -> tos.edge.v1.ThirdPartyCancelResponse
-	44, // [44:56] is the sub-list for method output_type
-	32, // [32:44] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	29, // 5: tos.edge.v1.ThirdPartyInvokeResponse.usage:type_name -> tos.edge.v1.Usage
+	8,  // 6: tos.edge.v1.ThirdPartyQueryRequest.binding:type_name -> tos.edge.v1.ThirdPartyBindingRef
+	12, // 7: tos.edge.v1.ThirdPartyQueryResponse.result:type_name -> tos.edge.v1.ThirdPartyInvokeResponse
+	8,  // 8: tos.edge.v1.ThirdPartyCancelRequest.binding:type_name -> tos.edge.v1.ThirdPartyBindingRef
+	3,  // 9: tos.edge.v1.ClaimEvidence.level:type_name -> tos.edge.v1.EvidenceLevel
+	4,  // 10: tos.edge.v1.ReadinessComponent.status:type_name -> tos.edge.v1.ReadinessStatus
+	17, // 11: tos.edge.v1.ReadinessComponent.evidence:type_name -> tos.edge.v1.ClaimEvidence
+	5,  // 12: tos.edge.v1.ResourceClaim.resource_class:type_name -> tos.edge.v1.ResourceClass
+	6,  // 13: tos.edge.v1.ResourceClaim.unit:type_name -> tos.edge.v1.ResourceUnit
+	17, // 14: tos.edge.v1.ResourceClaim.evidence:type_name -> tos.edge.v1.ClaimEvidence
+	39, // 15: tos.edge.v1.ResourceClaim.attributes:type_name -> tos.edge.v1.ResourceClaim.AttributesEntry
+	6,  // 16: tos.edge.v1.ResourceLimit.unit:type_name -> tos.edge.v1.ResourceUnit
+	18, // 17: tos.edge.v1.HealthResponse.readiness:type_name -> tos.edge.v1.ReadinessComponent
+	2,  // 18: tos.edge.v1.Capability.accepted_priorities:type_name -> tos.edge.v1.Priority
+	20, // 19: tos.edge.v1.Capability.admission_limits:type_name -> tos.edge.v1.ResourceLimit
+	24, // 20: tos.edge.v1.GetCapabilitiesResponse.capabilities:type_name -> tos.edge.v1.Capability
+	19, // 21: tos.edge.v1.GetCapabilitiesResponse.resources:type_name -> tos.edge.v1.ResourceClaim
+	2,  // 22: tos.edge.v1.QuoteRequest.priority:type_name -> tos.edge.v1.Priority
+	20, // 23: tos.edge.v1.QuoteRequest.requested_limits:type_name -> tos.edge.v1.ResourceLimit
+	20, // 24: tos.edge.v1.QuoteResponse.committed_limits:type_name -> tos.edge.v1.ResourceLimit
+	2,  // 25: tos.edge.v1.InvokeRequest.priority:type_name -> tos.edge.v1.Priority
+	29, // 26: tos.edge.v1.InvokeResponse.usage:type_name -> tos.edge.v1.Usage
+	7,  // 27: tos.edge.v1.GetTaskResponse.status:type_name -> tos.edge.v1.TaskStatus
+	30, // 28: tos.edge.v1.GetTaskResponse.result:type_name -> tos.edge.v1.InvokeResponse
+	28, // 29: tos.edge.v1.InvokeStreamRequest.invocation:type_name -> tos.edge.v1.InvokeRequest
+	31, // 30: tos.edge.v1.ResumeStreamRequest.task:type_name -> tos.edge.v1.GetTaskRequest
+	7,  // 31: tos.edge.v1.StreamEvent.terminal_status:type_name -> tos.edge.v1.TaskStatus
+	29, // 32: tos.edge.v1.StreamEvent.usage:type_name -> tos.edge.v1.Usage
+	21, // 33: tos.edge.v1.WorkerService.Health:input_type -> tos.edge.v1.HealthRequest
+	23, // 34: tos.edge.v1.WorkerService.GetCapabilities:input_type -> tos.edge.v1.GetCapabilitiesRequest
+	26, // 35: tos.edge.v1.WorkerService.Quote:input_type -> tos.edge.v1.QuoteRequest
+	28, // 36: tos.edge.v1.WorkerService.Invoke:input_type -> tos.edge.v1.InvokeRequest
+	31, // 37: tos.edge.v1.WorkerService.GetTask:input_type -> tos.edge.v1.GetTaskRequest
+	33, // 38: tos.edge.v1.WorkerService.Cancel:input_type -> tos.edge.v1.CancelRequest
+	35, // 39: tos.edge.v1.WorkerStreamService.InvokeStream:input_type -> tos.edge.v1.InvokeStreamRequest
+	36, // 40: tos.edge.v1.WorkerStreamService.ResumeStream:input_type -> tos.edge.v1.ResumeStreamRequest
+	9,  // 41: tos.edge.v1.ThirdPartyExecutionService.Health:input_type -> tos.edge.v1.ThirdPartyHealthRequest
+	11, // 42: tos.edge.v1.ThirdPartyExecutionService.Invoke:input_type -> tos.edge.v1.ThirdPartyInvokeRequest
+	13, // 43: tos.edge.v1.ThirdPartyExecutionService.Query:input_type -> tos.edge.v1.ThirdPartyQueryRequest
+	15, // 44: tos.edge.v1.ThirdPartyExecutionService.Cancel:input_type -> tos.edge.v1.ThirdPartyCancelRequest
+	22, // 45: tos.edge.v1.WorkerService.Health:output_type -> tos.edge.v1.HealthResponse
+	25, // 46: tos.edge.v1.WorkerService.GetCapabilities:output_type -> tos.edge.v1.GetCapabilitiesResponse
+	27, // 47: tos.edge.v1.WorkerService.Quote:output_type -> tos.edge.v1.QuoteResponse
+	30, // 48: tos.edge.v1.WorkerService.Invoke:output_type -> tos.edge.v1.InvokeResponse
+	32, // 49: tos.edge.v1.WorkerService.GetTask:output_type -> tos.edge.v1.GetTaskResponse
+	34, // 50: tos.edge.v1.WorkerService.Cancel:output_type -> tos.edge.v1.CancelResponse
+	37, // 51: tos.edge.v1.WorkerStreamService.InvokeStream:output_type -> tos.edge.v1.StreamEvent
+	37, // 52: tos.edge.v1.WorkerStreamService.ResumeStream:output_type -> tos.edge.v1.StreamEvent
+	10, // 53: tos.edge.v1.ThirdPartyExecutionService.Health:output_type -> tos.edge.v1.ThirdPartyHealthResponse
+	12, // 54: tos.edge.v1.ThirdPartyExecutionService.Invoke:output_type -> tos.edge.v1.ThirdPartyInvokeResponse
+	14, // 55: tos.edge.v1.ThirdPartyExecutionService.Query:output_type -> tos.edge.v1.ThirdPartyQueryResponse
+	16, // 56: tos.edge.v1.ThirdPartyExecutionService.Cancel:output_type -> tos.edge.v1.ThirdPartyCancelResponse
+	45, // [45:57] is the sub-list for method output_type
+	33, // [33:45] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_api_tos_edge_v1_worker_proto_init() }
