@@ -33,6 +33,9 @@ func (s *Server) GetProviderStatus(
 	if err := requiredIdentifier("capability_id", req.Msg.CapabilityId); err != nil {
 		return nil, err
 	}
+	if req.Msg.ThirdPartyBinding != nil {
+		return s.getThirdPartyProviderStatus(ctx, req)
+	}
 	response := &atostosv1.GetProviderStatusResponse{
 		ProviderId: req.Msg.ProviderId, CapabilityId: req.Msg.CapabilityId,
 		Readiness:          atostosv1.ProviderReadiness_PROVIDER_READINESS_UNAVAILABLE,
@@ -124,6 +127,9 @@ func (s *Server) QuoteExecution(
 	}
 	if req.Msg.ExecutionDeadlineUnixMillis <= s.now().UnixMilli() {
 		return nil, invalid("DEADLINE_EXCEEDED", "execution deadline has elapsed")
+	}
+	if req.Msg.ThirdPartyBinding != nil {
+		return s.quoteThirdPartyExecution(ctx, req)
 	}
 	if s.worker == nil || s.router == nil {
 		return nil, unavailable("PROVIDER_UNAVAILABLE", "private Worker route is not configured")
@@ -258,6 +264,9 @@ func (s *Server) SubmitJob(
 	}
 	if req.Msg.RetainUntilUnixMillis <= req.Msg.ExecutionDeadlineUnixMillis {
 		return nil, invalid("INVALID_ARGUMENT", "retain_until must be after execution deadline")
+	}
+	if req.Msg.ThirdPartyBinding != nil {
+		return s.submitThirdPartyJob(ctx, req)
 	}
 	if s.worker == nil {
 		return nil, unavailable("PROVIDER_UNAVAILABLE", "private Worker is not configured")
@@ -771,10 +780,18 @@ func (s *Server) GetJob(
 	if err != nil {
 		return nil, err
 	}
-	if !terminalJob(record.State) && s.worker != nil {
-		_, _ = s.recoverDurableJob(ctx, req.Msg.JobId, stored)
-		stored, _, _ = s.loadStoredJob(req.Msg.JobId)
-		_, record, _ = decodeExecutionJob(stored)
+	if !terminalJob(record.State) {
+		if stored.Kind == jobKindThirdParty {
+			if s.thirdPartyWorker != nil {
+				_, _ = s.recoverThirdPartyDurableJob(ctx, req.Msg.JobId, stored)
+				stored, _, _ = s.loadStoredJob(req.Msg.JobId)
+				_, record, _ = decodeExecutionJob(stored)
+			}
+		} else if s.worker != nil {
+			_, _ = s.recoverDurableJob(ctx, req.Msg.JobId, stored)
+			stored, _, _ = s.loadStoredJob(req.Msg.JobId)
+			_, record, _ = decodeExecutionJob(stored)
+		}
 	}
 	return connect.NewResponse(&atostosv1.GetJobResponse{Job: record, Found: true}), nil
 }
@@ -820,17 +837,36 @@ func (s *Server) CancelJob(
 	if terminalJob(record.State) {
 		return connect.NewResponse(&atostosv1.CancelJobResponse{Job: record, Accepted: record.State == atostosv1.JobState_JOB_STATE_CANCELED}), nil
 	}
-	if s.worker == nil {
-		return nil, unavailable("PROVIDER_UNAVAILABLE", "private Worker is not configured")
-	}
 	callContext, cancel, err := s.boundedContext(ctx, req.Msg.Context.DeadlineUnixMillis)
 	if err != nil {
 		return nil, err
 	}
 	defer cancel()
-	accepted, err := s.worker.Cancel(callContext, workerRequest)
-	if err != nil {
-		return nil, unavailable("PROVIDER_UNAVAILABLE", "private Worker cancellation failed")
+	var accepted bool
+	if stored.Kind == jobKindThirdParty {
+		if s.thirdPartyWorker == nil {
+			return nil, unavailable("PROVIDER_UNAVAILABLE", "private third-party execution Worker is not configured")
+		}
+		thirdPartyRequest, _, decodeErr := decodeThirdPartyExecutionJob(stored)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		cancelResponse, cancelErr := s.thirdPartyWorker.Cancel(callContext, &edgev1.ThirdPartyCancelRequest{
+			RequestId: thirdPartyRequest.RequestId, Binding: thirdPartyRequest.Binding,
+			Reason: "CANCELED_BY_CALLER",
+		})
+		if cancelErr != nil {
+			return nil, unavailable("PROVIDER_UNAVAILABLE", "private third-party execution Worker cancellation failed")
+		}
+		accepted = cancelResponse.Accepted
+	} else {
+		if s.worker == nil {
+			return nil, unavailable("PROVIDER_UNAVAILABLE", "private Worker is not configured")
+		}
+		accepted, err = s.worker.Cancel(callContext, workerRequest)
+		if err != nil {
+			return nil, unavailable("PROVIDER_UNAVAILABLE", "private Worker cancellation failed")
+		}
 	}
 	if accepted {
 		record.State = atostosv1.JobState_JOB_STATE_CANCELED
@@ -970,10 +1006,18 @@ func (s *Server) FetchResult(
 	if err != nil {
 		return nil, err
 	}
-	if !terminalJob(record.State) && s.worker != nil {
-		_, _ = s.recoverDurableJob(ctx, req.Msg.JobId, stored)
-		stored, _, _ = s.loadStoredJob(req.Msg.JobId)
-		_, record, _ = decodeExecutionJob(stored)
+	if !terminalJob(record.State) {
+		if stored.Kind == jobKindThirdParty {
+			if s.thirdPartyWorker != nil {
+				_, _ = s.recoverThirdPartyDurableJob(ctx, req.Msg.JobId, stored)
+				stored, _, _ = s.loadStoredJob(req.Msg.JobId)
+				_, record, _ = decodeExecutionJob(stored)
+			}
+		} else if s.worker != nil {
+			_, _ = s.recoverDurableJob(ctx, req.Msg.JobId, stored)
+			stored, _, _ = s.loadStoredJob(req.Msg.JobId)
+			_, record, _ = decodeExecutionJob(stored)
+		}
 	}
 	usage := new(atostosv1.Usage)
 	if len(stored.Usage) > 0 {

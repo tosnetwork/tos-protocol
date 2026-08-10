@@ -48,6 +48,23 @@ type Worker interface {
 	Cancel(context.Context, *edgev1.InvokeRequest) (bool, error)
 }
 
+// ThirdPartyWorker is the narrow Edge Core -> private
+// tos.edge.v1.ThirdPartyExecutionService dependency used by
+// ExecutionGatewayService whenever a request carries a ThirdPartyBinding.
+// localrpc.ThirdPartyWorkerClient satisfies this interface. Unlike Worker,
+// there is no Router: the request itself already names transport +
+// endpoint_ref (see atos-spec docs/THIRD_PARTY_EXECUTION_PLANE.md) --
+// routing is "does this request carry a ThirdPartyBinding", not a
+// provider/capability -> service selector table. Nil means this deployment
+// does not support third-party bindings yet, the same way a nil Worker/
+// Router means it does not support tos-native execution.
+type ThirdPartyWorker interface {
+	Health(context.Context, *edgev1.ThirdPartyHealthRequest) (*edgev1.ThirdPartyHealthResponse, error)
+	Invoke(context.Context, *edgev1.ThirdPartyInvokeRequest) (*edgev1.ThirdPartyInvokeResponse, error)
+	Query(context.Context, *edgev1.ThirdPartyQueryRequest) (*edgev1.ThirdPartyQueryResponse, error)
+	Cancel(context.Context, *edgev1.ThirdPartyCancelRequest) (*edgev1.ThirdPartyCancelResponse, error)
+}
+
 // Route maps one public ATOS capability to an existing private Worker route.
 // CapabilityID and CapabilityVersion may be "*" for an explicit fallback.
 type Route struct {
@@ -137,17 +154,18 @@ func (r *StaticRouter) Resolve(providerID, capabilityID, version string) (Route,
 
 // Config controls one ATOS/TOS RPC server.
 type Config struct {
-	StatePath       string
-	BearerToken     string
-	Authority       Authority
-	EconomicDriver  economic.Driver
-	Worker          Worker
-	Router          Router
-	MaxMessageBytes int
-	MaxRecordBytes  int
-	CallTimeout     time.Duration
-	Retention       time.Duration
-	Now             func() time.Time
+	StatePath        string
+	BearerToken      string
+	Authority        Authority
+	EconomicDriver   economic.Driver
+	Worker           Worker
+	Router           Router
+	ThirdPartyWorker ThirdPartyWorker
+	MaxMessageBytes  int
+	MaxRecordBytes   int
+	CallTimeout      time.Duration
+	Retention        time.Duration
+	Now              func() time.Time
 }
 
 func (c Config) withDefaults() (Config, error) {

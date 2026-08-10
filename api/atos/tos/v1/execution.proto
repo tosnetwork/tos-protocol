@@ -25,10 +25,46 @@ enum ProviderReadiness {
   PROVIDER_READINESS_DRAINING = 4;
 }
 
+// EndpointAdapterType names the transport a ThirdPartyBinding executes or
+// probes over. Mirrors atos's domain.EndpointAdapterType.
+enum EndpointAdapterType {
+  ENDPOINT_ADAPTER_TYPE_UNSPECIFIED = 0;
+  ENDPOINT_ADAPTER_TYPE_HTTP = 1;
+  ENDPOINT_ADAPTER_TYPE_MCP = 2;
+  ENDPOINT_ADAPTER_TYPE_A2A = 3;
+}
+
+// ThirdPartyBinding describes a third-party provider transport binding for
+// GetProviderStatus/QuoteExecution/SubmitJob -- see atos-spec
+// docs/THIRD_PARTY_EXECUTION_PLANE.md. Absent (unset) means an ordinary
+// tos-native/model Job; this Server routes a request carrying this to
+// tos.edge.v1.ThirdPartyExecutionService instead of the model-serving
+// WorkerService path, and MUST NOT let endpoint_ref be dialed unless a
+// worker-operator-curated allowlist permits it -- an invocation names a
+// binding, it never grants a new one.
+message ThirdPartyBinding {
+  EndpointAdapterType transport = 1;
+  // Opaque identifier/configuration reference, never a bearer credential --
+  // the same rule as atos's CapabilityBinding.endpoint_ref.
+  string endpoint_ref = 2;
+  // Commitment to the frozen CapabilityBinding this Job's Quote resolved,
+  // so a replay whose semantic binding changed can be detected as an
+  // idempotency_conflict without re-deriving ATOS's own binding-freeze/
+  // selection logic downstream.
+  Digest binding_commitment = 3;
+}
+
 message GetProviderStatusRequest {
   RequestContext context = 1;
   string provider_id = 2;
   string capability_id = 3;
+  ThirdPartyBinding third_party_binding = 4;
+  // capability_version scopes a ThirdPartyBinding-carrying probe to the
+  // exact Capability version being probed -- a worker-operator allowlist
+  // entry MAY be version-scoped, so omitting this silently probes as if
+  // no version were requested at all. Unset for an ordinary native/model
+  // request.
+  string capability_version = 5;
 }
 
 message GetProviderStatusResponse {
@@ -40,6 +76,11 @@ message GetProviderStatusResponse {
   int64 observed_unix_millis = 6;
   int64 expires_unix_millis = 7;
   string reason_code = 8;
+  // deep_probe and latency_unix_millis are populated only for a
+  // ThirdPartyBinding-carrying request -- see atos-spec docs/
+  // THIRD_PARTY_EXECUTION_PLANE.md.
+  bool deep_probe = 9;
+  int64 latency_unix_millis = 10;
 }
 
 message QuoteExecutionRequest {
@@ -54,6 +95,7 @@ message QuoteExecutionRequest {
   TrustMode intended_trust_mode = 9;
   ProofProfile intended_proof_profile = 10;
   map<string, string> execution_constraints = 11;
+  ThirdPartyBinding third_party_binding = 12;
 }
 
 message ServiceExecutionQuote {
@@ -95,6 +137,7 @@ message SubmitJobRequest {
   int64 retain_until_unix_millis = 17;
   repeated ArtifactCommitment input_artifacts = 18;
   map<string, string> execution_constraints = 19;
+  ThirdPartyBinding third_party_binding = 20;
 }
 
 message SubmitJobResponse {
