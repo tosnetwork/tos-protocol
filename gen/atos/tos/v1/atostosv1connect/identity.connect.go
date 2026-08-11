@@ -39,12 +39,20 @@ const (
 	// IdentityServiceResolvePrincipalBindingProcedure is the fully-qualified name of the
 	// IdentityService's ResolvePrincipalBinding RPC.
 	IdentityServiceResolvePrincipalBindingProcedure = "/atos.tos.v1.IdentityService/ResolvePrincipalBinding"
+	// IdentityServiceCreatePrincipalBindingProcedure is the fully-qualified name of the
+	// IdentityService's CreatePrincipalBinding RPC.
+	IdentityServiceCreatePrincipalBindingProcedure = "/atos.tos.v1.IdentityService/CreatePrincipalBinding"
+	// IdentityServiceRevokePrincipalBindingProcedure is the fully-qualified name of the
+	// IdentityService's RevokePrincipalBinding RPC.
+	IdentityServiceRevokePrincipalBindingProcedure = "/atos.tos.v1.IdentityService/RevokePrincipalBinding"
 )
 
 // IdentityServiceClient is a client for the atos.tos.v1.IdentityService service.
 type IdentityServiceClient interface {
 	ResolveAgentIdentity(context.Context, *connect.Request[v1.ResolveAgentIdentityRequest]) (*connect.Response[v1.ResolveAgentIdentityResponse], error)
 	ResolvePrincipalBinding(context.Context, *connect.Request[v1.ResolvePrincipalBindingRequest]) (*connect.Response[v1.ResolvePrincipalBindingResponse], error)
+	CreatePrincipalBinding(context.Context, *connect.Request[v1.CreatePrincipalBindingRequest]) (*connect.Response[v1.CreatePrincipalBindingResponse], error)
+	RevokePrincipalBinding(context.Context, *connect.Request[v1.RevokePrincipalBindingRequest]) (*connect.Response[v1.RevokePrincipalBindingResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the atos.tos.v1.IdentityService service. By
@@ -70,6 +78,18 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("ResolvePrincipalBinding")),
 			connect.WithClientOptions(opts...),
 		),
+		createPrincipalBinding: connect.NewClient[v1.CreatePrincipalBindingRequest, v1.CreatePrincipalBindingResponse](
+			httpClient,
+			baseURL+IdentityServiceCreatePrincipalBindingProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("CreatePrincipalBinding")),
+			connect.WithClientOptions(opts...),
+		),
+		revokePrincipalBinding: connect.NewClient[v1.RevokePrincipalBindingRequest, v1.RevokePrincipalBindingResponse](
+			httpClient,
+			baseURL+IdentityServiceRevokePrincipalBindingProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("RevokePrincipalBinding")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -77,6 +97,8 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 type identityServiceClient struct {
 	resolveAgentIdentity    *connect.Client[v1.ResolveAgentIdentityRequest, v1.ResolveAgentIdentityResponse]
 	resolvePrincipalBinding *connect.Client[v1.ResolvePrincipalBindingRequest, v1.ResolvePrincipalBindingResponse]
+	createPrincipalBinding  *connect.Client[v1.CreatePrincipalBindingRequest, v1.CreatePrincipalBindingResponse]
+	revokePrincipalBinding  *connect.Client[v1.RevokePrincipalBindingRequest, v1.RevokePrincipalBindingResponse]
 }
 
 // ResolveAgentIdentity calls atos.tos.v1.IdentityService.ResolveAgentIdentity.
@@ -89,10 +111,22 @@ func (c *identityServiceClient) ResolvePrincipalBinding(ctx context.Context, req
 	return c.resolvePrincipalBinding.CallUnary(ctx, req)
 }
 
+// CreatePrincipalBinding calls atos.tos.v1.IdentityService.CreatePrincipalBinding.
+func (c *identityServiceClient) CreatePrincipalBinding(ctx context.Context, req *connect.Request[v1.CreatePrincipalBindingRequest]) (*connect.Response[v1.CreatePrincipalBindingResponse], error) {
+	return c.createPrincipalBinding.CallUnary(ctx, req)
+}
+
+// RevokePrincipalBinding calls atos.tos.v1.IdentityService.RevokePrincipalBinding.
+func (c *identityServiceClient) RevokePrincipalBinding(ctx context.Context, req *connect.Request[v1.RevokePrincipalBindingRequest]) (*connect.Response[v1.RevokePrincipalBindingResponse], error) {
+	return c.revokePrincipalBinding.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the atos.tos.v1.IdentityService service.
 type IdentityServiceHandler interface {
 	ResolveAgentIdentity(context.Context, *connect.Request[v1.ResolveAgentIdentityRequest]) (*connect.Response[v1.ResolveAgentIdentityResponse], error)
 	ResolvePrincipalBinding(context.Context, *connect.Request[v1.ResolvePrincipalBindingRequest]) (*connect.Response[v1.ResolvePrincipalBindingResponse], error)
+	CreatePrincipalBinding(context.Context, *connect.Request[v1.CreatePrincipalBindingRequest]) (*connect.Response[v1.CreatePrincipalBindingResponse], error)
+	RevokePrincipalBinding(context.Context, *connect.Request[v1.RevokePrincipalBindingRequest]) (*connect.Response[v1.RevokePrincipalBindingResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -114,12 +148,28 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("ResolvePrincipalBinding")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceCreatePrincipalBindingHandler := connect.NewUnaryHandler(
+		IdentityServiceCreatePrincipalBindingProcedure,
+		svc.CreatePrincipalBinding,
+		connect.WithSchema(identityServiceMethods.ByName("CreatePrincipalBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceRevokePrincipalBindingHandler := connect.NewUnaryHandler(
+		IdentityServiceRevokePrincipalBindingProcedure,
+		svc.RevokePrincipalBinding,
+		connect.WithSchema(identityServiceMethods.ByName("RevokePrincipalBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/atos.tos.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceResolveAgentIdentityProcedure:
 			identityServiceResolveAgentIdentityHandler.ServeHTTP(w, r)
 		case IdentityServiceResolvePrincipalBindingProcedure:
 			identityServiceResolvePrincipalBindingHandler.ServeHTTP(w, r)
+		case IdentityServiceCreatePrincipalBindingProcedure:
+			identityServiceCreatePrincipalBindingHandler.ServeHTTP(w, r)
+		case IdentityServiceRevokePrincipalBindingProcedure:
+			identityServiceRevokePrincipalBindingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -135,4 +185,12 @@ func (UnimplementedIdentityServiceHandler) ResolveAgentIdentity(context.Context,
 
 func (UnimplementedIdentityServiceHandler) ResolvePrincipalBinding(context.Context, *connect.Request[v1.ResolvePrincipalBindingRequest]) (*connect.Response[v1.ResolvePrincipalBindingResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.IdentityService.ResolvePrincipalBinding is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) CreatePrincipalBinding(context.Context, *connect.Request[v1.CreatePrincipalBindingRequest]) (*connect.Response[v1.CreatePrincipalBindingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.IdentityService.CreatePrincipalBinding is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) RevokePrincipalBinding(context.Context, *connect.Request[v1.RevokePrincipalBindingRequest]) (*connect.Response[v1.RevokePrincipalBindingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.IdentityService.RevokePrincipalBinding is not implemented"))
 }

@@ -19,12 +19,16 @@ func (s *Server) economicPartiesTx(
 	if tx == nil || s == nil || s.economy == nil {
 		return "", "", errors.New("economic driver is unavailable")
 	}
-	boundAgent := tx.Bucket(bucketPrincipalBindings).Get([]byte(principalID))
-	if boundAgent == nil {
+	var binding principalBindingRecord
+	boundFound, err := s.store.getJSON(tx, bucketPrincipalBindings, principalID, &binding)
+	if err != nil {
+		return "", "", err
+	}
+	if !boundFound {
 		return "", "", failedPrecondition("PRINCIPAL_NOT_BOUND", "principal has no TOS identity binding")
 	}
 	principalIdentity := new(atostosv1.AgentIdentity)
-	found, err := s.store.getProto(tx, bucketIdentities, string(boundAgent), principalIdentity)
+	found, err := s.store.getProto(tx, bucketIdentities, binding.AgentID, principalIdentity)
 	if err != nil {
 		return "", "", err
 	}

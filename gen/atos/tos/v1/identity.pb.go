@@ -21,6 +21,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type PrincipalBindingStatus int32
+
+const (
+	PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_UNSPECIFIED PrincipalBindingStatus = 0
+	PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_ACTIVE      PrincipalBindingStatus = 1
+	PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_REVOKED     PrincipalBindingStatus = 2
+)
+
+// Enum value maps for PrincipalBindingStatus.
+var (
+	PrincipalBindingStatus_name = map[int32]string{
+		0: "PRINCIPAL_BINDING_STATUS_UNSPECIFIED",
+		1: "PRINCIPAL_BINDING_STATUS_ACTIVE",
+		2: "PRINCIPAL_BINDING_STATUS_REVOKED",
+	}
+	PrincipalBindingStatus_value = map[string]int32{
+		"PRINCIPAL_BINDING_STATUS_UNSPECIFIED": 0,
+		"PRINCIPAL_BINDING_STATUS_ACTIVE":      1,
+		"PRINCIPAL_BINDING_STATUS_REVOKED":     2,
+	}
+)
+
+func (x PrincipalBindingStatus) Enum() *PrincipalBindingStatus {
+	p := new(PrincipalBindingStatus)
+	*p = x
+	return p
+}
+
+func (x PrincipalBindingStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PrincipalBindingStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_atos_tos_v1_identity_proto_enumTypes[0].Descriptor()
+}
+
+func (PrincipalBindingStatus) Type() protoreflect.EnumType {
+	return &file_atos_tos_v1_identity_proto_enumTypes[0]
+}
+
+func (x PrincipalBindingStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PrincipalBindingStatus.Descriptor instead.
+func (PrincipalBindingStatus) EnumDescriptor() ([]byte, []int) {
+	return file_atos_tos_v1_identity_proto_rawDescGZIP(), []int{0}
+}
+
 type AgentIdentity struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	AgentId           string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -278,13 +327,15 @@ func (x *ResolvePrincipalBindingRequest) GetPrincipalId() string {
 }
 
 type ResolvePrincipalBindingResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PrincipalId   string                 `protobuf:"bytes,1,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
-	Identity      *AgentIdentity         `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
-	Bound         bool                   `protobuf:"varint,3,opt,name=bound,proto3" json:"bound,omitempty"`
-	BindingRef    *NetworkReference      `protobuf:"bytes,4,opt,name=binding_ref,json=bindingRef,proto3" json:"binding_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	PrincipalId          string                 `protobuf:"bytes,1,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	Identity             *AgentIdentity         `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
+	Bound                bool                   `protobuf:"varint,3,opt,name=bound,proto3" json:"bound,omitempty"`
+	BindingRef           *NetworkReference      `protobuf:"bytes,4,opt,name=binding_ref,json=bindingRef,proto3" json:"binding_ref,omitempty"`
+	Status               PrincipalBindingStatus `protobuf:"varint,5,opt,name=status,proto3,enum=atos.tos.v1.PrincipalBindingStatus" json:"status,omitempty"`
+	RevocationReasonCode string                 `protobuf:"bytes,6,opt,name=revocation_reason_code,json=revocationReasonCode,proto3" json:"revocation_reason_code,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ResolvePrincipalBindingResponse) Reset() {
@@ -345,6 +396,260 @@ func (x *ResolvePrincipalBindingResponse) GetBindingRef() *NetworkReference {
 	return nil
 }
 
+func (x *ResolvePrincipalBindingResponse) GetStatus() PrincipalBindingStatus {
+	if x != nil {
+		return x.Status
+	}
+	return PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_UNSPECIFIED
+}
+
+func (x *ResolvePrincipalBindingResponse) GetRevocationReasonCode() string {
+	if x != nil {
+		return x.RevocationReasonCode
+	}
+	return ""
+}
+
+type CreatePrincipalBindingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	PrincipalId   string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,3,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreatePrincipalBindingRequest) Reset() {
+	*x = CreatePrincipalBindingRequest{}
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreatePrincipalBindingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreatePrincipalBindingRequest) ProtoMessage() {}
+
+func (x *CreatePrincipalBindingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreatePrincipalBindingRequest.ProtoReflect.Descriptor instead.
+func (*CreatePrincipalBindingRequest) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_identity_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CreatePrincipalBindingRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *CreatePrincipalBindingRequest) GetPrincipalId() string {
+	if x != nil {
+		return x.PrincipalId
+	}
+	return ""
+}
+
+func (x *CreatePrincipalBindingRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type CreatePrincipalBindingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PrincipalId   string                 `protobuf:"bytes,1,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	Identity      *AgentIdentity         `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
+	BindingRef    *NetworkReference      `protobuf:"bytes,3,opt,name=binding_ref,json=bindingRef,proto3" json:"binding_ref,omitempty"`
+	Created       bool                   `protobuf:"varint,4,opt,name=created,proto3" json:"created,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreatePrincipalBindingResponse) Reset() {
+	*x = CreatePrincipalBindingResponse{}
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreatePrincipalBindingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreatePrincipalBindingResponse) ProtoMessage() {}
+
+func (x *CreatePrincipalBindingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreatePrincipalBindingResponse.ProtoReflect.Descriptor instead.
+func (*CreatePrincipalBindingResponse) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_identity_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CreatePrincipalBindingResponse) GetPrincipalId() string {
+	if x != nil {
+		return x.PrincipalId
+	}
+	return ""
+}
+
+func (x *CreatePrincipalBindingResponse) GetIdentity() *AgentIdentity {
+	if x != nil {
+		return x.Identity
+	}
+	return nil
+}
+
+func (x *CreatePrincipalBindingResponse) GetBindingRef() *NetworkReference {
+	if x != nil {
+		return x.BindingRef
+	}
+	return nil
+}
+
+func (x *CreatePrincipalBindingResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
+type RevokePrincipalBindingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	PrincipalId   string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	ReasonCode    string                 `protobuf:"bytes,3,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokePrincipalBindingRequest) Reset() {
+	*x = RevokePrincipalBindingRequest{}
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokePrincipalBindingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokePrincipalBindingRequest) ProtoMessage() {}
+
+func (x *RevokePrincipalBindingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokePrincipalBindingRequest.ProtoReflect.Descriptor instead.
+func (*RevokePrincipalBindingRequest) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_identity_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RevokePrincipalBindingRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *RevokePrincipalBindingRequest) GetPrincipalId() string {
+	if x != nil {
+		return x.PrincipalId
+	}
+	return ""
+}
+
+func (x *RevokePrincipalBindingRequest) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+type RevokePrincipalBindingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Revoked       bool                   `protobuf:"varint,1,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	RevocationRef *NetworkReference      `protobuf:"bytes,2,opt,name=revocation_ref,json=revocationRef,proto3" json:"revocation_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokePrincipalBindingResponse) Reset() {
+	*x = RevokePrincipalBindingResponse{}
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokePrincipalBindingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokePrincipalBindingResponse) ProtoMessage() {}
+
+func (x *RevokePrincipalBindingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_identity_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokePrincipalBindingResponse.ProtoReflect.Descriptor instead.
+func (*RevokePrincipalBindingResponse) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_identity_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RevokePrincipalBindingResponse) GetRevoked() bool {
+	if x != nil {
+		return x.Revoked
+	}
+	return false
+}
+
+func (x *RevokePrincipalBindingResponse) GetRevocationRef() *NetworkReference {
+	if x != nil {
+		return x.RevocationRef
+	}
+	return nil
+}
+
 var File_atos_tos_v1_identity_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_identity_proto_rawDesc = "" +
@@ -370,16 +675,42 @@ const file_atos_tos_v1_identity_proto_rawDesc = "" +
 	"\x05found\x18\x02 \x01(\bR\x05found\"z\n" +
 	"\x1eResolvePrincipalBindingRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12!\n" +
-	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\"\xd2\x01\n" +
+	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\"\xc5\x02\n" +
 	"\x1fResolvePrincipalBindingResponse\x12!\n" +
 	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x126\n" +
 	"\bidentity\x18\x02 \x01(\v2\x1a.atos.tos.v1.AgentIdentityR\bidentity\x12\x14\n" +
 	"\x05bound\x18\x03 \x01(\bR\x05bound\x12>\n" +
 	"\vbinding_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
-	"bindingRef2\xf4\x01\n" +
+	"bindingRef\x12;\n" +
+	"\x06status\x18\x05 \x01(\x0e2#.atos.tos.v1.PrincipalBindingStatusR\x06status\x124\n" +
+	"\x16revocation_reason_code\x18\x06 \x01(\tR\x14revocationReasonCode\"\x94\x01\n" +
+	"\x1dCreatePrincipalBindingRequest\x125\n" +
+	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12!\n" +
+	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x12\x19\n" +
+	"\bagent_id\x18\x03 \x01(\tR\aagentId\"\xd5\x01\n" +
+	"\x1eCreatePrincipalBindingResponse\x12!\n" +
+	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x126\n" +
+	"\bidentity\x18\x02 \x01(\v2\x1a.atos.tos.v1.AgentIdentityR\bidentity\x12>\n" +
+	"\vbinding_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
+	"bindingRef\x12\x18\n" +
+	"\acreated\x18\x04 \x01(\bR\acreated\"\x9a\x01\n" +
+	"\x1dRevokePrincipalBindingRequest\x125\n" +
+	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12!\n" +
+	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x12\x1f\n" +
+	"\vreason_code\x18\x03 \x01(\tR\n" +
+	"reasonCode\"\x80\x01\n" +
+	"\x1eRevokePrincipalBindingResponse\x12\x18\n" +
+	"\arevoked\x18\x01 \x01(\bR\arevoked\x12D\n" +
+	"\x0erevocation_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rrevocationRef*\x8d\x01\n" +
+	"\x16PrincipalBindingStatus\x12(\n" +
+	"$PRINCIPAL_BINDING_STATUS_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fPRINCIPAL_BINDING_STATUS_ACTIVE\x10\x01\x12$\n" +
+	" PRINCIPAL_BINDING_STATUS_REVOKED\x10\x022\xda\x03\n" +
 	"\x0fIdentityService\x12k\n" +
 	"\x14ResolveAgentIdentity\x12(.atos.tos.v1.ResolveAgentIdentityRequest\x1a).atos.tos.v1.ResolveAgentIdentityResponse\x12t\n" +
-	"\x17ResolvePrincipalBinding\x12+.atos.tos.v1.ResolvePrincipalBindingRequest\x1a,.atos.tos.v1.ResolvePrincipalBindingResponseB>Z<github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1b\x06proto3"
+	"\x17ResolvePrincipalBinding\x12+.atos.tos.v1.ResolvePrincipalBindingRequest\x1a,.atos.tos.v1.ResolvePrincipalBindingResponse\x12q\n" +
+	"\x16CreatePrincipalBinding\x12*.atos.tos.v1.CreatePrincipalBindingRequest\x1a+.atos.tos.v1.CreatePrincipalBindingResponse\x12q\n" +
+	"\x16RevokePrincipalBinding\x12*.atos.tos.v1.RevokePrincipalBindingRequest\x1a+.atos.tos.v1.RevokePrincipalBindingResponseB>Z<github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1b\x06proto3"
 
 var (
 	file_atos_tos_v1_identity_proto_rawDescOnce sync.Once
@@ -393,34 +724,50 @@ func file_atos_tos_v1_identity_proto_rawDescGZIP() []byte {
 	return file_atos_tos_v1_identity_proto_rawDescData
 }
 
-var file_atos_tos_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_atos_tos_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_atos_tos_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_atos_tos_v1_identity_proto_goTypes = []any{
-	(*AgentIdentity)(nil),                   // 0: atos.tos.v1.AgentIdentity
-	(*ResolveAgentIdentityRequest)(nil),     // 1: atos.tos.v1.ResolveAgentIdentityRequest
-	(*ResolveAgentIdentityResponse)(nil),    // 2: atos.tos.v1.ResolveAgentIdentityResponse
-	(*ResolvePrincipalBindingRequest)(nil),  // 3: atos.tos.v1.ResolvePrincipalBindingRequest
-	(*ResolvePrincipalBindingResponse)(nil), // 4: atos.tos.v1.ResolvePrincipalBindingResponse
-	nil,                                     // 5: atos.tos.v1.AgentIdentity.PublicAttributesEntry
-	(*NetworkReference)(nil),                // 6: atos.tos.v1.NetworkReference
-	(*RequestContext)(nil),                  // 7: atos.tos.v1.RequestContext
+	(PrincipalBindingStatus)(0),             // 0: atos.tos.v1.PrincipalBindingStatus
+	(*AgentIdentity)(nil),                   // 1: atos.tos.v1.AgentIdentity
+	(*ResolveAgentIdentityRequest)(nil),     // 2: atos.tos.v1.ResolveAgentIdentityRequest
+	(*ResolveAgentIdentityResponse)(nil),    // 3: atos.tos.v1.ResolveAgentIdentityResponse
+	(*ResolvePrincipalBindingRequest)(nil),  // 4: atos.tos.v1.ResolvePrincipalBindingRequest
+	(*ResolvePrincipalBindingResponse)(nil), // 5: atos.tos.v1.ResolvePrincipalBindingResponse
+	(*CreatePrincipalBindingRequest)(nil),   // 6: atos.tos.v1.CreatePrincipalBindingRequest
+	(*CreatePrincipalBindingResponse)(nil),  // 7: atos.tos.v1.CreatePrincipalBindingResponse
+	(*RevokePrincipalBindingRequest)(nil),   // 8: atos.tos.v1.RevokePrincipalBindingRequest
+	(*RevokePrincipalBindingResponse)(nil),  // 9: atos.tos.v1.RevokePrincipalBindingResponse
+	nil,                                     // 10: atos.tos.v1.AgentIdentity.PublicAttributesEntry
+	(*NetworkReference)(nil),                // 11: atos.tos.v1.NetworkReference
+	(*RequestContext)(nil),                  // 12: atos.tos.v1.RequestContext
 }
 var file_atos_tos_v1_identity_proto_depIdxs = []int32{
-	6, // 0: atos.tos.v1.AgentIdentity.identity_ref:type_name -> atos.tos.v1.NetworkReference
-	5, // 1: atos.tos.v1.AgentIdentity.public_attributes:type_name -> atos.tos.v1.AgentIdentity.PublicAttributesEntry
-	7, // 2: atos.tos.v1.ResolveAgentIdentityRequest.context:type_name -> atos.tos.v1.RequestContext
-	0, // 3: atos.tos.v1.ResolveAgentIdentityResponse.identity:type_name -> atos.tos.v1.AgentIdentity
-	7, // 4: atos.tos.v1.ResolvePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
-	0, // 5: atos.tos.v1.ResolvePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
-	6, // 6: atos.tos.v1.ResolvePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
-	1, // 7: atos.tos.v1.IdentityService.ResolveAgentIdentity:input_type -> atos.tos.v1.ResolveAgentIdentityRequest
-	3, // 8: atos.tos.v1.IdentityService.ResolvePrincipalBinding:input_type -> atos.tos.v1.ResolvePrincipalBindingRequest
-	2, // 9: atos.tos.v1.IdentityService.ResolveAgentIdentity:output_type -> atos.tos.v1.ResolveAgentIdentityResponse
-	4, // 10: atos.tos.v1.IdentityService.ResolvePrincipalBinding:output_type -> atos.tos.v1.ResolvePrincipalBindingResponse
-	9, // [9:11] is the sub-list for method output_type
-	7, // [7:9] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	11, // 0: atos.tos.v1.AgentIdentity.identity_ref:type_name -> atos.tos.v1.NetworkReference
+	10, // 1: atos.tos.v1.AgentIdentity.public_attributes:type_name -> atos.tos.v1.AgentIdentity.PublicAttributesEntry
+	12, // 2: atos.tos.v1.ResolveAgentIdentityRequest.context:type_name -> atos.tos.v1.RequestContext
+	1,  // 3: atos.tos.v1.ResolveAgentIdentityResponse.identity:type_name -> atos.tos.v1.AgentIdentity
+	12, // 4: atos.tos.v1.ResolvePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
+	1,  // 5: atos.tos.v1.ResolvePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
+	11, // 6: atos.tos.v1.ResolvePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
+	0,  // 7: atos.tos.v1.ResolvePrincipalBindingResponse.status:type_name -> atos.tos.v1.PrincipalBindingStatus
+	12, // 8: atos.tos.v1.CreatePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
+	1,  // 9: atos.tos.v1.CreatePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
+	11, // 10: atos.tos.v1.CreatePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
+	12, // 11: atos.tos.v1.RevokePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
+	11, // 12: atos.tos.v1.RevokePrincipalBindingResponse.revocation_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 13: atos.tos.v1.IdentityService.ResolveAgentIdentity:input_type -> atos.tos.v1.ResolveAgentIdentityRequest
+	4,  // 14: atos.tos.v1.IdentityService.ResolvePrincipalBinding:input_type -> atos.tos.v1.ResolvePrincipalBindingRequest
+	6,  // 15: atos.tos.v1.IdentityService.CreatePrincipalBinding:input_type -> atos.tos.v1.CreatePrincipalBindingRequest
+	8,  // 16: atos.tos.v1.IdentityService.RevokePrincipalBinding:input_type -> atos.tos.v1.RevokePrincipalBindingRequest
+	3,  // 17: atos.tos.v1.IdentityService.ResolveAgentIdentity:output_type -> atos.tos.v1.ResolveAgentIdentityResponse
+	5,  // 18: atos.tos.v1.IdentityService.ResolvePrincipalBinding:output_type -> atos.tos.v1.ResolvePrincipalBindingResponse
+	7,  // 19: atos.tos.v1.IdentityService.CreatePrincipalBinding:output_type -> atos.tos.v1.CreatePrincipalBindingResponse
+	9,  // 20: atos.tos.v1.IdentityService.RevokePrincipalBinding:output_type -> atos.tos.v1.RevokePrincipalBindingResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_identity_proto_init() }
@@ -434,13 +781,14 @@ func file_atos_tos_v1_identity_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_tos_v1_identity_proto_rawDesc), len(file_atos_tos_v1_identity_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      1,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_atos_tos_v1_identity_proto_goTypes,
 		DependencyIndexes: file_atos_tos_v1_identity_proto_depIdxs,
+		EnumInfos:         file_atos_tos_v1_identity_proto_enumTypes,
 		MessageInfos:      file_atos_tos_v1_identity_proto_msgTypes,
 	}.Build()
 	File_atos_tos_v1_identity_proto = out.File

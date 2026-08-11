@@ -16,31 +16,33 @@ import (
 )
 
 var (
-	bucketMeta               = []byte("meta-v1")
-	bucketIdentities         = []byte("identities-v1")
-	bucketIdentityURIs       = []byte("identity-uris-v1")
-	bucketPrincipalBindings  = []byte("principal-bindings-v1")
-	bucketCapabilities       = []byte("capabilities-v1")
-	bucketCapabilityLatest   = []byte("capability-latest-v1")
-	bucketQuoteCommitments   = []byte("quote-commitments-v1")
-	bucketSignerAuths        = []byte("signer-authorizations-v1")
-	bucketSignerAuthByAuthID = []byte("signer-auth-by-authorization-id-v1")
-	bucketEscrows            = []byte("escrows-v1")
-	bucketEscrowByQuote      = []byte("escrow-by-quote-v1")
-	bucketSettlements        = []byte("settlements-v1")
-	bucketSettlementByJob    = []byte("settlement-by-job-v1")
-	bucketSettlementByRcpt   = []byte("settlement-by-receipt-v1")
-	bucketReceipts           = []byte("execution-receipts-v1")
-	bucketReceiptByJob       = []byte("receipt-by-job-v1")
-	bucketEvidence           = []byte("proof-of-service-v1")
-	bucketProofs             = []byte("proofs-v1")
-	bucketServiceQuotes      = []byte("service-quotes-v1")
-	bucketJobs               = []byte("execution-jobs-v1")
-	bucketIdempotency        = []byte("idempotency-v1")
+	bucketMeta                 = []byte("meta-v1")
+	bucketIdentities           = []byte("identities-v1")
+	bucketIdentityURIs         = []byte("identity-uris-v1")
+	bucketPrincipalBindings    = []byte("principal-bindings-v1")
+	bucketPrincipalRevocations = []byte("principal-binding-revocations-v1")
+	bucketCapabilities         = []byte("capabilities-v1")
+	bucketCapabilityLatest     = []byte("capability-latest-v1")
+	bucketQuoteCommitments     = []byte("quote-commitments-v1")
+	bucketSignerAuths          = []byte("signer-authorizations-v1")
+	bucketSignerAuthByAuthID   = []byte("signer-auth-by-authorization-id-v1")
+	bucketEscrows              = []byte("escrows-v1")
+	bucketEscrowByQuote        = []byte("escrow-by-quote-v1")
+	bucketSettlements          = []byte("settlements-v1")
+	bucketSettlementByJob      = []byte("settlement-by-job-v1")
+	bucketSettlementByRcpt     = []byte("settlement-by-receipt-v1")
+	bucketReceipts             = []byte("execution-receipts-v1")
+	bucketReceiptByJob         = []byte("receipt-by-job-v1")
+	bucketEvidence             = []byte("proof-of-service-v1")
+	bucketProofs               = []byte("proofs-v1")
+	bucketServiceQuotes        = []byte("service-quotes-v1")
+	bucketJobs                 = []byte("execution-jobs-v1")
+	bucketIdempotency          = []byte("idempotency-v1")
 )
 
 var allBuckets = [][]byte{
 	bucketMeta, bucketIdentities, bucketIdentityURIs, bucketPrincipalBindings,
+	bucketPrincipalRevocations,
 	bucketCapabilities, bucketCapabilityLatest, bucketQuoteCommitments,
 	bucketSignerAuths, bucketSignerAuthByAuthID, bucketEscrows, bucketEscrowByQuote, bucketSettlements,
 	bucketSettlementByJob, bucketSettlementByRcpt, bucketReceipts,
@@ -176,6 +178,18 @@ func (s *store) signingKey() (ed25519.PrivateKey, error) {
 		return bucket.Put([]byte(signingKeyName), privateKey)
 	})
 	return privateKey, err
+}
+
+// principalBindingRevocation records that a principal's binding was
+// deliberately revoked, distinct from "never bound" -- ResolvePrincipalBinding
+// consults this only when bucketPrincipalBindings has no current entry for
+// the principal, since a later CreatePrincipalBinding always takes priority
+// over stale revocation history.
+type principalBindingRevocation struct {
+	ReasonCode        string `json:"reason_code"`
+	RefNetwork        string `json:"ref_network"`
+	RefReference      string `json:"ref_reference"`
+	RevokedUnixMillis int64  `json:"revoked_unix_millis"`
 }
 
 type idempotencyRecord struct {
