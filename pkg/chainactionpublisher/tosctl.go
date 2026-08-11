@@ -224,30 +224,46 @@ func tosctlRPCURL(path string) (string, error) {
 	}
 	var config struct {
 		ChainRPC struct {
-			URLs []json.RawMessage `json:"urls"`
-			URL  string            `json:"url"`
+			URLs   []json.RawMessage `json:"urls"`
+			URL    string            `json:"url"`
+			APIKey *string           `json:"api_key"`
 		} `json:"chain_rpc"`
 	}
 	if err := json.Unmarshal(raw, &config); err != nil {
 		return "", errors.New("decode tosctl RPC config")
 	}
-	values := config.ChainRPC.URLs
-	if len(values) == 0 && config.ChainRPC.URL != "" {
-		encoded, _ := json.Marshal(config.ChainRPC.URL)
-		values = []json.RawMessage{encoded}
+	if config.ChainRPC.APIKey != nil {
+		return "", errors.New("publisher recovery does not support tosctl RPC API keys")
 	}
-	if len(values) != 1 {
-		return "", errors.New("tosctl must use exactly one pinned RPC endpoint")
+	resolved := make([]string, 0, len(config.ChainRPC.URLs)+1)
+	seen := make(map[string]struct{}, len(config.ChainRPC.URLs)+1)
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			if _, ok := seen[value]; !ok {
+				seen[value] = struct{}{}
+				resolved = append(resolved, value)
+			}
+		}
 	}
-	var direct string
-	if json.Unmarshal(values[0], &direct) == nil {
-		return direct, nil
+	add(config.ChainRPC.URL)
+	for _, raw := range config.ChainRPC.URLs {
+		var direct string
+		if json.Unmarshal(raw, &direct) == nil {
+			add(direct)
+			continue
+		}
+		var entry struct {
+			URL    string  `json:"url"`
+			APIKey *string `json:"api_key"`
+		}
+		if json.Unmarshal(raw, &entry) != nil || entry.URL == "" || entry.APIKey != nil {
+			return "", errors.New("invalid or keyed tosctl RPC endpoint")
+		}
+		add(entry.URL)
 	}
-	var entry struct {
-		URL string `json:"url"`
+	if len(resolved) != 1 {
+		return "", errors.New("tosctl must resolve to exactly one pinned RPC endpoint")
 	}
-	if json.Unmarshal(values[0], &entry) != nil || entry.URL == "" {
-		return "", errors.New("invalid tosctl RPC endpoint")
-	}
-	return entry.URL, nil
+	return resolved[0], nil
 }

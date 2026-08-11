@@ -192,8 +192,11 @@ commitment tuple and fixed payer/payee/amount policy before the concrete
 tosctl backend can use the wallet. That backend searches exact chain history
 before every broadcast and after uncertain command completion; readiness
 checks the configured RPC and exact payer wallet.
-The tosctl configuration must contain exactly that same single RPC endpoint,
-and readiness pins its genesis root/file hashes. On a pending/recovering
+The tosctl configuration must resolve to exactly that same single RPC endpoint,
+using tosctl's legacy `url` plus `urls` merge/trim/deduplication semantics;
+divergent compatibility fields, failover entries and keyed endpoints are
+rejected because the recovery client cannot prove identical routing.
+Readiness also pins the endpoint's genesis root/file hashes. On a pending/recovering
 operation, bounded lookup failure is an uncertain outcome and never permits a
 second send; operators must restore authoritative visibility or reconcile the
 journal rather than widening mutation authority.

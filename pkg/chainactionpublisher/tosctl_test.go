@@ -76,6 +76,22 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	if _, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: mismatchConfig, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}); err == nil {
 		t.Fatal("split send/search RPC accepted")
 	}
+	legacyBypass := filepath.Join(dir, "legacy-bypass.json")
+	bypassJSON, _ := json.Marshal(map[string]any{"chain_rpc": map[string]any{"url": rpc.URL, "urls": []string{"https://wrong.example/jsonRPC"}}})
+	if err := os.WriteFile(legacyBypass, bypassJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: legacyBypass, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}); err == nil {
+		t.Fatal("legacy url hid a divergent urls endpoint")
+	}
+	legacySame := filepath.Join(dir, "legacy-same.json")
+	sameJSON, _ := json.Marshal(map[string]any{"chain_rpc": map[string]any{"url": " " + rpc.URL + " ", "urls": []string{rpc.URL}}})
+	if err := os.WriteFile(legacySame, sameJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: legacySame, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}); err != nil {
+		t.Fatalf("deduplicated legacy endpoint rejected: %v", err)
+	}
 	a := chain.Action{Version: "1", ActionID: "anchor-test", Network: "tos-test", Kind: chain.ActionKindAnchor, CommitmentKind: "quote", ObjectID: "q", Digest: "sha256:x", Payer: payer, Payee: payee, AmountNanoTOS: 1_000_000_000}
 	if _, err := b.Publish(context.Background(), a, true); err == nil {
 		t.Fatal("uncertain recovery outside the bounded window was rebroadcast")
