@@ -20,7 +20,7 @@ func TestChainActionPublisherClientPublishesExactRequest(t *testing.T) {
 			case request.Method == http.MethodGet && request.URL.Path == ChainActionHealthPath:
 				_ = json.NewEncoder(writer).Encode(chainActionHealth{
 					Status: "ready", Version: chain.ChainActionVersion,
-					Network: action.Network, Path: ChainActionPath,
+					Network: action.Network, PublishPath: ChainActionPath, ResolvePath: ChainActionResolvePath, JournalVersion: "1", Capabilities: []string{"durable_intent_before_publish", "typed_action_not_found", "read_only_resolve"},
 				})
 			case request.Method == http.MethodPost && request.URL.Path == ChainActionPath:
 				var got chain.Action
@@ -125,6 +125,20 @@ func TestChainActionPublisherClientResolvesWithoutPublishing(t *testing.T) {
 	}
 }
 
+func TestChainActionPublisherClientRejectsGeneric404(t *testing.T) {
+	action := testChainAction()
+	socketPath, stop := startReceiptSignerHTTPServer(t, http.NotFoundHandler())
+	defer stop()
+	client, err := NewChainActionPublisherClient(DefaultChainActionPublisherClientConfig(socketPath, action.Network))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if _, found, err := client.Resolve(context.Background(), action); err == nil || found {
+		t.Fatalf("generic 404 found=%v err=%v", found, err)
+	}
+}
+
 func TestChainActionPublisherClientRejectsWrongReadinessNetwork(t *testing.T) {
 	action := testChainAction()
 	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(
@@ -132,7 +146,7 @@ func TestChainActionPublisherClientRejectsWrongReadinessNetwork(t *testing.T) {
 			writer.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(writer).Encode(chainActionHealth{
 				Status: "ready", Version: chain.ChainActionVersion,
-				Network: "other-network", Path: ChainActionPath,
+				Network: "other-network", PublishPath: ChainActionPath, ResolvePath: ChainActionResolvePath, JournalVersion: "1", Capabilities: []string{"durable_intent_before_publish", "typed_action_not_found", "read_only_resolve"},
 			})
 		},
 	))

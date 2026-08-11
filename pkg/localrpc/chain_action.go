@@ -69,6 +69,14 @@ func (c *ChainActionPublisherClient) Resolve(ctx context.Context, action chain.A
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusNotFound {
+		if requireJSONContentType(response.Header.Get("Content-Type")) != nil {
+			return chain.ActionReceipt{}, false, errors.New("chain action resolver returned an untyped not-found")
+		}
+		data, readErr := io.ReadAll(io.LimitReader(response.Body, int64(c.maxMessageBytes)+1))
+		var missing chainActionNotFound
+		if readErr != nil || len(data) > c.maxMessageBytes || jsonstrict.Decode(data, &missing) != nil || missing.Version != chain.ChainActionVersion || missing.Code != "action_not_found" || missing.ActionID != action.ActionID {
+			return chain.ActionReceipt{}, false, errors.New("chain action resolver returned an untyped not-found")
+		}
 		return chain.ActionReceipt{}, false, nil
 	}
 	if response.StatusCode != http.StatusOK || requireJSONContentType(response.Header.Get("Content-Type")) != nil {
@@ -133,10 +141,18 @@ type ChainActionPublisherClient struct {
 }
 
 type chainActionHealth struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	Network string `json:"network"`
-	Path    string `json:"path"`
+	Status         string   `json:"status"`
+	Version        string   `json:"version"`
+	Network        string   `json:"network"`
+	PublishPath    string   `json:"publishPath"`
+	ResolvePath    string   `json:"resolvePath"`
+	JournalVersion string   `json:"journalVersion"`
+	Capabilities   []string `json:"capabilities"`
+}
+type chainActionNotFound struct {
+	Version  string `json:"version"`
+	Code     string `json:"code"`
+	ActionID string `json:"actionId"`
 }
 
 func NewChainActionPublisherClient(
@@ -278,11 +294,22 @@ func (c *ChainActionPublisherClient) CheckReady(ctx context.Context) error {
 	}
 	var health chainActionHealth
 	if err := jsonstrict.Decode(data, &health); err != nil ||
-		health.Status != "ready" || health.Version != chain.ChainActionVersion ||
-		health.Network != c.network || health.Path != ChainActionPath {
+		health.Status != "ready" || health.Version != chain.ChainActionVersion || health.Network != c.network || health.PublishPath != ChainActionPath || health.ResolvePath != ChainActionResolvePath || health.JournalVersion != "1" || !sameStrings(health.Capabilities, []string{"durable_intent_before_publish", "typed_action_not_found", "read_only_resolve"}) {
 		return errors.New("chain action publisher returned an invalid readiness response")
 	}
 	return nil
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func requireJSONContentType(value string) error {

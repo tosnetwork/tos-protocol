@@ -37,11 +37,16 @@ GET  /healthz
 
 The sidecar receives an immutable, idempotent action and returns one exact TOS
 transaction reference. The sidecar is not trusted to declare finality.
-The resolve endpoint is strictly read-only: it looks up the original receipt
+The production `cmd/tos-chain-action-publisher` sidecar owns a durable bbolt
+journal and exposes both publish and resolve routes. The resolve endpoint is
+strictly read-only: it looks up the original receipt
 by deterministic Action ID and exact stable action fields, returns `404` only
-when its durable canonical journal proves absence, and must be shared or
+as the versioned `action_not_found` response bound to that Action ID when its
+durable canonical journal proves absence, and must be shared or
 replicated consistently across publisher instances. Chain Authority refuses
-to start with a publisher client that lacks this resolver contract. A resolved
+to start unless `/healthz` advertises the versioned resolve and durable-journal
+capabilities. Generic proxy, wrong-route, and legacy-server `404` responses are
+resolver failures, never authoritative absence. A resolved
 receipt is still untrusted until the exact transaction is independently
 re-observed below.
 `tos-protocol` independently verifies the exact transaction through the
@@ -141,3 +146,27 @@ finality and semantic transition verification
 ```
 
 No wallet seed or private key should cross the ATOS RPC boundary.
+
+## Publisher configuration
+
+Run `cmd/tos-chain-action-publisher` with
+`TOS_CHAIN_ACTION_PUBLISHER_CONFIG` pointing to an absolute, owner-private JSON
+file. The backend executable receives `check-ready`, `publish`, or `recover` as
+its first argument; publish/recover read the exact action JSON from standard
+input and emit the receipt JSON on standard output.
+
+```json
+{
+  "version": "1",
+  "network": "tos-mainnet",
+  "socketPath": "/run/tos/atos-chain-publisher.sock",
+  "statePath": "/var/lib/tos/atos-chain-publisher.db",
+  "backendCommand": "/usr/local/libexec/tos-anchor-backend",
+  "backendArgs": []
+}
+```
+
+The journal writes the pending action intent before invoking the backend. An
+uncertain or interrupted attempt remains pending and can only be retried via
+`recover`; it is never reported as absent. Completed actions retain their exact
+receipt and exact-replay semantics across process restarts.
