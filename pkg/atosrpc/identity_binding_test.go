@@ -109,6 +109,52 @@ func TestCreatePrincipalBinding_RejectsCrossNetworkIdentity(t *testing.T) {
 	}
 }
 
+// TestCreatePrincipalBinding_ReplayDoesNotReverifyCurrentIdentityState
+// proves an idempotent replay (same principal+agent, fresh idempotency_key,
+// the documented safe lost-response retry pattern) succeeds even if the
+// bound identity's CURRENT state would fail verifiedTOSController -- the
+// existing binding remains valid until explicitly revoked, and
+// ResolvePrincipalBinding would still report it ACTIVE, so this RPC must
+// not disagree by re-validating current identity state on a mere replay.
+func TestCreatePrincipalBinding_ReplayDoesNotReverifyCurrentIdentityState(t *testing.T) {
+	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	server := newIdentityBindingTestServer(t, now)
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_degrades", CanonicalUri: "tos://agent/agt_degrades", Controllers: []string{testCanonicalController(5)},
+		Assurance: "tos_attested",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resp1, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-1", now), PrincipalId: "prn_degrades", AgentId: "agt_degrades",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The identity's assurance degrades to self_asserted after the bind --
+	// it would now fail verifiedTOSController if re-checked.
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_degrades", CanonicalUri: "tos://agent/agt_degrades", Controllers: []string{testCanonicalController(5)},
+		Assurance: "self_asserted",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp2, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-2", now), PrincipalId: "prn_degrades", AgentId: "agt_degrades",
+	}))
+	if err != nil {
+		t.Fatalf("idempotent replay must not re-verify current identity state: %v", err)
+	}
+	if resp2.Msg.Created {
+		t.Fatal("replay must report created=false")
+	}
+	if resp2.Msg.BindingRef.Reference != resp1.Msg.BindingRef.Reference {
+		t.Fatalf("binding_ref changed across replay: %q vs %q", resp1.Msg.BindingRef.Reference, resp2.Msg.BindingRef.Reference)
+	}
+}
+
 func TestCreatePrincipalBinding_HappyPathThenIdempotentReplay(t *testing.T) {
 	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
 	server := newIdentityBindingTestServer(t, now)
@@ -201,6 +247,57 @@ func TestRevokePrincipalBinding_NoExistingBindingIsNotAnError(t *testing.T) {
 	}
 }
 
+// TestRevokePrincipalBinding_RetryWithFreshKeyAfterLostResponseReportsRevoked
+// proves a caller that revoked successfully, lost the response, and retried
+// with a fresh idempotency_key (the same safe lost-response retry pattern
+// CreatePrincipalBinding documents) sees Revoked=true with the original
+// revocation_ref -- not Revoked=false, which would be indistinguishable
+// from "this principal was never bound" and would contradict what
+// ResolvePrincipalBinding already reports as PRINCIPAL_BINDING_STATUS_REVOKED
+// for the same principal.
+func TestRevokePrincipalBinding_RetryWithFreshKeyAfterLostResponseReportsRevoked(t *testing.T) {
+	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	server := newIdentityBindingTestServer(t, now)
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_revoke_retry", CanonicalUri: "tos://agent/agt_revoke_retry", Controllers: []string{testCanonicalController(6)},
+		Assurance: "tos_attested",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-bind", now), PrincipalId: "prn_revoke_retry", AgentId: "agt_revoke_retry",
+	})); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := server.RevokePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.RevokePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-revoke-1", now), PrincipalId: "prn_revoke_retry", ReasonCode: "TEST",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Msg.Revoked || first.Msg.RevocationRef == nil || first.Msg.RevocationRef.Reference == "" {
+		t.Fatalf("unexpected first revoke response: %+v", first.Msg)
+	}
+
+	// Simulates the response being lost and the caller retrying under a
+	// DIFFERENT idempotency_key -- bucketPrincipalBindings is already
+	// empty, so this must consult bucketPrincipalRevocations instead of
+	// concluding "nothing to revoke."
+	retry, err := server.RevokePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.RevokePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-revoke-2", now), PrincipalId: "prn_revoke_retry", ReasonCode: "TEST",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !retry.Msg.Revoked {
+		t.Fatal("retry after a lost response must report revoked=true, not indistinguishable from never-bound")
+	}
+	if retry.Msg.RevocationRef == nil || retry.Msg.RevocationRef.Reference != first.Msg.RevocationRef.Reference {
+		t.Fatalf("retry must return the ORIGINAL revocation_ref, got %+v vs first %+v", retry.Msg.RevocationRef, first.Msg.RevocationRef)
+	}
+}
+
 func TestRevokePrincipalBinding_FullLifecycleThenRebind(t *testing.T) {
 	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
 	server := newIdentityBindingTestServer(t, now)
@@ -280,5 +377,55 @@ func TestResolvePrincipalBinding_NeverBoundIsUnspecifiedNotRevoked(t *testing.T)
 	}
 	if resolved.Msg.Status != atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_UNSPECIFIED {
 		t.Fatalf("status = %v, want UNSPECIFIED for a principal that was never bound", resolved.Msg.Status)
+	}
+}
+
+// TestSeedIdentity_ReseedWithNewCanonicalURIRemovesStaleMapping proves that
+// re-seeding an existing agent_id under a DIFFERENT canonical_uri cleans up
+// the old bucketIdentityURIs mapping -- otherwise the old URI would keep
+// resolving to this agent_id forever, and permanently block seeding a
+// different agent_id under that now-stale URI.
+func TestSeedIdentity_ReseedWithNewCanonicalURIRemovesStaleMapping(t *testing.T) {
+	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	server := newIdentityBindingTestServer(t, now)
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_uri_move", CanonicalUri: "tos://agent/old-uri",
+		Controllers: []string{testCanonicalController(8)}, Assurance: "tos_attested",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_uri_move", CanonicalUri: "tos://agent/new-uri",
+		Controllers: []string{testCanonicalController(8)}, Assurance: "tos_attested",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	byOldURI, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: bindingReqCtx("caller-1", "", now), CanonicalUri: "tos://agent/old-uri",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byOldURI.Msg.Found {
+		t.Fatal("the old canonical_uri must no longer resolve after re-seeding under a new one")
+	}
+
+	byNewURI, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: bindingReqCtx("caller-1", "", now), CanonicalUri: "tos://agent/new-uri",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !byNewURI.Msg.Found || byNewURI.Msg.Identity.AgentId != "agt_uri_move" {
+		t.Fatalf("the new canonical_uri must resolve to the re-seeded agent: %+v", byNewURI.Msg)
+	}
+
+	// A different agent_id can now legitimately claim the freed-up old URI.
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_uri_move_other", CanonicalUri: "tos://agent/old-uri",
+		Controllers: []string{testCanonicalController(9)}, Assurance: "tos_attested",
+	}); err != nil {
+		t.Fatalf("freed-up canonical_uri must be seedable for a different agent_id: %v", err)
 	}
 }

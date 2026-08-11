@@ -46,6 +46,21 @@ func (s *Server) SeedIdentity(identity *atostosv1.AgentIdentity) error {
 		copyIdentity.UpdatedUnixMillis = s.now().UnixMilli()
 	}
 	return s.store.update(func(tx *bolt.Tx) error {
+		// If this agent_id was already seeded under a DIFFERENT
+		// canonical_uri, that old mapping must be removed -- otherwise it
+		// keeps resolving to this agent_id forever (bucketIdentityURIs has
+		// no other cleanup path) and permanently blocks any future attempt
+		// to seed a different agent_id under that now-stale URI.
+		var previous atostosv1.AgentIdentity
+		previousFound, err := s.store.getProto(tx, bucketIdentities, copyIdentity.AgentId, &previous)
+		if err != nil {
+			return err
+		}
+		if previousFound && previous.CanonicalUri != "" && previous.CanonicalUri != copyIdentity.CanonicalUri {
+			if err := tx.Bucket(bucketIdentityURIs).Delete([]byte(previous.CanonicalUri)); err != nil {
+				return err
+			}
+		}
 		if err := s.store.putProto(tx, bucketIdentities, copyIdentity.AgentId, copyIdentity); err != nil {
 			return err
 		}
@@ -220,9 +235,6 @@ func (s *Server) CreatePrincipalBinding(
 		if !identityFound {
 			return notFound("NOT_FOUND", "agent identity does not exist; it must be established before it can be bound")
 		}
-		if _, err := verifiedTOSController(identity, s.authority.Network()); err != nil {
-			return failedPrecondition("PROVIDER_IDENTITY_UNAVAILABLE", "agent identity is not independently anchored on this server's configured network: "+err.Error())
-		}
 		var existing principalBindingRecord
 		existingFound, err := s.store.getJSON(tx, bucketPrincipalBindings, req.Msg.PrincipalId, &existing)
 		if err != nil {
@@ -232,11 +244,32 @@ func (s *Server) CreatePrincipalBinding(
 			if existing.AgentID != req.Msg.AgentId {
 				return conflict("ALREADY_EXISTS", "principal is already bound to a different TOS Agent Identity; revoke the existing binding first")
 			}
+			// An idempotent replay of an ALREADY-anchored binding must not
+			// re-run verifiedTOSController against the identity's CURRENT
+			// state: a lost-response retry under a fresh idempotency_key is
+			// documented as a safe no-op regardless of what happened to the
+			// identity's assurance/network since the original successful
+			// bind -- the existing binding remains valid until explicitly
+			// revoked (see RevokePrincipalBinding's own doc comment), and
+			// ResolvePrincipalBinding would still report it ACTIVE. Gating
+			// a mere replay on current identity state would make this RPC
+			// disagree with ResolvePrincipalBinding about the same fact.
 			response.PrincipalId = req.Msg.PrincipalId
 			response.Identity = identity
 			response.BindingRef = &NetworkReference{Network: existing.RefNetwork, Reference: existing.RefReference}
 			response.Created = false
 			return nil
+		}
+		if _, err := verifiedTOSController(identity, s.authority.Network()); err != nil {
+			// A distinct stable code from economic.go's PRINCIPAL_NOT_BOUND
+			// (which means "no binding exists at all") and
+			// PROVIDER_IDENTITY_UNAVAILABLE (which economic.go uses
+			// specifically for the counterparty side of an economic
+			// transaction) -- CreatePrincipalBinding's principal_id can be
+			// either a consumer or a provider account (they share one
+			// namespace), so reusing either existing code here would let a
+			// client that switches on reason_code misroute this failure.
+			return failedPrecondition("AGENT_IDENTITY_NOT_VERIFIED", "agent identity is not independently anchored on this server's configured network: "+err.Error())
 		}
 		digest, err := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-V1", withoutTransportContext(req.Msg))
 		if err != nil {
@@ -269,10 +302,17 @@ func (s *Server) CreatePrincipalBinding(
 	return connect.NewResponse(response), nil
 }
 
-// RevokePrincipalBinding ends a principal's current binding. A missing
-// binding is not an error: RevokePrincipalBindingResponse.Revoked=false
-// distinguishes "there was nothing to revoke" from a transport/authority
-// failure, mirroring RevokeExecutionSigner's idempotent-no-op convention.
+// RevokePrincipalBinding ends a principal's current binding.
+// Revoked=false distinguishes "this principal was never bound" from a
+// transport/authority failure, mirroring RevokeExecutionSigner's
+// idempotent-no-op convention. A principal that WAS bound and already has a
+// revocation on record (whether from this exact call or an earlier one --
+// e.g. a lost-response retry under a fresh idempotency_key, the same safe
+// retry pattern CreatePrincipalBinding documents) also reports Revoked=true
+// with the original revocation_ref, matching what ResolvePrincipalBinding
+// already reports as PRINCIPAL_BINDING_STATUS_REVOKED for the same
+// principal -- this RPC must not disagree with that fact merely because a
+// retry no longer finds an active binding to delete.
 func (s *Server) RevokePrincipalBinding(
 	ctx context.Context,
 	req *connect.Request[atostosv1.RevokePrincipalBindingRequest],
@@ -293,6 +333,16 @@ func (s *Server) RevokePrincipalBinding(
 			return err
 		}
 		if !existingFound {
+			var revocation principalBindingRevocation
+			alreadyRevoked, err := s.store.getJSON(tx, bucketPrincipalRevocations, req.Msg.PrincipalId, &revocation)
+			if err != nil {
+				return err
+			}
+			if alreadyRevoked {
+				response.Revoked = true
+				response.RevocationRef = &NetworkReference{Network: revocation.RefNetwork, Reference: revocation.RefReference}
+				return nil
+			}
 			response.Revoked = false
 			return nil
 		}

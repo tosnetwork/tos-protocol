@@ -311,6 +311,14 @@ func identityAlreadySeeded(server *atosrpc.Server, seed identitySeed) (bool, err
 		return false, nil
 	}
 	existing := resp.Msg.Identity
+	// Compared as a raw slices.Equal (not canonicalized): verified that
+	// toschain.CanonicalAddress is a strict validator, not a true
+	// many-forms-to-one normalizer -- requireCanonicalAddress rejects any
+	// input whose own value differs from its parsed/normalized form, so
+	// only ONE textual form of a given address can ever pass this seed
+	// file's own controller pre-validation. Two different-but-equivalent
+	// textual forms can therefore never both appear as valid seed content,
+	// making a canonicalized comparison here a no-op in practice.
 	return existing.CanonicalUri == seed.CanonicalURI &&
 		existing.Assurance == seed.Assurance &&
 		slices.Equal(existing.Controllers, seed.Controllers) &&
