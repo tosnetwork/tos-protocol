@@ -282,9 +282,18 @@ func (s *Server) GetEscrow(
 		if response.Found && response.Escrow.FinalizedCheckpoint > resolved.State.ObservedMasterSeqno {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "TaskEscrow checkpoint regressed")
 		}
-		state := atostosv1.EscrowState_ESCROW_STATE_RESERVED
-		if resolved.State.Status == chain.TaskEscrowStatusCancelled || resolved.State.Status == chain.TaskEscrowStatusExpired || resolved.State.Status == chain.TaskEscrowStatusRejected {
+		state := atostosv1.EscrowState_ESCROW_STATE_UNSPECIFIED
+		switch resolved.State.Status {
+		case chain.TaskEscrowStatusOpen, chain.TaskEscrowStatusAccepted:
+			state = atostosv1.EscrowState_ESCROW_STATE_RESERVED
+		case chain.TaskEscrowStatusCancelled, chain.TaskEscrowStatusExpired, chain.TaskEscrowStatusRejected:
 			state = atostosv1.EscrowState_ESCROW_STATE_RELEASED
+		case chain.TaskEscrowStatusSettled:
+			state = atostosv1.EscrowState_ESCROW_STATE_SETTLED
+		case chain.TaskEscrowStatusDisputed:
+			state = atostosv1.EscrowState_ESCROW_STATE_DISPUTED
+		default:
+			return nil, failedPrecondition("ESCROW_MISMATCH", "canonical TaskEscrow state is not legal for this lifecycle")
 		}
 		response.Escrow = &atostosv1.Escrow{EscrowId: terms.EscrowId, QuoteId: terms.QuoteId, JobId: terms.JobId, PrincipalId: terms.PrincipalId, ProviderId: terms.ProviderId, CapabilityId: terms.CapabilityId, CapabilityVersion: terms.CapabilityVersion, TrustMode: terms.TrustMode, ProofProfile: terms.ProofProfile, Reserved: cloneMessage(terms.Reserve), State: state, ExpiresUnixMillis: terms.EscrowDeadlineUnixMillis, EscrowRef: &NetworkReference{Network: s.economy.Network(), Reference: resolved.ContractReference, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}, FundingModel: terms.FundingModel, QuoteCommitmentDigest: terms.QuoteCommitmentDigest, QuoteCommitmentRef: cloneMessage(terms.QuoteCommitmentRef), ReservationDigest: reservationDigest, ReservationActionId: resolved.ActionID, ContractCodeHash: resolved.State.CodeHash, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}
 		response.Found = true

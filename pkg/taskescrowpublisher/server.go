@@ -302,8 +302,7 @@ func validateAction(action chain.TaskEscrowAction, network string, now time.Time
 	if action.Version != chain.TaskEscrowActionVersion || action.Network != network ||
 		strings.TrimSpace(action.ActionID) == "" || len(action.ActionID) > 256 ||
 		strings.TrimSpace(action.EscrowID) == "" || len(action.EscrowID) > 256 ||
-		strings.TrimSpace(action.Creator) == "" || strings.TrimSpace(action.Agent) == "" ||
-		strings.TrimSpace(action.Verifier) == "" || action.BudgetNanoTOS == 0 ||
+		strings.TrimSpace(action.Creator) == "" || strings.TrimSpace(action.Agent) == "" || action.BudgetNanoTOS == 0 ||
 		action.DeadlineUnix == 0 || action.ReviewPeriod < 3600 ||
 		!validDigest(action.PolicyHash) || !validDigest(action.PermissionHash) ||
 		action.ExpiresUnixMillis <= now.UTC().UnixMilli() || idErr != nil || action.ActionID != expectedID || !contains(policy.AllowedCreators, action.Creator) || !contains(policy.AllowedAgents, action.Agent) || (action.Verifier != "" && !contains(policy.AllowedVerifiers, action.Verifier)) || !contains(policy.AllowedPolicyHashes, action.PolicyHash) || action.BudgetNanoTOS > policy.MaxBudgetNanoTOS || action.FundingNanoTOS > policy.MaxFundingNanoTOS {
