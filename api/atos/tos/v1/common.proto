@@ -44,6 +44,12 @@ message Digest {
 message NetworkReference {
   string network = 1;
   string reference = 2;
+  // Finalized is true only when a chain-backed Authority independently
+  // observed this exact reference as finalized and non-reorganized.
+  bool finalized = 3;
+  // Network-specific finalized checkpoint (TOS masterchain sequence number).
+  // Zero for local/non-finalized authorities.
+  uint64 finalized_checkpoint = 4;
 }
 
 message Money {

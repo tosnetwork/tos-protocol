@@ -35,6 +35,7 @@ var (
 	bucketEvidence           = []byte("proof-of-service-v1")
 	bucketProofs             = []byte("proofs-v1")
 	bucketServiceQuotes      = []byte("service-quotes-v1")
+	bucketFinancialAnchors   = []byte("managed-financial-anchors-v1")
 	bucketJobs               = []byte("execution-jobs-v1")
 	bucketIdempotency        = []byte("idempotency-v1")
 )
@@ -45,7 +46,7 @@ var allBuckets = [][]byte{
 	bucketSignerAuths, bucketSignerAuthByAuthID, bucketEscrows, bucketEscrowByQuote, bucketSettlements,
 	bucketSettlementByJob, bucketSettlementByRcpt, bucketReceipts,
 	bucketReceiptByJob, bucketEvidence, bucketProofs, bucketServiceQuotes,
-	bucketJobs, bucketIdempotency,
+	bucketJobs, bucketFinancialAnchors, bucketIdempotency,
 }
 
 const signingKeyName = "execution-signing-key-ed25519"

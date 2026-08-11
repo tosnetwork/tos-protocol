@@ -250,7 +250,10 @@ func (a *chainAuthority) Commit(
 	if err != nil || after.ObservedMasterSeqno < state.ObservedMasterSeqno {
 		return NetworkReference{}, errors.New("TOS chain commitment finality is not current")
 	}
-	return NetworkReference{Network: a.network, Reference: receipt.Reference}, nil
+	return NetworkReference{
+		Network: a.network, Reference: receipt.Reference,
+		Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno,
+	}, nil
 }
 
 func (a *chainAuthority) anchorAction(
