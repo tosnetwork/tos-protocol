@@ -218,6 +218,9 @@ func (s *Server) CreatePrincipalBinding(
 		if !identityFound {
 			return notFound("NOT_FOUND", "agent identity does not exist; it must be established before it can be bound")
 		}
+		if _, err := verifiedTOSController(identity, s.authority.Network()); err != nil {
+			return failedPrecondition("PROVIDER_IDENTITY_UNAVAILABLE", "agent identity is not independently anchored on this server's configured network: "+err.Error())
+		}
 		var existing principalBindingRecord
 		existingFound, err := s.store.getJSON(tx, bucketPrincipalBindings, req.Msg.PrincipalId, &existing)
 		if err != nil {

@@ -2,13 +2,23 @@ package atosrpc
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 )
+
+// testCanonicalController returns a syntactically valid canonical TOS
+// account address (workchain 0, 32 bytes), suitable for
+// CreatePrincipalBinding's verifiedTOSController check. seed varies the
+// byte value so distinct agent identities don't collide on the same address.
+func testCanonicalController(seed byte) string {
+	return "0:" + strings.Repeat(fmt.Sprintf("%02x", seed), 32)
+}
 
 func newIdentityBindingTestServer(t *testing.T, now time.Time) *Server {
 	t.Helper()
@@ -47,11 +57,63 @@ func TestCreatePrincipalBinding_RejectsUnresolvedAgentIdentity(t *testing.T) {
 	}
 }
 
+// TestCreatePrincipalBinding_RejectsSelfAssertedIdentity proves an identity
+// with no independent anchoring (self_asserted, or empty assurance) cannot
+// be bound -- a binding to an identity that can never satisfy
+// TOSBackedActivationAuthority's ownership checks would be a permanently
+// unusable, misleading "active" binding in the operator surface.
+func TestCreatePrincipalBinding_RejectsSelfAssertedIdentity(t *testing.T) {
+	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	server := newIdentityBindingTestServer(t, now)
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_self_asserted", CanonicalUri: "tos://agent/agt_self_asserted",
+		Controllers: []string{testCanonicalController(9)}, Assurance: "self_asserted",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-1", now), PrincipalId: "prn_1", AgentId: "agt_self_asserted",
+	}))
+	if err == nil {
+		t.Fatal("expected error binding to a self-asserted (unverified) agent identity")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("error code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
+// TestCreatePrincipalBinding_RejectsCrossNetworkIdentity proves the fix for
+// the missing "network/domain binding that prevents mixing references from
+// different TOS networks" invariant: an AgentIdentity anchored on a
+// DIFFERENT network than this server's own configured network (e.g. a
+// mainnet identity resolved against a devnet gateway) must not be bindable,
+// even though it independently resolves and is not self-asserted.
+func TestCreatePrincipalBinding_RejectsCrossNetworkIdentity(t *testing.T) {
+	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	server := newIdentityBindingTestServer(t, now) // Authority.Network() == "tos-local"
+	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+		AgentId: "agt_other_network", CanonicalUri: "tos://agent/agt_other_network",
+		Controllers: []string{testCanonicalController(7)}, Assurance: "tos_attested",
+		IdentityRef: &atostosv1.NetworkReference{Network: "tos-mainnet", Reference: "tos:external-anchor"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{
+		Context: bindingReqCtx("caller-1", "idem-1", now), PrincipalId: "prn_1", AgentId: "agt_other_network",
+	}))
+	if err == nil {
+		t.Fatal("expected error binding to an identity anchored on a different TOS network")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("error code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
 func TestCreatePrincipalBinding_HappyPathThenIdempotentReplay(t *testing.T) {
 	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
 	server := newIdentityBindingTestServer(t, now)
 	if err := server.SeedIdentity(&atostosv1.AgentIdentity{
-		AgentId: "agt_1", CanonicalUri: "tos://agent/agt_1", Controllers: []string{"tos:addr:1"},
+		AgentId: "agt_1", CanonicalUri: "tos://agent/agt_1", Controllers: []string{testCanonicalController(1)},
 		Assurance: "tos_attested",
 	}); err != nil {
 		t.Fatal(err)
@@ -101,9 +163,10 @@ func TestCreatePrincipalBinding_HappyPathThenIdempotentReplay(t *testing.T) {
 func TestCreatePrincipalBinding_RebindingToDifferentAgentConflicts(t *testing.T) {
 	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
 	server := newIdentityBindingTestServer(t, now)
-	for _, agentID := range []string{"agt_1", "agt_2"} {
+	for i, agentID := range []string{"agt_1", "agt_2"} {
 		if err := server.SeedIdentity(&atostosv1.AgentIdentity{
-			AgentId: agentID, CanonicalUri: "tos://agent/" + agentID, Controllers: []string{"tos:addr:" + agentID},
+			AgentId: agentID, CanonicalUri: "tos://agent/" + agentID,
+			Controllers: []string{testCanonicalController(byte(i + 1))}, Assurance: "tos_attested",
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -141,9 +204,10 @@ func TestRevokePrincipalBinding_NoExistingBindingIsNotAnError(t *testing.T) {
 func TestRevokePrincipalBinding_FullLifecycleThenRebind(t *testing.T) {
 	now := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
 	server := newIdentityBindingTestServer(t, now)
-	for _, agentID := range []string{"agt_1", "agt_2"} {
+	for i, agentID := range []string{"agt_1", "agt_2"} {
 		if err := server.SeedIdentity(&atostosv1.AgentIdentity{
-			AgentId: agentID, CanonicalUri: "tos://agent/" + agentID, Controllers: []string{"tos:addr:" + agentID},
+			AgentId: agentID, CanonicalUri: "tos://agent/" + agentID,
+			Controllers: []string{testCanonicalController(byte(i + 1))}, Assurance: "tos_attested",
 		}); err != nil {
 			t.Fatal(err)
 		}
