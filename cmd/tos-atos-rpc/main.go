@@ -221,16 +221,24 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 			return 0, fmt.Errorf("identity seed %q must list at least one controller", seed.AgentID)
 		}
 		// Every controller must be a syntactically valid canonical TOS
-		// address -- catching a typo'd controller here, at the moment the
-		// operator's mistake was actually made, rather than only once a
-		// later CreatePrincipalBinding attempt fails verifiedTOSController
-		// far removed in time from the seed file that caused it (and after
+		// address, AND canonicalize to exactly one unique address -- the
+		// same two invariants verifiedTOSController/uniqueTOSController
+		// enforce at CreatePrincipalBinding time. Catching both here, at
+		// the moment the operator's mistake was actually made, rather than
+		// only once a later CreatePrincipalBinding attempt fails far
+		// removed in time from the seed file that caused it (and after
 		// identityAlreadySeeded starts treating the broken record as
 		// already-seeded on every subsequent restart, masking it further).
+		uniqueControllers := make(map[string]struct{}, len(seed.Controllers))
 		for _, controller := range seed.Controllers {
-			if _, err := toschain.CanonicalAddress(controller); err != nil {
+			canonical, err := toschain.CanonicalAddress(controller)
+			if err != nil {
 				return 0, fmt.Errorf("identity seed %q has an invalid controller %q: %w", seed.AgentID, controller, err)
 			}
+			uniqueControllers[canonical] = struct{}{}
+		}
+		if len(uniqueControllers) != 1 {
+			return 0, fmt.Errorf("identity seed %q must canonicalize to exactly one unique controller, got %d", seed.AgentID, len(uniqueControllers))
 		}
 		if seenAgentIDs[seed.AgentID] {
 			return 0, fmt.Errorf("identity seed file lists agent_id %q more than once", seed.AgentID)
@@ -244,6 +252,19 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 			return 0, fmt.Errorf("identity seed file's canonical_uri %q is used by both %q and %q", seed.CanonicalURI, owner, seed.AgentID)
 		}
 		seenCanonicalURIs[seed.CanonicalURI] = seed.AgentID
+		// The collision check above only covers records within THIS file --
+		// it must also reject reusing a canonical_uri already owned by a
+		// DIFFERENT agent_id from a prior run (an edited/reduced seed file
+		// across restarts), or that prior identity would silently become
+		// unresolvable by URI with no error, the same way an in-file
+		// collision would.
+		existingOwner, err := resolveAgentIDByCanonicalURI(server, seed.CanonicalURI)
+		if err != nil {
+			return 0, fmt.Errorf("resolve canonical_uri %q before seeding: %w", seed.CanonicalURI, err)
+		}
+		if existingOwner != "" && existingOwner != seed.AgentID {
+			return 0, fmt.Errorf("canonical_uri %q is already owned by agent_id %q, cannot also seed it for %q", seed.CanonicalURI, existingOwner, seed.AgentID)
+		}
 	}
 	applied := 0
 	for _, seed := range seeds {
@@ -294,6 +315,25 @@ func identityAlreadySeeded(server *atosrpc.Server, seed identitySeed) (bool, err
 		existing.Assurance == seed.Assurance &&
 		slices.Equal(existing.Controllers, seed.Controllers) &&
 		maps.Equal(existing.PublicAttributes, seed.PublicAttrs), nil
+}
+
+// resolveAgentIDByCanonicalURI returns the agent_id currently owning
+// canonicalURI in the store, or "" if none does -- used to reject a seed
+// file from claiming a canonical_uri a PRIOR run already committed under a
+// different agent_id (bucketIdentityURIs.Put is unconditional/last-write-
+// wins, so nothing else would catch this).
+func resolveAgentIDByCanonicalURI(server *atosrpc.Server, canonicalURI string) (string, error) {
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context:      &atostosv1.RequestContext{RequestId: "seed-uri-lookup", CallerId: "tos-atos-rpc-seed"},
+		CanonicalUri: canonicalURI,
+	}))
+	if err != nil {
+		return "", err
+	}
+	if resp.Msg == nil || !resp.Msg.Found || resp.Msg.Identity == nil {
+		return "", nil
+	}
+	return resp.Msg.Identity.AgentId, nil
 }
 
 func loadRoutes(path string) ([]atosrpc.Route, error) {

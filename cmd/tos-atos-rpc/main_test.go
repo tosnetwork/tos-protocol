@@ -188,6 +188,69 @@ func TestSeedIdentities_ReappliesOnContentChange(t *testing.T) {
 	}
 }
 
+// TestSeedIdentities_RejectsMultipleDistinctControllers proves a record
+// whose controllers canonicalize to more than one unique address is
+// rejected at seed time, matching CreatePrincipalBinding's own
+// uniqueTOSController requirement -- not silently accepted only to fail
+// every subsequent bind attempt with no obvious link back to the seed file.
+func TestSeedIdentities_RejectsMultipleDistinctControllers(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_multicontroller", CanonicalURI: "tos://agent/agt_seed_multicontroller",
+		Controllers: []string{
+			"0:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+			"0:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		},
+		Assurance: "tos_operator_verified",
+	}})
+	if _, err := seedIdentities(server, path); err == nil {
+		t.Fatal("expected two distinct controllers to be rejected")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_multicontroller",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.Found {
+		t.Fatal("a record with multiple distinct controllers must not have been committed")
+	}
+}
+
+// TestSeedIdentities_RejectsCanonicalURICollisionAcrossRuns proves the
+// canonical_uri collision check also covers identities committed by a
+// PRIOR run, not just within the current file -- an edited/reduced seed
+// file across restarts must not silently orphan a previously-seeded
+// identity's canonical_uri resolution.
+func TestSeedIdentities_RejectsCanonicalURICollisionAcrossRuns(t *testing.T) {
+	server := newTestServer(t)
+	firstPath := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_uri_first", CanonicalURI: "tos://agent/shared-across-runs",
+		Controllers: []string{"0:1212121212121212121212121212121212121212121212121212121212121212"},
+		Assurance:   "tos_operator_verified",
+	}})
+	if _, err := seedIdentities(server, firstPath); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	secondPath := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_uri_second", CanonicalURI: "tos://agent/shared-across-runs",
+		Controllers: []string{"0:3434343434343434343434343434343434343434343434343434343434343434"},
+		Assurance:   "tos_operator_verified",
+	}})
+	if _, err := seedIdentities(server, secondPath); err == nil {
+		t.Fatal("expected the second run's canonical_uri collision with the first run's identity to be rejected")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), CanonicalUri: "tos://agent/shared-across-runs",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Msg.Found || resp.Msg.Identity.AgentId != "agt_seed_uri_first" {
+		t.Fatalf("the first run's identity must still own the canonical_uri: %+v", resp.Msg)
+	}
+}
+
 // TestSeedIdentities_RejectsMalformedController proves a syntactically
 // invalid controller address is caught at seed time -- not silently
 // accepted only to fail far later, at the first CreatePrincipalBinding
