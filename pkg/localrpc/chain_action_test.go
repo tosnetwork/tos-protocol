@@ -93,6 +93,38 @@ func TestChainActionPublisherClientRejectsChangedReceipt(t *testing.T) {
 	}
 }
 
+func TestChainActionPublisherClientResolvesWithoutPublishing(t *testing.T) {
+	action := testChainAction()
+	var resolveCalls, publishCalls int
+	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodPost && request.URL.Path == ChainActionResolvePath {
+			resolveCalls++
+			var got chain.Action
+			if json.NewDecoder(request.Body).Decode(&got) != nil || got != action {
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(writer).Encode(chain.ActionReceipt{Version: got.Version, ActionID: got.ActionID, Network: got.Network, Kind: got.Kind, ObjectID: got.ObjectID, Digest: got.Digest, Reference: "tos:tx:v1:0:" + repeatHex("ab", 32) + ":1:" + repeatHex("cd", 32), Payer: got.Payer, Payee: got.Payee, AmountNanoTOS: got.AmountNanoTOS, Comment: got.Comment})
+			return
+		}
+		if request.URL.Path == ChainActionPath {
+			publishCalls++
+		}
+		writer.WriteHeader(http.StatusNotFound)
+	}))
+	defer stop()
+	client, err := NewChainActionPublisherClient(DefaultChainActionPublisherClientConfig(socketPath, action.Network))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	receipt, found, err := client.Resolve(context.Background(), action)
+	if err != nil || !found || receipt.ActionID != action.ActionID || resolveCalls != 1 || publishCalls != 0 {
+		t.Fatalf("receipt=%+v found=%v resolve=%d publish=%d err=%v", receipt, found, resolveCalls, publishCalls, err)
+	}
+}
+
 func TestChainActionPublisherClientRejectsWrongReadinessNetwork(t *testing.T) {
 	action := testChainAction()
 	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(

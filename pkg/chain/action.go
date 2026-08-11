@@ -64,3 +64,12 @@ type ActionPublisher interface {
 	Publish(context.Context, Action) (ActionReceipt, error)
 	Close() error
 }
+
+// ActionResolver is the read-only counterpart required for lost-response
+// recovery. It looks up the original receipt by the deterministic ActionID
+// and verifies every stable field against action. It must never publish a
+// transaction. found=false is an authoritative absence from the configured
+// publisher journal; transport or journal availability failures are errors.
+type ActionResolver interface {
+	Resolve(context.Context, Action) (receipt ActionReceipt, found bool, err error)
+}

@@ -31,11 +31,19 @@ same-user private Unix-socket sidecar implements the narrow
 
 ```text
 POST /v1/chain/action
+POST /v1/chain/action/resolve
 GET  /healthz
 ```
 
 The sidecar receives an immutable, idempotent action and returns one exact TOS
 transaction reference. The sidecar is not trusted to declare finality.
+The resolve endpoint is strictly read-only: it looks up the original receipt
+by deterministic Action ID and exact stable action fields, returns `404` only
+when its durable canonical journal proves absence, and must be shared or
+replicated consistently across publisher instances. Chain Authority refuses
+to start with a publisher client that lacks this resolver contract. A resolved
+receipt is still untrusted until the exact transaction is independently
+re-observed below.
 `tos-protocol` independently verifies the exact transaction through the
 existing `pkg/toschain` strict-majority adapter, including:
 
