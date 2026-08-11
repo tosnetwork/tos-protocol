@@ -18,8 +18,9 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 )
 
-// Server implements Identity, Capability, Trust, Settlement, Proof, and
-// ExecutionGateway services over one authenticated durable Edge boundary.
+// Server implements the ATOS trust/economic/proof/execution services,
+// including the purpose-specific Managed financial-integrity anchor boundary,
+// over one authenticated durable Edge boundary.
 type Server struct {
 	config           Config
 	store            *store
@@ -153,6 +154,7 @@ func (s *Server) Handler() http.Handler {
 		pair(atostosv1connect.NewSettlementServiceHandler(s, handlerOptions...)),
 		pair(atostosv1connect.NewProofServiceHandler(s, handlerOptions...)),
 		pair(atostosv1connect.NewExecutionGatewayServiceHandler(s, handlerOptions...)),
+		pair(atostosv1connect.NewFinancialIntegrityServiceHandler(s, handlerOptions...)),
 	} {
 		mux.Handle(registered.path, registered.handler)
 	}

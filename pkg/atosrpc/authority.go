@@ -48,5 +48,6 @@ func (a *localAuthority) Commit(_ context.Context, kind, id, digest string) (Net
 	return NetworkReference{
 		Network:   a.network,
 		Reference: "atosrpc:" + kind + ":" + id + ":" + digest,
+		Finalized: false,
 	}, nil
 }

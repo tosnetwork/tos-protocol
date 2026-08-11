@@ -33,7 +33,8 @@ generate:
 		atos/tos/v1/trust.proto \
 		atos/tos/v1/settlement.proto \
 		atos/tos/v1/proof.proto \
-		atos/tos/v1/execution.proto
+		atos/tos/v1/execution.proto \
+		atos/tos/v1/financial_integrity.proto
 
 reproducible-builds:
 	./scripts/verify-reproducible-builds.sh

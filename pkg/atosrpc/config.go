@@ -61,6 +61,13 @@ type Authority interface {
 	Close() error
 }
 
+// CommitmentResolver is implemented by production authorities that can
+// re-observe a previously published commitment against the live network. A
+// finalized financial anchor is never resolved from the local RPC cache alone.
+type CommitmentResolver interface {
+	ResolveCommitment(context.Context, string, string, string, *NetworkReference) (*NetworkReference, error)
+}
+
 // Worker is the narrow Edge Core -> private Worker dependency used by
 // ExecutionGatewayService. localrpc.WorkerClient satisfies this interface.
 type Worker interface {

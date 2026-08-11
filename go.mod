@@ -8,11 +8,11 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/xssnick/tonutils-go v1.16.0
 	go.etcd.io/bbolt v1.4.3
+	golang.org/x/sys v0.29.0
 	google.golang.org/protobuf v1.36.11
 )
 
 require (
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 )
