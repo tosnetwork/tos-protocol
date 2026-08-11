@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +44,8 @@ type TosctlBackendConfig struct {
 	TosctlConfig           string            `json:"tosctlConfig"`
 	VaultURL               string            `json:"vaultUrl"`
 	RPCURL                 string            `json:"rpcUrl"`
+	GenesisRootHash        string            `json:"genesisRootHash"`
+	GenesisFileHash        string            `json:"genesisFileHash"`
 	Wallets                map[string]string `json:"wallets"`
 	ExecutorWallet         string            `json:"executorWallet"`
 	Workchain              int32             `json:"workchain"`
@@ -54,20 +59,23 @@ type TosctlBackendConfig struct {
 }
 
 type TosctlBackend struct {
-	network        string
-	binary         string
-	configPath     string
-	vaultURL       string
-	wallets        map[string]string
-	executorWallet string
-	workchain      int32
-	operationValue uint64
-	commandTimeout time.Duration
-	publishTimeout time.Duration
-	recoveryWait   time.Duration
-	locator        *transactionLocator
-	environment    []string
-	mu             sync.Mutex
+	network         string
+	binary          string
+	configFile      *os.File
+	vaultURL        string
+	wallets         map[string]string
+	executorWallet  string
+	workchain       int32
+	operationValue  uint64
+	commandTimeout  time.Duration
+	publishTimeout  time.Duration
+	recoveryWait    time.Duration
+	locator         *transactionLocator
+	environment     []string
+	mu              sync.Mutex
+	configMu        sync.Mutex
+	genesisRootHash string
+	genesisFileHash string
 }
 
 func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
@@ -83,6 +91,21 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 	configPath, err := validateRegularPath(config.TosctlConfig, false)
 	if err != nil {
 		return nil, fmt.Errorf("tosctl config: %w", err)
+	}
+	rawConfig, err := os.ReadFile(configPath)
+	if err != nil || len(rawConfig) > 2<<20 {
+		return nil, errors.New("read tosctl configuration snapshot")
+	}
+	configuredRPC, err := taskEscrowTosctlRPCURL(rawConfig)
+	if err != nil || configuredRPC != config.RPCURL {
+		return nil, errors.New("tosctl send RPC does not match recovery RPC")
+	}
+	if !validBase64Hash(config.GenesisRootHash) || !validBase64Hash(config.GenesisFileHash) {
+		return nil, errors.New("invalid expected TOS genesis identity")
+	}
+	configFile, err := pinnedTaskEscrowConfig(rawConfig)
+	if err != nil {
+		return nil, err
 	}
 	wallets := make(map[string]string, len(config.Wallets))
 	for rawAddress, name := range config.Wallets {
@@ -128,11 +151,11 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 		return nil, err
 	}
 	return &TosctlBackend{
-		network: config.Network, binary: binary, configPath: configPath,
+		network: config.Network, binary: binary, configFile: configFile,
 		vaultURL: config.VaultURL, wallets: wallets, executorWallet: config.ExecutorWallet,
 		workchain: config.Workchain, operationValue: operationValue,
 		commandTimeout: commandTimeout, publishTimeout: publishTimeout,
-		recoveryWait: recoveryWait, locator: locator, environment: environment,
+		recoveryWait: recoveryWait, locator: locator, environment: environment, genesisRootHash: config.GenesisRootHash, genesisFileHash: config.GenesisFileHash,
 	}, nil
 }
 
@@ -152,9 +175,17 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if b == nil || b.locator == nil || b.locator.client == nil {
 		return errors.New("invalid tosctl publisher backend")
 	}
-	var master map[string]any
+	var master struct {
+		Init struct {
+			RootHash string `json:"root_hash"`
+			FileHash string `json:"file_hash"`
+		} `json:"init"`
+	}
 	if err := b.locator.client.Call(ctx, "getMasterchainInfo", struct{}{}, &master); err != nil {
 		return fmt.Errorf("TOS JSON-RPC is unavailable: %w", err)
+	}
+	if master.Init.RootHash != b.genesisRootHash || master.Init.FileHash != b.genesisFileHash {
+		return errors.New("TOS genesis identity mismatch")
 	}
 	output, err := b.run(ctx, "wallet", "ls", "--format", "json")
 	if err != nil {
@@ -236,7 +267,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 			normalizeDigest(state.PolicyHash) != action.PolicyHash {
 			return PreparedAction{}, errors.New("tosctl build-state changed immutable escrow fields")
 		}
-		codeHash = normalizeDigest(state.CodeHash)
+		codeHash = normalizeCellDigest(state.CodeHash)
 	} else {
 		var err error
 		contractAddress, err = toschain.CanonicalAddress(contractAddress)
@@ -293,7 +324,16 @@ func (b *TosctlBackend) Publish(
 	return taskEscrowReceipt(action, prepared.ContractAddress, reference), nil
 }
 
-func (b *TosctlBackend) Close() error { return nil }
+func (b *TosctlBackend) Close() error {
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.configFile == nil {
+		return nil
+	}
+	err := b.configFile.Close()
+	b.configFile = nil
+	return err
+}
 
 func (b *TosctlBackend) buildStateArgs(action chain.TaskEscrowAction) []string {
 	return []string{
@@ -371,8 +411,30 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	}
 	commandContext, cancel := context.WithTimeout(ctx, b.commandTimeout)
 	defer cancel()
-	args = append(args, "-c", b.configPath)
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.configFile == nil {
+		return nil, errors.New("tosctl backend is closed")
+	}
+	if _, err := b.configFile.Seek(0, 0); err != nil {
+		return nil, errors.New("seek pinned tosctl config")
+	}
+	dir, err := os.MkdirTemp("", "tos-task-escrow-config-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	target := "/proc/self/fd/3"
+	if runtime.GOOS == "darwin" {
+		target = "/dev/fd/3"
+	}
+	snapshotPath := filepath.Join(dir, "config.json")
+	if err = os.Symlink(target, snapshotPath); err != nil {
+		return nil, err
+	}
+	args = append(args, "-c", snapshotPath)
 	command := exec.CommandContext(commandContext, b.binary, args...)
+	command.ExtraFiles = []*os.File{b.configFile}
 	command.Env = append([]string(nil), b.environment...)
 	var stdout, stderr limitedBuffer
 	stdout.limit, stderr.limit = maxCommandOutputBytes, maxCommandOutputBytes
@@ -387,6 +449,80 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 		return nil, errors.New("tosctl output exceeded byte limit")
 	}
 	return bytes.TrimSpace(stdout.Bytes()), nil
+}
+
+func taskEscrowTosctlRPCURL(raw []byte) (string, error) {
+	var config struct {
+		ChainRPC struct {
+			URLs   []json.RawMessage `json:"urls"`
+			URL    string            `json:"url"`
+			APIKey *string           `json:"api_key"`
+		} `json:"chain_rpc"`
+	}
+	if json.Unmarshal(raw, &config) != nil {
+		return "", errors.New("decode tosctl RPC config")
+	}
+	if config.ChainRPC.APIKey != nil {
+		return "", errors.New("RPC API keys are unsupported")
+	}
+	var out []string
+	seen := map[string]bool{}
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	add(config.ChainRPC.URL)
+	for _, rawValue := range config.ChainRPC.URLs {
+		var direct string
+		if json.Unmarshal(rawValue, &direct) == nil {
+			add(direct)
+			continue
+		}
+		var entry struct {
+			URL    string  `json:"url"`
+			APIKey *string `json:"api_key"`
+		}
+		if json.Unmarshal(rawValue, &entry) != nil || entry.APIKey != nil {
+			return "", errors.New("invalid tosctl RPC endpoint")
+		}
+		add(entry.URL)
+	}
+	if len(out) != 1 {
+		return "", errors.New("tosctl must resolve to exactly one RPC endpoint")
+	}
+	return out[0], nil
+}
+func pinnedTaskEscrowConfig(raw []byte) (*os.File, error) {
+	file, err := os.CreateTemp("", "tos-task-escrow-pinned-*")
+	if err != nil {
+		return nil, err
+	}
+	path := file.Name()
+	if err = os.Remove(path); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err = file.Chmod(0600); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if _, err = file.Write(raw); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err = file.Sync(); err != nil {
+		file.Close()
+		return nil, err
+	}
+	_, err = file.Seek(0, 0)
+	return file, err
+}
+func validBase64Hash(value string) bool {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	return err == nil && len(decoded) == 32
 }
 
 type limitedBuffer struct {
@@ -436,6 +572,12 @@ func normalizeDigest(value string) string {
 	value = strings.TrimPrefix(strings.TrimSpace(value), "0x")
 	value = strings.TrimPrefix(value, "sha256:")
 	return "sha256:" + strings.ToLower(value)
+}
+func normalizeCellDigest(value string) string {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "0x")
+	value = strings.TrimPrefix(value, "sha256:")
+	value = strings.TrimPrefix(value, "tvm-cell-sha256:")
+	return "tvm-cell-sha256:" + strings.ToLower(value)
 }
 
 func boundedDuration(valueMillis uint64, defaultValue, maximum time.Duration) (time.Duration, error) {
