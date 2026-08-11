@@ -12,13 +12,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
+
+	"connectrpc.com/connect"
 
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/atosrpc"
@@ -208,7 +212,23 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 			return 0, fmt.Errorf("identity seed %q must list at least one controller", seed.AgentID)
 		}
 	}
+	applied := 0
 	for _, seed := range seeds {
+		// This function is designed to run on every process start (see the
+		// content-stable re-seed guarantee), and SeedIdentity's own Commit
+		// call is a real, potentially costly external operation under a
+		// chain-backed Authority -- so skip records that already resolve
+		// with identical content rather than unconditionally re-committing
+		// every record on every restart. This also shrinks the partial-
+		// application window a genuine mid-loop Commit failure leaves: a
+		// retry after fixing the underlying issue only re-attempts records
+		// that did NOT already land, instead of re-doing already-successful
+		// ones too.
+		if already, err := identityAlreadySeeded(server, seed); err != nil {
+			return 0, fmt.Errorf("resolve identity %q before seeding: %w", seed.AgentID, err)
+		} else if already {
+			continue
+		}
 		if err := server.SeedIdentity(&atostosv1.AgentIdentity{
 			AgentId: seed.AgentID, CanonicalUri: seed.CanonicalURI,
 			Controllers: seed.Controllers, Assurance: seed.Assurance,
@@ -216,8 +236,31 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 		}); err != nil {
 			return 0, fmt.Errorf("seed identity %q: %w", seed.AgentID, err)
 		}
+		applied++
 	}
-	return len(seeds), nil
+	return applied, nil
+}
+
+// identityAlreadySeeded reports whether seed's agent_id already resolves to
+// an identity with identical content, so seedIdentities can skip a redundant
+// SeedIdentity call (and, under a chain-backed Authority, a redundant real
+// commitment) on repeated runs of an unchanged seed file.
+func identityAlreadySeeded(server *atosrpc.Server, seed identitySeed) (bool, error) {
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: &atostosv1.RequestContext{RequestId: "seed-lookup-" + seed.AgentID, CallerId: "tos-atos-rpc-seed"},
+		AgentId: seed.AgentID,
+	}))
+	if err != nil {
+		return false, err
+	}
+	if resp.Msg == nil || !resp.Msg.Found || resp.Msg.Identity == nil {
+		return false, nil
+	}
+	existing := resp.Msg.Identity
+	return existing.CanonicalUri == seed.CanonicalURI &&
+		existing.Assurance == seed.Assurance &&
+		slices.Equal(existing.Controllers, seed.Controllers) &&
+		maps.Equal(existing.PublicAttributes, seed.PublicAttrs), nil
 }
 
 func loadRoutes(path string) ([]atosrpc.Route, error) {

@@ -53,12 +53,14 @@ func (s *Server) SeedIdentity(identity *atostosv1.AgentIdentity) error {
 	})
 }
 
-// BindPrincipal is a test/bootstrap-only helper that binds without going
-// through CreatePrincipalBinding's RPC/idempotency surface. Production
-// binding creation MUST use the CreatePrincipalBinding RPC below -- this
-// method remains only because existing tests construct bindings directly
-// against an in-process *Server.
-func (s *Server) BindPrincipal(principalID, agentID string) error {
+// bindPrincipal is a test-only helper that binds without going through
+// CreatePrincipalBinding's RPC/idempotency surface OR its
+// verifiedTOSController check (self-asserted/cross-network rejection) --
+// unexported so nothing outside this package's own tests can reach a path
+// that bypasses those invariants. Production binding creation MUST use the
+// CreatePrincipalBinding RPC below; this method remains only because
+// existing tests construct bindings directly against an in-process *Server.
+func (s *Server) bindPrincipal(principalID, agentID string) error {
 	if requiredIdentifier("principal_id", principalID) != nil || requiredIdentifier("agent_id", agentID) != nil {
 		return invalid("INVALID_ARGUMENT", "valid principal and agent IDs are required")
 	}

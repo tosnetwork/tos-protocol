@@ -131,6 +131,63 @@ func TestSeedIdentities_RejectsNoControllers(t *testing.T) {
 	}
 }
 
+// TestSeedIdentities_SkipsAlreadyMatchingRecordsOnReseed proves an unchanged
+// re-run of seedIdentities (e.g. every process restart, which this function
+// is designed to tolerate) does not redundantly re-commit records that
+// already resolve with identical content -- both an efficiency property
+// (avoids a real, potentially costly re-commit under a chain-backed
+// Authority) and what shrinks the exposure of a genuine mid-loop Commit
+// failure: a retry only re-attempts records that did not already land.
+func TestSeedIdentities_SkipsAlreadyMatchingRecordsOnReseed(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_reseed", CanonicalURI: "tos://agent/agt_seed_reseed",
+		Controllers: []string{"0:5555555555555555555555555555555555555555555555555555555555555555"},
+		Assurance:   "tos_operator_verified",
+	}})
+	count, err := seedIdentities(server, path)
+	if err != nil || count != 1 {
+		t.Fatalf("first run: count=%d err=%v, want 1, nil", count, err)
+	}
+	count, err = seedIdentities(server, path)
+	if err != nil || count != 0 {
+		t.Fatalf("unchanged re-run: count=%d err=%v, want 0 (nothing newly applied), nil", count, err)
+	}
+}
+
+// TestSeedIdentities_ReappliesOnContentChange proves the skip above is
+// content-aware, not a blanket "agent_id already exists" skip -- an operator
+// intentionally rotating a seed record's controller must see it re-applied.
+func TestSeedIdentities_ReappliesOnContentChange(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_rotate", CanonicalURI: "tos://agent/agt_seed_rotate",
+		Controllers: []string{"0:6666666666666666666666666666666666666666666666666666666666666666"},
+		Assurance:   "tos_operator_verified",
+	}})
+	if count, err := seedIdentities(server, path); err != nil || count != 1 {
+		t.Fatalf("first run: count=%d err=%v, want 1, nil", count, err)
+	}
+	rotatedPath := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_rotate", CanonicalURI: "tos://agent/agt_seed_rotate",
+		Controllers: []string{"0:7777777777777777777777777777777777777777777777777777777777777777"},
+		Assurance:   "tos_operator_verified",
+	}})
+	count, err := seedIdentities(server, rotatedPath)
+	if err != nil || count != 1 {
+		t.Fatalf("rotated re-run: count=%d err=%v, want 1 (re-applied), nil", count, err)
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_rotate",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Msg.Identity.Controllers) != 1 || resp.Msg.Identity.Controllers[0] != "0:7777777777777777777777777777777777777777777777777777777777777777" {
+		t.Fatalf("controller was not rotated: %+v", resp.Msg.Identity.Controllers)
+	}
+}
+
 // TestSeedIdentities_ValidatesAllBeforeApplyingAny proves a later record's
 // validation failure does not leave earlier, individually-valid records
 // already durably committed -- an operator fixing the bad record and

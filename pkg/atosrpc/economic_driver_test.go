@@ -138,7 +138,7 @@ func TestEconomicPartiesRejectSelfAssertedIdentity(t *testing.T) {
 	if err := server.SeedIdentity(principalIdentity); err != nil {
 		t.Fatal(err)
 	}
-	if err := server.BindPrincipal("principal-test", principalIdentity.AgentId); err != nil {
+	if err := server.bindPrincipal("principal-test", principalIdentity.AgentId); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := server.CommitCapabilityManifest(context.Background(), connect.NewRequest(
@@ -272,7 +272,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := server.BindPrincipal(principalID, principalAgentID); err != nil {
+	if err := server.bindPrincipal(principalID, principalAgentID); err != nil {
 		t.Fatal(err)
 	}
 	quote := &atostosv1.QuoteCommitment{Value: &atostosv1.QuoteCommitmentInput{
