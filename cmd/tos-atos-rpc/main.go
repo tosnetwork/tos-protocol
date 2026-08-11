@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -19,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/atosrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
@@ -38,6 +40,19 @@ func main() {
 		authorityConfig = flag.String("authority-config", os.Getenv("TOS_ATOS_RPC_AUTHORITY_CONFIG"), "strict JSON chain Authority configuration")
 		economicMode    = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
 		economicConfig  = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
+		// identitySeedFile is the ONLY way this process establishes a new
+		// AgentIdentity -- Server.SeedIdentity is deliberately not a
+		// network RPC (atos-spec proto/atos/tos/v1/identity.proto: "Creating
+		// a brand-new AgentIdentity from nothing remains an out-of-band
+		// operator/bootstrap action... Full self-service, wallet-proved
+		// Agent Identity creation is Phase 5's deliverable, not this
+		// phase's"). This flag is that operator/bootstrap mechanism made
+		// practically usable: an operator who has already independently
+		// verified an Agent's TOS controller key (by whatever out-of-band
+		// process this deployment uses) lists it here; re-running with the
+		// same file content on every restart is safe (SeedIdentity's
+		// Authority.Commit digest is stable across identical re-seeds).
+		identitySeedFile = flag.String("identity-seed-file", os.Getenv("TOS_ATOS_RPC_IDENTITY_SEED_FILE"), "JSON array of already-verified AgentIdentity records to seed at startup")
 	)
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -86,6 +101,15 @@ func main() {
 	}
 	defer server.Close()
 
+	seeded, err := seedIdentities(server, *identitySeedFile)
+	if err != nil {
+		logger.Error("seed identities", "error", err)
+		os.Exit(2)
+	}
+	if seeded > 0 {
+		logger.Info("seeded operator-verified identities", "count", seeded)
+	}
+
 	tlsConfig, useTLS, err := buildServerTLS(*listen, *tlsCert, *tlsKey, *clientCA)
 	if err != nil {
 		logger.Error("configure ATOS RPC transport", "error", err)
@@ -122,6 +146,68 @@ func main() {
 	if err := httpServer.Shutdown(shutdown); err != nil {
 		logger.Error("ATOS RPC shutdown", "error", err)
 	}
+}
+
+// identitySeed is the JSON operator/bootstrap record shape -- deliberately a
+// plain DTO, not atostosv1.AgentIdentity's own JSON encoding, so this file
+// format stays stable/reviewable independent of the proto's wire shape.
+type identitySeed struct {
+	AgentID      string            `json:"agent_id"`
+	CanonicalURI string            `json:"canonical_uri"`
+	Controllers  []string          `json:"controllers"`
+	Assurance    string            `json:"assurance"`
+	PublicAttrs  map[string]string `json:"public_attributes"`
+}
+
+// seedIdentities loads and applies path's operator/bootstrap identity file
+// (empty path is a no-op, not an error). Every record MUST declare a
+// non-empty, non-"self_asserted" assurance level -- this file exists
+// precisely because the operator running this process has ALREADY verified
+// each Agent's TOS controller key through some out-of-band process; a
+// self-asserted entry here would defeat the entire point (see
+// pkg/atosrpc/economic.go's verifiedTOSController, which rejects
+// self-asserted assurance for any Verified-mode-gating decision).
+func seedIdentities(server *atosrpc.Server, path string) (int, error) {
+	if strings.TrimSpace(path) == "" {
+		return 0, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	var seeds []identitySeed
+	if err := decoder.Decode(&seeds); err != nil {
+		return 0, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return 0, errors.New("identity seed file contains trailing JSON")
+		}
+		return 0, err
+	}
+	for _, seed := range seeds {
+		if strings.TrimSpace(seed.AgentID) == "" || strings.TrimSpace(seed.CanonicalURI) == "" {
+			return 0, fmt.Errorf("identity seed missing agent_id or canonical_uri")
+		}
+		if strings.TrimSpace(seed.Assurance) == "" || strings.EqualFold(strings.TrimSpace(seed.Assurance), "self_asserted") {
+			return 0, fmt.Errorf("identity seed %q must declare a non-self-asserted assurance level", seed.AgentID)
+		}
+		if len(seed.Controllers) == 0 {
+			return 0, fmt.Errorf("identity seed %q must list at least one controller", seed.AgentID)
+		}
+		if err := server.SeedIdentity(&atostosv1.AgentIdentity{
+			AgentId: seed.AgentID, CanonicalUri: seed.CanonicalURI,
+			Controllers: seed.Controllers, Assurance: seed.Assurance,
+			PublicAttributes: seed.PublicAttrs,
+		}); err != nil {
+			return 0, fmt.Errorf("seed identity %q: %w", seed.AgentID, err)
+		}
+	}
+	return len(seeds), nil
 }
 
 func loadRoutes(path string) ([]atosrpc.Route, error) {
