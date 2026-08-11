@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,19 +16,45 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-type verifiedTestAuthority struct{ closed bool }
+type verifiedTestAuthority struct {
+	mu         sync.Mutex
+	closed     bool
+	resolveErr error
+	refs       map[string]string
+}
 
 func (*verifiedTestAuthority) Network() string { return "tos-test" }
 func (*verifiedTestAuthority) Supports(mode TrustMode) bool {
 	return mode == TrustModeManaged || mode == TrustModeVerified
 }
 func (*verifiedTestAuthority) CheckReady(context.Context) error { return nil }
-func (*verifiedTestAuthority) Commit(
-	_ context.Context, kind, id, digest string,
-) (NetworkReference, error) {
-	return NetworkReference{Network: "tos-test", Reference: "tos:test:" + kind + ":" + id + ":" + digest}, nil
+func (a *verifiedTestAuthority) Commit(_ context.Context, kind, id, digest string) (NetworkReference, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.refs == nil {
+		a.refs = make(map[string]string)
+	}
+	key := kind + "\x00" + id + "\x00" + digest
+	reference := "tos:test:" + kind + ":" + id + ":" + digest
+	a.refs[key] = reference
+	return NetworkReference{Network: "tos-test", Reference: reference, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
 func (a *verifiedTestAuthority) Close() error { a.closed = true; return nil }
+func (a *verifiedTestAuthority) ResolveCommitment(_ context.Context, kind, id, digest string, ref *NetworkReference) (*NetworkReference, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.resolveErr != nil {
+		return nil, a.resolveErr
+	}
+	reference, ok := a.refs[kind+"\x00"+id+"\x00"+digest]
+	if !ok {
+		return nil, ErrCommitmentNotFound
+	}
+	if ref != nil && (ref.Network != "tos-test" || ref.Reference != reference) {
+		return nil, ErrCommitmentNotFound
+	}
+	return &NetworkReference{Network: "tos-test", Reference: reference, Finalized: true, FinalizedCheckpoint: 42}, nil
+}
 
 type verifiedTestEconomy struct{ closed bool }
 

@@ -31,11 +31,24 @@ same-user private Unix-socket sidecar implements the narrow
 
 ```text
 POST /v1/chain/action
+POST /v1/chain/action/resolve
 GET  /healthz
 ```
 
 The sidecar receives an immutable, idempotent action and returns one exact TOS
 transaction reference. The sidecar is not trusted to declare finality.
+The production `cmd/tos-chain-action-publisher` sidecar owns a durable bbolt
+journal and exposes both publish and resolve routes. The resolve endpoint is
+strictly read-only: it looks up the original receipt
+by deterministic Action ID and exact stable action fields, returns `404` only
+as the versioned `action_not_found` response bound to that Action ID when its
+durable canonical journal proves absence, and must be shared or
+replicated consistently across publisher instances. Chain Authority refuses
+to start unless `/healthz` advertises the versioned resolve and durable-journal
+capabilities. Generic proxy, wrong-route, and legacy-server `404` responses are
+resolver failures, never authoritative absence. A resolved
+receipt is still untrusted until the exact transaction is independently
+re-observed below.
 `tos-protocol` independently verifies the exact transaction through the
 existing `pkg/toschain` strict-majority adapter, including:
 
@@ -133,3 +146,62 @@ finality and semantic transition verification
 ```
 
 No wallet seed or private key should cross the ATOS RPC boundary.
+
+## Publisher configuration
+
+Run `cmd/tos-chain-action-publisher` with
+`TOS_CHAIN_ACTION_PUBLISHER_CONFIG` pointing to an absolute, owner-private JSON
+file. Before first use, explicitly enroll the durable volume once with
+`tos-chain-action-publisher init-journal`. Normal startup never creates a
+missing journal and verifies its configured identity.
+
+```json
+{
+  "version": "1",
+  "network": "tos-mainnet",
+  "socketPath": "/run/tos/atos-chain-publisher.sock",
+  "statePath": "/var/lib/tos/atos-chain-publisher.db",
+  "journalIdentity": "prod-mainnet-anchor-journal-01",
+  "policy": {
+    "serviceAddress": "0:<atos-service-agent-account>",
+    "serviceId": "atos-gateway",
+    "payer": "0:<treasury-account>",
+    "payee": "0:<anchor-account>",
+    "amountNanoTOS": 1
+  },
+  "backend": {
+    "network": "tos-mainnet",
+    "binary": "/usr/local/bin/tosctl",
+    "configPath": "/etc/tos/tosctl.json",
+    "vaultUrl": "https://vault.example",
+    "rpcUrl": "https://rpc.example/jsonRPC",
+    "genesisRootHash": "<base64-32-byte-root-hash>",
+    "genesisFileHash": "<base64-32-byte-file-hash>",
+    "walletName": "atos-anchor",
+    "payer": "0:<treasury-account>"
+  }
+}
+```
+
+The journal writes the pending action intent before invoking the backend. An
+uncertain or interrupted attempt remains pending and can only be retried via
+`recover`; it is never reported as absent. Completed actions retain their exact
+receipt and exact-replay semantics across process restarts.
+The publisher recomputes Action ID from the configured service identity,
+commitment tuple and fixed payer/payee/amount policy before the concrete
+tosctl backend can use the wallet. That backend searches exact chain history
+before every broadcast and after uncertain command completion; readiness
+checks the configured RPC and exact payer wallet.
+The tosctl configuration must resolve to exactly that same single RPC endpoint,
+using tosctl's legacy `url` plus `urls` merge/trim/deduplication semantics;
+divergent compatibility fields, failover entries and keyed endpoints are
+rejected because the recovery client cannot prove identical routing.
+Readiness also pins the endpoint's genesis root/file hashes. On a pending/recovering
+operation, bounded lookup failure is an uncertain outcome and never permits a
+second send; operators must restore authoritative visibility or reconcile the
+journal rather than widening mutation authority.
+At construction the publisher copies the validated tosctl configuration into
+an unlinked, owner-only file descriptor. Every child receives only that fixed
+descriptor through tosctl's explicit `--config-fd 3 --config-format json`
+interface, so no `/proc` path or filename extension is involved. Replacing or editing the original path after
+startup cannot redirect wallet sends and there is no check/use pathname race.

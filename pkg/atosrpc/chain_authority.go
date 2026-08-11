@@ -104,6 +104,9 @@ func newChainAuthority(
 	if runtime == nil || publisher == nil {
 		return nil, errors.New("TOS chain authority runtime and publisher are required")
 	}
+	if _, ok := publisher.(chain.ActionResolver); !ok {
+		return nil, errors.New("TOS chain authority publisher must support read-only action receipt resolution")
+	}
 	if strings.TrimSpace(serviceReference.Network) == "" ||
 		strings.TrimSpace(serviceReference.Address) == "" ||
 		strings.TrimSpace(serviceReference.ServiceID) == "" {
@@ -257,8 +260,10 @@ func (a *chainAuthority) Commit(
 }
 
 func (a *chainAuthority) ResolveCommitment(ctx context.Context, kind, objectID, digest string, reference *NetworkReference) (*NetworkReference, error) {
-	if a == nil || reference == nil || reference.Network != a.network || !reference.Finalized || reference.FinalizedCheckpoint == 0 ||
-		strings.TrimSpace(reference.Reference) == "" || !chainCommitmentKindPattern.MatchString(kind) || objectID == "" || !chainDigestPattern.MatchString(digest) {
+	if a == nil || !chainCommitmentKindPattern.MatchString(kind) || objectID == "" || !chainDigestPattern.MatchString(digest) {
+		return nil, errors.New("invalid finalized TOS commitment reference")
+	}
+	if reference != nil && (reference.Network != a.network || !reference.Finalized || reference.FinalizedCheckpoint == 0 || strings.TrimSpace(reference.Reference) == "") {
 		return nil, errors.New("invalid finalized TOS commitment reference")
 	}
 	callContext, cancel, err := a.callContext(ctx)
@@ -267,26 +272,48 @@ func (a *chainAuthority) ResolveCommitment(ctx context.Context, kind, objectID, 
 	}
 	defer cancel()
 	action := a.anchorAction(kind, objectID, digest, a.now().UTC())
+	minimumCheckpoint := uint64(0)
+	referenceValue := ""
+	if reference == nil {
+		resolver, ok := a.publisher.(chain.ActionResolver)
+		if !ok {
+			return nil, errors.New("TOS chain action receipt resolver is unavailable")
+		}
+		receipt, found, resolveErr := resolver.Resolve(callContext, action)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("resolve TOS chain action receipt: %w", resolveErr)
+		}
+		if !found {
+			return nil, ErrCommitmentNotFound
+		}
+		if err := verifyActionReceipt(action, receipt); err != nil {
+			return nil, err
+		}
+		referenceValue = receipt.Reference
+	} else {
+		referenceValue = reference.Reference
+		minimumCheckpoint = reference.FinalizedCheckpoint
+	}
 	state, err := a.runtime.ObservePayment(callContext, chain.PaymentReference{
 		Network: a.network, AuthorizationID: action.ActionID, QuoteID: action.ActionID, RequestID: action.ActionID,
-		Reference: reference.Reference, Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS,
-		Comment: action.Comment, MinimumMasterSeqno: reference.FinalizedCheckpoint,
+		Reference: referenceValue, Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS,
+		Comment: action.Comment, MinimumMasterSeqno: minimumCheckpoint,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("re-observe TOS chain commitment: %w", err)
 	}
 	if !state.Confirmed || !state.Finalized || state.Reorganized || state.Network != action.Network ||
-		state.Reference != reference.Reference || state.AuthorizationID != action.ActionID || state.QuoteID != action.ActionID ||
+		state.Reference != referenceValue || state.AuthorizationID != action.ActionID || state.QuoteID != action.ActionID ||
 		state.RequestID != action.ActionID || state.Payer != action.Payer || state.Payee != action.Payee ||
 		state.AmountNanoTOS != action.AmountNanoTOS || state.Comment != action.Comment ||
-		state.ObservedMasterSeqno < reference.FinalizedCheckpoint || state.ObservedAt.IsZero() {
+		state.ObservedMasterSeqno < minimumCheckpoint || state.ObservedAt.IsZero() {
 		return nil, errors.New("TOS chain commitment is no longer finalized with the expected binding")
 	}
 	ready, err := a.runtime.CheckServiceReady(callContext, a.serviceReference, a.now().UTC())
 	if err != nil || ready.ObservedMasterSeqno < state.ObservedMasterSeqno {
 		return nil, errors.New("TOS chain commitment finality observation is not current")
 	}
-	return &NetworkReference{Network: a.network, Reference: reference.Reference, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno}, nil
+	return &NetworkReference{Network: a.network, Reference: referenceValue, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno}, nil
 }
 
 func (a *chainAuthority) anchorAction(
@@ -315,7 +342,7 @@ func (a *chainAuthority) anchorAction(
 	return chain.Action{
 		Version:  chain.ChainActionVersion,
 		ActionID: "anchor-" + anchorDigest, Network: a.network,
-		Kind: chain.ActionKindAnchor, ObjectID: objectID, Digest: digest,
+		Kind: chain.ActionKindAnchor, CommitmentKind: kind, ObjectID: objectID, Digest: digest,
 		Payer: a.anchorPayer, Payee: a.anchorPayee,
 		AmountNanoTOS:     a.anchorAmountNano,
 		Comment:           "atos:v1:" + anchorDigest,
@@ -333,7 +360,7 @@ func managedEconomicCommitment(kind string) bool {
 }
 
 func verifyActionReceipt(action chain.Action, receipt chain.ActionReceipt) error {
-	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
+	if receipt.Version != action.Version || receipt.ActionID != action.ActionID || receipt.CommitmentKind != action.CommitmentKind ||
 		receipt.Network != action.Network || receipt.Kind != action.Kind ||
 		receipt.ObjectID != action.ObjectID || receipt.Digest != action.Digest ||
 		receipt.Payer != action.Payer || receipt.Payee != action.Payee ||

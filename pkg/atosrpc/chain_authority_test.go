@@ -84,7 +84,7 @@ func (p *testChainActionPublisher) Publish(
 	p.actions = append(p.actions, action)
 	receipt := chain.ActionReceipt{
 		Version: action.Version, ActionID: action.ActionID,
-		Network: action.Network, Kind: action.Kind, ObjectID: action.ObjectID,
+		Network: action.Network, Kind: action.Kind, CommitmentKind: action.CommitmentKind, ObjectID: action.ObjectID,
 		Digest:    action.Digest,
 		Reference: "tos:tx:v1:0:2222222222222222222222222222222222222222222222222222222222222222:1:3333333333333333333333333333333333333333333333333333333333333333",
 		Payer:     action.Payer, Payee: action.Payee,
@@ -94,6 +94,19 @@ func (p *testChainActionPublisher) Publish(
 		p.changeReceipt(&receipt)
 	}
 	return receipt, nil
+}
+
+func (p *testChainActionPublisher) Resolve(_ context.Context, action chain.Action) (chain.ActionReceipt, bool, error) {
+	for _, published := range p.actions {
+		if published.ActionID == action.ActionID {
+			receipt := chain.ActionReceipt{Version: action.Version, ActionID: action.ActionID, Network: action.Network, Kind: action.Kind, CommitmentKind: action.CommitmentKind, ObjectID: action.ObjectID, Digest: action.Digest, Reference: "tos:tx:v1:0:2222222222222222222222222222222222222222222222222222222222222222:1:3333333333333333333333333333333333333333333333333333333333333333", Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS, Comment: action.Comment}
+			if p.changeReceipt != nil {
+				p.changeReceipt(&receipt)
+			}
+			return receipt, true, nil
+		}
+	}
+	return chain.ActionReceipt{}, false, nil
 }
 
 func (p *testChainActionPublisher) Close() error { p.closed = true; return nil }
@@ -132,6 +145,41 @@ func TestChainAuthorityPublishesAndIndependentlyVerifiesFinalizedCommitment(t *t
 	}
 	if err := authority.Close(); err != nil || !publisher.closed {
 		t.Fatalf("authority did not close publisher: err=%v closed=%v", err, publisher.closed)
+	}
+}
+
+func TestChainAuthorityDiscoversCommitmentByTupleWithoutReference(t *testing.T) {
+	now := time.Unix(1_800_000_001, 0).UTC()
+	runtime := &testChainAuthorityRuntime{readiness: toschain.ReadinessSnapshot{Network: "tos-test", ObservedMasterSeqno: 700, ObservedAt: now, QuorumEndpoints: 2}}
+	publisher := new(testChainActionPublisher)
+	authority, err := newTestChainAuthority(runtime, publisher, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	kind, objectID := "quote", "quote-lost-response"
+	digest := "sha256:" + strings.Repeat("a", 64)
+	committed, err := authority.Commit(context.Background(), kind, objectID, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A separately constructed authority models another tos-protocol replica:
+	// it has no local Quote cache or reference, but shares the production
+	// publisher journal and quorum-backed chain observer.
+	other, err := newTestChainAuthority(runtime, publisher, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := other.(CommitmentResolver)
+	discovered, err := resolver.ResolveCommitment(context.Background(), kind, objectID, digest, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if discovered.Reference != committed.Reference || !discovered.Finalized || discovered.FinalizedCheckpoint == 0 || runtime.observed.MinimumMasterSeqno != 0 {
+		t.Fatalf("tuple discovery reference=%q finalized=%v checkpoint=%d; committed reference=%q; observed=%+v", discovered.Reference, discovered.Finalized, discovered.FinalizedCheckpoint, committed.Reference, runtime.observed)
+	}
+	_, err = resolver.ResolveCommitment(context.Background(), kind, "missing-quote", digest, nil)
+	if !errors.Is(err, ErrCommitmentNotFound) {
+		t.Fatalf("missing tuple error=%v, want ErrCommitmentNotFound", err)
 	}
 }
 

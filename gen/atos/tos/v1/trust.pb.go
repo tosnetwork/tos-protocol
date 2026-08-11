@@ -22,23 +22,37 @@ const (
 )
 
 type QuoteCommitmentInput struct {
-	state                     protoimpl.MessageState `protogen:"open.v1"`
-	QuoteId                   string                 `protobuf:"bytes,1,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
-	PrincipalId               string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
-	ProviderId                string                 `protobuf:"bytes,3,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	CapabilityId              string                 `protobuf:"bytes,4,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	CapabilityVersion         string                 `protobuf:"bytes,5,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
-	TrustMode                 TrustMode              `protobuf:"varint,6,opt,name=trust_mode,json=trustMode,proto3,enum=atos.tos.v1.TrustMode" json:"trust_mode,omitempty"`
-	ProofProfile              ProofProfile           `protobuf:"varint,7,opt,name=proof_profile,json=proofProfile,proto3,enum=atos.tos.v1.ProofProfile" json:"proof_profile,omitempty"`
-	TotalMax                  *Money                 `protobuf:"bytes,8,opt,name=total_max,json=totalMax,proto3" json:"total_max,omitempty"`
-	TermsDigest               *Digest                `protobuf:"bytes,9,opt,name=terms_digest,json=termsDigest,proto3" json:"terms_digest,omitempty"`
-	DisputePolicyDigest       *Digest                `protobuf:"bytes,10,opt,name=dispute_policy_digest,json=disputePolicyDigest,proto3" json:"dispute_policy_digest,omitempty"`
-	ExpiresUnixMillis         int64                  `protobuf:"varint,11,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
-	SettlementBackend         string                 `protobuf:"bytes,12,opt,name=settlement_backend,json=settlementBackend,proto3" json:"settlement_backend,omitempty"`
-	SettlementAsset           string                 `protobuf:"bytes,13,opt,name=settlement_asset,json=settlementAsset,proto3" json:"settlement_asset,omitempty"`
-	UnderlyingServiceQuoteRef string                 `protobuf:"bytes,14,opt,name=underlying_service_quote_ref,json=underlyingServiceQuoteRef,proto3" json:"underlying_service_quote_ref,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"open.v1"`
+	QuoteId                      string                 `protobuf:"bytes,1,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	PrincipalId                  string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	ProviderId                   string                 `protobuf:"bytes,3,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	CapabilityId                 string                 `protobuf:"bytes,4,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	CapabilityVersion            string                 `protobuf:"bytes,5,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
+	TrustMode                    TrustMode              `protobuf:"varint,6,opt,name=trust_mode,json=trustMode,proto3,enum=atos.tos.v1.TrustMode" json:"trust_mode,omitempty"`
+	ProofProfile                 ProofProfile           `protobuf:"varint,7,opt,name=proof_profile,json=proofProfile,proto3,enum=atos.tos.v1.ProofProfile" json:"proof_profile,omitempty"`
+	TotalMax                     *Money                 `protobuf:"bytes,8,opt,name=total_max,json=totalMax,proto3" json:"total_max,omitempty"`
+	TermsDigest                  *Digest                `protobuf:"bytes,9,opt,name=terms_digest,json=termsDigest,proto3" json:"terms_digest,omitempty"`
+	DisputePolicyDigest          *Digest                `protobuf:"bytes,10,opt,name=dispute_policy_digest,json=disputePolicyDigest,proto3" json:"dispute_policy_digest,omitempty"`
+	ExpiresUnixMillis            int64                  `protobuf:"varint,11,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
+	SettlementBackend            string                 `protobuf:"bytes,12,opt,name=settlement_backend,json=settlementBackend,proto3" json:"settlement_backend,omitempty"`
+	SettlementAsset              string                 `protobuf:"bytes,13,opt,name=settlement_asset,json=settlementAsset,proto3" json:"settlement_asset,omitempty"`
+	UnderlyingServiceQuoteRef    string                 `protobuf:"bytes,14,opt,name=underlying_service_quote_ref,json=underlyingServiceQuoteRef,proto3" json:"underlying_service_quote_ref,omitempty"`
+	Version                      string                 `protobuf:"bytes,15,opt,name=version,proto3" json:"version,omitempty"`
+	NetworkId                    string                 `protobuf:"bytes,16,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	Domain                       string                 `protobuf:"bytes,17,opt,name=domain,proto3" json:"domain,omitempty"`
+	RequesterAgentId             string                 `protobuf:"bytes,18,opt,name=requester_agent_id,json=requesterAgentId,proto3" json:"requester_agent_id,omitempty"`
+	ManifestDigest               *Digest                `protobuf:"bytes,19,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"`
+	OwnershipRef                 *NetworkReference      `protobuf:"bytes,20,opt,name=ownership_ref,json=ownershipRef,proto3" json:"ownership_ref,omitempty"`
+	Subtotal                     *Money                 `protobuf:"bytes,21,opt,name=subtotal,proto3" json:"subtotal,omitempty"`
+	Fees                         *Money                 `protobuf:"bytes,22,opt,name=fees,proto3" json:"fees,omitempty"`
+	AssetDecimals                uint32                 `protobuf:"varint,23,opt,name=asset_decimals,json=assetDecimals,proto3" json:"asset_decimals,omitempty"`
+	AcceptanceDeadlineUnixMillis int64                  `protobuf:"varint,24,opt,name=acceptance_deadline_unix_millis,json=acceptanceDeadlineUnixMillis,proto3" json:"acceptance_deadline_unix_millis,omitempty"`
+	ExecutionDeadlineUnixMillis  int64                  `protobuf:"varint,25,opt,name=execution_deadline_unix_millis,json=executionDeadlineUnixMillis,proto3" json:"execution_deadline_unix_millis,omitempty"`
+	SignerAuthorizationId        string                 `protobuf:"bytes,26,opt,name=signer_authorization_id,json=signerAuthorizationId,proto3" json:"signer_authorization_id,omitempty"`
+	SignerAuthorizationRef       *NetworkReference      `protobuf:"bytes,27,opt,name=signer_authorization_ref,json=signerAuthorizationRef,proto3" json:"signer_authorization_ref,omitempty"`
+	Canonicalization             string                 `protobuf:"bytes,28,opt,name=canonicalization,proto3" json:"canonicalization,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *QuoteCommitmentInput) Reset() {
@@ -169,11 +183,110 @@ func (x *QuoteCommitmentInput) GetUnderlyingServiceQuoteRef() string {
 	return ""
 }
 
+func (x *QuoteCommitmentInput) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *QuoteCommitmentInput) GetNetworkId() string {
+	if x != nil {
+		return x.NetworkId
+	}
+	return ""
+}
+
+func (x *QuoteCommitmentInput) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *QuoteCommitmentInput) GetRequesterAgentId() string {
+	if x != nil {
+		return x.RequesterAgentId
+	}
+	return ""
+}
+
+func (x *QuoteCommitmentInput) GetManifestDigest() *Digest {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return nil
+}
+
+func (x *QuoteCommitmentInput) GetOwnershipRef() *NetworkReference {
+	if x != nil {
+		return x.OwnershipRef
+	}
+	return nil
+}
+
+func (x *QuoteCommitmentInput) GetSubtotal() *Money {
+	if x != nil {
+		return x.Subtotal
+	}
+	return nil
+}
+
+func (x *QuoteCommitmentInput) GetFees() *Money {
+	if x != nil {
+		return x.Fees
+	}
+	return nil
+}
+
+func (x *QuoteCommitmentInput) GetAssetDecimals() uint32 {
+	if x != nil {
+		return x.AssetDecimals
+	}
+	return 0
+}
+
+func (x *QuoteCommitmentInput) GetAcceptanceDeadlineUnixMillis() int64 {
+	if x != nil {
+		return x.AcceptanceDeadlineUnixMillis
+	}
+	return 0
+}
+
+func (x *QuoteCommitmentInput) GetExecutionDeadlineUnixMillis() int64 {
+	if x != nil {
+		return x.ExecutionDeadlineUnixMillis
+	}
+	return 0
+}
+
+func (x *QuoteCommitmentInput) GetSignerAuthorizationId() string {
+	if x != nil {
+		return x.SignerAuthorizationId
+	}
+	return ""
+}
+
+func (x *QuoteCommitmentInput) GetSignerAuthorizationRef() *NetworkReference {
+	if x != nil {
+		return x.SignerAuthorizationRef
+	}
+	return nil
+}
+
+func (x *QuoteCommitmentInput) GetCanonicalization() string {
+	if x != nil {
+		return x.Canonicalization
+	}
+	return ""
+}
+
 type QuoteCommitment struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Value               *QuoteCommitmentInput  `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	CommitmentRef       *NetworkReference      `protobuf:"bytes,2,opt,name=commitment_ref,json=commitmentRef,proto3" json:"commitment_ref,omitempty"`
 	CommittedUnixMillis int64                  `protobuf:"varint,3,opt,name=committed_unix_millis,json=committedUnixMillis,proto3" json:"committed_unix_millis,omitempty"`
+	CommitmentDigest    *Digest                `protobuf:"bytes,4,opt,name=commitment_digest,json=commitmentDigest,proto3" json:"commitment_digest,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -227,6 +340,13 @@ func (x *QuoteCommitment) GetCommittedUnixMillis() int64 {
 		return x.CommittedUnixMillis
 	}
 	return 0
+}
+
+func (x *QuoteCommitment) GetCommitmentDigest() *Digest {
+	if x != nil {
+		return x.CommitmentDigest
+	}
+	return nil
 }
 
 type CommitQuoteRequest struct {
@@ -334,11 +454,13 @@ func (x *CommitQuoteResponse) GetCreated() bool {
 }
 
 type GetQuoteCommitmentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	QuoteId       string                 `protobuf:"bytes,2,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Context               *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	QuoteId               string                 `protobuf:"bytes,2,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	ExpectedQuote         *QuoteCommitmentInput  `protobuf:"bytes,3,opt,name=expected_quote,json=expectedQuote,proto3" json:"expected_quote,omitempty"`
+	ExpectedCommitmentRef *NetworkReference      `protobuf:"bytes,4,opt,name=expected_commitment_ref,json=expectedCommitmentRef,proto3" json:"expected_commitment_ref,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GetQuoteCommitmentRequest) Reset() {
@@ -383,6 +505,20 @@ func (x *GetQuoteCommitmentRequest) GetQuoteId() string {
 		return x.QuoteId
 	}
 	return ""
+}
+
+func (x *GetQuoteCommitmentRequest) GetExpectedQuote() *QuoteCommitmentInput {
+	if x != nil {
+		return x.ExpectedQuote
+	}
+	return nil
+}
+
+func (x *GetQuoteCommitmentRequest) GetExpectedCommitmentRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedCommitmentRef
+	}
+	return nil
 }
 
 type GetQuoteCommitmentResponse struct {
@@ -977,7 +1113,7 @@ var File_atos_tos_v1_trust_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\n" +
-	"\x17atos/tos/v1/trust.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\xbd\x05\n" +
+	"\x17atos/tos/v1/trust.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\x86\v\n" +
 	"\x14QuoteCommitmentInput\x12\x19\n" +
 	"\bquote_id\x18\x01 \x01(\tR\aquoteId\x12!\n" +
 	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x12\x1f\n" +
@@ -995,20 +1131,38 @@ const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\x13expires_unix_millis\x18\v \x01(\x03R\x11expiresUnixMillis\x12-\n" +
 	"\x12settlement_backend\x18\f \x01(\tR\x11settlementBackend\x12)\n" +
 	"\x10settlement_asset\x18\r \x01(\tR\x0fsettlementAsset\x12?\n" +
-	"\x1cunderlying_service_quote_ref\x18\x0e \x01(\tR\x19underlyingServiceQuoteRef\"\xc4\x01\n" +
+	"\x1cunderlying_service_quote_ref\x18\x0e \x01(\tR\x19underlyingServiceQuoteRef\x12\x18\n" +
+	"\aversion\x18\x0f \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"network_id\x18\x10 \x01(\tR\tnetworkId\x12\x16\n" +
+	"\x06domain\x18\x11 \x01(\tR\x06domain\x12,\n" +
+	"\x12requester_agent_id\x18\x12 \x01(\tR\x10requesterAgentId\x12<\n" +
+	"\x0fmanifest_digest\x18\x13 \x01(\v2\x13.atos.tos.v1.DigestR\x0emanifestDigest\x12B\n" +
+	"\rownership_ref\x18\x14 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\fownershipRef\x12.\n" +
+	"\bsubtotal\x18\x15 \x01(\v2\x12.atos.tos.v1.MoneyR\bsubtotal\x12&\n" +
+	"\x04fees\x18\x16 \x01(\v2\x12.atos.tos.v1.MoneyR\x04fees\x12%\n" +
+	"\x0easset_decimals\x18\x17 \x01(\rR\rassetDecimals\x12E\n" +
+	"\x1facceptance_deadline_unix_millis\x18\x18 \x01(\x03R\x1cacceptanceDeadlineUnixMillis\x12C\n" +
+	"\x1eexecution_deadline_unix_millis\x18\x19 \x01(\x03R\x1bexecutionDeadlineUnixMillis\x126\n" +
+	"\x17signer_authorization_id\x18\x1a \x01(\tR\x15signerAuthorizationId\x12W\n" +
+	"\x18signer_authorization_ref\x18\x1b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x16signerAuthorizationRef\x12*\n" +
+	"\x10canonicalization\x18\x1c \x01(\tR\x10canonicalization\"\x86\x02\n" +
 	"\x0fQuoteCommitment\x127\n" +
 	"\x05value\x18\x01 \x01(\v2!.atos.tos.v1.QuoteCommitmentInputR\x05value\x12D\n" +
 	"\x0ecommitment_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rcommitmentRef\x122\n" +
-	"\x15committed_unix_millis\x18\x03 \x01(\x03R\x13committedUnixMillis\"\x84\x01\n" +
+	"\x15committed_unix_millis\x18\x03 \x01(\x03R\x13committedUnixMillis\x12@\n" +
+	"\x11commitment_digest\x18\x04 \x01(\v2\x13.atos.tos.v1.DigestR\x10commitmentDigest\"\x84\x01\n" +
 	"\x12CommitQuoteRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x127\n" +
 	"\x05quote\x18\x02 \x01(\v2!.atos.tos.v1.QuoteCommitmentInputR\x05quote\"c\n" +
 	"\x13CommitQuoteResponse\x122\n" +
 	"\x05quote\x18\x01 \x01(\v2\x1c.atos.tos.v1.QuoteCommitmentR\x05quote\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"m\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\x8e\x02\n" +
 	"\x19GetQuoteCommitmentRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x19\n" +
-	"\bquote_id\x18\x02 \x01(\tR\aquoteId\"f\n" +
+	"\bquote_id\x18\x02 \x01(\tR\aquoteId\x12H\n" +
+	"\x0eexpected_quote\x18\x03 \x01(\v2!.atos.tos.v1.QuoteCommitmentInputR\rexpectedQuote\x12U\n" +
+	"\x17expected_commitment_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x15expectedCommitmentRef\"f\n" +
 	"\x1aGetQuoteCommitmentResponse\x122\n" +
 	"\x05quote\x18\x01 \x01(\v2\x1c.atos.tos.v1.QuoteCommitmentR\x05quote\x12\x14\n" +
 	"\x05found\x18\x02 \x01(\bR\x05found\"\xbc\x03\n" +
@@ -1105,38 +1259,46 @@ var file_atos_tos_v1_trust_proto_depIdxs = []int32{
 	16, // 2: atos.tos.v1.QuoteCommitmentInput.total_max:type_name -> atos.tos.v1.Money
 	17, // 3: atos.tos.v1.QuoteCommitmentInput.terms_digest:type_name -> atos.tos.v1.Digest
 	17, // 4: atos.tos.v1.QuoteCommitmentInput.dispute_policy_digest:type_name -> atos.tos.v1.Digest
-	0,  // 5: atos.tos.v1.QuoteCommitment.value:type_name -> atos.tos.v1.QuoteCommitmentInput
-	18, // 6: atos.tos.v1.QuoteCommitment.commitment_ref:type_name -> atos.tos.v1.NetworkReference
-	19, // 7: atos.tos.v1.CommitQuoteRequest.context:type_name -> atos.tos.v1.RequestContext
-	0,  // 8: atos.tos.v1.CommitQuoteRequest.quote:type_name -> atos.tos.v1.QuoteCommitmentInput
-	1,  // 9: atos.tos.v1.CommitQuoteResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
-	19, // 10: atos.tos.v1.GetQuoteCommitmentRequest.context:type_name -> atos.tos.v1.RequestContext
-	1,  // 11: atos.tos.v1.GetQuoteCommitmentResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
-	6,  // 12: atos.tos.v1.ExecutionSignerAuthorization.value:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
-	18, // 13: atos.tos.v1.ExecutionSignerAuthorization.authorization_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 14: atos.tos.v1.ExecutionSignerAuthorization.revocation_ref:type_name -> atos.tos.v1.NetworkReference
-	19, // 15: atos.tos.v1.AuthorizeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
-	6,  // 16: atos.tos.v1.AuthorizeExecutionSignerRequest.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
-	7,  // 17: atos.tos.v1.AuthorizeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	19, // 18: atos.tos.v1.RevokeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
-	7,  // 19: atos.tos.v1.RevokeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	19, // 20: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.context:type_name -> atos.tos.v1.RequestContext
-	7,  // 21: atos.tos.v1.ResolveExecutionSignerAuthorizationResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	2,  // 22: atos.tos.v1.TrustService.CommitQuote:input_type -> atos.tos.v1.CommitQuoteRequest
-	4,  // 23: atos.tos.v1.TrustService.GetQuoteCommitment:input_type -> atos.tos.v1.GetQuoteCommitmentRequest
-	8,  // 24: atos.tos.v1.TrustService.AuthorizeExecutionSigner:input_type -> atos.tos.v1.AuthorizeExecutionSignerRequest
-	10, // 25: atos.tos.v1.TrustService.RevokeExecutionSigner:input_type -> atos.tos.v1.RevokeExecutionSignerRequest
-	12, // 26: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:input_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationRequest
-	3,  // 27: atos.tos.v1.TrustService.CommitQuote:output_type -> atos.tos.v1.CommitQuoteResponse
-	5,  // 28: atos.tos.v1.TrustService.GetQuoteCommitment:output_type -> atos.tos.v1.GetQuoteCommitmentResponse
-	9,  // 29: atos.tos.v1.TrustService.AuthorizeExecutionSigner:output_type -> atos.tos.v1.AuthorizeExecutionSignerResponse
-	11, // 30: atos.tos.v1.TrustService.RevokeExecutionSigner:output_type -> atos.tos.v1.RevokeExecutionSignerResponse
-	13, // 31: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:output_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationResponse
-	27, // [27:32] is the sub-list for method output_type
-	22, // [22:27] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	17, // 5: atos.tos.v1.QuoteCommitmentInput.manifest_digest:type_name -> atos.tos.v1.Digest
+	18, // 6: atos.tos.v1.QuoteCommitmentInput.ownership_ref:type_name -> atos.tos.v1.NetworkReference
+	16, // 7: atos.tos.v1.QuoteCommitmentInput.subtotal:type_name -> atos.tos.v1.Money
+	16, // 8: atos.tos.v1.QuoteCommitmentInput.fees:type_name -> atos.tos.v1.Money
+	18, // 9: atos.tos.v1.QuoteCommitmentInput.signer_authorization_ref:type_name -> atos.tos.v1.NetworkReference
+	0,  // 10: atos.tos.v1.QuoteCommitment.value:type_name -> atos.tos.v1.QuoteCommitmentInput
+	18, // 11: atos.tos.v1.QuoteCommitment.commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	17, // 12: atos.tos.v1.QuoteCommitment.commitment_digest:type_name -> atos.tos.v1.Digest
+	19, // 13: atos.tos.v1.CommitQuoteRequest.context:type_name -> atos.tos.v1.RequestContext
+	0,  // 14: atos.tos.v1.CommitQuoteRequest.quote:type_name -> atos.tos.v1.QuoteCommitmentInput
+	1,  // 15: atos.tos.v1.CommitQuoteResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
+	19, // 16: atos.tos.v1.GetQuoteCommitmentRequest.context:type_name -> atos.tos.v1.RequestContext
+	0,  // 17: atos.tos.v1.GetQuoteCommitmentRequest.expected_quote:type_name -> atos.tos.v1.QuoteCommitmentInput
+	18, // 18: atos.tos.v1.GetQuoteCommitmentRequest.expected_commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	1,  // 19: atos.tos.v1.GetQuoteCommitmentResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
+	6,  // 20: atos.tos.v1.ExecutionSignerAuthorization.value:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
+	18, // 21: atos.tos.v1.ExecutionSignerAuthorization.authorization_ref:type_name -> atos.tos.v1.NetworkReference
+	18, // 22: atos.tos.v1.ExecutionSignerAuthorization.revocation_ref:type_name -> atos.tos.v1.NetworkReference
+	19, // 23: atos.tos.v1.AuthorizeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
+	6,  // 24: atos.tos.v1.AuthorizeExecutionSignerRequest.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
+	7,  // 25: atos.tos.v1.AuthorizeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	19, // 26: atos.tos.v1.RevokeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
+	7,  // 27: atos.tos.v1.RevokeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	19, // 28: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.context:type_name -> atos.tos.v1.RequestContext
+	7,  // 29: atos.tos.v1.ResolveExecutionSignerAuthorizationResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	2,  // 30: atos.tos.v1.TrustService.CommitQuote:input_type -> atos.tos.v1.CommitQuoteRequest
+	4,  // 31: atos.tos.v1.TrustService.GetQuoteCommitment:input_type -> atos.tos.v1.GetQuoteCommitmentRequest
+	8,  // 32: atos.tos.v1.TrustService.AuthorizeExecutionSigner:input_type -> atos.tos.v1.AuthorizeExecutionSignerRequest
+	10, // 33: atos.tos.v1.TrustService.RevokeExecutionSigner:input_type -> atos.tos.v1.RevokeExecutionSignerRequest
+	12, // 34: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:input_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationRequest
+	3,  // 35: atos.tos.v1.TrustService.CommitQuote:output_type -> atos.tos.v1.CommitQuoteResponse
+	5,  // 36: atos.tos.v1.TrustService.GetQuoteCommitment:output_type -> atos.tos.v1.GetQuoteCommitmentResponse
+	9,  // 37: atos.tos.v1.TrustService.AuthorizeExecutionSigner:output_type -> atos.tos.v1.AuthorizeExecutionSignerResponse
+	11, // 38: atos.tos.v1.TrustService.RevokeExecutionSigner:output_type -> atos.tos.v1.RevokeExecutionSignerResponse
+	13, // 39: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:output_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationResponse
+	35, // [35:40] is the sub-list for method output_type
+	30, // [30:35] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_trust_proto_init() }

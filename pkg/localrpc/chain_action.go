@@ -19,6 +19,7 @@ import (
 
 const (
 	ChainActionPath                   = "/v1/chain/action"
+	ChainActionResolvePath            = "/v1/chain/action/resolve"
 	ChainActionHealthPath             = "/healthz"
 	DefaultChainActionTimeout         = 15 * time.Second
 	DefaultChainActionMaxMessageBytes = 256 << 10
@@ -38,6 +39,81 @@ type ChainActionPublisherClientConfig struct {
 	Timeout         time.Duration
 	MaxMessageBytes int
 	MaxConcurrent   int
+}
+
+func (c *ChainActionPublisherClient) Resolve(ctx context.Context, action chain.Action) (chain.ActionReceipt, bool, error) {
+	if err := c.validateAction(ctx, action); err != nil {
+		return chain.ActionReceipt{}, false, err
+	}
+	encoded, err := json.Marshal(action)
+	if err != nil || len(encoded) > c.maxMessageBytes {
+		return chain.ActionReceipt{}, false, errors.New("chain action lookup request exceeds message limit")
+	}
+	requestContext, finish, err := c.beginRequest(ctx)
+	if err != nil {
+		return chain.ActionReceipt{}, false, err
+	}
+	defer finish()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, "http://unix"+ChainActionResolvePath, bytes.NewReader(encoded))
+	if err != nil {
+		return chain.ActionReceipt{}, false, errors.New("construct chain action lookup request")
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return chain.ActionReceipt{}, false, contextErr
+		}
+		return chain.ActionReceipt{}, false, errors.New("chain action resolver unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		if requireJSONContentType(response.Header.Get("Content-Type")) != nil {
+			return chain.ActionReceipt{}, false, errors.New("chain action resolver returned an untyped not-found")
+		}
+		data, readErr := io.ReadAll(io.LimitReader(response.Body, int64(c.maxMessageBytes)+1))
+		var missing chainActionNotFound
+		if readErr != nil || len(data) > c.maxMessageBytes || jsonstrict.Decode(data, &missing) != nil || missing.Version != chain.ChainActionVersion || missing.Code != "action_not_found" || missing.ActionID != action.ActionID {
+			return chain.ActionReceipt{}, false, errors.New("chain action resolver returned an untyped not-found")
+		}
+		return chain.ActionReceipt{}, false, nil
+	}
+	if response.StatusCode != http.StatusOK || requireJSONContentType(response.Header.Get("Content-Type")) != nil {
+		return chain.ActionReceipt{}, false, errors.New("chain action resolver rejected request")
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(c.maxMessageBytes)+1))
+	if err != nil || len(data) > c.maxMessageBytes {
+		return chain.ActionReceipt{}, false, errors.New("chain action lookup response exceeds message limit")
+	}
+	var receipt chain.ActionReceipt
+	if err := jsonstrict.Decode(data, &receipt); err != nil || validateActionReceipt(action, receipt) != nil {
+		return chain.ActionReceipt{}, false, errors.New("chain action resolver returned an invalid receipt")
+	}
+	return receipt, true, nil
+}
+
+func (c *ChainActionPublisherClient) validateAction(ctx context.Context, action chain.Action) error {
+	if c == nil || c.httpClient == nil || c.maxMessageBytes <= 0 || c.slots == nil || c.active == nil {
+		return errors.New("invalid chain action publisher client")
+	}
+	if ctx == nil {
+		return errors.New("nil chain action context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if action.Version != chain.ChainActionVersion || action.Network != c.network || strings.TrimSpace(action.ActionID) == "" || strings.TrimSpace(action.ObjectID) == "" || strings.TrimSpace(action.Digest) == "" || strings.TrimSpace(action.Payer) == "" || strings.TrimSpace(action.Payee) == "" || action.AmountNanoTOS == 0 || strings.TrimSpace(action.Comment) == "" || action.ExpiresUnixMillis <= 0 {
+		return errors.New("invalid chain action")
+	}
+	return nil
+}
+
+func validateActionReceipt(action chain.Action, receipt chain.ActionReceipt) error {
+	if receipt.Version != action.Version || receipt.ActionID != action.ActionID || receipt.Network != action.Network || receipt.Kind != action.Kind || receipt.ObjectID != action.ObjectID || receipt.Digest != action.Digest || receipt.Payer != action.Payer || receipt.Payee != action.Payee || receipt.AmountNanoTOS != action.AmountNanoTOS || receipt.Comment != action.Comment || strings.TrimSpace(receipt.Reference) == "" {
+		return errors.New("chain action receipt does not match immutable request")
+	}
+	return nil
 }
 
 func DefaultChainActionPublisherClientConfig(
@@ -65,10 +141,18 @@ type ChainActionPublisherClient struct {
 }
 
 type chainActionHealth struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	Network string `json:"network"`
-	Path    string `json:"path"`
+	Status         string   `json:"status"`
+	Version        string   `json:"version"`
+	Network        string   `json:"network"`
+	PublishPath    string   `json:"publishPath"`
+	ResolvePath    string   `json:"resolvePath"`
+	JournalVersion string   `json:"journalVersion"`
+	Capabilities   []string `json:"capabilities"`
+}
+type chainActionNotFound struct {
+	Version  string `json:"version"`
+	Code     string `json:"code"`
+	ActionID string `json:"actionId"`
 }
 
 func NewChainActionPublisherClient(
@@ -161,6 +245,7 @@ func (c *ChainActionPublisherClient) Publish(
 	}
 	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
 		receipt.Network != action.Network || receipt.Kind != action.Kind ||
+		receipt.CommitmentKind != action.CommitmentKind ||
 		receipt.ObjectID != action.ObjectID || receipt.Digest != action.Digest ||
 		receipt.Payer != action.Payer || receipt.Payee != action.Payee ||
 		receipt.AmountNanoTOS != action.AmountNanoTOS || receipt.Comment != action.Comment ||
@@ -210,11 +295,22 @@ func (c *ChainActionPublisherClient) CheckReady(ctx context.Context) error {
 	}
 	var health chainActionHealth
 	if err := jsonstrict.Decode(data, &health); err != nil ||
-		health.Status != "ready" || health.Version != chain.ChainActionVersion ||
-		health.Network != c.network || health.Path != ChainActionPath {
+		health.Status != "ready" || health.Version != chain.ChainActionVersion || health.Network != c.network || health.PublishPath != ChainActionPath || health.ResolvePath != ChainActionResolvePath || health.JournalVersion != "1" || !sameStrings(health.Capabilities, []string{"durable_intent_before_publish", "typed_action_not_found", "read_only_resolve"}) {
 		return errors.New("chain action publisher returned an invalid readiness response")
 	}
 	return nil
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func requireJSONContentType(value string) error {

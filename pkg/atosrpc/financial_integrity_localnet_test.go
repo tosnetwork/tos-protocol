@@ -122,7 +122,7 @@ func (p *localnetTosctlPublisher) Publish(ctx context.Context, action chain.Acti
 		return chain.ActionReceipt{}, err
 	}
 	receipt := chain.ActionReceipt{Version: action.Version, ActionID: action.ActionID, Network: action.Network,
-		Kind: action.Kind, ObjectID: action.ObjectID, Digest: action.Digest, Reference: reference,
+		Kind: action.Kind, CommitmentKind: action.CommitmentKind, ObjectID: action.ObjectID, Digest: action.Digest, Reference: reference,
 		Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS, Comment: action.Comment}
 	p.receipts[action.ActionID] = receipt
 	return receipt, nil
