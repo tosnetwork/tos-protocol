@@ -37,12 +37,13 @@ type TosctlBackendConfig struct {
 	PollMillis         uint64 `json:"pollMillis,omitempty"`
 }
 type TosctlBackend struct {
-	network, binary, configPath, vaultURL, walletName, payer string
-	client                                                   *chain.Client
-	genesisRootHash, genesisFileHash                         string
-	lookback                                                 int
-	recoveryWait, poll                                       time.Duration
-	mu                                                       sync.Mutex
+	network, binary, vaultURL, walletName, payer string
+	configFile                                   *os.File
+	client                                       *chain.Client
+	genesisRootHash, genesisFileHash             string
+	lookback                                     int
+	recoveryWait, poll                           time.Duration
+	mu                                           sync.Mutex
 }
 
 func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
@@ -60,7 +61,11 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if !ok || stat.Uid != uint32(os.Geteuid()) {
 		return nil, errors.New("tosctl config owner mismatch")
 	}
-	configuredRPC, err := tosctlRPCURL(c.ConfigPath)
+	rawConfig, err := os.ReadFile(c.ConfigPath)
+	if err != nil || len(rawConfig) > 2<<20 {
+		return nil, errors.New("read tosctl RPC config")
+	}
+	configuredRPC, err := tosctlRPCURL(rawConfig)
 	if err != nil || configuredRPC != c.RPCURL {
 		return nil, errors.New("tosctl send RPC does not match recovery RPC")
 	}
@@ -95,7 +100,11 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if poll < 100*time.Millisecond || poll > 5*time.Second {
 		return nil, errors.New("invalid tosctl recovery poll")
 	}
-	return &TosctlBackend{network: c.Network, binary: c.Binary, configPath: c.ConfigPath, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, lookback: c.Lookback, recoveryWait: recovery, poll: poll}, nil
+	configFile, err := pinnedConfig(rawConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &TosctlBackend{network: c.Network, binary: c.Binary, configFile: configFile, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, lookback: c.Lookback, recoveryWait: recovery, poll: poll}, nil
 }
 
 type tosctlWallet struct {
@@ -186,8 +195,12 @@ func receiptFor(a chain.Action, ref string) chain.ActionReceipt {
 	return chain.ActionReceipt{Version: a.Version, ActionID: a.ActionID, Network: a.Network, Kind: a.Kind, CommitmentKind: a.CommitmentKind, ObjectID: a.ObjectID, Digest: a.Digest, Reference: ref, Payer: a.Payer, Payee: a.Payee, AmountNanoTOS: a.AmountNanoTOS, Comment: a.Comment}
 }
 func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error) {
-	args = append(args, "-c", b.configPath)
+	if b == nil || b.configFile == nil {
+		return nil, errors.New("tosctl backend is closed")
+	}
+	args = append(args, "-c", "/proc/self/fd/3")
 	command := exec.CommandContext(ctx, b.binary, args...)
+	command.ExtraFiles = []*os.File{b.configFile}
 	command.Env = backendEnvironment(b.vaultURL)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -200,7 +213,14 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	}
 	return stdout.Bytes(), nil
 }
-func (*TosctlBackend) Close() error { return nil }
+func (b *TosctlBackend) Close() error {
+	if b == nil || b.configFile == nil {
+		return nil
+	}
+	err := b.configFile.Close()
+	b.configFile = nil
+	return err
+}
 
 func backendEnvironment(vaultURL string) []string {
 	environment := make([]string, 0, len(os.Environ())+1)
@@ -217,11 +237,7 @@ func validBase64Hash(value string) bool {
 	return err == nil && len(decoded) == 32
 }
 
-func tosctlRPCURL(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil || len(raw) > 2<<20 {
-		return "", errors.New("read tosctl RPC config")
-	}
+func tosctlRPCURL(raw []byte) (string, error) {
 	var config struct {
 		ChainRPC struct {
 			URLs   []json.RawMessage `json:"urls"`
@@ -266,4 +282,33 @@ func tosctlRPCURL(path string) (string, error) {
 		return "", errors.New("tosctl must resolve to exactly one pinned RPC endpoint")
 	}
 	return resolved[0], nil
+}
+
+func pinnedConfig(raw []byte) (*os.File, error) {
+	file, err := os.CreateTemp("", "tos-chain-publisher-config-*")
+	if err != nil {
+		return nil, err
+	}
+	path := file.Name()
+	if err := os.Remove(path); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if _, err := file.Write(raw); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
 }

@@ -200,3 +200,7 @@ Readiness also pins the endpoint's genesis root/file hashes. On a pending/recove
 operation, bounded lookup failure is an uncertain outcome and never permits a
 second send; operators must restore authoritative visibility or reconcile the
 journal rather than widening mutation authority.
+At construction the publisher copies the validated tosctl configuration into
+an unlinked, owner-only file descriptor. Every child receives only that fixed
+descriptor (`/proc/self/fd/3`), so replacing or editing the original path after
+startup cannot redirect wallet sends and there is no check/use pathname race.

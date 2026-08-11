@@ -44,7 +44,7 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	}))
 	defer rpc.Close()
 	script := filepath.Join(dir, "tosctl")
-	content := "#!/bin/sh\nif [ \"$1 $2\" = \"wallet ls\" ]; then echo '[{\"name\":\"anchor\",\"address\":\"" + payer + "\",\"balance\":0,\"state\":\"active\",\"wallet_type\":\"V3R2\",\"seqno\":1}]'; exit 0; fi\ntouch '" + marker + "'\nexit 1\n"
+	content := "#!/bin/sh\nfor last do :; done\ngrep -F '" + rpc.URL + "' \"$last\" >/dev/null || exit 42\nif [ \"$1 $2\" = \"wallet ls\" ]; then echo '[{\"name\":\"anchor\",\"address\":\"" + payer + "\",\"balance\":0,\"state\":\"active\",\"wallet_type\":\"V3R2\",\"seqno\":1}]'; exit 0; fi\ntouch '" + marker + "'\nexit 1\n"
 	if err := os.WriteFile(script, []byte(content), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +69,7 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	if _, err := wrong.CheckReady(context.Background()); err == nil {
 		t.Fatal("wrong genesis reported ready")
 	}
+	_ = wrong.Close()
 	mismatchConfig := filepath.Join(dir, "mismatch.json")
 	if err := os.WriteFile(mismatchConfig, []byte(`{"chain_rpc":{"urls":["https://wrong.example/jsonRPC"]}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -89,8 +90,16 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	if err := os.WriteFile(legacySame, sameJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: legacySame, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}); err != nil {
+	same, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: legacySame, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))})
+	if err != nil {
 		t.Fatalf("deduplicated legacy endpoint rejected: %v", err)
+	}
+	_ = same.Close()
+	if err := os.WriteFile(configPath, []byte(`{"chain_rpc":{"urls":["https://changed.example/jsonRPC"]}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CheckReady(context.Background()); err != nil {
+		t.Fatalf("runtime config replacement affected pinned sender: %v", err)
 	}
 	a := chain.Action{Version: "1", ActionID: "anchor-test", Network: "tos-test", Kind: chain.ActionKindAnchor, CommitmentKind: "quote", ObjectID: "q", Digest: "sha256:x", Payer: payer, Payee: payee, AmountNanoTOS: 1_000_000_000}
 	if _, err := b.Publish(context.Background(), a, true); err == nil {
