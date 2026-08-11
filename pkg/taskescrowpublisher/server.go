@@ -16,6 +16,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 )
 
 const (
@@ -32,6 +33,17 @@ type Config struct {
 	MaxBodyBytes    int64
 	Now             Clock
 	Logger          *slog.Logger
+	Policy          PublisherPolicy
+}
+
+type PublisherPolicy struct {
+	AllowedCreators     []string `json:"allowedCreators"`
+	AllowedAgents       []string `json:"allowedAgents"`
+	AllowedVerifiers    []string `json:"allowedVerifiers"`
+	AllowedPolicyHashes []string `json:"allowedPolicyHashes"`
+	AllowedCodeHashes   []string `json:"allowedCodeHashes"`
+	MaxBudgetNanoTOS    uint64   `json:"maxBudgetNanoTOS"`
+	MaxFundingNanoTOS   uint64   `json:"maxFundingNanoTOS"`
 }
 
 type Server struct {
@@ -41,6 +53,7 @@ type Server struct {
 	maxBody int64
 	now     Clock
 	logger  *slog.Logger
+	policy  PublisherPolicy
 	mu      sync.Mutex
 	close   sync.Once
 }
@@ -65,9 +78,14 @@ func Open(config Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	policy, err := validatePublisherPolicy(config.Policy)
+	if err != nil {
+		_ = state.close()
+		return nil, err
+	}
 	return &Server{
 		network: config.Network, backend: config.Backend, store: state,
-		maxBody: config.MaxBodyBytes, now: config.Now, logger: config.Logger,
+		maxBody: config.MaxBodyBytes, now: config.Now, logger: config.Logger, policy: policy,
 	}, nil
 }
 
@@ -132,7 +150,7 @@ func (s *Server) resolve(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var action chain.TaskEscrowAction
-	if jsonstrict.Decode(data, &action) != nil || validateAction(action, s.network, s.now()) != nil {
+	if jsonstrict.Decode(data, &action) != nil || validateAction(action, s.network, s.now(), s.policy) != nil {
 		writePublisherError(writer, http.StatusBadRequest)
 		return
 	}
@@ -187,7 +205,7 @@ func (s *Server) publish(writer http.ResponseWriter, request *http.Request) {
 		writePublisherError(writer, http.StatusBadRequest)
 		return
 	}
-	if err := validateAction(action, s.network, s.now()); err != nil {
+	if err := validateAction(action, s.network, s.now(), s.policy); err != nil {
 		s.logger.Error("publisher rejected invalid action", "action_id", action.ActionID, "kind", action.Kind, "error", err)
 		writePublisherError(writer, http.StatusBadRequest)
 		return
@@ -241,6 +259,9 @@ func (s *Server) process(ctx context.Context, action chain.TaskEscrowAction) (ch
 		if prepareErr != nil {
 			return chain.TaskEscrowActionReceipt{}, prepareErr
 		}
+		if action.Kind == chain.TaskEscrowActionDeploy && !contains(s.policy.AllowedCodeHashes, prepared.CodeHash) {
+			return chain.TaskEscrowActionReceipt{}, errors.New("prepared TaskEscrow code hash is not allowed")
+		}
 		now := s.now().UTC().UnixMilli()
 		record = &actionRecord{
 			Version: ServerConfigVersion, SemanticDigest: digest, State: recordStatePending,
@@ -276,7 +297,8 @@ func (s *Server) process(ctx context.Context, action chain.TaskEscrowAction) (ch
 	return receipt, nil
 }
 
-func validateAction(action chain.TaskEscrowAction, network string, now time.Time) error {
+func validateAction(action chain.TaskEscrowAction, network string, now time.Time, policy PublisherPolicy) error {
+	expectedID, idErr := chain.TaskEscrowActionID(action)
 	if action.Version != chain.TaskEscrowActionVersion || action.Network != network ||
 		strings.TrimSpace(action.ActionID) == "" || len(action.ActionID) > 256 ||
 		strings.TrimSpace(action.EscrowID) == "" || len(action.EscrowID) > 256 ||
@@ -284,7 +306,7 @@ func validateAction(action chain.TaskEscrowAction, network string, now time.Time
 		strings.TrimSpace(action.Verifier) == "" || action.BudgetNanoTOS == 0 ||
 		action.DeadlineUnix == 0 || action.ReviewPeriod < 3600 ||
 		!validDigest(action.PolicyHash) || !validDigest(action.PermissionHash) ||
-		action.ExpiresUnixMillis <= now.UTC().UnixMilli() {
+		action.ExpiresUnixMillis <= now.UTC().UnixMilli() || idErr != nil || action.ActionID != expectedID || !contains(policy.AllowedCreators, action.Creator) || !contains(policy.AllowedAgents, action.Agent) || (action.Verifier != "" && !contains(policy.AllowedVerifiers, action.Verifier)) || !contains(policy.AllowedPolicyHashes, action.PolicyHash) || action.BudgetNanoTOS > policy.MaxBudgetNanoTOS || action.FundingNanoTOS > policy.MaxFundingNanoTOS {
 		return errors.New("invalid task escrow action")
 	}
 	switch action.Kind {
@@ -316,6 +338,53 @@ func validateAction(action chain.TaskEscrowAction, network string, now time.Time
 		return errors.New("unsupported task escrow action")
 	}
 	return nil
+}
+
+func contains(values []string, value string) bool {
+	for _, v := range values {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+func validatePublisherPolicy(p PublisherPolicy) (PublisherPolicy, error) {
+	if len(p.AllowedCreators) == 0 || len(p.AllowedAgents) == 0 || len(p.AllowedPolicyHashes) == 0 || len(p.AllowedCodeHashes) == 0 || p.MaxBudgetNanoTOS == 0 || p.MaxFundingNanoTOS < p.MaxBudgetNanoTOS {
+		return p, errors.New("incomplete task escrow publisher policy")
+	}
+	canonicalize := func(values []string) ([]string, error) {
+		out := make([]string, 0, len(values))
+		seen := map[string]bool{}
+		for _, v := range values {
+			c, err := toschain.CanonicalAddress(strings.TrimSpace(v))
+			if err != nil {
+				return nil, err
+			}
+			if !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+		return out, nil
+	}
+	var err error
+	if p.AllowedCreators, err = canonicalize(p.AllowedCreators); err != nil {
+		return p, errors.New("invalid allowed creator")
+	}
+	if p.AllowedAgents, err = canonicalize(p.AllowedAgents); err != nil {
+		return p, errors.New("invalid allowed agent")
+	}
+	if len(p.AllowedVerifiers) > 0 {
+		if p.AllowedVerifiers, err = canonicalize(p.AllowedVerifiers); err != nil {
+			return p, errors.New("invalid allowed verifier")
+		}
+	}
+	for _, v := range append(append([]string{}, p.AllowedPolicyHashes...), p.AllowedCodeHashes...) {
+		if !validDigest(v) && !validCellHash(v) {
+			return p, errors.New("invalid publisher digest policy")
+		}
+	}
+	return p, nil
 }
 
 func validDigest(value string) bool {

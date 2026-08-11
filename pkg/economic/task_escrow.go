@@ -794,11 +794,11 @@ func (d *TaskEscrowDriver) finishAction(action *chain.TaskEscrowAction) error {
 		action.ExpectedBodyHash = bodyHash
 		stable = stableAction(*action)
 	}
-	digest, err := codec.Digest("tos.task-escrow.action.v1", stable)
+	actionID, err := chain.TaskEscrowActionID(*action)
 	if err != nil {
 		return err
 	}
-	action.ActionID = "task-action-" + strings.TrimPrefix(digest, "sha256:")
+	action.ActionID = actionID
 	action.ExpiresUnixMillis = d.now().Add(d.actionLifetime).UnixMilli()
 	return nil
 }

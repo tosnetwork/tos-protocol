@@ -33,6 +33,7 @@ type startupConfig struct {
 	JournalIdentity string                                  `json:"journalIdentity"`
 	MaxBodyBytes    int64                                   `json:"maxBodyBytes,omitempty"`
 	Backend         taskescrowpublisher.TosctlBackendConfig `json:"backend"`
+	Policy          taskescrowpublisher.PublisherPolicy     `json:"policy"`
 }
 
 func main() {
@@ -68,6 +69,7 @@ func main() {
 		Network: config.Network, StatePath: config.StatePath,
 		JournalIdentity: config.JournalIdentity,
 		Backend:         backend, MaxBodyBytes: config.MaxBodyBytes, Logger: logger,
+		Policy: config.Policy,
 	})
 	if err != nil {
 		_ = backend.Close()

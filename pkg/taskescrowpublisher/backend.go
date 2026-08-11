@@ -17,6 +17,7 @@ type PreparedAction struct {
 	BaselineLT      uint64 `json:"baselineLt,omitempty"`
 	BaselineHash    string `json:"baselineHash,omitempty"`
 	PreparedAt      int64  `json:"preparedAtUnixMillis"`
+	CodeHash        string `json:"codeHash,omitempty"`
 }
 
 // Backend owns the key-custody-specific transaction construction and

@@ -32,6 +32,7 @@ func (f *fakeBackend) Prepare(_ context.Context, action chain.TaskEscrowAction) 
 	f.prepareCalls++
 	return PreparedAction{
 		ContractAddress: "0:" + strings.Repeat("44", 32),
+		CodeHash:        "sha256:" + strings.Repeat("cc", 32),
 		PreparedAt:      time.Now().UnixMilli(),
 	}, nil
 }
@@ -64,7 +65,7 @@ func TestServerReplaysCompletedActionAndRejectsSubstitution(t *testing.T) {
 	}
 	server, err := Open(Config{
 		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal",
-		Backend: backend, Now: func() time.Time { return now },
+		Backend: backend, Now: func() time.Time { return now }, Policy: testPublisherPolicy(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +90,7 @@ func TestServerReplaysCompletedActionAndRejectsSubstitution(t *testing.T) {
 	}
 	action.BudgetNanoTOS++
 	conflict := postAction(t, server.Handler(), action)
-	if conflict.Code != http.StatusConflict {
+	if conflict.Code != http.StatusBadRequest {
 		t.Fatalf("substitution status=%d body=%s", conflict.Code, conflict.Body.String())
 	}
 }
@@ -103,7 +104,7 @@ func TestServerRecoversPendingAction(t *testing.T) {
 	}
 	server, err := Open(Config{
 		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal",
-		Backend: backend, Now: func() time.Time { return now },
+		Backend: backend, Now: func() time.Time { return now }, Policy: testPublisherPolicy(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +132,7 @@ func TestHealthUsesExactClientContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
-		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal", Backend: backend,
+		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal", Backend: backend, Policy: testPublisherPolicy(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -155,16 +156,16 @@ func TestHealthUsesExactClientContract(t *testing.T) {
 
 func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "journal.db")
-	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend)}); err == nil {
+	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend), Policy: testPublisherPolicy()}); err == nil {
 		t.Fatal("missing journal was silently initialized")
 	}
 	if err := InitializeJournal(path, "journal-a"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-b", Backend: new(fakeBackend)}); err == nil {
+	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-b", Backend: new(fakeBackend), Policy: testPublisherPolicy()}); err == nil {
 		t.Fatal("mismatched journal identity was accepted")
 	}
-	server, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend), Now: func() time.Time { return time.Unix(1_800_000_000, 0) }})
+	server, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend), Now: func() time.Time { return time.Unix(1_800_000_000, 0) }, Policy: testPublisherPolicy()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +185,32 @@ func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
 	}
 }
 
+func TestPublisherRecomputesActionIDAndEnforcesSpendingPolicy(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	path := filepath.Join(t.TempDir(), "journal.db")
+	if err := InitializeJournal(path, "journal"); err != nil {
+		t.Fatal(err)
+	}
+	server, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Now: func() time.Time { return now }, Policy: testPublisherPolicy()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	a := testAction(now)
+	a.Agent = "0:" + strings.Repeat("99", 32)
+	a.ActionID, _ = chain.TaskEscrowActionID(a)
+	if got := postAction(t, server.Handler(), a); got.Code != http.StatusBadRequest {
+		t.Fatalf("unapproved agent status=%d", got.Code)
+	}
+	a = testAction(now)
+	a.BudgetNanoTOS++
+	if got := postAction(t, server.Handler(), a); got.Code != http.StatusBadRequest {
+		t.Fatalf("stale caller action id status=%d", got.Code)
+	}
+}
+
 func testAction(now time.Time) chain.TaskEscrowAction {
-	return chain.TaskEscrowAction{
+	a := chain.TaskEscrowAction{
 		Version:  chain.TaskEscrowActionVersion,
 		ActionID: "act-" + strings.Repeat("11", 32), Network: "tos-test",
 		Kind: chain.TaskEscrowActionDeploy, EscrowID: "esc-1",
@@ -198,6 +223,12 @@ func testAction(now time.Time) chain.TaskEscrowAction {
 		PermissionHash:    "sha256:" + strings.Repeat("bb", 32),
 		ExpiresUnixMillis: now.Add(time.Minute).UnixMilli(),
 	}
+	a.ActionID, _ = chain.TaskEscrowActionID(a)
+	return a
+}
+
+func testPublisherPolicy() PublisherPolicy {
+	return PublisherPolicy{AllowedCreators: []string{"0:" + strings.Repeat("11", 32)}, AllowedAgents: []string{"0:" + strings.Repeat("22", 32)}, AllowedVerifiers: []string{"0:" + strings.Repeat("33", 32)}, AllowedPolicyHashes: []string{"sha256:" + strings.Repeat("aa", 32)}, AllowedCodeHashes: []string{"sha256:" + strings.Repeat("cc", 32)}, MaxBudgetNanoTOS: 2_000_000_000, MaxFundingNanoTOS: 2_100_000_000}
 }
 
 func postAction(t *testing.T, handler http.Handler, action chain.TaskEscrowAction) *httptest.ResponseRecorder {

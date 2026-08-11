@@ -221,6 +221,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 		return PreparedAction{}, errors.New("task escrow action signer wallet is unavailable")
 	}
 	contractAddress := action.ContractAddress
+	codeHash := ""
 	if action.Kind == chain.TaskEscrowActionDeploy {
 		output, err := b.run(ctx, b.buildStateArgs(action)...)
 		if err != nil {
@@ -235,6 +236,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 			normalizeDigest(state.PolicyHash) != action.PolicyHash {
 			return PreparedAction{}, errors.New("tosctl build-state changed immutable escrow fields")
 		}
+		codeHash = normalizeDigest(state.CodeHash)
 	} else {
 		var err error
 		contractAddress, err = toschain.CanonicalAddress(contractAddress)
@@ -248,7 +250,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 	}
 	return PreparedAction{
 		ContractAddress: contractAddress, BaselineLT: baseline.LT,
-		BaselineHash: baseline.Hash, PreparedAt: time.Now().UTC().UnixMilli(),
+		BaselineHash: baseline.Hash, PreparedAt: time.Now().UTC().UnixMilli(), CodeHash: codeHash,
 	}, nil
 }
 
