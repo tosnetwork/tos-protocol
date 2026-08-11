@@ -188,6 +188,64 @@ func TestSeedIdentities_ReappliesOnContentChange(t *testing.T) {
 	}
 }
 
+// TestSeedIdentities_RejectsMalformedController proves a syntactically
+// invalid controller address is caught at seed time -- not silently
+// accepted only to fail far later, at the first CreatePrincipalBinding
+// attempt against that agent_id, with identityAlreadySeeded then masking
+// the defect as "already seeded" on every subsequent restart.
+func TestSeedIdentities_RejectsMalformedController(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{{
+		AgentID: "agt_seed_badcontroller", CanonicalURI: "tos://agent/agt_seed_badcontroller",
+		Controllers: []string{"not-a-canonical-address"},
+		Assurance:   "tos_operator_verified",
+	}})
+	if _, err := seedIdentities(server, path); err == nil {
+		t.Fatal("expected a malformed controller address to be rejected")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_badcontroller",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.Found {
+		t.Fatal("a record with a malformed controller must not have been committed")
+	}
+}
+
+// TestSeedIdentities_RejectsCollidingCanonicalURI proves two different
+// agent_id records sharing one canonical_uri are rejected outright, instead
+// of SeedIdentity's unconditional bucketIdentityURIs.Put silently letting
+// the second record's write make the first agent_id unresolvable by URI.
+func TestSeedIdentities_RejectsCollidingCanonicalURI(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{
+		{
+			AgentID: "agt_seed_uri_a", CanonicalURI: "tos://agent/shared",
+			Controllers: []string{"0:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+			Assurance:   "tos_operator_verified",
+		},
+		{
+			AgentID: "agt_seed_uri_b", CanonicalURI: "tos://agent/shared",
+			Controllers: []string{"0:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+			Assurance:   "tos_operator_verified",
+		},
+	})
+	if _, err := seedIdentities(server, path); err == nil {
+		t.Fatal("expected a colliding canonical_uri across two agent_id records to be rejected")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_uri_a",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.Found {
+		t.Fatal("a rejected colliding-canonical_uri file must not have applied either record")
+	}
+}
+
 // TestSeedIdentities_MalformedAgentIDDoesNotLeakPartialApplication proves
 // the pre-validation pass catches a malformed-but-non-empty agent_id (which
 // SeedIdentity/ResolveAgentIdentity would only reject once actually

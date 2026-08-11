@@ -28,6 +28,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/atosrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 )
 
 func main() {
@@ -205,6 +206,7 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 	// malformed-but-non-empty agent_id only once actually reached -- which
 	// would otherwise still let earlier, well-formed records land first.
 	seenAgentIDs := make(map[string]bool, len(seeds))
+	seenCanonicalURIs := make(map[string]string, len(seeds))
 	for _, seed := range seeds {
 		if strings.TrimSpace(seed.CanonicalURI) == "" {
 			return 0, fmt.Errorf("identity seed missing canonical_uri")
@@ -218,10 +220,30 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 		if len(seed.Controllers) == 0 {
 			return 0, fmt.Errorf("identity seed %q must list at least one controller", seed.AgentID)
 		}
+		// Every controller must be a syntactically valid canonical TOS
+		// address -- catching a typo'd controller here, at the moment the
+		// operator's mistake was actually made, rather than only once a
+		// later CreatePrincipalBinding attempt fails verifiedTOSController
+		// far removed in time from the seed file that caused it (and after
+		// identityAlreadySeeded starts treating the broken record as
+		// already-seeded on every subsequent restart, masking it further).
+		for _, controller := range seed.Controllers {
+			if _, err := toschain.CanonicalAddress(controller); err != nil {
+				return 0, fmt.Errorf("identity seed %q has an invalid controller %q: %w", seed.AgentID, controller, err)
+			}
+		}
 		if seenAgentIDs[seed.AgentID] {
 			return 0, fmt.Errorf("identity seed file lists agent_id %q more than once", seed.AgentID)
 		}
 		seenAgentIDs[seed.AgentID] = true
+		// canonical_uri also uniquely maps to one agent_id in bucketIdentityURIs
+		// (SeedIdentity's Put there is unconditional, last-write-wins) -- a
+		// collision across two different agent_id records would silently
+		// make the first agent_id unresolvable by its own canonical_uri.
+		if owner, seen := seenCanonicalURIs[seed.CanonicalURI]; seen && owner != seed.AgentID {
+			return 0, fmt.Errorf("identity seed file's canonical_uri %q is used by both %q and %q", seed.CanonicalURI, owner, seed.AgentID)
+		}
+		seenCanonicalURIs[seed.CanonicalURI] = seed.AgentID
 	}
 	applied := 0
 	for _, seed := range seeds {
