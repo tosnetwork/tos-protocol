@@ -25,12 +25,13 @@ const (
 )
 
 type Config struct {
-	Network      string
-	StatePath    string
-	Backend      Backend
-	MaxBodyBytes int64
-	Now          Clock
-	Logger       *slog.Logger
+	Network         string
+	StatePath       string
+	JournalIdentity string
+	Backend         Backend
+	MaxBodyBytes    int64
+	Now             Clock
+	Logger          *slog.Logger
 }
 
 type Server struct {
@@ -60,7 +61,7 @@ func Open(config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	state, err := openActionStore(config.StatePath)
+	state, err := openActionStore(config.StatePath, config.JournalIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(localrpc.TaskEscrowActionHealthPath, s.health)
 	mux.HandleFunc(localrpc.TaskEscrowActionPath, s.publish)
+	mux.HandleFunc(localrpc.TaskEscrowActionResolvePath, s.resolve)
 	return mux
 }
 
@@ -112,7 +114,55 @@ func (s *Server) health(writer http.ResponseWriter, request *http.Request) {
 	_ = json.NewEncoder(writer).Encode(map[string]string{
 		"status": "ready", "version": chain.TaskEscrowActionVersion,
 		"network": s.network, "path": localrpc.TaskEscrowActionPath,
+		"resolvePath":    localrpc.TaskEscrowActionResolvePath,
+		"journalVersion": JournalVersion,
 	})
+}
+
+func (s *Server) resolve(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	writer.Header().Set("Cache-Control", "no-store")
+	if request.Method != http.MethodPost {
+		writer.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(request.Body, s.maxBody+1))
+	if err != nil || int64(len(data)) > s.maxBody {
+		writePublisherError(writer, http.StatusRequestEntityTooLarge)
+		return
+	}
+	var action chain.TaskEscrowAction
+	if jsonstrict.Decode(data, &action) != nil || validateAction(action, s.network, s.now()) != nil {
+		writePublisherError(writer, http.StatusBadRequest)
+		return
+	}
+	stable := action
+	stable.ExpiresUnixMillis = 0
+	digest, err := codec.Digest("tos.task-escrow.publisher-action.v1", stable)
+	if err != nil {
+		writePublisherError(writer, http.StatusServiceUnavailable)
+		return
+	}
+	record, err := s.store.get(action.ActionID)
+	if err != nil {
+		writePublisherError(writer, http.StatusServiceUnavailable)
+		return
+	}
+	if record == nil {
+		writer.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(writer).Encode(map[string]string{"version": chain.TaskEscrowActionVersion, "code": "action_not_found", "actionId": action.ActionID})
+		return
+	}
+	if record.SemanticDigest != digest {
+		writePublisherError(writer, http.StatusConflict)
+		return
+	}
+	if record.State != recordStateCompleted || record.Receipt == nil {
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(writer).Encode(map[string]string{"version": chain.TaskEscrowActionVersion, "code": "action_outcome_uncertain", "actionId": action.ActionID})
+		return
+	}
+	_ = json.NewEncoder(writer).Encode(record.Receipt)
 }
 
 func (s *Server) publish(writer http.ResponseWriter, request *http.Request) {

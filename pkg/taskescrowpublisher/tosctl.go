@@ -269,6 +269,9 @@ func (b *TosctlBackend) Publish(
 		} else if found {
 			return taskEscrowReceipt(action, prepared.ContractAddress, reference), nil
 		}
+		// The configured lookup is bounded and therefore cannot prove the
+		// original broadcast absent. Never send again from an uncertain intent.
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action outcome remains uncertain after bounded recovery")
 	}
 	if _, err := b.run(ctx, b.publishArgs(action, prepared.ContractAddress)...); err != nil {
 		// A process can lose the CLI response after the chain accepted the action.

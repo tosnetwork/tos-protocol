@@ -45,6 +45,55 @@ message Escrow {
   int64 expires_unix_millis = 11;
   NetworkReference escrow_ref = 12;
   string funding_model = 13;
+  string job_id = 14;
+  string capability_version = 15;
+  string quote_commitment_digest = 16;
+  NetworkReference quote_commitment_ref = 17;
+  string reservation_digest = 18;
+  string reservation_action_id = 19;
+  string contract_code_hash = 20;
+  bool finalized = 21;
+  uint64 finalized_checkpoint = 22;
+  NetworkReference release_ref = 23;
+  string release_digest = 24;
+  string release_action_id = 25;
+  string release_reason_code = 26;
+}
+
+message VerifiedEscrowTerms {
+  string version = 1;
+  string canonicalization = 2;
+  string network_id = 3;
+  string domain = 4;
+  string escrow_id = 5;
+  string job_id = 6;
+  string quote_id = 7;
+  string quote_commitment_digest = 8;
+  NetworkReference quote_commitment_ref = 9;
+  string principal_id = 10;
+  string requester_agent_id = 11;
+  string provider_id = 12;
+  string capability_id = 13;
+  string capability_version = 14;
+  Digest manifest_digest = 15;
+  NetworkReference ownership_ref = 16;
+  TrustMode trust_mode = 17;
+  ProofProfile proof_profile = 18;
+  NetworkAmount reserve = 19;
+  uint32 asset_decimals = 20;
+  string settlement_backend = 21;
+  string settlement_asset = 22;
+  string funding_model = 23;
+  int64 acceptance_deadline_unix_millis = 24;
+  int64 execution_deadline_unix_millis = 25;
+  int64 escrow_deadline_unix_millis = 26;
+  string underlying_service_quote_ref = 27;
+  Digest dispute_policy_digest = 28;
+  string signer_authorization_id = 29;
+  NetworkReference signer_authorization_ref = 30;
+  NetworkAmount subtotal = 31;
+  NetworkAmount fees = 32;
+  Digest terms_digest = 33;
 }
 
 message CreateEscrowRequest {
@@ -58,6 +107,7 @@ message CreateEscrowRequest {
   NetworkAmount reserve = 8;
   string funding_model = 9;
   int64 expires_unix_millis = 10;
+  VerifiedEscrowTerms verified_terms = 11;
 }
 
 message CreateEscrowResponse {
@@ -69,6 +119,9 @@ message GetEscrowRequest {
   RequestContext context = 1;
   string escrow_id = 2;
   string quote_id = 3;
+  VerifiedEscrowTerms expected_terms = 4;
+  NetworkReference expected_escrow_ref = 5;
+  string expected_reservation_digest = 6;
 }
 
 message GetEscrowResponse {
@@ -82,6 +135,9 @@ message ReleaseEscrowRequest {
   string quote_id = 3;
   string job_id = 4;
   string reason_code = 5;
+  VerifiedEscrowTerms expected_terms = 6;
+  NetworkReference expected_escrow_ref = 7;
+  string expected_reservation_digest = 8;
 }
 
 message ReleaseEscrowResponse {

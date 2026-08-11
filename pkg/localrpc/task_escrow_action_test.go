@@ -22,6 +22,7 @@ func TestTaskEscrowActionPublisherClientPublishesExactAction(t *testing.T) {
 				_ = json.NewEncoder(writer).Encode(taskEscrowActionHealth{
 					Status: "ready", Version: chain.TaskEscrowActionVersion,
 					Network: action.Network, Path: TaskEscrowActionPath,
+					ResolvePath: TaskEscrowActionResolvePath, JournalVersion: "1",
 				})
 			case request.Method == http.MethodPost && request.URL.Path == TaskEscrowActionPath:
 				var got chain.TaskEscrowAction
@@ -84,6 +85,24 @@ func TestTaskEscrowActionPublisherRejectsChangedContract(t *testing.T) {
 	defer client.Close()
 	if _, err := client.Publish(context.Background(), action); err == nil {
 		t.Fatal("publisher contract substitution was accepted")
+	}
+}
+
+func TestTaskEscrowResolverRejectsGeneric404(t *testing.T) {
+	action := testTaskEscrowAction(chain.TaskEscrowActionAccept)
+	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("not found"))
+	}))
+	defer stop()
+	client, err := NewTaskEscrowActionPublisherClient(DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if _, found, err := client.Resolve(context.Background(), action); err == nil || found {
+		t.Fatal("generic 404 authorized TaskEscrow mutation replay")
 	}
 }
 

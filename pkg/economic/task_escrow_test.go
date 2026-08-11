@@ -36,6 +36,15 @@ func newTaskEscrowHarness(now time.Time) *taskEscrowHarness {
 func (h *taskEscrowHarness) CheckReady(context.Context) error { return nil }
 func (h *taskEscrowHarness) Close() error                     { h.closed = true; return nil }
 
+func (h *taskEscrowHarness) Resolve(_ context.Context, action chain.TaskEscrowAction) (chain.TaskEscrowActionReceipt, bool, error) {
+	reference, ok := h.references[action.ActionID]
+	if !ok {
+		return chain.TaskEscrowActionReceipt{}, false, nil
+	}
+	h.last = action
+	return chain.TaskEscrowActionReceipt{Version: action.Version, ActionID: action.ActionID, Network: action.Network, Kind: action.Kind, EscrowID: action.EscrowID, ContractAddress: testContract, Reference: reference}, true, nil
+}
+
 func (h *taskEscrowHarness) Publish(
 	_ context.Context,
 	action chain.TaskEscrowAction,

@@ -133,50 +133,13 @@ func (d *TaskEscrowDriver) ReserveEscrow(
 	ctx context.Context,
 	request ReserveEscrowRequest,
 ) (Result, error) {
-	if d == nil {
-		return Result{}, errors.New("invalid task escrow driver")
-	}
-	creator, err := toschain.CanonicalAddress(request.Creator)
+	action, err := d.reservationAction(request)
 	if err != nil {
-		return Result{}, fmt.Errorf("invalid escrow creator: %w", err)
-	}
-	agent, err := toschain.CanonicalAddress(request.Agent)
-	if err != nil {
-		return Result{}, fmt.Errorf("invalid escrow agent: %w", err)
-	}
-	verifier := d.verifier
-	if strings.TrimSpace(request.Verifier) != "" {
-		verifier, err = toschain.CanonicalAddress(request.Verifier)
-		if err != nil {
-			return Result{}, fmt.Errorf("invalid escrow verifier: %w", err)
-		}
-	}
-	if creator == agent || verifier == creator || verifier == agent {
-		return Result{}, errors.New("Task Escrow creator, agent, and verifier must be distinct")
-	}
-	if strings.TrimSpace(request.EscrowID) == "" || request.BudgetNanoTOS == 0 ||
-		request.DeadlineUnix <= uint64(d.now().Unix()) ||
-		!validDigest(request.PolicyHash) || !validDigest(request.PermissionHash) {
-		return Result{}, errors.New("invalid task escrow reservation")
-	}
-	funding, ok := addNoOverflow(request.BudgetNanoTOS, d.fundingOverhead)
-	if !ok {
-		return Result{}, errors.New("task escrow funding overflows uint64")
-	}
-	action := chain.TaskEscrowAction{
-		Version: chain.TaskEscrowActionVersion, Network: d.network,
-		Kind: chain.TaskEscrowActionDeploy, EscrowID: request.EscrowID,
-		Creator: creator, Agent: agent, Verifier: verifier,
-		BudgetNanoTOS: request.BudgetNanoTOS, FundingNanoTOS: funding,
-		DeadlineUnix: request.DeadlineUnix, ReviewPeriod: d.reviewPeriod,
-		PolicyHash: request.PolicyHash, PermissionHash: request.PermissionHash,
-	}
-	if err := d.finishAction(&action); err != nil {
 		return Result{}, err
 	}
 	transition, err := d.publishAndObserve(ctx, action, chain.TaskEscrowTransitionReference{
-		ExpectedSender: creator, ExpectedKind: chain.TaskEscrowActionDeploy,
-		ExpectedInboundMinimum: funding,
+		ExpectedSender: action.Creator, ExpectedKind: chain.TaskEscrowActionDeploy,
+		ExpectedInboundMinimum: action.FundingNanoTOS,
 	})
 	if err != nil {
 		return Result{}, err
@@ -193,8 +156,83 @@ func (d *TaskEscrowDriver) ReserveEscrow(
 	}
 	return Result{
 		State: transition.State, ContractReference: contractRef,
-		TransitionReference: transition.TransactionReference,
+		TransitionReference: transition.TransactionReference, ActionID: action.ActionID,
 	}, nil
+}
+
+func (d *TaskEscrowDriver) ResolveEscrow(ctx context.Context, request ReserveEscrowRequest) (Result, bool, error) {
+	action, err := d.reservationAction(request)
+	if err != nil {
+		return Result{}, false, err
+	}
+	callContext, cancel, err := d.callContext(ctx)
+	if err != nil {
+		return Result{}, false, err
+	}
+	defer cancel()
+	minimum, _, err := d.observer.CheckChainReady(callContext, d.now().UTC())
+	if err != nil {
+		return Result{}, false, err
+	}
+	receipt, found, err := d.publisher.Resolve(callContext, action)
+	if err != nil || !found {
+		return Result{}, found, err
+	}
+	transition, err := d.observeReceipt(callContext, action, receipt, minimum, chain.TaskEscrowTransitionReference{ExpectedSender: action.Creator, ExpectedKind: chain.TaskEscrowActionDeploy, ExpectedInboundMinimum: action.FundingNanoTOS})
+	if err != nil {
+		return Result{}, false, err
+	}
+	if err := d.validateObservedState(transition.State, transition.State.ContractAddress); err != nil {
+		return Result{}, false, err
+	}
+	if transition.State.Status == chain.TaskEscrowStatusOpen {
+		if err := validateReservedState(transition.State, action); err != nil {
+			return Result{}, false, err
+		}
+	} else if transition.State.Status != chain.TaskEscrowStatusCancelled && transition.State.Status != chain.TaskEscrowStatusExpired && transition.State.Status != chain.TaskEscrowStatusRejected {
+		return Result{}, false, errors.New("TaskEscrow is not in a recoverable reservation/release state")
+	}
+	contractRef, err := toschain.FormatTaskEscrowReference(transition.State.ContractAddress)
+	if err != nil {
+		return Result{}, false, err
+	}
+	return Result{State: transition.State, ContractReference: contractRef, TransitionReference: transition.TransactionReference, ActionID: action.ActionID}, true, nil
+}
+
+func (d *TaskEscrowDriver) reservationAction(request ReserveEscrowRequest) (chain.TaskEscrowAction, error) {
+	if d == nil {
+		return chain.TaskEscrowAction{}, errors.New("invalid task escrow driver")
+	}
+	creator, err := toschain.CanonicalAddress(request.Creator)
+	if err != nil {
+		return chain.TaskEscrowAction{}, fmt.Errorf("invalid escrow creator: %w", err)
+	}
+	agent, err := toschain.CanonicalAddress(request.Agent)
+	if err != nil {
+		return chain.TaskEscrowAction{}, fmt.Errorf("invalid escrow agent: %w", err)
+	}
+	verifier := d.verifier
+	if strings.TrimSpace(request.Verifier) != "" {
+		verifier, err = toschain.CanonicalAddress(request.Verifier)
+		if err != nil {
+			return chain.TaskEscrowAction{}, fmt.Errorf("invalid escrow verifier: %w", err)
+		}
+	}
+	if creator == agent || verifier == creator || verifier == agent {
+		return chain.TaskEscrowAction{}, errors.New("Task Escrow creator, agent, and verifier must be distinct")
+	}
+	if strings.TrimSpace(request.EscrowID) == "" || request.BudgetNanoTOS == 0 || request.DeadlineUnix <= uint64(d.now().Unix()) || !validDigest(request.PolicyHash) || !validDigest(request.PermissionHash) {
+		return chain.TaskEscrowAction{}, errors.New("invalid task escrow reservation")
+	}
+	funding, ok := addNoOverflow(request.BudgetNanoTOS, d.fundingOverhead)
+	if !ok {
+		return chain.TaskEscrowAction{}, errors.New("task escrow funding overflows uint64")
+	}
+	action := chain.TaskEscrowAction{Version: chain.TaskEscrowActionVersion, Network: d.network, Kind: chain.TaskEscrowActionDeploy, EscrowID: request.EscrowID, Creator: creator, Agent: agent, Verifier: verifier, BudgetNanoTOS: request.BudgetNanoTOS, FundingNanoTOS: funding, DeadlineUnix: request.DeadlineUnix, ReviewPeriod: d.reviewPeriod, PolicyHash: request.PolicyHash, PermissionHash: request.PermissionHash}
+	if err := d.finishAction(&action); err != nil {
+		return chain.TaskEscrowAction{}, err
+	}
+	return action, nil
 }
 
 func (d *TaskEscrowDriver) AcceptEscrow(
@@ -236,7 +274,9 @@ func (d *TaskEscrowDriver) AcceptEscrow(
 	if transition.State.Status != chain.TaskEscrowStatusAccepted {
 		return Result{}, errors.New("task escrow acceptance did not reach accepted state")
 	}
-	return transitionResult(transition), nil
+	result := transitionResult(transition)
+	result.ActionID = action.ActionID
+	return result, nil
 }
 
 func (d *TaskEscrowDriver) CommitResult(
@@ -633,7 +673,9 @@ func (d *TaskEscrowDriver) refundAction(
 		transition.CreatorPaidNanoTOS < budget {
 		return Result{}, errors.New("task escrow refund transition mismatch")
 	}
-	return transitionResult(transition), nil
+	result := transitionResult(transition)
+	result.ActionID = action.ActionID
+	return result, nil
 }
 
 func (d *TaskEscrowDriver) read(
@@ -852,10 +894,23 @@ func (d *TaskEscrowDriver) publishAndObserve(
 	if err != nil {
 		return chain.TaskEscrowTransition{}, err
 	}
-	receipt, err := d.publisher.Publish(callContext, action)
+	// Always query the enrolled durable journal before mutation. A typed,
+	// Action-ID-bound absence is the only result that authorizes Publish;
+	// pending/unknown/transport failures remain ambiguous and fail closed.
+	receipt, found, err := d.publisher.Resolve(callContext, action)
 	if err != nil {
 		return chain.TaskEscrowTransition{}, err
 	}
+	if !found {
+		receipt, err = d.publisher.Publish(callContext, action)
+		if err != nil {
+			return chain.TaskEscrowTransition{}, err
+		}
+	}
+	return d.observeReceipt(callContext, action, receipt, minimum, expectation)
+}
+
+func (d *TaskEscrowDriver) observeReceipt(callContext context.Context, action chain.TaskEscrowAction, receipt chain.TaskEscrowActionReceipt, minimum uint64, expectation chain.TaskEscrowTransitionReference) (chain.TaskEscrowTransition, error) {
 	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
 		receipt.Network != action.Network || receipt.Kind != action.Kind ||
 		receipt.EscrowID != action.EscrowID || receipt.Reference == "" {

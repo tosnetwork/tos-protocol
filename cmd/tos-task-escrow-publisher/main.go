@@ -26,12 +26,13 @@ const (
 )
 
 type startupConfig struct {
-	Version      string                                  `json:"version"`
-	Network      string                                  `json:"network"`
-	SocketPath   string                                  `json:"socketPath"`
-	StatePath    string                                  `json:"statePath"`
-	MaxBodyBytes int64                                   `json:"maxBodyBytes,omitempty"`
-	Backend      taskescrowpublisher.TosctlBackendConfig `json:"backend"`
+	Version         string                                  `json:"version"`
+	Network         string                                  `json:"network"`
+	SocketPath      string                                  `json:"socketPath"`
+	StatePath       string                                  `json:"statePath"`
+	JournalIdentity string                                  `json:"journalIdentity"`
+	MaxBodyBytes    int64                                   `json:"maxBodyBytes,omitempty"`
+	Backend         taskescrowpublisher.TosctlBackendConfig `json:"backend"`
 }
 
 func main() {
@@ -46,6 +47,18 @@ func main() {
 		logger.Error("invalid publisher configuration", "error", err)
 		os.Exit(2)
 	}
+	if len(os.Args) == 2 && os.Args[1] == "init-journal" {
+		if err := taskescrowpublisher.InitializeJournal(config.StatePath, config.JournalIdentity); err != nil {
+			logger.Error("initialize TaskEscrow publisher journal", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("TaskEscrow publisher journal initialized", "identity", config.JournalIdentity)
+		return
+	}
+	if len(os.Args) != 1 {
+		logger.Error("usage: tos-task-escrow-publisher [init-journal]")
+		os.Exit(2)
+	}
 	backend, err := taskescrowpublisher.NewTosctlBackend(config.Backend)
 	if err != nil {
 		logger.Error("configure tosctl backend", "error", err)
@@ -53,7 +66,8 @@ func main() {
 	}
 	publisher, err := taskescrowpublisher.Open(taskescrowpublisher.Config{
 		Network: config.Network, StatePath: config.StatePath,
-		Backend: backend, MaxBodyBytes: config.MaxBodyBytes, Logger: logger,
+		JournalIdentity: config.JournalIdentity,
+		Backend:         backend, MaxBodyBytes: config.MaxBodyBytes, Logger: logger,
 	})
 	if err != nil {
 		_ = backend.Close()
@@ -121,7 +135,7 @@ func loadConfig(path string) (startupConfig, error) {
 	}
 	if config.Version != configVersion || strings.TrimSpace(config.Network) == "" ||
 		config.Backend.Network != config.Network || !filepath.IsAbs(config.SocketPath) ||
-		!filepath.IsAbs(config.StatePath) {
+		!filepath.IsAbs(config.StatePath) || strings.TrimSpace(config.JournalIdentity) == "" {
 		return startupConfig{}, fmt.Errorf("publisher configuration is inconsistent")
 	}
 	return config, nil

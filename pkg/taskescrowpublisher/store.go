@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
@@ -13,6 +14,8 @@ import (
 )
 
 var actionBucket = []byte("task-escrow-actions-v1")
+var metadataBucket = []byte("task-escrow-publisher-metadata-v1")
+var journalIdentityKey = []byte("journal-identity")
 
 const (
 	recordStatePending   = "pending"
@@ -35,23 +38,72 @@ type actionRecord struct {
 
 type actionStore struct{ db *bolt.DB }
 
-func openActionStore(path string) (*actionStore, error) {
+const JournalVersion = "1"
+
+// InitializeJournal explicitly enrolls an empty journal. Normal startup never
+// creates one, so a lost or mistyped volume cannot become authoritative
+// absence for previously broadcast economic actions.
+func InitializeJournal(path, identity string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || identity == "" || len(identity) > 256 {
+		return errors.New("invalid task escrow journal enrollment")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("create task escrow journal: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2 * time.Second})
+	if err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	err = db.Update(func(tx *bolt.Tx) error {
+		if _, err := tx.CreateBucket(actionBucket); err != nil {
+			return err
+		}
+		metadata, err := tx.CreateBucket(metadataBucket)
+		if err != nil {
+			return err
+		}
+		return metadata.Put(journalIdentityKey, []byte(identity))
+	})
+	closeErr := db.Close()
+	if err != nil || closeErr != nil {
+		_ = os.Remove(path)
+	}
+	return errors.Join(err, closeErr)
+}
+
+func openActionStore(path, identity string) (*actionStore, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("publisher state path must be absolute and clean")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("create publisher state directory: %w", err)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.New("enrolled owner-private task escrow journal is missing")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != uint32(os.Geteuid()) {
+		return nil, errors.New("task escrow journal owner mismatch")
 	}
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2 * time.Second, NoGrowSync: false})
 	if err != nil {
 		return nil, fmt.Errorf("open publisher state: %w", err)
 	}
-	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(actionBucket)
-		return err
+	if err := db.View(func(tx *bolt.Tx) error {
+		actions, metadata := tx.Bucket(actionBucket), tx.Bucket(metadataBucket)
+		if actions == nil || metadata == nil || identity == "" || string(metadata.Get(journalIdentityKey)) != identity {
+			return errors.New("task escrow journal identity mismatch")
+		}
+		return nil
 	}); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("initialize publisher state: %w", err)
+		return nil, fmt.Errorf("open enrolled task escrow journal: %w", err)
 	}
 	return &actionStore{db: db}, nil
 }

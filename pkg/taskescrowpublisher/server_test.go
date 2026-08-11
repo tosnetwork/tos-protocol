@@ -58,8 +58,12 @@ func (f *fakeBackend) Close() error { return nil }
 func TestServerReplaysCompletedActionAndRejectsSubstitution(t *testing.T) {
 	backend := new(fakeBackend)
 	now := time.Unix(1_800_000_000, 0)
+	statePath := filepath.Join(t.TempDir(), "state.db")
+	if err := InitializeJournal(statePath, "test-journal"); err != nil {
+		t.Fatal(err)
+	}
 	server, err := Open(Config{
-		Network: "tos-test", StatePath: filepath.Join(t.TempDir(), "state.db"),
+		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal",
 		Backend: backend, Now: func() time.Time { return now },
 	})
 	if err != nil {
@@ -93,8 +97,12 @@ func TestServerReplaysCompletedActionAndRejectsSubstitution(t *testing.T) {
 func TestServerRecoversPendingAction(t *testing.T) {
 	backend := &fakeBackend{failFirst: true}
 	now := time.Unix(1_800_000_000, 0)
+	statePath := filepath.Join(t.TempDir(), "state.db")
+	if err := InitializeJournal(statePath, "test-journal"); err != nil {
+		t.Fatal(err)
+	}
 	server, err := Open(Config{
-		Network: "tos-test", StatePath: filepath.Join(t.TempDir(), "state.db"),
+		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal",
 		Backend: backend, Now: func() time.Time { return now },
 	})
 	if err != nil {
@@ -118,8 +126,12 @@ func TestServerRecoversPendingAction(t *testing.T) {
 
 func TestHealthUsesExactClientContract(t *testing.T) {
 	backend := new(fakeBackend)
+	statePath := filepath.Join(t.TempDir(), "state.db")
+	if err := InitializeJournal(statePath, "test-journal"); err != nil {
+		t.Fatal(err)
+	}
 	server, err := Open(Config{
-		Network: "tos-test", StatePath: filepath.Join(t.TempDir(), "state.db"), Backend: backend,
+		Network: "tos-test", StatePath: statePath, JournalIdentity: "test-journal", Backend: backend,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +150,37 @@ func TestHealthUsesExactClientContract(t *testing.T) {
 	if health["status"] != "ready" || health["network"] != "tos-test" ||
 		health["path"] != localrpc.TaskEscrowActionPath {
 		t.Fatalf("unexpected health response: %#v", health)
+	}
+}
+
+func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.db")
+	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend)}); err == nil {
+		t.Fatal("missing journal was silently initialized")
+	}
+	if err := InitializeJournal(path, "journal-a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-b", Backend: new(fakeBackend)}); err == nil {
+		t.Fatal("mismatched journal identity was accepted")
+	}
+	server, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend), Now: func() time.Time { return time.Unix(1_800_000_000, 0) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	action := testAction(time.Unix(1_800_000_000, 0))
+	encoded, _ := json.Marshal(action)
+	req := httptest.NewRequest(http.MethodPost, localrpc.TaskEscrowActionResolvePath, bytes.NewReader(encoded))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("resolve status=%d body=%s", res.Code, res.Body.String())
+	}
+	var missing map[string]string
+	if json.Unmarshal(res.Body.Bytes(), &missing) != nil || missing["code"] != "action_not_found" || missing["actionId"] != action.ActionID {
+		t.Fatalf("untyped absence: %#v", missing)
 	}
 }
 

@@ -13,6 +13,8 @@ import (
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
+	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -65,6 +67,9 @@ func (*verifiedTestEconomy) Supports(mode economic.TrustMode) bool {
 func (*verifiedTestEconomy) CheckReady(context.Context) error { return nil }
 func (*verifiedTestEconomy) ReserveEscrow(context.Context, economic.ReserveEscrowRequest) (economic.Result, error) {
 	return economic.Result{}, errors.New("not used")
+}
+func (*verifiedTestEconomy) ResolveEscrow(context.Context, economic.ReserveEscrowRequest) (economic.Result, bool, error) {
+	return economic.Result{}, false, nil
 }
 func (*verifiedTestEconomy) AcceptEscrow(context.Context, economic.AcceptEscrowRequest) (economic.Result, error) {
 	return economic.Result{}, errors.New("not used")
@@ -217,8 +222,12 @@ func (e *recordingEconomy) ReserveEscrow(_ context.Context, request economic.Res
 			Creator: request.Creator, Agent: request.Agent, HasAgent: true,
 			Verifier: "0:" + strings.Repeat("33", 32), HasVerifier: true,
 			BudgetNanoTOS: request.BudgetNanoTOS, Status: chain.TaskEscrowStatusOpen,
+			ObservedMasterSeqno: 42, CodeHash: "tvm-cell-sha256:" + strings.Repeat("aa", 32),
 		},
 	}, nil
+}
+func (e *recordingEconomy) ResolveEscrow(context.Context, economic.ReserveEscrowRequest) (economic.Result, bool, error) {
+	return economic.Result{}, false, nil
 }
 func (*recordingEconomy) AcceptEscrow(context.Context, economic.AcceptEscrowRequest) (economic.Result, error) {
 	return economic.Result{}, nil
@@ -302,18 +311,34 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	if err := server.bindPrincipal(principalID, principalAgentID); err != nil {
 		t.Fatal(err)
 	}
-	quote := &atostosv1.QuoteCommitment{Value: &atostosv1.QuoteCommitmentInput{
+	expires := now.Add(time.Hour).UnixMilli()
+	quoteValue := &atostosv1.QuoteCommitmentInput{
 		QuoteId: quoteID, PrincipalId: principalID, ProviderId: providerID,
 		CapabilityId: capabilityID, CapabilityVersion: "1.0.0",
 		TrustMode: TrustModeVerified, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1,
-		TotalMax: &atostosv1.Money{Amount: "1.00", Currency: "USD"},
-	}}
+		Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im",
+		RequesterAgentId: principalAgentID, ManifestDigest: digestMessage([]byte("manifest")), OwnershipRef: &NetworkReference{Network: "tos-test", Reference: "ownership"},
+		Subtotal: &atostosv1.Money{Amount: "0.000000900", Currency: "TOS"}, Fees: &atostosv1.Money{Amount: "0.000000100", Currency: "TOS"}, TotalMax: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, AssetDecimals: 9,
+		TermsDigest: digestMessage([]byte("terms")), DisputePolicyDigest: digestMessage([]byte("dispute")), AcceptanceDeadlineUnixMillis: expires, ExpiresUnixMillis: expires, ExecutionDeadlineUnixMillis: expires,
+		SettlementBackend: "tos", SettlementAsset: "TOS", UnderlyingServiceQuoteRef: "service-quote", SignerAuthorizationId: "auth-1", SignerAuthorizationRef: &NetworkReference{Network: "tos-test", Reference: "auth"},
+	}
+	quoteDigest, err := quotecommitment.Digest(quoteValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quoteRef, err := server.authority.Commit(context.Background(), "quote", quoteID, quoteDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := &atostosv1.QuoteCommitment{Value: quoteValue, CommitmentRef: &quoteRef, CommitmentDigest: digestMessageFromString(quoteDigest)}
 	if err := server.store.update(func(tx *bolt.Tx) error {
 		return server.store.putProto(tx, bucketQuoteCommitments, quoteID, quote)
 	}); err != nil {
 		t.Fatal(err)
 	}
 
+	terms := &atostosv1.VerifiedEscrowTerms{Version: escrowcommitment.Version, Canonicalization: escrowcommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", JobId: jobID, QuoteId: quoteID, QuoteCommitmentDigest: quoteDigest, QuoteCommitmentRef: &quoteRef, PrincipalId: principalID, RequesterAgentId: principalAgentID, ProviderId: providerID, CapabilityId: capabilityID, CapabilityVersion: "1.0.0", ManifestDigest: quoteValue.ManifestDigest, OwnershipRef: quoteValue.OwnershipRef, TrustMode: TrustModeVerified, ProofProfile: quoteValue.ProofProfile, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "900"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "100"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "task_escrow_v1", AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: expires, EscrowDeadlineUnixMillis: expires, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: quoteValue.DisputePolicyDigest, SignerAuthorizationId: "auth-1", SignerAuthorizationRef: quoteValue.SignerAuthorizationRef, TermsDigest: quoteValue.TermsDigest}
+	terms.EscrowId = escrowcommitment.EscrowID(terms.NetworkId, terms.Domain, terms.QuoteId, terms.JobId)
 	create, err := server.CreateEscrow(context.Background(), connect.NewRequest(
 		&atostosv1.CreateEscrowRequest{
 			Context: &atostosv1.RequestContext{
@@ -324,7 +349,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 			CapabilityId: capabilityID, TrustMode: TrustModeVerified,
 			ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1,
 			Reserve:      &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"},
-			FundingModel: "task_escrow_v1", ExpiresUnixMillis: now.Add(time.Hour).UnixMilli(),
+			FundingModel: "task_escrow_v1", ExpiresUnixMillis: expires, VerifiedTerms: terms,
 		},
 	))
 	if err != nil {

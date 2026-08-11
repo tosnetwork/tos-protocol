@@ -133,6 +133,9 @@ type TaskEscrowTransition struct {
 
 type TaskEscrowActionPublisher interface {
 	CheckReady(context.Context) error
+	// Resolve is read-only. found=false is permitted only when the enrolled
+	// durable journal returns a typed Action-ID-bound authoritative absence.
+	Resolve(context.Context, TaskEscrowAction) (TaskEscrowActionReceipt, bool, error)
 	Publish(context.Context, TaskEscrowAction) (TaskEscrowActionReceipt, error)
 	Close() error
 }

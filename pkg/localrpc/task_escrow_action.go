@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	TaskEscrowActionPath       = "/v1/economic/task-escrow/action"
-	TaskEscrowActionHealthPath = "/healthz"
+	TaskEscrowActionPath        = "/v1/economic/task-escrow/action"
+	TaskEscrowActionResolvePath = "/v1/economic/task-escrow/action/resolve"
+	TaskEscrowActionHealthPath  = "/healthz"
 	// DefaultTaskEscrowActionTimeout must exceed the publisher's default
 	// publish wait budget (taskescrowpublisher.DefaultPublishTimeout, 90s):
 	// the server legitimately blocks the HTTP response until it observes the
@@ -67,10 +68,18 @@ type TaskEscrowActionPublisherClient struct {
 }
 
 type taskEscrowActionHealth struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	Network string `json:"network"`
-	Path    string `json:"path"`
+	Status         string `json:"status"`
+	Version        string `json:"version"`
+	Network        string `json:"network"`
+	Path           string `json:"path"`
+	ResolvePath    string `json:"resolvePath"`
+	JournalVersion string `json:"journalVersion"`
+}
+
+type taskEscrowActionNotFound struct {
+	Version  string `json:"version"`
+	Code     string `json:"code"`
+	ActionID string `json:"actionId"`
 }
 
 func NewTaskEscrowActionPublisherClient(
@@ -164,6 +173,54 @@ func (c *TaskEscrowActionPublisherClient) Publish(
 	return receipt, nil
 }
 
+func (c *TaskEscrowActionPublisherClient) Resolve(ctx context.Context, action chain.TaskEscrowAction) (chain.TaskEscrowActionReceipt, bool, error) {
+	if c == nil || ctx == nil {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("invalid task escrow action resolver")
+	}
+	if err := validateTaskEscrowAction(action, c.network); err != nil {
+		return chain.TaskEscrowActionReceipt{}, false, err
+	}
+	encoded, err := json.Marshal(action)
+	if err != nil || len(encoded) > c.maxMessageBytes {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow lookup request exceeds message limit")
+	}
+	requestContext, finish, err := c.beginRequest(ctx)
+	if err != nil {
+		return chain.TaskEscrowActionReceipt{}, false, err
+	}
+	defer finish()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, "http://unix"+TaskEscrowActionResolvePath, bytes.NewReader(encoded))
+	if err != nil {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("construct task escrow lookup request")
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow action resolver unavailable")
+	}
+	defer response.Body.Close()
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, int64(c.maxMessageBytes)+1))
+	if readErr != nil || len(data) > c.maxMessageBytes || requireTaskEscrowJSON(response.Header.Get("Content-Type")) != nil {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow action resolver returned an invalid response")
+	}
+	if response.StatusCode == http.StatusNotFound {
+		var missing taskEscrowActionNotFound
+		if jsonstrict.Decode(data, &missing) != nil || missing.Version != chain.TaskEscrowActionVersion || missing.Code != "action_not_found" || missing.ActionID != action.ActionID {
+			return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow action resolver returned an untyped not-found")
+		}
+		return chain.TaskEscrowActionReceipt{}, false, nil
+	}
+	if response.StatusCode != http.StatusOK {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow action outcome is uncertain")
+	}
+	var receipt chain.TaskEscrowActionReceipt
+	if jsonstrict.Decode(data, &receipt) != nil || receipt.Version != action.Version || receipt.ActionID != action.ActionID || receipt.Network != action.Network || receipt.Kind != action.Kind || receipt.EscrowID != action.EscrowID || strings.TrimSpace(receipt.ContractAddress) == "" || strings.TrimSpace(receipt.Reference) == "" || (action.ContractAddress != "" && receipt.ContractAddress != action.ContractAddress) {
+		return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow action resolver returned an invalid receipt")
+	}
+	return receipt, true, nil
+}
+
 func (c *TaskEscrowActionPublisherClient) CheckReady(ctx context.Context) error {
 	if c == nil || c.httpClient == nil || c.slots == nil || c.active == nil {
 		return errors.New("invalid task escrow action publisher client")
@@ -198,7 +255,8 @@ func (c *TaskEscrowActionPublisherClient) CheckReady(ctx context.Context) error 
 	var health taskEscrowActionHealth
 	if err := jsonstrict.Decode(data, &health); err != nil ||
 		health.Status != "ready" || health.Version != chain.TaskEscrowActionVersion ||
-		health.Network != c.network || health.Path != TaskEscrowActionPath {
+		health.Network != c.network || health.Path != TaskEscrowActionPath ||
+		health.ResolvePath != TaskEscrowActionResolvePath || health.JournalVersion != "1" {
 		return errors.New("task escrow action publisher returned an invalid readiness response")
 	}
 	return nil
