@@ -15,8 +15,17 @@ import (
 
 type countingFinancialAuthority struct {
 	Authority
-	commits int
-	fail    bool
+	commits  int
+	resolves int
+	fail     bool
+}
+
+func (a *countingFinancialAuthority) ResolveCommitment(_ context.Context, _, _, _ string, reference *NetworkReference) (*NetworkReference, error) {
+	a.resolves++
+	if a.fail {
+		return nil, errors.New("injected resolve failure")
+	}
+	return cloneMessage(reference), nil
 }
 
 func (a *countingFinancialAuthority) Commit(ctx context.Context, kind, id, digest string) (NetworkReference, error) {
@@ -117,6 +126,9 @@ func TestManagedFinancialAnchorPublishResolveAndLostResponseRetry(t *testing.T) 
 		!proto.Equal(resolved.Msg.Anchor, anchor) ||
 		resolved.Msg.AnchorRef.Reference != first.Msg.AnchorRef.Reference {
 		t.Fatalf("resolved anchor differs: %#v", resolved.Msg)
+	}
+	if authority.resolves != 1 {
+		t.Fatalf("resolve used local cache without live authority observation: %d", authority.resolves)
 	}
 }
 

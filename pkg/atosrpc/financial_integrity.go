@@ -205,7 +205,7 @@ func (s *Server) PublishManagedFinancialAnchor(
 }
 
 func (s *Server) ResolveManagedFinancialAnchor(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.ResolveManagedFinancialAnchorRequest],
 ) (*connect.Response[atostosv1.ResolveManagedFinancialAnchorResponse], error) {
 	if req == nil || req.Msg == nil {
@@ -235,6 +235,18 @@ func (s *Server) ResolveManagedFinancialAnchor(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if response.Found && response.Finalized {
+		resolver, ok := s.authority.(CommitmentResolver)
+		if !ok || response.Anchor == nil || response.AnchorRef == nil || response.PayloadDigest == nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "finalized managed financial anchor requires a live network resolver")
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "managed-financial-ledger-root", response.Anchor.AnchorId, digestText(response.PayloadDigest), response.AnchorRef)
+		if resolveErr != nil || live == nil || !live.Finalized || live.Network != req.Msg.NetworkId || live.Reference != response.AnchorRef.Reference || live.FinalizedCheckpoint < response.FinalizedCheckpoint {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "managed financial anchor finality could not be re-observed")
+		}
+		response.AnchorRef = cloneMessage(live)
+		response.FinalizedCheckpoint = live.FinalizedCheckpoint
 	}
 	return connect.NewResponse(response), nil
 }

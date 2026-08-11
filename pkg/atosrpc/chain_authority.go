@@ -256,6 +256,39 @@ func (a *chainAuthority) Commit(
 	}, nil
 }
 
+func (a *chainAuthority) ResolveCommitment(ctx context.Context, kind, objectID, digest string, reference *NetworkReference) (*NetworkReference, error) {
+	if a == nil || reference == nil || reference.Network != a.network || !reference.Finalized || reference.FinalizedCheckpoint == 0 ||
+		strings.TrimSpace(reference.Reference) == "" || !chainCommitmentKindPattern.MatchString(kind) || objectID == "" || !chainDigestPattern.MatchString(digest) {
+		return nil, errors.New("invalid finalized TOS commitment reference")
+	}
+	callContext, cancel, err := a.callContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	action := a.anchorAction(kind, objectID, digest, a.now().UTC())
+	state, err := a.runtime.ObservePayment(callContext, chain.PaymentReference{
+		Network: a.network, AuthorizationID: action.ActionID, QuoteID: action.ActionID, RequestID: action.ActionID,
+		Reference: reference.Reference, Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS,
+		Comment: action.Comment, MinimumMasterSeqno: reference.FinalizedCheckpoint,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("re-observe TOS chain commitment: %w", err)
+	}
+	if !state.Confirmed || !state.Finalized || state.Reorganized || state.Network != action.Network ||
+		state.Reference != reference.Reference || state.AuthorizationID != action.ActionID || state.QuoteID != action.ActionID ||
+		state.RequestID != action.ActionID || state.Payer != action.Payer || state.Payee != action.Payee ||
+		state.AmountNanoTOS != action.AmountNanoTOS || state.Comment != action.Comment ||
+		state.ObservedMasterSeqno < reference.FinalizedCheckpoint || state.ObservedAt.IsZero() {
+		return nil, errors.New("TOS chain commitment is no longer finalized with the expected binding")
+	}
+	ready, err := a.runtime.CheckServiceReady(callContext, a.serviceReference, a.now().UTC())
+	if err != nil || ready.ObservedMasterSeqno < state.ObservedMasterSeqno {
+		return nil, errors.New("TOS chain commitment finality observation is not current")
+	}
+	return &NetworkReference{Network: a.network, Reference: reference.Reference, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno}, nil
+}
+
 func (a *chainAuthority) anchorAction(
 	kind, objectID, digest string,
 	now time.Time,
@@ -337,3 +370,4 @@ func (a *chainAuthority) Close() error {
 }
 
 var _ Authority = (*chainAuthority)(nil)
+var _ CommitmentResolver = (*chainAuthority)(nil)
