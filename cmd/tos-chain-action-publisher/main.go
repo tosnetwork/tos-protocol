@@ -21,13 +21,14 @@ import (
 )
 
 type config struct {
-	Version        string   `json:"version"`
-	Network        string   `json:"network"`
-	SocketPath     string   `json:"socketPath"`
-	StatePath      string   `json:"statePath"`
-	BackendCommand string   `json:"backendCommand"`
-	BackendArgs    []string `json:"backendArgs,omitempty"`
-	MaxBodyBytes   int64    `json:"maxBodyBytes,omitempty"`
+	Version         string                                   `json:"version"`
+	Network         string                                   `json:"network"`
+	SocketPath      string                                   `json:"socketPath"`
+	StatePath       string                                   `json:"statePath"`
+	JournalIdentity string                                   `json:"journalIdentity"`
+	Policy          chainactionpublisher.SpendingPolicy      `json:"policy"`
+	Backend         chainactionpublisher.TosctlBackendConfig `json:"backend"`
+	MaxBodyBytes    int64                                    `json:"maxBodyBytes,omitempty"`
 }
 
 func main() {
@@ -42,12 +43,24 @@ func main() {
 		logger.Error("invalid publisher config", "error", err)
 		os.Exit(2)
 	}
-	backend, err := chainactionpublisher.NewCommandBackend(c.BackendCommand, c.BackendArgs)
+	if len(os.Args) == 2 && os.Args[1] == "init-journal" {
+		if err := chainactionpublisher.InitializeJournal(c.StatePath, c.JournalIdentity); err != nil {
+			logger.Error("initialize publisher journal", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("publisher journal initialized", "identity", c.JournalIdentity)
+		return
+	}
+	if len(os.Args) != 1 {
+		logger.Error("usage: tos-chain-action-publisher [init-journal]")
+		os.Exit(2)
+	}
+	backend, err := chainactionpublisher.NewTosctlBackend(c.Backend)
 	if err != nil {
 		logger.Error("invalid backend", "error", err)
 		os.Exit(2)
 	}
-	publisher, err := chainactionpublisher.Open(chainactionpublisher.Config{Network: c.Network, StatePath: c.StatePath, Backend: backend, MaxBodyBytes: c.MaxBodyBytes, Logger: logger})
+	publisher, err := chainactionpublisher.Open(chainactionpublisher.Config{Network: c.Network, StatePath: c.StatePath, JournalIdentity: c.JournalIdentity, Policy: c.Policy, Backend: backend, MaxBodyBytes: c.MaxBodyBytes, Logger: logger})
 	if err != nil {
 		logger.Error("open publisher", "error", err)
 		os.Exit(1)
@@ -102,8 +115,8 @@ func loadConfig(path string) (config, error) {
 	}
 	if c.Version != "1" || strings.TrimSpace(c.Network) == "" || !filepath.IsAbs(c.SocketPath) ||
 		filepath.Clean(c.SocketPath) != c.SocketPath || !filepath.IsAbs(c.StatePath) ||
-		filepath.Clean(c.StatePath) != c.StatePath || !filepath.IsAbs(c.BackendCommand) ||
-		filepath.Clean(c.BackendCommand) != c.BackendCommand {
+		filepath.Clean(c.StatePath) != c.StatePath || strings.TrimSpace(c.JournalIdentity) == "" ||
+		c.Backend.Network != c.Network || c.Backend.Payer != c.Policy.Payer {
 		return config{}, fmt.Errorf("publisher configuration is inconsistent")
 	}
 	return c, nil

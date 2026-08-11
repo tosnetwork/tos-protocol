@@ -245,6 +245,7 @@ func (c *ChainActionPublisherClient) Publish(
 	}
 	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
 		receipt.Network != action.Network || receipt.Kind != action.Kind ||
+		receipt.CommitmentKind != action.CommitmentKind ||
 		receipt.ObjectID != action.ObjectID || receipt.Digest != action.Digest ||
 		receipt.Payer != action.Payer || receipt.Payee != action.Payee ||
 		receipt.AmountNanoTOS != action.AmountNanoTOS || receipt.Comment != action.Comment ||

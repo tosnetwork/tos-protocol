@@ -2,12 +2,15 @@ package chainactionpublisher
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,21 +19,36 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 )
 
 const ProtocolVersion = "1"
 const statePending, stateCompleted = "pending", "completed"
 
 type Backend interface {
-	CheckReady(context.Context) error
+	CheckReady(context.Context) (BackendCapabilities, error)
 	Publish(context.Context, chain.Action, bool) (chain.ActionReceipt, error)
 	Close() error
 }
+type BackendCapabilities struct {
+	Version               string `json:"version"`
+	Network               string `json:"network"`
+	RecoverByActionID     bool   `json:"recoverByActionId"`
+	SearchBeforeBroadcast bool   `json:"searchBeforeBroadcast"`
+}
 type Config struct {
-	Network, StatePath string
-	Backend            Backend
-	MaxBodyBytes       int64
-	Logger             *slog.Logger
+	Network, StatePath, JournalIdentity string
+	Policy                              SpendingPolicy
+	Backend                             Backend
+	MaxBodyBytes                        int64
+	Logger                              *slog.Logger
+}
+type SpendingPolicy struct {
+	ServiceAddress string `json:"serviceAddress"`
+	ServiceID      string `json:"serviceId"`
+	Payer          string `json:"payer"`
+	Payee          string `json:"payee"`
+	AmountNanoTOS  uint64 `json:"amountNanoTOS"`
 }
 type Server struct {
 	network string
@@ -38,6 +56,7 @@ type Server struct {
 	journal *journal
 	maxBody int64
 	logger  *slog.Logger
+	policy  SpendingPolicy
 	mu      sync.Mutex
 	once    sync.Once
 }
@@ -55,11 +74,15 @@ func Open(c Config) (*Server, error) {
 	if c.Logger == nil {
 		c.Logger = slog.Default()
 	}
-	j, err := openJournal(c.StatePath)
+	policy, err := validatePolicy(c.Policy)
 	if err != nil {
 		return nil, err
 	}
-	return &Server{network: c.Network, backend: c.Backend, journal: j, maxBody: c.MaxBodyBytes, logger: c.Logger}, nil
+	j, err := openJournal(c.StatePath, c.JournalIdentity)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{network: c.Network, backend: c.Backend, journal: j, maxBody: c.MaxBodyBytes, logger: c.Logger, policy: policy}, nil
 }
 func (s *Server) Handler() http.Handler {
 	m := http.NewServeMux()
@@ -72,7 +95,14 @@ func (s *Server) CheckReady(ctx context.Context) error {
 	if s == nil || s.journal == nil || s.backend == nil {
 		return errors.New("invalid publisher")
 	}
-	return s.backend.CheckReady(ctx)
+	capabilities, err := s.backend.CheckReady(ctx)
+	if err != nil {
+		return err
+	}
+	if capabilities.Version != ProtocolVersion || capabilities.Network != s.network || !capabilities.RecoverByActionID || !capabilities.SearchBeforeBroadcast {
+		return errors.New("backend does not provide required recovery capabilities")
+	}
+	return nil
 }
 func (s *Server) Close() (err error) {
 	if s == nil {
@@ -151,7 +181,7 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request) (chain.Action, b
 		return chain.Action{}, false
 	}
 	var a chain.Action
-	if jsonstrict.Decode(raw, &a) != nil || validate(a, s.network) != nil {
+	if jsonstrict.Decode(raw, &a) != nil || validate(a, s.network, s.policy) != nil {
 		w.WriteHeader(400)
 		return chain.Action{}, false
 	}
@@ -199,18 +229,49 @@ func semanticDigest(a chain.Action) (string, error) {
 	a.ExpiresUnixMillis = 0
 	return codec.Digest("tos.chain-action.publisher.v1", a)
 }
-func validate(a chain.Action, network string) error {
-	anchorDigest, ok := strings.CutPrefix(a.ActionID, "anchor-")
-	if !ok || len(anchorDigest) != 64 || a.Comment != "atos:v1:"+anchorDigest ||
+func validate(a chain.Action, network string, policy SpendingPolicy) error {
+	anchorDigest := expectedActionDigest(a, network, policy)
+	if a.ActionID != "anchor-"+anchorDigest || a.Comment != "atos:v1:"+anchorDigest ||
 		a.Version != chain.ChainActionVersion || a.Network != network || a.Kind != chain.ActionKindAnchor ||
-		a.ObjectID == "" || a.Digest == "" || a.Payer == "" || a.Payee == "" ||
-		a.AmountNanoTOS == 0 || a.ExpiresUnixMillis <= time.Now().Add(-time.Minute).UnixMilli() {
+		a.CommitmentKind == "" || a.ObjectID == "" || a.Digest == "" || a.Payer != policy.Payer ||
+		a.Payee != policy.Payee || a.AmountNanoTOS != policy.AmountNanoTOS ||
+		a.ExpiresUnixMillis <= time.Now().Add(-time.Minute).UnixMilli() {
 		return errors.New("invalid action")
 	}
 	return nil
 }
+func expectedActionDigest(a chain.Action, network string, policy SpendingPolicy) string {
+	h := sha256.New()
+	for _, value := range []string{"ATOS-TOS-CHAIN-AUTHORITY-V1", chain.ChainActionVersion, network,
+		policy.ServiceAddress, policy.ServiceID, string(chain.ActionKindAnchor), a.CommitmentKind,
+		a.ObjectID, a.Digest, policy.Payer, policy.Payee, strconv.FormatUint(policy.AmountNanoTOS, 10)} {
+		h.Write([]byte(value))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+func validatePolicy(p SpendingPolicy) (SpendingPolicy, error) {
+	var err error
+	p.ServiceAddress, err = toschain.CanonicalAddress(strings.TrimSpace(p.ServiceAddress))
+	if err != nil {
+		return p, errors.New("invalid service address policy")
+	}
+	p.Payer, err = toschain.CanonicalAddress(strings.TrimSpace(p.Payer))
+	if err != nil {
+		return p, errors.New("invalid payer policy")
+	}
+	p.Payee, err = toschain.CanonicalAddress(strings.TrimSpace(p.Payee))
+	if err != nil {
+		return p, errors.New("invalid payee policy")
+	}
+	p.ServiceID = strings.TrimSpace(p.ServiceID)
+	if p.ServiceID == "" || len(p.ServiceID) > 128 || p.AmountNanoTOS == 0 {
+		return p, errors.New("invalid publisher spending policy")
+	}
+	return p, nil
+}
 func validateReceipt(a chain.Action, r chain.ActionReceipt) error {
-	if r.Version != a.Version || r.ActionID != a.ActionID || r.Network != a.Network || r.Kind != a.Kind || r.ObjectID != a.ObjectID || r.Digest != a.Digest || r.Payer != a.Payer || r.Payee != a.Payee || r.AmountNanoTOS != a.AmountNanoTOS || r.Comment != a.Comment || strings.TrimSpace(r.Reference) == "" {
+	if r.Version != a.Version || r.ActionID != a.ActionID || r.Network != a.Network || r.Kind != a.Kind || r.CommitmentKind != a.CommitmentKind || r.ObjectID != a.ObjectID || r.Digest != a.Digest || r.Payer != a.Payer || r.Payee != a.Payee || r.AmountNanoTOS != a.AmountNanoTOS || r.Comment != a.Comment || strings.TrimSpace(r.Reference) == "" {
 		return errors.New("receipt mismatch")
 	}
 	return nil

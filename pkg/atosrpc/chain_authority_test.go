@@ -84,7 +84,7 @@ func (p *testChainActionPublisher) Publish(
 	p.actions = append(p.actions, action)
 	receipt := chain.ActionReceipt{
 		Version: action.Version, ActionID: action.ActionID,
-		Network: action.Network, Kind: action.Kind, ObjectID: action.ObjectID,
+		Network: action.Network, Kind: action.Kind, CommitmentKind: action.CommitmentKind, ObjectID: action.ObjectID,
 		Digest:    action.Digest,
 		Reference: "tos:tx:v1:0:2222222222222222222222222222222222222222222222222222222222222222:1:3333333333333333333333333333333333333333333333333333333333333333",
 		Payer:     action.Payer, Payee: action.Payee,
@@ -99,7 +99,7 @@ func (p *testChainActionPublisher) Publish(
 func (p *testChainActionPublisher) Resolve(_ context.Context, action chain.Action) (chain.ActionReceipt, bool, error) {
 	for _, published := range p.actions {
 		if published.ActionID == action.ActionID {
-			receipt := chain.ActionReceipt{Version: action.Version, ActionID: action.ActionID, Network: action.Network, Kind: action.Kind, ObjectID: action.ObjectID, Digest: action.Digest, Reference: "tos:tx:v1:0:2222222222222222222222222222222222222222222222222222222222222222:1:3333333333333333333333333333333333333333333333333333333333333333", Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS, Comment: action.Comment}
+			receipt := chain.ActionReceipt{Version: action.Version, ActionID: action.ActionID, Network: action.Network, Kind: action.Kind, CommitmentKind: action.CommitmentKind, ObjectID: action.ObjectID, Digest: action.Digest, Reference: "tos:tx:v1:0:2222222222222222222222222222222222222222222222222222222222222222:1:3333333333333333333333333333333333333333333333333333333333333333", Payer: action.Payer, Payee: action.Payee, AmountNanoTOS: action.AmountNanoTOS, Comment: action.Comment}
 			if p.changeReceipt != nil {
 				p.changeReceipt(&receipt)
 			}

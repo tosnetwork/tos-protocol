@@ -342,7 +342,7 @@ func (a *chainAuthority) anchorAction(
 	return chain.Action{
 		Version:  chain.ChainActionVersion,
 		ActionID: "anchor-" + anchorDigest, Network: a.network,
-		Kind: chain.ActionKindAnchor, ObjectID: objectID, Digest: digest,
+		Kind: chain.ActionKindAnchor, CommitmentKind: kind, ObjectID: objectID, Digest: digest,
 		Payer: a.anchorPayer, Payee: a.anchorPayee,
 		AmountNanoTOS:     a.anchorAmountNano,
 		Comment:           "atos:v1:" + anchorDigest,
@@ -360,7 +360,7 @@ func managedEconomicCommitment(kind string) bool {
 }
 
 func verifyActionReceipt(action chain.Action, receipt chain.ActionReceipt) error {
-	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
+	if receipt.Version != action.Version || receipt.ActionID != action.ActionID || receipt.CommitmentKind != action.CommitmentKind ||
 		receipt.Network != action.Network || receipt.Kind != action.Kind ||
 		receipt.ObjectID != action.ObjectID || receipt.Digest != action.Digest ||
 		receipt.Payer != action.Payer || receipt.Payee != action.Payee ||

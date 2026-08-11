@@ -30,6 +30,7 @@ type Action struct {
 	ActionID          string     `json:"actionId"`
 	Network           string     `json:"network"`
 	Kind              ActionKind `json:"kind"`
+	CommitmentKind    string     `json:"commitmentKind"`
 	ObjectID          string     `json:"objectId"`
 	Digest            string     `json:"digest"`
 	Payer             string     `json:"payer"`
@@ -43,17 +44,18 @@ type Action struct {
 // the key-custody sidecar. The caller must independently observe this exact
 // reference through quorum-backed TOS chain readers before accepting it.
 type ActionReceipt struct {
-	Version       string     `json:"version"`
-	ActionID      string     `json:"actionId"`
-	Network       string     `json:"network"`
-	Kind          ActionKind `json:"kind"`
-	ObjectID      string     `json:"objectId"`
-	Digest        string     `json:"digest"`
-	Reference     string     `json:"reference"`
-	Payer         string     `json:"payer"`
-	Payee         string     `json:"payee"`
-	AmountNanoTOS uint64     `json:"amountNanoTOS"`
-	Comment       string     `json:"comment"`
+	Version        string     `json:"version"`
+	ActionID       string     `json:"actionId"`
+	Network        string     `json:"network"`
+	Kind           ActionKind `json:"kind"`
+	CommitmentKind string     `json:"commitmentKind"`
+	ObjectID       string     `json:"objectId"`
+	Digest         string     `json:"digest"`
+	Reference      string     `json:"reference"`
+	Payer          string     `json:"payer"`
+	Payee          string     `json:"payee"`
+	AmountNanoTOS  uint64     `json:"amountNanoTOS"`
+	Comment        string     `json:"comment"`
 }
 
 // ActionPublisher is a private key-custody boundary. It may submit a TOS

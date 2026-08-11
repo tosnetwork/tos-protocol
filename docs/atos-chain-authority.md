@@ -151,9 +151,9 @@ No wallet seed or private key should cross the ATOS RPC boundary.
 
 Run `cmd/tos-chain-action-publisher` with
 `TOS_CHAIN_ACTION_PUBLISHER_CONFIG` pointing to an absolute, owner-private JSON
-file. The backend executable receives `check-ready`, `publish`, or `recover` as
-its first argument; publish/recover read the exact action JSON from standard
-input and emit the receipt JSON on standard output.
+file. Before first use, explicitly enroll the durable volume once with
+`tos-chain-action-publisher init-journal`. Normal startup never creates a
+missing journal and verifies its configured identity.
 
 ```json
 {
@@ -161,8 +161,23 @@ input and emit the receipt JSON on standard output.
   "network": "tos-mainnet",
   "socketPath": "/run/tos/atos-chain-publisher.sock",
   "statePath": "/var/lib/tos/atos-chain-publisher.db",
-  "backendCommand": "/usr/local/libexec/tos-anchor-backend",
-  "backendArgs": []
+  "journalIdentity": "prod-mainnet-anchor-journal-01",
+  "policy": {
+    "serviceAddress": "0:<atos-service-agent-account>",
+    "serviceId": "atos-gateway",
+    "payer": "0:<treasury-account>",
+    "payee": "0:<anchor-account>",
+    "amountNanoTOS": 1
+  },
+  "backend": {
+    "network": "tos-mainnet",
+    "binary": "/usr/local/bin/tosctl",
+    "configPath": "/etc/tos/tosctl.json",
+    "vaultUrl": "https://vault.example",
+    "rpcUrl": "https://rpc.example/jsonRPC",
+    "walletName": "atos-anchor",
+    "payer": "0:<treasury-account>"
+  }
 }
 ```
 
@@ -170,3 +185,8 @@ The journal writes the pending action intent before invoking the backend. An
 uncertain or interrupted attempt remains pending and can only be retried via
 `recover`; it is never reported as absent. Completed actions retain their exact
 receipt and exact-replay semantics across process restarts.
+The publisher recomputes Action ID from the configured service identity,
+commitment tuple and fixed payer/payee/amount policy before the concrete
+tosctl backend can use the wallet. That backend searches exact chain history
+before every broadcast and after uncertain command completion; readiness
+checks the configured RPC and exact payer wallet.
