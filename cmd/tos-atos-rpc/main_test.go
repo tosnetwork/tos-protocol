@@ -131,6 +131,38 @@ func TestSeedIdentities_RejectsNoControllers(t *testing.T) {
 	}
 }
 
+// TestSeedIdentities_ValidatesAllBeforeApplyingAny proves a later record's
+// validation failure does not leave earlier, individually-valid records
+// already durably committed -- an operator fixing the bad record and
+// retrying must see the WHOLE file's intent applied, not a partial mix from
+// the failed attempt plus the retry.
+func TestSeedIdentities_ValidatesAllBeforeApplyingAny(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{
+		{
+			AgentID: "agt_seed_partial_good", CanonicalURI: "tos://agent/agt_seed_partial_good",
+			Controllers: []string{"0:4444444444444444444444444444444444444444444444444444444444444444"},
+			Assurance:   "tos_operator_verified",
+		},
+		{
+			AgentID: "agt_seed_partial_bad", CanonicalURI: "tos://agent/agt_seed_partial_bad",
+			Assurance: "self_asserted",
+		},
+	})
+	if _, err := seedIdentities(server, path); err == nil {
+		t.Fatal("expected the file's invalid second record to reject the whole seed")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_partial_good",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.Found {
+		t.Fatal("the earlier, individually-valid record must not have been committed when a later record failed validation")
+	}
+}
+
 func TestSeedIdentities_MalformedFileRejected(t *testing.T) {
 	server := newTestServer(t)
 	path := filepath.Join(t.TempDir(), "bad.json")

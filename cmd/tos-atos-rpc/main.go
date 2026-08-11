@@ -103,6 +103,7 @@ func main() {
 
 	seeded, err := seedIdentities(server, *identitySeedFile)
 	if err != nil {
+		_ = server.Close()
 		logger.Error("seed identities", "error", err)
 		os.Exit(2)
 	}
@@ -189,6 +190,13 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 		}
 		return 0, err
 	}
+	// Validate every record BEFORE applying any of them: SeedIdentity's own
+	// commit is durable per-call, so validating and applying in the same
+	// pass would let an early record land in the store even though a later
+	// record's validation failure makes the whole file (and this process
+	// startup) fail -- an operator fixing record N and retrying would then
+	// find records 1..N-1 already seeded from the failed attempt, silently
+	// diverging from what "the seed file describes" is supposed to mean.
 	for _, seed := range seeds {
 		if strings.TrimSpace(seed.AgentID) == "" || strings.TrimSpace(seed.CanonicalURI) == "" {
 			return 0, fmt.Errorf("identity seed missing agent_id or canonical_uri")
@@ -199,6 +207,8 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 		if len(seed.Controllers) == 0 {
 			return 0, fmt.Errorf("identity seed %q must list at least one controller", seed.AgentID)
 		}
+	}
+	for _, seed := range seeds {
 		if err := server.SeedIdentity(&atostosv1.AgentIdentity{
 			AgentId: seed.AgentID, CanonicalUri: seed.CanonicalURI,
 			Controllers: seed.Controllers, Assurance: seed.Assurance,
