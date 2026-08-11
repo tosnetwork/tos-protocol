@@ -45,17 +45,16 @@ func main() {
 		economicMode    = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
 		economicConfig  = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
 		// identitySeedFile is the ONLY way this process establishes a new
-		// AgentIdentity -- Server.SeedIdentity is deliberately not a
-		// network RPC (atos-spec proto/atos/tos/v1/identity.proto: "Creating
-		// a brand-new AgentIdentity from nothing remains an out-of-band
-		// operator/bootstrap action... Full self-service, wallet-proved
-		// Agent Identity creation is Phase 5's deliverable, not this
-		// phase's"). This flag is that operator/bootstrap mechanism made
-		// practically usable: an operator who has already independently
-		// verified an Agent's TOS controller key (by whatever out-of-band
-		// process this deployment uses) lists it here; re-running with the
-		// same file content on every restart is safe (SeedIdentity's
-		// Authority.Commit digest is stable across identical re-seeds).
+		// AgentIdentity -- Server.SeedIdentity is deliberately not exposed
+		// as a network RPC: creating a brand-new identity from nothing is
+		// an out-of-band operator/bootstrap action, never something a
+		// network caller can trigger by itself. This flag is that
+		// operator/bootstrap mechanism made practically usable: an operator
+		// who has already independently verified an Agent's TOS controller
+		// key (by whatever out-of-band process this deployment uses) lists
+		// it here; re-running with the same file content on every restart
+		// is safe (SeedIdentity's Authority.Commit digest is stable across
+		// identical re-seeds, and unchanged records are skipped entirely).
 		identitySeedFile = flag.String("identity-seed-file", os.Getenv("TOS_ATOS_RPC_IDENTITY_SEED_FILE"), "JSON array of already-verified AgentIdentity records to seed at startup")
 	)
 	flag.Parse()
@@ -201,9 +200,17 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 	// startup) fail -- an operator fixing record N and retrying would then
 	// find records 1..N-1 already seeded from the failed attempt, silently
 	// diverging from what "the seed file describes" is supposed to mean.
+	// agent_id is checked against atosrpc's own identifier format (not just
+	// emptiness) here, because SeedIdentity/ResolveAgentIdentity reject a
+	// malformed-but-non-empty agent_id only once actually reached -- which
+	// would otherwise still let earlier, well-formed records land first.
+	seenAgentIDs := make(map[string]bool, len(seeds))
 	for _, seed := range seeds {
-		if strings.TrimSpace(seed.AgentID) == "" || strings.TrimSpace(seed.CanonicalURI) == "" {
-			return 0, fmt.Errorf("identity seed missing agent_id or canonical_uri")
+		if strings.TrimSpace(seed.CanonicalURI) == "" {
+			return 0, fmt.Errorf("identity seed missing canonical_uri")
+		}
+		if !atosrpc.ValidIdentifier(seed.AgentID) {
+			return 0, fmt.Errorf("identity seed has an invalid agent_id %q", seed.AgentID)
 		}
 		if strings.TrimSpace(seed.Assurance) == "" || strings.EqualFold(strings.TrimSpace(seed.Assurance), "self_asserted") {
 			return 0, fmt.Errorf("identity seed %q must declare a non-self-asserted assurance level", seed.AgentID)
@@ -211,6 +218,10 @@ func seedIdentities(server *atosrpc.Server, path string) (int, error) {
 		if len(seed.Controllers) == 0 {
 			return 0, fmt.Errorf("identity seed %q must list at least one controller", seed.AgentID)
 		}
+		if seenAgentIDs[seed.AgentID] {
+			return 0, fmt.Errorf("identity seed file lists agent_id %q more than once", seed.AgentID)
+		}
+		seenAgentIDs[seed.AgentID] = true
 	}
 	applied := 0
 	for _, seed := range seeds {

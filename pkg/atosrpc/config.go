@@ -25,6 +25,17 @@ const (
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@/-]{1,255}$`)
 
+// ValidIdentifier reports whether value satisfies this package's identifier
+// format (used for principal_id/agent_id/request_id/idempotency_key/etc
+// throughout the RPC surface). Exported so callers that must reject a
+// malformed identifier BEFORE calling any RPC method -- e.g. validating an
+// entire batch upfront so a later record's bad identifier can't be
+// discovered only after earlier records already committed -- don't have to
+// duplicate this package's own identifier rule to do so.
+func ValidIdentifier(value string) bool {
+	return identifierPattern.MatchString(value)
+}
+
 // Authority is the trust/economic anchoring boundary. The bundled local
 // authority supports Managed mode only and emits references on the explicit
 // tos-local development network. A production TOS authority must independently

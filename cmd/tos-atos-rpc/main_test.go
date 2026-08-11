@@ -188,6 +188,69 @@ func TestSeedIdentities_ReappliesOnContentChange(t *testing.T) {
 	}
 }
 
+// TestSeedIdentities_MalformedAgentIDDoesNotLeakPartialApplication proves
+// the pre-validation pass catches a malformed-but-non-empty agent_id (which
+// SeedIdentity/ResolveAgentIdentity would only reject once actually
+// reached) BEFORE any record is applied -- not just an empty one.
+func TestSeedIdentities_MalformedAgentIDDoesNotLeakPartialApplication(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{
+		{
+			AgentID: "agt_seed_ok", CanonicalURI: "tos://agent/agt_seed_ok",
+			Controllers: []string{"0:8888888888888888888888888888888888888888888888888888888888888888"},
+			Assurance:   "tos_operator_verified",
+		},
+		{
+			AgentID: "bad agent id", CanonicalURI: "tos://agent/bad",
+			Controllers: []string{"0:9999999999999999999999999999999999999999999999999999999999999999"},
+			Assurance:   "tos_operator_verified",
+		},
+	})
+	if _, err := seedIdentities(server, path); err == nil {
+		t.Fatal("expected the malformed agent_id to reject the whole seed")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_ok",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.Found {
+		t.Fatal("the earlier, well-formed record must not have been committed when a later record's agent_id was malformed")
+	}
+}
+
+// TestSeedIdentities_RejectsDuplicateAgentIDInSameFile proves a seed file
+// listing the same agent_id twice is rejected outright, not silently
+// applied twice with the later record's content winning unnoticed.
+func TestSeedIdentities_RejectsDuplicateAgentIDInSameFile(t *testing.T) {
+	server := newTestServer(t)
+	path := writeIdentitySeedFile(t, []identitySeed{
+		{
+			AgentID: "agt_seed_dup", CanonicalURI: "tos://agent/agt_seed_dup",
+			Controllers: []string{"0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			Assurance:   "tos_operator_verified",
+		},
+		{
+			AgentID: "agt_seed_dup", CanonicalURI: "tos://agent/agt_seed_dup",
+			Controllers: []string{"0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+			Assurance:   "tos_operator_verified",
+		},
+	})
+	if _, err := seedIdentities(server, path); err == nil {
+		t.Fatal("expected a duplicate agent_id within one seed file to be rejected")
+	}
+	resp, err := server.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{
+		Context: testRequestContext(), AgentId: "agt_seed_dup",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.Found {
+		t.Fatal("a rejected duplicate-agent_id file must not have applied either record")
+	}
+}
+
 // TestSeedIdentities_ValidatesAllBeforeApplyingAny proves a later record's
 // validation failure does not leave earlier, individually-valid records
 // already durably committed -- an operator fixing the bad record and
