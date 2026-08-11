@@ -51,7 +51,7 @@ func verifiedQuoteFixture(t *testing.T) (*Server, *atostosv1.QuoteCommitmentInpu
 		t.Fatal(err)
 	}
 	expires := now.Add(10 * time.Minute).UnixMilli()
-	q := &atostosv1.QuoteCommitmentInput{QuoteId: "quote-1", PrincipalId: "principal-requester", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, TotalMax: &atostosv1.Money{Amount: "1.05", Currency: "USD"}, TermsDigest: digestMessage([]byte("terms")), ExpiresUnixMillis: expires, Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", RequesterAgentId: "agent-requester", ManifestDigest: manifest, OwnershipRef: capResp.Msg.Capability.OwnershipRef, Subtotal: &atostosv1.Money{Amount: "1.00", Currency: "USD"}, Fees: &atostosv1.Money{Amount: "0.05", Currency: "USD"}, AssetDecimals: 2, AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: now.Add(20 * time.Minute).UnixMilli(), SignerAuthorizationId: "auth-1", SignerAuthorizationRef: authResp.Msg.Authorization.AuthorizationRef, SettlementBackend: "tos", SettlementAsset: "TOS"}
+	q := &atostosv1.QuoteCommitmentInput{QuoteId: "quote-1", PrincipalId: "principal-requester", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, TotalMax: &atostosv1.Money{Amount: "1.05", Currency: "USD"}, TermsDigest: digestMessage([]byte("terms")), DisputePolicyDigest: digestMessage([]byte("dispute-policy")), ExpiresUnixMillis: expires, Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", RequesterAgentId: "agent-requester", ManifestDigest: manifest, OwnershipRef: capResp.Msg.Capability.OwnershipRef, Subtotal: &atostosv1.Money{Amount: "1.00", Currency: "USD"}, Fees: &atostosv1.Money{Amount: "0.05", Currency: "USD"}, AssetDecimals: 2, AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: now.Add(20 * time.Minute).UnixMilli(), SignerAuthorizationId: "auth-1", SignerAuthorizationRef: authResp.Msg.Authorization.AuthorizationRef, SettlementBackend: "tos", SettlementAsset: "TOS", UnderlyingServiceQuoteRef: "service-quote-1"}
 	return s, q
 }
 
@@ -68,7 +68,7 @@ func TestVerifiedQuoteCommitmentReplayConflictAndRecovery(t *testing.T) {
 	if !first.Msg.Created || !first.Msg.Quote.CommitmentRef.Finalized {
 		t.Fatalf("first=%+v", first.Msg)
 	}
-	if got := fmt.Sprintf("sha256:%x", first.Msg.Quote.CommitmentDigest.Value); got != "sha256:1ac05ca7ac3f9a4c0a314a43a658febf14031535dbb4ef47d2b2cf03406cb9a8" {
+	if got := fmt.Sprintf("sha256:%x", first.Msg.Quote.CommitmentDigest.Value); got != "sha256:a726197baa2d392aa4dfaf67a81ce89c6617177d607a14104f6d5bdb1a1ae159" {
 		t.Fatalf("commitment vector digest=%s", got)
 	}
 	replay, err := s.CommitQuote(ctx, request(q))
@@ -111,7 +111,10 @@ func TestVerifiedQuoteCanonicalLookupWorksOnIndependentReplicaAndFailsOnReorg(t 
 		t.Fatal(err)
 	}
 	defer other.Close()
-	request := connect.NewRequest(&atostosv1.GetQuoteCommitmentRequest{Context: readContext("cross-replica"), QuoteId: q.QuoteId, ExpectedQuote: q, ExpectedCommitmentRef: committed.Msg.Quote.CommitmentRef})
+	// Deliberately omit ExpectedCommitmentRef: this is the exact successful
+	// CommitQuote/lost-response recovery shape on a replica with an empty
+	// local bbolt cache.
+	request := connect.NewRequest(&atostosv1.GetQuoteCommitmentRequest{Context: readContext("cross-replica"), QuoteId: q.QuoteId, ExpectedQuote: q})
 	got, err := other.GetQuoteCommitment(ctx, request)
 	if err != nil || !got.Msg.Found || got.Msg.Quote.CommitmentRef.Reference != committed.Msg.Quote.CommitmentRef.Reference {
 		t.Fatalf("cross-replica lookup=%+v err=%v", got, err)
@@ -119,6 +122,27 @@ func TestVerifiedQuoteCanonicalLookupWorksOnIndependentReplicaAndFailsOnReorg(t 
 	authority.resolveErr = errors.New("reorganized")
 	if _, err := other.GetQuoteCommitment(ctx, request); err == nil {
 		t.Fatal("reorganized commitment remained usable")
+	}
+	if _, err := s.CommitQuote(ctx, connect.NewRequest(&atostosv1.CommitQuoteRequest{Context: mutationContext(q.QuoteId), Quote: q})); err == nil {
+		t.Fatal("cached CommitQuote replay bypassed live finality")
+	}
+}
+
+func TestVerifiedQuoteRejectsMissingCommercialTerms(t *testing.T) {
+	for name, mutate := range map[string]func(*atostosv1.QuoteCommitmentInput){
+		"settlement backend": func(q *atostosv1.QuoteCommitmentInput) { q.SettlementBackend = "" },
+		"settlement asset":   func(q *atostosv1.QuoteCommitmentInput) { q.SettlementAsset = "" },
+		"service quote":      func(q *atostosv1.QuoteCommitmentInput) { q.UnderlyingServiceQuoteRef = "" },
+		"dispute digest":     func(q *atostosv1.QuoteCommitmentInput) { q.DisputePolicyDigest = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, q := verifiedQuoteFixture(t)
+			mutate(q)
+			_, err := s.CommitQuote(context.Background(), connect.NewRequest(&atostosv1.CommitQuoteRequest{Context: mutationContext(q.QuoteId), Quote: q}))
+			if err == nil {
+				t.Fatal("missing required commercial term was accepted")
+			}
+		})
 	}
 }
 

@@ -65,8 +65,15 @@ type Authority interface {
 // re-observe a previously published commitment against the live network. A
 // finalized financial anchor is never resolved from the local RPC cache alone.
 type CommitmentResolver interface {
+	// ResolveCommitment performs a canonical tuple lookup. reference may be
+	// nil after a successful mutation response was lost; implementations must
+	// then discover by (kind, objectID, digest), return the finalized reference,
+	// or return ErrCommitmentNotFound. Local cache absence is never evidence of
+	// authoritative absence.
 	ResolveCommitment(context.Context, string, string, string, *NetworkReference) (*NetworkReference, error)
 }
+
+var ErrCommitmentNotFound = errors.New("canonical commitment not found")
 
 // Worker is the narrow Edge Core -> private Worker dependency used by
 // ExecutionGatewayService. localrpc.WorkerClient satisfies this interface.

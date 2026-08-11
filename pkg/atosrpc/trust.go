@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"regexp"
 	"strings"
@@ -70,6 +71,15 @@ func (s *Server) CommitQuote(
 			return nil, invalid("INVALID_ARGUMENT", "quote acceptance/expiry/execution deadlines are invalid")
 		}
 		if err := validateDigest(quote.ManifestDigest); err != nil {
+			return nil, err
+		}
+		if err := validateDigest(quote.DisputePolicyDigest); err != nil {
+			return nil, err
+		}
+		if quote.SettlementBackend != "tos" || quote.SettlementAsset != "TOS" {
+			return nil, invalid("INVALID_ARGUMENT", "verified Quote settlement must use the TOS backend and TOS provider asset")
+		}
+		if err := requiredIdentifier("underlying_service_quote_ref", quote.UnderlyingServiceQuoteRef); err != nil {
 			return nil, err
 		}
 		if quote.OwnershipRef == nil || quote.SignerAuthorizationRef == nil || quote.RequesterAgentId == "" || quote.SignerAuthorizationId == "" {
@@ -182,6 +192,19 @@ func (s *Server) CommitQuote(
 	if err != nil {
 		return nil, err
 	}
+	if verified {
+		digest, digestErr := quotecommitment.Digest(response.Quote.GetValue())
+		resolver, ok := s.authority.(CommitmentResolver)
+		if digestErr != nil || !ok || response.Quote.GetCommitmentRef() == nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "verified Quote requires live authority resolution")
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "quote", quote.QuoteId, digest, response.Quote.CommitmentRef)
+		if resolveErr != nil || !validLiveQuoteReference(s.authority.Network(), live, response.Quote.CommitmentRef) {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "verified Quote finality could not be re-observed")
+		}
+		response.Quote.CommitmentRef = cloneMessage(live)
+		response.Quote.CommitmentDigest = digestMessageFromString(digest)
+	}
 	return connect.NewResponse(response), nil
 }
 
@@ -265,25 +288,48 @@ func (s *Server) GetQuoteCommitment(
 			if digestErr != nil || storedDigest != expectedDigest {
 				return nil, conflict("QUOTE_MISMATCH", "stored Quote differs from expected canonical value")
 			}
-		} else if req.Msg.ExpectedCommitmentRef != nil {
-			response.Quote = &atostosv1.QuoteCommitment{Value: cloneMessage(req.Msg.ExpectedQuote), CommitmentRef: cloneMessage(req.Msg.ExpectedCommitmentRef), CommitmentDigest: digestMessageFromString(expectedDigest)}
-			response.Found = true
 		}
 	}
-	if response.Found && response.Quote != nil && response.Quote.Value != nil && response.Quote.Value.TrustMode == atostosv1.TrustMode_TRUST_MODE_VERIFIED {
-		digest, digestErr := quotecommitment.Digest(response.Quote.Value)
+	verifiedExpected := req.Msg.ExpectedQuote != nil && req.Msg.ExpectedQuote.TrustMode == atostosv1.TrustMode_TRUST_MODE_VERIFIED
+	verifiedStored := response.Found && response.Quote != nil && response.Quote.Value != nil && response.Quote.Value.TrustMode == atostosv1.TrustMode_TRUST_MODE_VERIFIED
+	if verifiedExpected || verifiedStored {
+		value := req.Msg.ExpectedQuote
+		if value == nil {
+			value = response.Quote.Value
+		}
+		digest, digestErr := quotecommitment.Digest(value)
 		resolver, ok := s.authority.(CommitmentResolver)
-		if digestErr != nil || !ok || response.Quote.CommitmentRef == nil {
+		if digestErr != nil || !ok {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "verified Quote requires live authority resolution")
 		}
-		live, resolveErr := resolver.ResolveCommitment(ctx, "quote", req.Msg.QuoteId, digest, response.Quote.CommitmentRef)
-		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != s.authority.Network() || live.Reference != response.Quote.CommitmentRef.Reference || live.FinalizedCheckpoint < response.Quote.CommitmentRef.FinalizedCheckpoint {
+		var known *NetworkReference
+		if response.Found {
+			known = response.Quote.CommitmentRef
+		} else {
+			known = req.Msg.ExpectedCommitmentRef
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "quote", req.Msg.QuoteId, digest, known)
+		if errors.Is(resolveErr, ErrCommitmentNotFound) {
+			return connect.NewResponse(&atostosv1.GetQuoteCommitmentResponse{}), nil
+		}
+		if resolveErr != nil || !validLiveQuoteReference(s.authority.Network(), live, known) {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "verified Quote finality could not be re-observed")
+		}
+		if !response.Found {
+			response.Quote = &atostosv1.QuoteCommitment{Value: cloneMessage(value), CommitmentRef: cloneMessage(live), CommitmentDigest: digestMessageFromString(digest)}
+			response.Found = true
 		}
 		response.Quote.CommitmentRef = cloneMessage(live)
 		response.Quote.CommitmentDigest = digestMessageFromString(digest)
 	}
 	return connect.NewResponse(response), nil
+}
+
+func validLiveQuoteReference(network string, live, known *NetworkReference) bool {
+	if live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != network || strings.TrimSpace(live.Reference) == "" {
+		return false
+	}
+	return known == nil || (live.Reference == known.Reference && live.FinalizedCheckpoint >= known.FinalizedCheckpoint)
 }
 
 func (s *Server) AuthorizeExecutionSigner(

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,12 +14,13 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	bolt "go.etcd.io/bbolt"
-	"google.golang.org/protobuf/proto"
 )
 
 type verifiedTestAuthority struct {
+	mu         sync.Mutex
 	closed     bool
 	resolveErr error
+	refs       map[string]string
 }
 
 func (*verifiedTestAuthority) Network() string { return "tos-test" }
@@ -26,20 +28,32 @@ func (*verifiedTestAuthority) Supports(mode TrustMode) bool {
 	return mode == TrustModeManaged || mode == TrustModeVerified
 }
 func (*verifiedTestAuthority) CheckReady(context.Context) error { return nil }
-func (*verifiedTestAuthority) Commit(
-	_ context.Context, kind, id, digest string,
-) (NetworkReference, error) {
-	return NetworkReference{Network: "tos-test", Reference: "tos:test:" + kind + ":" + id + ":" + digest, Finalized: true, FinalizedCheckpoint: 42}, nil
+func (a *verifiedTestAuthority) Commit(_ context.Context, kind, id, digest string) (NetworkReference, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.refs == nil {
+		a.refs = make(map[string]string)
+	}
+	key := kind + "\x00" + id + "\x00" + digest
+	reference := "tos:test:" + kind + ":" + id + ":" + digest
+	a.refs[key] = reference
+	return NetworkReference{Network: "tos-test", Reference: reference, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
 func (a *verifiedTestAuthority) Close() error { a.closed = true; return nil }
-func (a *verifiedTestAuthority) ResolveCommitment(_ context.Context, _, _, _ string, ref *NetworkReference) (*NetworkReference, error) {
+func (a *verifiedTestAuthority) ResolveCommitment(_ context.Context, kind, id, digest string, ref *NetworkReference) (*NetworkReference, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.resolveErr != nil {
 		return nil, a.resolveErr
 	}
-	if ref == nil {
-		return nil, errors.New("missing reference")
+	reference, ok := a.refs[kind+"\x00"+id+"\x00"+digest]
+	if !ok {
+		return nil, ErrCommitmentNotFound
 	}
-	return proto.Clone(ref).(*NetworkReference), nil
+	if ref != nil && (ref.Network != "tos-test" || ref.Reference != reference) {
+		return nil, ErrCommitmentNotFound
+	}
+	return &NetworkReference{Network: "tos-test", Reference: reference, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
 
 type verifiedTestEconomy struct{ closed bool }
