@@ -314,6 +314,9 @@ func (s *Server) ReleaseEscrow(
 	if err := requiredIdentifier("escrow_id", req.Msg.EscrowId); err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(req.Msg.ReasonCode) == "" || len(req.Msg.ReasonCode) > 128 {
+		return nil, invalid("INVALID_ARGUMENT", "release reason_code is required")
+	}
 	var canonicalEscrow *atostosv1.Escrow
 	if req.Msg.ExpectedTerms != nil {
 		lookup, lookupErr := s.GetEscrow(ctx, connect.NewRequest(&atostosv1.GetEscrowRequest{Context: req.Msg.Context, EscrowId: req.Msg.EscrowId, QuoteId: req.Msg.QuoteId, ExpectedTerms: req.Msg.ExpectedTerms, ExpectedEscrowRef: req.Msg.ExpectedEscrowRef, ExpectedReservationDigest: req.Msg.ExpectedReservationDigest}))
