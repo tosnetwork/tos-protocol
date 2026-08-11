@@ -25,7 +25,7 @@ func (*verifiedTestAuthority) CheckReady(context.Context) error { return nil }
 func (*verifiedTestAuthority) Commit(
 	_ context.Context, kind, id, digest string,
 ) (NetworkReference, error) {
-	return NetworkReference{Network: "tos-test", Reference: "tos:test:" + kind + ":" + id + ":" + digest}, nil
+	return NetworkReference{Network: "tos-test", Reference: "tos:test:" + kind + ":" + id + ":" + digest, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
 func (a *verifiedTestAuthority) Close() error { a.closed = true; return nil }
 

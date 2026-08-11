@@ -29,12 +29,26 @@ message QuoteCommitmentInput {
   string settlement_backend = 12;
   string settlement_asset = 13;
   string underlying_service_quote_ref = 14;
+  string version = 15;
+  string network_id = 16;
+  string domain = 17;
+  string requester_agent_id = 18;
+  Digest manifest_digest = 19;
+  NetworkReference ownership_ref = 20;
+  Money subtotal = 21;
+  Money fees = 22;
+  uint32 asset_decimals = 23;
+  int64 acceptance_deadline_unix_millis = 24;
+  int64 execution_deadline_unix_millis = 25;
+  string signer_authorization_id = 26;
+  NetworkReference signer_authorization_ref = 27;
 }
 
 message QuoteCommitment {
   QuoteCommitmentInput value = 1;
   NetworkReference commitment_ref = 2;
   int64 committed_unix_millis = 3;
+  Digest commitment_digest = 4;
 }
 
 message CommitQuoteRequest {

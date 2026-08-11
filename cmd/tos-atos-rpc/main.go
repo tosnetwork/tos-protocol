@@ -57,6 +57,7 @@ func main() {
 		// is safe (SeedIdentity's Authority.Commit digest is stable across
 		// identical re-seeds, and unchanged records are skipped entirely).
 		identitySeedFile = flag.String("identity-seed-file", os.Getenv("TOS_ATOS_RPC_IDENTITY_SEED_FILE"), "JSON array of already-verified AgentIdentity records to seed at startup")
+		trustDomain      = flag.String("trust-domain", envOr("TOS_ATOS_RPC_TRUST_DOMAIN", "atos.im"), "verified Quote commitment domain")
 	)
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -97,7 +98,8 @@ func main() {
 	server, err := atosrpc.Open(atosrpc.Config{
 		StatePath: *statePath, BearerToken: *bearerToken,
 		Authority: authority, EconomicDriver: economicDriver,
-		Worker: worker, Router: router,
+		TrustDomain: *trustDomain,
+		Worker:      worker, Router: router,
 	})
 	if err != nil {
 		logger.Error("open ATOS RPC server", "error", err)

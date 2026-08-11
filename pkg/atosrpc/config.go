@@ -197,6 +197,7 @@ type Config struct {
 	CallTimeout      time.Duration
 	Retention        time.Duration
 	Now              func() time.Time
+	TrustDomain      string
 }
 
 func (c Config) withDefaults() (Config, error) {
@@ -211,6 +212,12 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if strings.TrimSpace(c.Authority.Network()) == "" {
 		return Config{}, errors.New("ATOS RPC authority network is required")
+	}
+	if strings.TrimSpace(c.TrustDomain) == "" {
+		c.TrustDomain = "atos.im"
+	}
+	if !identifierPattern.MatchString(c.TrustDomain) {
+		return Config{}, errors.New("invalid ATOS RPC trust domain")
 	}
 	if c.EconomicDriver != nil {
 		if strings.TrimSpace(c.EconomicDriver.Network()) == "" ||
