@@ -12,10 +12,9 @@ import (
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	bolt "go.etcd.io/bbolt"
 )
-
-const verifiedQuoteVersion = "atos_verified_quote_commitment_v1"
 
 var canonicalMoneyPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
@@ -27,6 +26,9 @@ func (s *Server) CommitQuote(
 		return nil, invalid("INVALID_ARGUMENT", "quote commitment is required")
 	}
 	quote := req.Msg.Quote
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
+	}
 	for name, value := range map[string]string{
 		"quote_id": quote.QuoteId, "principal_id": quote.PrincipalId,
 		"provider_id": quote.ProviderId, "capability_id": quote.CapabilityId,
@@ -44,7 +46,7 @@ func (s *Server) CommitQuote(
 	}
 	verified := quote.TrustMode == atostosv1.TrustMode_TRUST_MODE_VERIFIED
 	if verified {
-		if quote.Version != verifiedQuoteVersion || quote.NetworkId != s.authority.Network() || quote.Domain != s.config.TrustDomain {
+		if quote.Version != quotecommitment.Version || quote.Canonicalization != quotecommitment.Canonicalization || quote.NetworkId != s.authority.Network() || quote.Domain != s.config.TrustDomain {
 			return nil, invalid("NETWORK_DOMAIN_MISMATCH", "quote version, network, or domain does not match this authority")
 		}
 		if req.Msg.Context == nil || req.Msg.Context.IdempotencyKey != quote.QuoteId {
@@ -127,24 +129,32 @@ func (s *Server) CommitQuote(
 			}
 		}
 		commitmentDomain := "ATOS-TOS-QUOTE-COMMITMENT-V1"
-		if verified {
-			commitmentDomain = "ATOS-TOS-VERIFIED-QUOTE-COMMITMENT-V1"
-		}
 		existing := new(atostosv1.QuoteCommitment)
 		exists, err := s.store.getProto(tx, bucketQuoteCommitments, quote.QuoteId, existing)
 		if err != nil {
 			return err
 		}
 		if exists {
-			existingDigest, _ := protoDigest(commitmentDomain, existing.Value)
-			requestedDigest, _ := protoDigest(commitmentDomain, quote)
+			existingDigest, requestedDigest := "", ""
+			if verified {
+				existingDigest, _ = quotecommitment.Digest(existing.Value)
+				requestedDigest, _ = quotecommitment.Digest(quote)
+			} else {
+				existingDigest, _ = protoDigest(commitmentDomain, existing.Value)
+				requestedDigest, _ = protoDigest(commitmentDomain, quote)
+			}
 			if existingDigest != requestedDigest {
 				return conflict("QUOTE_MISMATCH", "quote ID is already committed to different terms")
 			}
 			response.Quote = existing
 			return nil
 		}
-		digest, err := protoDigest(commitmentDomain, quote)
+		var digest string
+		if verified {
+			digest, err = quotecommitment.Digest(quote)
+		} else {
+			digest, err = protoDigest(commitmentDomain, quote)
+		}
 		if err != nil {
 			return err
 		}
@@ -152,7 +162,7 @@ func (s *Server) CommitQuote(
 		if err != nil {
 			return unavailable("NETWORK_UNAVAILABLE", "quote commitment authority is unavailable")
 		}
-		if verified && (ref.Network != quote.NetworkId || !ref.Finalized) {
+		if verified && (ref.Network != quote.NetworkId || !ref.Finalized || ref.FinalizedCheckpoint == 0) {
 			return unavailable("AUTHORITY_NOT_FINAL", "quote commitment authority did not return matching finalized state")
 		}
 		committed := &atostosv1.QuoteCommitment{
@@ -212,11 +222,14 @@ func validateVerifiedQuoteMoney(q *atostosv1.QuoteCommitmentInput) error {
 }
 
 func (s *Server) GetQuoteCommitment(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.GetQuoteCommitmentRequest],
 ) (*connect.Response[atostosv1.GetQuoteCommitmentResponse], error) {
 	if req == nil || req.Msg == nil {
 		return nil, invalid("INVALID_ARGUMENT", "request is required")
+	}
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
 	}
 	if err := validateReadContext(req.Msg.Context, s.now()); err != nil {
 		return nil, err
@@ -238,6 +251,37 @@ func (s *Server) GetQuoteCommitment(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if req.Msg.ExpectedQuote != nil {
+		if req.Msg.ExpectedQuote.QuoteId != req.Msg.QuoteId {
+			return nil, invalid("INVALID_ARGUMENT", "expected quote_id mismatch")
+		}
+		expectedDigest, digestErr := quotecommitment.Digest(req.Msg.ExpectedQuote)
+		if digestErr != nil {
+			return nil, invalid("INVALID_ARGUMENT", "expected Quote cannot be canonicalized")
+		}
+		if response.Found {
+			storedDigest, digestErr := quotecommitment.Digest(response.Quote.Value)
+			if digestErr != nil || storedDigest != expectedDigest {
+				return nil, conflict("QUOTE_MISMATCH", "stored Quote differs from expected canonical value")
+			}
+		} else if req.Msg.ExpectedCommitmentRef != nil {
+			response.Quote = &atostosv1.QuoteCommitment{Value: cloneMessage(req.Msg.ExpectedQuote), CommitmentRef: cloneMessage(req.Msg.ExpectedCommitmentRef), CommitmentDigest: digestMessageFromString(expectedDigest)}
+			response.Found = true
+		}
+	}
+	if response.Found && response.Quote != nil && response.Quote.Value != nil && response.Quote.Value.TrustMode == atostosv1.TrustMode_TRUST_MODE_VERIFIED {
+		digest, digestErr := quotecommitment.Digest(response.Quote.Value)
+		resolver, ok := s.authority.(CommitmentResolver)
+		if digestErr != nil || !ok || response.Quote.CommitmentRef == nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "verified Quote requires live authority resolution")
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "quote", req.Msg.QuoteId, digest, response.Quote.CommitmentRef)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != s.authority.Network() || live.Reference != response.Quote.CommitmentRef.Reference || live.FinalizedCheckpoint < response.Quote.CommitmentRef.FinalizedCheckpoint {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "verified Quote finality could not be re-observed")
+		}
+		response.Quote.CommitmentRef = cloneMessage(live)
+		response.Quote.CommitmentDigest = digestMessageFromString(digest)
 	}
 	return connect.NewResponse(response), nil
 }

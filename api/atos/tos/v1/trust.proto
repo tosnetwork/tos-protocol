@@ -42,6 +42,7 @@ message QuoteCommitmentInput {
   int64 execution_deadline_unix_millis = 25;
   string signer_authorization_id = 26;
   NetworkReference signer_authorization_ref = 27;
+  string canonicalization = 28;
 }
 
 message QuoteCommitment {
@@ -64,6 +65,8 @@ message CommitQuoteResponse {
 message GetQuoteCommitmentRequest {
   RequestContext context = 1;
   string quote_id = 2;
+  QuoteCommitmentInput expected_quote = 3;
+  NetworkReference expected_commitment_ref = 4;
 }
 
 message GetQuoteCommitmentResponse {

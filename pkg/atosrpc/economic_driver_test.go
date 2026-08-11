@@ -13,9 +13,13 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/protobuf/proto"
 )
 
-type verifiedTestAuthority struct{ closed bool }
+type verifiedTestAuthority struct {
+	closed     bool
+	resolveErr error
+}
 
 func (*verifiedTestAuthority) Network() string { return "tos-test" }
 func (*verifiedTestAuthority) Supports(mode TrustMode) bool {
@@ -28,6 +32,15 @@ func (*verifiedTestAuthority) Commit(
 	return NetworkReference{Network: "tos-test", Reference: "tos:test:" + kind + ":" + id + ":" + digest, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
 func (a *verifiedTestAuthority) Close() error { a.closed = true; return nil }
+func (a *verifiedTestAuthority) ResolveCommitment(_ context.Context, _, _, _ string, ref *NetworkReference) (*NetworkReference, error) {
+	if a.resolveErr != nil {
+		return nil, a.resolveErr
+	}
+	if ref == nil {
+		return nil, errors.New("missing reference")
+	}
+	return proto.Clone(ref).(*NetworkReference), nil
+}
 
 type verifiedTestEconomy struct{ closed bool }
 

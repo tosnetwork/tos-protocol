@@ -50,6 +50,7 @@ type QuoteCommitmentInput struct {
 	ExecutionDeadlineUnixMillis  int64                  `protobuf:"varint,25,opt,name=execution_deadline_unix_millis,json=executionDeadlineUnixMillis,proto3" json:"execution_deadline_unix_millis,omitempty"`
 	SignerAuthorizationId        string                 `protobuf:"bytes,26,opt,name=signer_authorization_id,json=signerAuthorizationId,proto3" json:"signer_authorization_id,omitempty"`
 	SignerAuthorizationRef       *NetworkReference      `protobuf:"bytes,27,opt,name=signer_authorization_ref,json=signerAuthorizationRef,proto3" json:"signer_authorization_ref,omitempty"`
+	Canonicalization             string                 `protobuf:"bytes,28,opt,name=canonicalization,proto3" json:"canonicalization,omitempty"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache
 }
@@ -273,6 +274,13 @@ func (x *QuoteCommitmentInput) GetSignerAuthorizationRef() *NetworkReference {
 	return nil
 }
 
+func (x *QuoteCommitmentInput) GetCanonicalization() string {
+	if x != nil {
+		return x.Canonicalization
+	}
+	return ""
+}
+
 type QuoteCommitment struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Value               *QuoteCommitmentInput  `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
@@ -446,11 +454,13 @@ func (x *CommitQuoteResponse) GetCreated() bool {
 }
 
 type GetQuoteCommitmentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	QuoteId       string                 `protobuf:"bytes,2,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Context               *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	QuoteId               string                 `protobuf:"bytes,2,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	ExpectedQuote         *QuoteCommitmentInput  `protobuf:"bytes,3,opt,name=expected_quote,json=expectedQuote,proto3" json:"expected_quote,omitempty"`
+	ExpectedCommitmentRef *NetworkReference      `protobuf:"bytes,4,opt,name=expected_commitment_ref,json=expectedCommitmentRef,proto3" json:"expected_commitment_ref,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GetQuoteCommitmentRequest) Reset() {
@@ -495,6 +505,20 @@ func (x *GetQuoteCommitmentRequest) GetQuoteId() string {
 		return x.QuoteId
 	}
 	return ""
+}
+
+func (x *GetQuoteCommitmentRequest) GetExpectedQuote() *QuoteCommitmentInput {
+	if x != nil {
+		return x.ExpectedQuote
+	}
+	return nil
+}
+
+func (x *GetQuoteCommitmentRequest) GetExpectedCommitmentRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedCommitmentRef
+	}
+	return nil
 }
 
 type GetQuoteCommitmentResponse struct {
@@ -1089,8 +1113,7 @@ var File_atos_tos_v1_trust_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\n" +
-	"\x17atos/tos/v1/trust.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\xda\n" +
-	"\n" +
+	"\x17atos/tos/v1/trust.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\x86\v\n" +
 	"\x14QuoteCommitmentInput\x12\x19\n" +
 	"\bquote_id\x18\x01 \x01(\tR\aquoteId\x12!\n" +
 	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x12\x1f\n" +
@@ -1122,7 +1145,8 @@ const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\x1facceptance_deadline_unix_millis\x18\x18 \x01(\x03R\x1cacceptanceDeadlineUnixMillis\x12C\n" +
 	"\x1eexecution_deadline_unix_millis\x18\x19 \x01(\x03R\x1bexecutionDeadlineUnixMillis\x126\n" +
 	"\x17signer_authorization_id\x18\x1a \x01(\tR\x15signerAuthorizationId\x12W\n" +
-	"\x18signer_authorization_ref\x18\x1b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x16signerAuthorizationRef\"\x86\x02\n" +
+	"\x18signer_authorization_ref\x18\x1b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x16signerAuthorizationRef\x12*\n" +
+	"\x10canonicalization\x18\x1c \x01(\tR\x10canonicalization\"\x86\x02\n" +
 	"\x0fQuoteCommitment\x127\n" +
 	"\x05value\x18\x01 \x01(\v2!.atos.tos.v1.QuoteCommitmentInputR\x05value\x12D\n" +
 	"\x0ecommitment_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rcommitmentRef\x122\n" +
@@ -1133,10 +1157,12 @@ const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\x05quote\x18\x02 \x01(\v2!.atos.tos.v1.QuoteCommitmentInputR\x05quote\"c\n" +
 	"\x13CommitQuoteResponse\x122\n" +
 	"\x05quote\x18\x01 \x01(\v2\x1c.atos.tos.v1.QuoteCommitmentR\x05quote\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"m\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\x8e\x02\n" +
 	"\x19GetQuoteCommitmentRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x19\n" +
-	"\bquote_id\x18\x02 \x01(\tR\aquoteId\"f\n" +
+	"\bquote_id\x18\x02 \x01(\tR\aquoteId\x12H\n" +
+	"\x0eexpected_quote\x18\x03 \x01(\v2!.atos.tos.v1.QuoteCommitmentInputR\rexpectedQuote\x12U\n" +
+	"\x17expected_commitment_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x15expectedCommitmentRef\"f\n" +
 	"\x1aGetQuoteCommitmentResponse\x122\n" +
 	"\x05quote\x18\x01 \x01(\v2\x1c.atos.tos.v1.QuoteCommitmentR\x05quote\x12\x14\n" +
 	"\x05found\x18\x02 \x01(\bR\x05found\"\xbc\x03\n" +
@@ -1245,32 +1271,34 @@ var file_atos_tos_v1_trust_proto_depIdxs = []int32{
 	0,  // 14: atos.tos.v1.CommitQuoteRequest.quote:type_name -> atos.tos.v1.QuoteCommitmentInput
 	1,  // 15: atos.tos.v1.CommitQuoteResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
 	19, // 16: atos.tos.v1.GetQuoteCommitmentRequest.context:type_name -> atos.tos.v1.RequestContext
-	1,  // 17: atos.tos.v1.GetQuoteCommitmentResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
-	6,  // 18: atos.tos.v1.ExecutionSignerAuthorization.value:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
-	18, // 19: atos.tos.v1.ExecutionSignerAuthorization.authorization_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 20: atos.tos.v1.ExecutionSignerAuthorization.revocation_ref:type_name -> atos.tos.v1.NetworkReference
-	19, // 21: atos.tos.v1.AuthorizeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
-	6,  // 22: atos.tos.v1.AuthorizeExecutionSignerRequest.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
-	7,  // 23: atos.tos.v1.AuthorizeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	19, // 24: atos.tos.v1.RevokeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
-	7,  // 25: atos.tos.v1.RevokeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	19, // 26: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.context:type_name -> atos.tos.v1.RequestContext
-	7,  // 27: atos.tos.v1.ResolveExecutionSignerAuthorizationResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	2,  // 28: atos.tos.v1.TrustService.CommitQuote:input_type -> atos.tos.v1.CommitQuoteRequest
-	4,  // 29: atos.tos.v1.TrustService.GetQuoteCommitment:input_type -> atos.tos.v1.GetQuoteCommitmentRequest
-	8,  // 30: atos.tos.v1.TrustService.AuthorizeExecutionSigner:input_type -> atos.tos.v1.AuthorizeExecutionSignerRequest
-	10, // 31: atos.tos.v1.TrustService.RevokeExecutionSigner:input_type -> atos.tos.v1.RevokeExecutionSignerRequest
-	12, // 32: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:input_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationRequest
-	3,  // 33: atos.tos.v1.TrustService.CommitQuote:output_type -> atos.tos.v1.CommitQuoteResponse
-	5,  // 34: atos.tos.v1.TrustService.GetQuoteCommitment:output_type -> atos.tos.v1.GetQuoteCommitmentResponse
-	9,  // 35: atos.tos.v1.TrustService.AuthorizeExecutionSigner:output_type -> atos.tos.v1.AuthorizeExecutionSignerResponse
-	11, // 36: atos.tos.v1.TrustService.RevokeExecutionSigner:output_type -> atos.tos.v1.RevokeExecutionSignerResponse
-	13, // 37: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:output_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationResponse
-	33, // [33:38] is the sub-list for method output_type
-	28, // [28:33] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	0,  // 17: atos.tos.v1.GetQuoteCommitmentRequest.expected_quote:type_name -> atos.tos.v1.QuoteCommitmentInput
+	18, // 18: atos.tos.v1.GetQuoteCommitmentRequest.expected_commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	1,  // 19: atos.tos.v1.GetQuoteCommitmentResponse.quote:type_name -> atos.tos.v1.QuoteCommitment
+	6,  // 20: atos.tos.v1.ExecutionSignerAuthorization.value:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
+	18, // 21: atos.tos.v1.ExecutionSignerAuthorization.authorization_ref:type_name -> atos.tos.v1.NetworkReference
+	18, // 22: atos.tos.v1.ExecutionSignerAuthorization.revocation_ref:type_name -> atos.tos.v1.NetworkReference
+	19, // 23: atos.tos.v1.AuthorizeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
+	6,  // 24: atos.tos.v1.AuthorizeExecutionSignerRequest.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
+	7,  // 25: atos.tos.v1.AuthorizeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	19, // 26: atos.tos.v1.RevokeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
+	7,  // 27: atos.tos.v1.RevokeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	19, // 28: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.context:type_name -> atos.tos.v1.RequestContext
+	7,  // 29: atos.tos.v1.ResolveExecutionSignerAuthorizationResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	2,  // 30: atos.tos.v1.TrustService.CommitQuote:input_type -> atos.tos.v1.CommitQuoteRequest
+	4,  // 31: atos.tos.v1.TrustService.GetQuoteCommitment:input_type -> atos.tos.v1.GetQuoteCommitmentRequest
+	8,  // 32: atos.tos.v1.TrustService.AuthorizeExecutionSigner:input_type -> atos.tos.v1.AuthorizeExecutionSignerRequest
+	10, // 33: atos.tos.v1.TrustService.RevokeExecutionSigner:input_type -> atos.tos.v1.RevokeExecutionSignerRequest
+	12, // 34: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:input_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationRequest
+	3,  // 35: atos.tos.v1.TrustService.CommitQuote:output_type -> atos.tos.v1.CommitQuoteResponse
+	5,  // 36: atos.tos.v1.TrustService.GetQuoteCommitment:output_type -> atos.tos.v1.GetQuoteCommitmentResponse
+	9,  // 37: atos.tos.v1.TrustService.AuthorizeExecutionSigner:output_type -> atos.tos.v1.AuthorizeExecutionSignerResponse
+	11, // 38: atos.tos.v1.TrustService.RevokeExecutionSigner:output_type -> atos.tos.v1.RevokeExecutionSignerResponse
+	13, // 39: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:output_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationResponse
+	35, // [35:40] is the sub-list for method output_type
+	30, // [30:35] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_trust_proto_init() }

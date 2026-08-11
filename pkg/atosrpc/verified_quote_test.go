@@ -2,6 +2,7 @@ package atosrpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -49,7 +51,7 @@ func verifiedQuoteFixture(t *testing.T) (*Server, *atostosv1.QuoteCommitmentInpu
 		t.Fatal(err)
 	}
 	expires := now.Add(10 * time.Minute).UnixMilli()
-	q := &atostosv1.QuoteCommitmentInput{QuoteId: "quote-1", PrincipalId: "principal-requester", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, TotalMax: &atostosv1.Money{Amount: "1.05", Currency: "USD"}, TermsDigest: digestMessage([]byte("terms")), ExpiresUnixMillis: expires, Version: verifiedQuoteVersion, NetworkId: "tos-test", Domain: "atos.im", RequesterAgentId: "agent-requester", ManifestDigest: manifest, OwnershipRef: capResp.Msg.Capability.OwnershipRef, Subtotal: &atostosv1.Money{Amount: "1.00", Currency: "USD"}, Fees: &atostosv1.Money{Amount: "0.05", Currency: "USD"}, AssetDecimals: 2, AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: now.Add(20 * time.Minute).UnixMilli(), SignerAuthorizationId: "auth-1", SignerAuthorizationRef: authResp.Msg.Authorization.AuthorizationRef, SettlementBackend: "tos", SettlementAsset: "TOS"}
+	q := &atostosv1.QuoteCommitmentInput{QuoteId: "quote-1", PrincipalId: "principal-requester", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, TotalMax: &atostosv1.Money{Amount: "1.05", Currency: "USD"}, TermsDigest: digestMessage([]byte("terms")), ExpiresUnixMillis: expires, Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", RequesterAgentId: "agent-requester", ManifestDigest: manifest, OwnershipRef: capResp.Msg.Capability.OwnershipRef, Subtotal: &atostosv1.Money{Amount: "1.00", Currency: "USD"}, Fees: &atostosv1.Money{Amount: "0.05", Currency: "USD"}, AssetDecimals: 2, AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: now.Add(20 * time.Minute).UnixMilli(), SignerAuthorizationId: "auth-1", SignerAuthorizationRef: authResp.Msg.Authorization.AuthorizationRef, SettlementBackend: "tos", SettlementAsset: "TOS"}
 	return s, q
 }
 
@@ -66,7 +68,7 @@ func TestVerifiedQuoteCommitmentReplayConflictAndRecovery(t *testing.T) {
 	if !first.Msg.Created || !first.Msg.Quote.CommitmentRef.Finalized {
 		t.Fatalf("first=%+v", first.Msg)
 	}
-	if got := fmt.Sprintf("sha256:%x", first.Msg.Quote.CommitmentDigest.Value); got != "sha256:fe88505b6e6404e97b02973e189ae008e896a46449806706ec2259f621998043" {
+	if got := fmt.Sprintf("sha256:%x", first.Msg.Quote.CommitmentDigest.Value); got != "sha256:1ac05ca7ac3f9a4c0a314a43a658febf14031535dbb4ef47d2b2cf03406cb9a8" {
 		t.Fatalf("commitment vector digest=%s", got)
 	}
 	replay, err := s.CommitQuote(ctx, request(q))
@@ -84,6 +86,39 @@ func TestVerifiedQuoteCommitmentReplayConflictAndRecovery(t *testing.T) {
 	changed.TotalMax.Amount = "2.05"
 	if _, err := s.CommitQuote(ctx, request(changed)); err == nil {
 		t.Fatal("changed semantics replay succeeded")
+	}
+}
+
+func TestVerifiedQuoteRejectsUnknownFieldsRecursively(t *testing.T) {
+	s, q := verifiedQuoteFixture(t)
+	q.TotalMax.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01})
+	_, err := s.CommitQuote(context.Background(), connect.NewRequest(&atostosv1.CommitQuoteRequest{Context: mutationContext(q.QuoteId), Quote: q}))
+	if err == nil {
+		t.Fatal("recursive protobuf unknown field was accepted")
+	}
+}
+
+func TestVerifiedQuoteCanonicalLookupWorksOnIndependentReplicaAndFailsOnReorg(t *testing.T) {
+	s, q := verifiedQuoteFixture(t)
+	ctx := context.Background()
+	committed, err := s.CommitQuote(ctx, connect.NewRequest(&atostosv1.CommitQuoteRequest{Context: mutationContext(q.QuoteId), Quote: q}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority := s.authority.(*verifiedTestAuthority)
+	other, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "other.db"), BearerToken: "test", Authority: authority, EconomicDriver: new(verifiedTestEconomy), Now: s.now, TrustDomain: "atos.im"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	request := connect.NewRequest(&atostosv1.GetQuoteCommitmentRequest{Context: readContext("cross-replica"), QuoteId: q.QuoteId, ExpectedQuote: q, ExpectedCommitmentRef: committed.Msg.Quote.CommitmentRef})
+	got, err := other.GetQuoteCommitment(ctx, request)
+	if err != nil || !got.Msg.Found || got.Msg.Quote.CommitmentRef.Reference != committed.Msg.Quote.CommitmentRef.Reference {
+		t.Fatalf("cross-replica lookup=%+v err=%v", got, err)
+	}
+	authority.resolveErr = errors.New("reorganized")
+	if _, err := other.GetQuoteCommitment(ctx, request); err == nil {
+		t.Fatal("reorganized commitment remained usable")
 	}
 }
 
