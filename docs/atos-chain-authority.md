@@ -202,5 +202,6 @@ second send; operators must restore authoritative visibility or reconcile the
 journal rather than widening mutation authority.
 At construction the publisher copies the validated tosctl configuration into
 an unlinked, owner-only file descriptor. Every child receives only that fixed
-descriptor (`/proc/self/fd/3`), so replacing or editing the original path after
+descriptor through tosctl's explicit `--config-fd 3 --config-format json`
+interface, so no `/proc` path or filename extension is involved. Replacing or editing the original path after
 startup cannot redirect wallet sends and there is no check/use pathname race.

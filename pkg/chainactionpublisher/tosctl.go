@@ -43,7 +43,7 @@ type TosctlBackend struct {
 	genesisRootHash, genesisFileHash             string
 	lookback                                     int
 	recoveryWait, poll                           time.Duration
-	mu                                           sync.Mutex
+	mu, configMu                                 sync.Mutex
 }
 
 func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
@@ -195,10 +195,18 @@ func receiptFor(a chain.Action, ref string) chain.ActionReceipt {
 	return chain.ActionReceipt{Version: a.Version, ActionID: a.ActionID, Network: a.Network, Kind: a.Kind, CommitmentKind: a.CommitmentKind, ObjectID: a.ObjectID, Digest: a.Digest, Reference: ref, Payer: a.Payer, Payee: a.Payee, AmountNanoTOS: a.AmountNanoTOS, Comment: a.Comment}
 }
 func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error) {
-	if b == nil || b.configFile == nil {
+	if b == nil {
 		return nil, errors.New("tosctl backend is closed")
 	}
-	args = append(args, "-c", "/proc/self/fd/3")
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.configFile == nil {
+		return nil, errors.New("tosctl backend is closed")
+	}
+	if _, err := b.configFile.Seek(0, 0); err != nil {
+		return nil, errors.New("seek pinned tosctl config")
+	}
+	args = append(args, "--config-fd", "3", "--config-format", "json")
 	command := exec.CommandContext(ctx, b.binary, args...)
 	command.ExtraFiles = []*os.File{b.configFile}
 	command.Env = backendEnvironment(b.vaultURL)
@@ -214,7 +222,12 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	return stdout.Bytes(), nil
 }
 func (b *TosctlBackend) Close() error {
-	if b == nil || b.configFile == nil {
+	if b == nil {
+		return nil
+	}
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.configFile == nil {
 		return nil
 	}
 	err := b.configFile.Close()

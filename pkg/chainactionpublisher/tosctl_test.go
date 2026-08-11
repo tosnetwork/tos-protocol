@@ -44,7 +44,7 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	}))
 	defer rpc.Close()
 	script := filepath.Join(dir, "tosctl")
-	content := "#!/bin/sh\nfor last do :; done\ngrep -F '" + rpc.URL + "' \"$last\" >/dev/null || exit 42\nif [ \"$1 $2\" = \"wallet ls\" ]; then echo '[{\"name\":\"anchor\",\"address\":\"" + payer + "\",\"balance\":0,\"state\":\"active\",\"wallet_type\":\"V3R2\",\"seqno\":1}]'; exit 0; fi\ntouch '" + marker + "'\nexit 1\n"
+	content := "#!/bin/sh\ngrep -F '" + rpc.URL + "' <&3 >/dev/null || exit 42\nif [ \"$1 $2\" = \"wallet ls\" ]; then echo '[{\"name\":\"anchor\",\"address\":\"" + payer + "\",\"balance\":0,\"state\":\"active\",\"wallet_type\":\"V3R2\",\"seqno\":1}]'; exit 0; fi\ntouch '" + marker + "'\nexit 1\n"
 	if err := os.WriteFile(script, []byte(content), 0o700); err != nil {
 		t.Fatal(err)
 	}
