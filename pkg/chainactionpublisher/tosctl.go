@@ -3,6 +3,7 @@ package chainactionpublisher
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +28,8 @@ type TosctlBackendConfig struct {
 	ConfigPath         string `json:"configPath"`
 	VaultURL           string `json:"vaultUrl"`
 	RPCURL             string `json:"rpcUrl"`
+	GenesisRootHash    string `json:"genesisRootHash"`
+	GenesisFileHash    string `json:"genesisFileHash"`
 	WalletName         string `json:"walletName"`
 	Payer              string `json:"payer"`
 	Lookback           int    `json:"lookback,omitempty"`
@@ -36,6 +39,7 @@ type TosctlBackendConfig struct {
 type TosctlBackend struct {
 	network, binary, configPath, vaultURL, walletName, payer string
 	client                                                   *chain.Client
+	genesisRootHash, genesisFileHash                         string
 	lookback                                                 int
 	recoveryWait, poll                                       time.Duration
 	mu                                                       sync.Mutex
@@ -55,6 +59,13 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	stat, ok := configInfo.Sys().(*syscall.Stat_t)
 	if !ok || stat.Uid != uint32(os.Geteuid()) {
 		return nil, errors.New("tosctl config owner mismatch")
+	}
+	configuredRPC, err := tosctlRPCURL(c.ConfigPath)
+	if err != nil || configuredRPC != c.RPCURL {
+		return nil, errors.New("tosctl send RPC does not match recovery RPC")
+	}
+	if !validBase64Hash(c.GenesisRootHash) || !validBase64Hash(c.GenesisFileHash) {
+		return nil, errors.New("invalid expected TOS genesis identity")
 	}
 	payer, err := toschain.CanonicalAddress(c.Payer)
 	if err != nil {
@@ -84,7 +95,7 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if poll < 100*time.Millisecond || poll > 5*time.Second {
 		return nil, errors.New("invalid tosctl recovery poll")
 	}
-	return &TosctlBackend{network: c.Network, binary: c.Binary, configPath: c.ConfigPath, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, lookback: c.Lookback, recoveryWait: recovery, poll: poll}, nil
+	return &TosctlBackend{network: c.Network, binary: c.Binary, configPath: c.ConfigPath, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, lookback: c.Lookback, recoveryWait: recovery, poll: poll}, nil
 }
 
 type tosctlWallet struct {
@@ -100,9 +111,17 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 	if b == nil || b.client == nil {
 		return BackendCapabilities{}, errors.New("invalid tosctl backend")
 	}
-	var master map[string]any
+	var master struct {
+		Init struct {
+			RootHash string `json:"root_hash"`
+			FileHash string `json:"file_hash"`
+		} `json:"init"`
+	}
 	if err := b.client.Call(ctx, "getMasterchainInfo", struct{}{}, &master); err != nil {
 		return BackendCapabilities{}, err
+	}
+	if master.Init.RootHash != b.genesisRootHash || master.Init.FileHash != b.genesisFileHash {
+		return BackendCapabilities{}, errors.New("TOS genesis identity mismatch")
 	}
 	out, err := b.run(ctx, "wallet", "ls", "--format", "json")
 	if err != nil {
@@ -124,13 +143,16 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 	}
 	return BackendCapabilities{Version: ProtocolVersion, Network: b.network, RecoverByActionID: true, SearchBeforeBroadcast: true}, nil
 }
-func (b *TosctlBackend) Publish(ctx context.Context, a chain.Action, _ bool) (chain.ActionReceipt, error) {
+func (b *TosctlBackend) Publish(ctx context.Context, a chain.Action, recovering bool) (chain.ActionReceipt, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if ref, found, err := b.find(ctx, a); err != nil {
 		return chain.ActionReceipt{}, err
 	} else if found {
 		return receiptFor(a, ref), nil
+	}
+	if recovering {
+		return chain.ActionReceipt{}, errors.New("uncertain action is outside authoritative recovery visibility")
 	}
 	_, commandErr := b.run(ctx, "wallet", "send", "--from", b.walletName, "--to", a.Payee, "--amount-nanotos", strconv.FormatUint(a.AmountNanoTOS, 10), "--message", a.Comment, "--yes")
 	deadline := time.Now().Add(b.recoveryWait)
@@ -188,4 +210,44 @@ func backendEnvironment(vaultURL string) []string {
 		}
 	}
 	return append(environment, "VAULT_URL="+vaultURL)
+}
+
+func validBase64Hash(value string) bool {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	return err == nil && len(decoded) == 32
+}
+
+func tosctlRPCURL(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil || len(raw) > 2<<20 {
+		return "", errors.New("read tosctl RPC config")
+	}
+	var config struct {
+		ChainRPC struct {
+			URLs []json.RawMessage `json:"urls"`
+			URL  string            `json:"url"`
+		} `json:"chain_rpc"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return "", errors.New("decode tosctl RPC config")
+	}
+	values := config.ChainRPC.URLs
+	if len(values) == 0 && config.ChainRPC.URL != "" {
+		encoded, _ := json.Marshal(config.ChainRPC.URL)
+		values = []json.RawMessage{encoded}
+	}
+	if len(values) != 1 {
+		return "", errors.New("tosctl must use exactly one pinned RPC endpoint")
+	}
+	var direct string
+	if json.Unmarshal(values[0], &direct) == nil {
+		return direct, nil
+	}
+	var entry struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal(values[0], &entry) != nil || entry.URL == "" {
+		return "", errors.New("invalid tosctl RPC endpoint")
+	}
+	return entry.URL, nil
 }

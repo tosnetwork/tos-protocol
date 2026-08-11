@@ -28,7 +28,7 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 		var result any
 		switch call.Method {
 		case "getMasterchainInfo":
-			result = map[string]any{"ok": true}
+			result = map[string]any{"init": map[string]any{"root_hash": base64.StdEncoding.EncodeToString(make([]byte, 32)), "file_hash": base64.StdEncoding.EncodeToString(make([]byte, 32))}}
 		case "getAddressInformation":
 			result = map[string]any{"@type": "raw.fullAccountState", "balance": "1", "code": "", "data": "", "last_transaction_id": map[string]any{"@type": "internal.transactionId", "lt": "153078000001", "hash": "BHDYVQ6yv+8IBrJMfE3lpseJKCsED8XAX2scl+ImJKc="}, "block_id": map[string]any{}, "sync_utime": 0, "extra_currencies": []any{}, "state": "active", "frozen_hash": ""}
 		case "getTransactions":
@@ -49,17 +49,40 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(dir, "tosctl.json")
-	if err := os.WriteFile(configPath, []byte("{}"), 0o600); err != nil {
+	configJSON, _ := json.Marshal(map[string]any{"chain_rpc": map[string]any{"urls": []string{rpc.URL}}})
+	if err := os.WriteFile(configPath, configJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	b, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: configPath, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, RecoveryWaitMillis: 1000, PollMillis: 100})
+	b, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: configPath, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), RecoveryWaitMillis: 1000, PollMillis: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.CheckReady(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	wrongGenesis := make([]byte, 32)
+	wrongGenesis[0] = 1
+	wrong, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: configPath, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(wrongGenesis), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wrong.CheckReady(context.Background()); err == nil {
+		t.Fatal("wrong genesis reported ready")
+	}
+	mismatchConfig := filepath.Join(dir, "mismatch.json")
+	if err := os.WriteFile(mismatchConfig, []byte(`{"chain_rpc":{"urls":["https://wrong.example/jsonRPC"]}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: mismatchConfig, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}); err == nil {
+		t.Fatal("split send/search RPC accepted")
+	}
 	a := chain.Action{Version: "1", ActionID: "anchor-test", Network: "tos-test", Kind: chain.ActionKindAnchor, CommitmentKind: "quote", ObjectID: "q", Digest: "sha256:x", Payer: payer, Payee: payee, AmountNanoTOS: 1_000_000_000}
+	if _, err := b.Publish(context.Background(), a, true); err == nil {
+		t.Fatal("uncertain recovery outside the bounded window was rebroadcast")
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("recovering call invoked tosctl send")
+	}
 	receipt, err := b.Publish(context.Background(), a, false)
 	if err != nil {
 		t.Fatal(err)
