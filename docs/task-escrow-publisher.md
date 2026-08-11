@@ -6,6 +6,7 @@ ATOS contract-backed economics. It serves only an owner-private Unix socket:
 ```text
 GET  /healthz
 POST /v1/economic/task-escrow/action
+POST /v1/economic/task-escrow/action/resolve
 ```
 
 The sidecar owns access to the configured `tosctl` vault. `tos-protocol` never
@@ -21,8 +22,8 @@ Before invoking `tosctl`, the sidecar persists the immutable action digest,
 deterministic contract address, and the contract's previous transaction cursor
 in bbolt. The same `actionId` with different stable fields is rejected. A retry
 of the same action first searches the TaskEscrow transaction history for the
-original successful transaction. Only if the bounded recovery window finds no
-matching transaction may the sidecar submit again.
+original successful transaction. A bounded lookup miss never proves absence:
+the pending action remains uncertain and the sidecar does not submit it again.
 
 `expiresUnixMillis` is a freshness window and is deliberately excluded from the
 stable action identity. All economic fields remain part of the identity.
@@ -61,8 +62,13 @@ timeout                   -> configured executor wallet
 1. Install `tosctl` and `tos-task-escrow-publisher`.
 2. Create a private runtime directory owned by the service account.
 3. Store the sidecar config as an owner-private regular file.
-4. Configure `TOS_ATOS_RPC_ECONOMIC_CONFIG` to use the same Unix socket.
-5. Start the publisher before `tos-atos-rpc`.
+4. Enroll the journal exactly once with the final network and policy:
+   `TOS_TASK_ESCROW_PUBLISHER_CONFIG=/absolute/config.json tos-task-escrow-publisher init-journal`.
+   Enrollment binds the journal identity, schema, network, wallet/spending
+   policy and code-hash allowlist. Normal startup rejects missing, substituted
+   or configuration-mismatched journal state.
+5. Configure `TOS_ATOS_RPC_ECONOMIC_CONFIG` to use the same Unix socket.
+6. Start the publisher before `tos-atos-rpc`.
 
 See `examples/tos-task-escrow-publisher.json` and
 `deploy/systemd/tos-task-escrow-publisher.service`.

@@ -121,9 +121,23 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 		return BackendCapabilities{}, errors.New("invalid tosctl backend")
 	}
 	var master struct {
-		Init struct {
-			RootHash string `json:"root_hash"`
-			FileHash string `json:"file_hash"`
+		Type string `json:"@type"`
+		Last struct {
+			Type      string `json:"@type"`
+			Workchain int32  `json:"workchain"`
+			Shard     string `json:"shard"`
+			Seqno     uint64 `json:"seqno"`
+			RootHash  string `json:"root_hash"`
+			FileHash  string `json:"file_hash"`
+		} `json:"last"`
+		StateRootHash string `json:"state_root_hash"`
+		Init          struct {
+			Type      string `json:"@type"`
+			Workchain int32  `json:"workchain"`
+			Shard     string `json:"shard"`
+			Seqno     uint64 `json:"seqno"`
+			RootHash  string `json:"root_hash"`
+			FileHash  string `json:"file_hash"`
 		} `json:"init"`
 	}
 	if err := b.client.Call(ctx, "getMasterchainInfo", struct{}{}, &master); err != nil {

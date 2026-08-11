@@ -169,6 +169,22 @@ func TestAccountInformationAcceptsFullGetAddressInformationShape(t *testing.T) {
 	}
 }
 
+func TestMasterchainInformationAcceptsRealDaemonShape(t *testing.T) {
+	payload := []byte(`{
+		"@type":"blocks.masterchainInfo",
+		"last":{"@type":"tos.blockIdExt","workchain":-1,"shard":"-9223372036854775808","seqno":64,"root_hash":"root","file_hash":"file"},
+		"state_root_hash":"state",
+		"init":{"@type":"tos.blockIdExt","workchain":-1,"shard":"-9223372036854775808","seqno":0,"root_hash":"genesis-root","file_hash":"genesis-file"}
+	}`)
+	var info masterchainInformation
+	if err := jsonstrict.Decode(payload, &info); err != nil {
+		t.Fatalf("decode real getMasterchainInfo payload: %v", err)
+	}
+	if info.Type != "blocks.masterchainInfo" || info.Last.Seqno != 64 || info.Init.RootHash != "genesis-root" {
+		t.Fatalf("unexpected masterchain info: %+v", info)
+	}
+}
+
 func TestRawTransactionAcceptsFullGetTransactionsShape(t *testing.T) {
 	// TOS JSON-RPC getTransactions includes fee and in_msg_hash whenever the
 	// daemon can parse the fee or the transaction carries an inbound message;

@@ -60,7 +60,7 @@ func TestServerReplaysCompletedActionAndRejectsSubstitution(t *testing.T) {
 	backend := new(fakeBackend)
 	now := time.Unix(1_800_000_000, 0)
 	statePath := filepath.Join(t.TempDir(), "state.db")
-	if err := InitializeJournal(statePath, "test-journal"); err != nil {
+	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
@@ -99,7 +99,7 @@ func TestServerRecoversPendingAction(t *testing.T) {
 	backend := &fakeBackend{failFirst: true}
 	now := time.Unix(1_800_000_000, 0)
 	statePath := filepath.Join(t.TempDir(), "state.db")
-	if err := InitializeJournal(statePath, "test-journal"); err != nil {
+	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
@@ -128,7 +128,7 @@ func TestServerRecoversPendingAction(t *testing.T) {
 func TestHealthUsesExactClientContract(t *testing.T) {
 	backend := new(fakeBackend)
 	statePath := filepath.Join(t.TempDir(), "state.db")
-	if err := InitializeJournal(statePath, "test-journal"); err != nil {
+	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
@@ -159,7 +159,7 @@ func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
 	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend), Policy: testPublisherPolicy()}); err == nil {
 		t.Fatal("missing journal was silently initialized")
 	}
-	if err := InitializeJournal(path, "journal-a"); err != nil {
+	if err := InitializeJournal(path, "journal-a", "tos-test", testPublisherPolicy()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-b", Backend: new(fakeBackend), Policy: testPublisherPolicy()}); err == nil {
@@ -185,10 +185,26 @@ func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
 	}
 }
 
+func TestPublisherJournalEnrollmentRejectsNetworkAndPolicyDrift(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.db")
+	policy := testPublisherPolicy()
+	if err := InitializeJournal(path, "journal", "tos-test", policy); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(Config{Network: "tos-other", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Policy: policy}); err == nil {
+		t.Fatal("journal enrolled for another network was accepted")
+	}
+	changed := policy
+	changed.MaxFundingNanoTOS++
+	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Policy: changed}); err == nil {
+		t.Fatal("journal enrolled under another spending policy was accepted")
+	}
+}
+
 func TestPublisherRecomputesActionIDAndEnforcesSpendingPolicy(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	path := filepath.Join(t.TempDir(), "journal.db")
-	if err := InitializeJournal(path, "journal"); err != nil {
+	if err := InitializeJournal(path, "journal", "tos-test", testPublisherPolicy()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Now: func() time.Time { return now }, Policy: testPublisherPolicy()})

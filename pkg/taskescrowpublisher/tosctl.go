@@ -175,12 +175,7 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if b == nil || b.locator == nil || b.locator.client == nil {
 		return errors.New("invalid tosctl publisher backend")
 	}
-	var master struct {
-		Init struct {
-			RootHash string `json:"root_hash"`
-			FileHash string `json:"file_hash"`
-		} `json:"init"`
-	}
+	var master masterchainInformation
 	if err := b.locator.client.Call(ctx, "getMasterchainInfo", struct{}{}, &master); err != nil {
 		return fmt.Errorf("TOS JSON-RPC is unavailable: %w", err)
 	}

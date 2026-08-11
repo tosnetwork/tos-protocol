@@ -54,6 +54,16 @@ type blockID struct {
 	FileHash  string `json:"file_hash"`
 }
 
+// masterchainInformation mirrors the complete getMasterchainInfo result.
+// The JSON-RPC client rejects unknown result fields, so readiness must track
+// the real daemon schema rather than decoding only init.{root,file}_hash.
+type masterchainInformation struct {
+	Type          string  `json:"@type"`
+	Last          blockID `json:"last"`
+	StateRootHash string  `json:"state_root_hash"`
+	Init          blockID `json:"init"`
+}
+
 // rawTransaction mirrors every field the TOS JSON-RPC getTransactions method
 // emits per transaction. jsonstrict.Decode rejects unknown fields, and fee/
 // in_msg_hash are only present when the daemon can parse the fee or the

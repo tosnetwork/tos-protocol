@@ -49,7 +49,7 @@ func main() {
 		os.Exit(2)
 	}
 	if len(os.Args) == 2 && os.Args[1] == "init-journal" {
-		if err := taskescrowpublisher.InitializeJournal(config.StatePath, config.JournalIdentity); err != nil {
+		if err := taskescrowpublisher.InitializeJournal(config.StatePath, config.JournalIdentity, config.Network, config.Policy); err != nil {
 			logger.Error("initialize TaskEscrow publisher journal", "error", err)
 			os.Exit(1)
 		}

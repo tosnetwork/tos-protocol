@@ -74,7 +74,7 @@ func Open(config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	state, err := openActionStore(config.StatePath, config.JournalIdentity)
+	state, err := openActionStore(config.StatePath, config.JournalIdentity, config.Network, config.Policy)
 	if err != nil {
 		return nil, err
 	}
