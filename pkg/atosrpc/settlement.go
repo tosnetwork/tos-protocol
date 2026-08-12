@@ -307,6 +307,12 @@ func (s *Server) GetEscrow(
 			return nil, failedPrecondition("ESCROW_MISMATCH", "canonical TaskEscrow state is not legal for this lifecycle")
 		}
 		response.Escrow = &atostosv1.Escrow{EscrowId: terms.EscrowId, QuoteId: terms.QuoteId, JobId: terms.JobId, PrincipalId: terms.PrincipalId, ProviderId: terms.ProviderId, CapabilityId: terms.CapabilityId, CapabilityVersion: terms.CapabilityVersion, TrustMode: terms.TrustMode, ProofProfile: terms.ProofProfile, Reserved: cloneMessage(terms.Reserve), State: state, ExpiresUnixMillis: terms.EscrowDeadlineUnixMillis, EscrowRef: &NetworkReference{Network: s.economy.Network(), Reference: resolved.ContractReference, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}, FundingModel: terms.FundingModel, QuoteCommitmentDigest: terms.QuoteCommitmentDigest, QuoteCommitmentRef: cloneMessage(terms.QuoteCommitmentRef), ReservationDigest: reservationDigest, ReservationActionId: resolved.ActionID, ContractCodeHash: resolved.State.CodeHash, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}
+		if state == atostosv1.EscrowState_ESCROW_STATE_RELEASED || state == atostosv1.EscrowState_ESCROW_STATE_SETTLED {
+			if strings.TrimSpace(resolved.TransitionReference) == "" {
+				return nil, unavailable("NETWORK_UNAVAILABLE", "terminal TaskEscrow transition reference unavailable")
+			}
+			response.Escrow.TerminalRef = &NetworkReference{Network: s.economy.Network(), Reference: resolved.TransitionReference, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}
+		}
 		response.Found = true
 	}
 	return connect.NewResponse(response), nil

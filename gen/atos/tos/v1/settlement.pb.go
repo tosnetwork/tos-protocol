@@ -162,6 +162,7 @@ type Escrow struct {
 	ReleaseDigest         string                 `protobuf:"bytes,24,opt,name=release_digest,json=releaseDigest,proto3" json:"release_digest,omitempty"`
 	ReleaseActionId       string                 `protobuf:"bytes,25,opt,name=release_action_id,json=releaseActionId,proto3" json:"release_action_id,omitempty"`
 	ReleaseReasonCode     string                 `protobuf:"bytes,26,opt,name=release_reason_code,json=releaseReasonCode,proto3" json:"release_reason_code,omitempty"`
+	TerminalRef           *NetworkReference      `protobuf:"bytes,27,opt,name=terminal_ref,json=terminalRef,proto3" json:"terminal_ref,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -376,6 +377,13 @@ func (x *Escrow) GetReleaseReasonCode() string {
 		return x.ReleaseReasonCode
 	}
 	return ""
+}
+
+func (x *Escrow) GetTerminalRef() *NetworkReference {
+	if x != nil {
+		return x.TerminalRef
+	}
+	return nil
 }
 
 type VerifiedEscrowTerms struct {
@@ -1558,7 +1566,8 @@ var File_atos_tos_v1_settlement_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\n" +
-	"\x1catos/tos/v1/settlement.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\xbf\t\n" +
+	"\x1catos/tos/v1/settlement.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\x81\n" +
+	"\n" +
 	"\x06Escrow\x12\x1b\n" +
 	"\tescrow_id\x18\x01 \x01(\tR\bescrowId\x12\x19\n" +
 	"\bquote_id\x18\x02 \x01(\tR\aquoteId\x12!\n" +
@@ -1590,7 +1599,8 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"releaseRef\x12%\n" +
 	"\x0erelease_digest\x18\x18 \x01(\tR\rreleaseDigest\x12*\n" +
 	"\x11release_action_id\x18\x19 \x01(\tR\x0freleaseActionId\x12.\n" +
-	"\x13release_reason_code\x18\x1a \x01(\tR\x11releaseReasonCode\"\x8b\r\n" +
+	"\x13release_reason_code\x18\x1a \x01(\tR\x11releaseReasonCode\x12@\n" +
+	"\fterminal_ref\x18\x1b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\vterminalRef\"\x8b\r\n" +
 	"\x13VerifiedEscrowTerms\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12*\n" +
 	"\x10canonicalization\x18\x02 \x01(\tR\x10canonicalization\x12\x1d\n" +
@@ -1779,59 +1789,60 @@ var file_atos_tos_v1_settlement_proto_depIdxs = []int32{
 	18, // 4: atos.tos.v1.Escrow.escrow_ref:type_name -> atos.tos.v1.NetworkReference
 	18, // 5: atos.tos.v1.Escrow.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
 	18, // 6: atos.tos.v1.Escrow.release_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 7: atos.tos.v1.VerifiedEscrowTerms.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
-	19, // 8: atos.tos.v1.VerifiedEscrowTerms.manifest_digest:type_name -> atos.tos.v1.Digest
-	18, // 9: atos.tos.v1.VerifiedEscrowTerms.ownership_ref:type_name -> atos.tos.v1.NetworkReference
-	15, // 10: atos.tos.v1.VerifiedEscrowTerms.trust_mode:type_name -> atos.tos.v1.TrustMode
-	16, // 11: atos.tos.v1.VerifiedEscrowTerms.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	17, // 12: atos.tos.v1.VerifiedEscrowTerms.reserve:type_name -> atos.tos.v1.NetworkAmount
-	19, // 13: atos.tos.v1.VerifiedEscrowTerms.dispute_policy_digest:type_name -> atos.tos.v1.Digest
-	18, // 14: atos.tos.v1.VerifiedEscrowTerms.signer_authorization_ref:type_name -> atos.tos.v1.NetworkReference
-	17, // 15: atos.tos.v1.VerifiedEscrowTerms.subtotal:type_name -> atos.tos.v1.NetworkAmount
-	17, // 16: atos.tos.v1.VerifiedEscrowTerms.fees:type_name -> atos.tos.v1.NetworkAmount
-	19, // 17: atos.tos.v1.VerifiedEscrowTerms.terms_digest:type_name -> atos.tos.v1.Digest
-	20, // 18: atos.tos.v1.CreateEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
-	15, // 19: atos.tos.v1.CreateEscrowRequest.trust_mode:type_name -> atos.tos.v1.TrustMode
-	16, // 20: atos.tos.v1.CreateEscrowRequest.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	17, // 21: atos.tos.v1.CreateEscrowRequest.reserve:type_name -> atos.tos.v1.NetworkAmount
-	3,  // 22: atos.tos.v1.CreateEscrowRequest.verified_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	2,  // 23: atos.tos.v1.CreateEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 24: atos.tos.v1.GetEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
-	3,  // 25: atos.tos.v1.GetEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	18, // 26: atos.tos.v1.GetEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	2,  // 27: atos.tos.v1.GetEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 28: atos.tos.v1.ReleaseEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
-	3,  // 29: atos.tos.v1.ReleaseEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	18, // 30: atos.tos.v1.ReleaseEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	2,  // 31: atos.tos.v1.ReleaseEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
-	18, // 32: atos.tos.v1.ReleaseEscrowResponse.release_ref:type_name -> atos.tos.v1.NetworkReference
-	17, // 33: atos.tos.v1.Settlement.charged:type_name -> atos.tos.v1.NetworkAmount
-	17, // 34: atos.tos.v1.Settlement.refunded:type_name -> atos.tos.v1.NetworkAmount
-	1,  // 35: atos.tos.v1.Settlement.state:type_name -> atos.tos.v1.SettlementState
-	18, // 36: atos.tos.v1.Settlement.settlement_ref:type_name -> atos.tos.v1.NetworkReference
-	20, // 37: atos.tos.v1.SettleJobRequest.context:type_name -> atos.tos.v1.RequestContext
-	17, // 38: atos.tos.v1.SettleJobRequest.requested_charge:type_name -> atos.tos.v1.NetworkAmount
-	3,  // 39: atos.tos.v1.SettleJobRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	18, // 40: atos.tos.v1.SettleJobRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	10, // 41: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
-	2,  // 42: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 43: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
-	10, // 44: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
-	4,  // 45: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
-	6,  // 46: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
-	8,  // 47: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
-	11, // 48: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
-	13, // 49: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
-	5,  // 50: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
-	7,  // 51: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
-	9,  // 52: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
-	12, // 53: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
-	14, // 54: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
-	50, // [50:55] is the sub-list for method output_type
-	45, // [45:50] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	18, // 7: atos.tos.v1.Escrow.terminal_ref:type_name -> atos.tos.v1.NetworkReference
+	18, // 8: atos.tos.v1.VerifiedEscrowTerms.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	19, // 9: atos.tos.v1.VerifiedEscrowTerms.manifest_digest:type_name -> atos.tos.v1.Digest
+	18, // 10: atos.tos.v1.VerifiedEscrowTerms.ownership_ref:type_name -> atos.tos.v1.NetworkReference
+	15, // 11: atos.tos.v1.VerifiedEscrowTerms.trust_mode:type_name -> atos.tos.v1.TrustMode
+	16, // 12: atos.tos.v1.VerifiedEscrowTerms.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	17, // 13: atos.tos.v1.VerifiedEscrowTerms.reserve:type_name -> atos.tos.v1.NetworkAmount
+	19, // 14: atos.tos.v1.VerifiedEscrowTerms.dispute_policy_digest:type_name -> atos.tos.v1.Digest
+	18, // 15: atos.tos.v1.VerifiedEscrowTerms.signer_authorization_ref:type_name -> atos.tos.v1.NetworkReference
+	17, // 16: atos.tos.v1.VerifiedEscrowTerms.subtotal:type_name -> atos.tos.v1.NetworkAmount
+	17, // 17: atos.tos.v1.VerifiedEscrowTerms.fees:type_name -> atos.tos.v1.NetworkAmount
+	19, // 18: atos.tos.v1.VerifiedEscrowTerms.terms_digest:type_name -> atos.tos.v1.Digest
+	20, // 19: atos.tos.v1.CreateEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
+	15, // 20: atos.tos.v1.CreateEscrowRequest.trust_mode:type_name -> atos.tos.v1.TrustMode
+	16, // 21: atos.tos.v1.CreateEscrowRequest.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	17, // 22: atos.tos.v1.CreateEscrowRequest.reserve:type_name -> atos.tos.v1.NetworkAmount
+	3,  // 23: atos.tos.v1.CreateEscrowRequest.verified_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	2,  // 24: atos.tos.v1.CreateEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
+	20, // 25: atos.tos.v1.GetEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 26: atos.tos.v1.GetEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	18, // 27: atos.tos.v1.GetEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 28: atos.tos.v1.GetEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
+	20, // 29: atos.tos.v1.ReleaseEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 30: atos.tos.v1.ReleaseEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	18, // 31: atos.tos.v1.ReleaseEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 32: atos.tos.v1.ReleaseEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
+	18, // 33: atos.tos.v1.ReleaseEscrowResponse.release_ref:type_name -> atos.tos.v1.NetworkReference
+	17, // 34: atos.tos.v1.Settlement.charged:type_name -> atos.tos.v1.NetworkAmount
+	17, // 35: atos.tos.v1.Settlement.refunded:type_name -> atos.tos.v1.NetworkAmount
+	1,  // 36: atos.tos.v1.Settlement.state:type_name -> atos.tos.v1.SettlementState
+	18, // 37: atos.tos.v1.Settlement.settlement_ref:type_name -> atos.tos.v1.NetworkReference
+	20, // 38: atos.tos.v1.SettleJobRequest.context:type_name -> atos.tos.v1.RequestContext
+	17, // 39: atos.tos.v1.SettleJobRequest.requested_charge:type_name -> atos.tos.v1.NetworkAmount
+	3,  // 40: atos.tos.v1.SettleJobRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	18, // 41: atos.tos.v1.SettleJobRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	10, // 42: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
+	2,  // 43: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
+	20, // 44: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
+	10, // 45: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
+	4,  // 46: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
+	6,  // 47: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
+	8,  // 48: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
+	11, // 49: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
+	13, // 50: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
+	5,  // 51: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
+	7,  // 52: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
+	9,  // 53: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
+	12, // 54: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
+	14, // 55: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
+	51, // [51:56] is the sub-list for method output_type
+	46, // [46:51] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_settlement_proto_init() }

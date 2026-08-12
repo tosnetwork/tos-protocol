@@ -58,6 +58,7 @@ message Escrow {
   string release_digest = 24;
   string release_action_id = 25;
   string release_reason_code = 26;
+  NetworkReference terminal_ref = 27;
 }
 
 message VerifiedEscrowTerms {

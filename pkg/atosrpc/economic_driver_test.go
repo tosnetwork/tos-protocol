@@ -238,13 +238,15 @@ func (e *recordingEconomy) ResolveEscrow(_ context.Context, request economic.Res
 	status := chain.TaskEscrowStatusOpen
 	budget := request.BudgetNanoTOS
 	checkpoint := uint64(42)
+	transition := ""
 	if e.settleCalls > 0 && e.settlementCheckpoint > 0 {
 		status = chain.TaskEscrowStatusSettled
 		budget = 0
 		checkpoint = e.settlementCheckpoint
+		transition = e.settlementRef
 	}
 	return economic.Result{
-		ContractReference: e.contract,
+		ContractReference: e.contract, TransitionReference: transition,
 		State: chain.TaskEscrowState{
 			Network: "tos-test", ContractAddress: strings.TrimPrefix(e.contract, "tos:task-escrow:v1:"),
 			Creator: request.Creator, Agent: request.Agent, HasAgent: true,
