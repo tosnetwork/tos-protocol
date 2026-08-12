@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"math/big"
 	"strings"
@@ -51,22 +52,37 @@ type Result struct {
 }
 
 type EvidenceRequest struct {
-	Kind, ObjectID, Digest string
-	Reference              Reference
+	Kind      string    `json:"kind"`
+	ObjectID  string    `json:"object_id"`
+	Digest    string    `json:"digest"`
+	Reference Reference `json:"reference"`
 }
 type EvidenceObservation struct {
-	Found                                      bool
-	Network, Kind, ObjectID, Digest, Reference string
-	Finalized                                  bool
-	FinalizedCheckpoint                        uint64
+	Found               bool   `json:"found"`
+	Network             string `json:"network"`
+	Kind                string `json:"kind"`
+	ObjectID            string `json:"object_id"`
+	Digest              string `json:"digest"`
+	Reference           string `json:"reference"`
+	Finalized           bool   `json:"finalized"`
+	FinalizedCheckpoint uint64 `json:"finalized_checkpoint"`
 }
 type SignerObservation struct {
-	Found, Revoked                                                                                                 bool
-	RevokedUnixNanos                                                                                               int64
-	Network, AuthorizationID, ProviderID, CapabilityID, CapabilityVersion, SignerID, Reference, SignatureAlgorithm string
-	PublicKey                                                                                                      []byte
-	ValidFromUnixNanos, ValidUntilUnixNanos                                                                        int64
-	FinalizedCheckpoint                                                                                            uint64
+	Found               bool   `json:"found"`
+	Revoked             bool   `json:"revoked"`
+	RevokedUnixNanos    int64  `json:"revoked_unix_nanos"`
+	Network             string `json:"network"`
+	AuthorizationID     string `json:"authorization_id"`
+	ProviderID          string `json:"provider_id"`
+	CapabilityID        string `json:"capability_id"`
+	CapabilityVersion   string `json:"capability_version"`
+	SignerID            string `json:"signer_id"`
+	Reference           string `json:"reference"`
+	SignatureAlgorithm  string `json:"signature_algorithm"`
+	PublicKey           []byte `json:"public_key"`
+	ValidFromUnixNanos  int64  `json:"valid_from_unix_nanos"`
+	ValidUntilUnixNanos int64  `json:"valid_until_unix_nanos"`
+	FinalizedCheckpoint uint64 `json:"finalized_checkpoint"`
 }
 type Observer interface {
 	Observe(context.Context, EvidenceRequest) (EvidenceObservation, error)
@@ -88,7 +104,19 @@ func (v Verifier) VerifyBytes(ctx context.Context, data []byte) Result {
 }
 
 func (v Verifier) Verify(ctx context.Context, p Package) Result {
-	r := Result{Version: p.Version, Network: p.NetworkID, QuoteID: p.Quote.QuoteID, JobID: p.Escrow.JobID, CapabilityID: p.Capability.CapabilityID, EscrowID: p.Escrow.EscrowID, Outcome: p.Outcome.Kind, ExecutionSignerID: p.SignerAuthorization.ExecutionSignerID}
+	r := Result{Version: p.Version, Network: p.NetworkID, QuoteID: p.Quote.QuoteID, JobID: p.Escrow.JobID, CapabilityID: p.Capability.CapabilityID, EscrowID: p.Escrow.EscrowID, Outcome: p.Outcome.Kind}
+	hasExecution := p.Outcome.Kind != "requester_release"
+	if hasExecution && (p.SignerAuthorization == nil || p.Receipt == nil || p.ProofOfService == nil) {
+		r.Failures = []Failure{{CodeMalformed, "receipt", "execution evidence is required for this outcome"}}
+		return r
+	}
+	if !hasExecution && (p.SignerAuthorization != nil || p.Receipt != nil || p.ProofOfService != nil) {
+		r.Failures = []Failure{{CodeOutcome, "outcome", "pre-execution release must omit execution evidence"}}
+		return r
+	}
+	if hasExecution {
+		r.ExecutionSignerID = p.SignerAuthorization.ExecutionSignerID
+	}
 	add := func(code Code, field, msg string) { r.Failures = append(r.Failures, Failure{code, field, msg}) }
 	if p.Version != Version || p.Canonicalization != Canonicalization {
 		add(CodeUnsupported, "version", "unsupported package version or canonicalization")
@@ -103,12 +131,24 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	if p.Quote.TrustMode != "verified" || p.Quote.ProofProfile != "tos_verified_v1" || p.Quote.SettlementBackend != "tos" || p.Quote.SettlementAsset != "TOS" || p.Quote.AssetDecimals != 9 || p.Quote.FeesAtomic != "0" || strings.TrimSpace(p.Escrow.FundingModel) == "" {
 		add(CodeTuple, "quote", "unsupported Verified commercial tuple")
 	}
-	for field, value := range map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest, "escrow.contract_code_hash": p.Escrow.ContractCodeHash, "receipt.receipt_digest": p.Receipt.ReceiptDigest, "receipt.input_commitment": p.Receipt.InputCommitment, "receipt.output_commitment": p.Receipt.OutputCommitment, "receipt.usage_commitment": p.Receipt.UsageCommitment, "proof_of_service.evidence_digest": p.ProofOfService.EvidenceDigest, "proof_of_service.content_digest": p.ProofOfService.ContentDigest} {
+	digests := map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest, "escrow.contract_code_hash": p.Escrow.ContractCodeHash}
+	if hasExecution {
+		digests["receipt.receipt_digest"] = p.Receipt.ReceiptDigest
+		digests["receipt.input_commitment"] = p.Receipt.InputCommitment
+		digests["receipt.output_commitment"] = p.Receipt.OutputCommitment
+		digests["receipt.usage_commitment"] = p.Receipt.UsageCommitment
+		digests["proof_of_service.evidence_digest"] = p.ProofOfService.EvidenceDigest
+		digests["proof_of_service.content_digest"] = p.ProofOfService.ContentDigest
+	}
+	for field, value := range digests {
 		if !validDigest(value) {
 			add(CodeDigest, field, "invalid SHA-256 digest")
 		}
 	}
-	amounts := map[string]string{"subtotal": p.Quote.SubtotalAtomic, "fees": p.Quote.FeesAtomic, "total_max": p.Quote.TotalMaxAtomic, "reserved": p.Escrow.ReservedAtomic, "receipt.charge": p.Receipt.ChargedAtomic, "outcome.charge": p.Outcome.ChargedAtomic, "outcome.refund": p.Outcome.RefundedAtomic}
+	amounts := map[string]string{"subtotal": p.Quote.SubtotalAtomic, "fees": p.Quote.FeesAtomic, "total_max": p.Quote.TotalMaxAtomic, "reserved": p.Escrow.ReservedAtomic, "outcome.charge": p.Outcome.ChargedAtomic, "outcome.refund": p.Outcome.RefundedAtomic}
+	if hasExecution {
+		amounts["receipt.charge"] = p.Receipt.ChargedAtomic
+	}
 	parsed := map[string]*big.Int{}
 	for k, s := range amounts {
 		n, ok := new(big.Int).SetString(s, 10)
@@ -119,20 +159,22 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 		}
 	}
 	if len(parsed) == len(amounts) {
-		if parsed["total_max"].Cmp(parsed["reserved"]) != 0 || parsed["receipt.charge"].Cmp(parsed["outcome.charge"]) != 0 || new(big.Int).Add(parsed["outcome.charge"], parsed["outcome.refund"]).Cmp(parsed["reserved"]) != 0 {
+		if parsed["total_max"].Cmp(parsed["reserved"]) != 0 || (hasExecution && parsed["receipt.charge"].Cmp(parsed["outcome.charge"]) != 0) || new(big.Int).Add(parsed["outcome.charge"], parsed["outcome.refund"]).Cmp(parsed["reserved"]) != 0 {
 			add(CodeOutcome, "outcome", "monetary conservation failed")
 		}
 	}
-	if p.Receipt.CompletedUnixNanos < p.Receipt.StartedUnixNanos || p.Receipt.CompletedUnixNanos < p.SignerAuthorization.ValidFromUnixNanos || p.Receipt.CompletedUnixNanos >= p.SignerAuthorization.ValidUntilUnixNanos {
+	if hasExecution && (p.Receipt.CompletedUnixNanos < p.Receipt.StartedUnixNanos || p.Receipt.CompletedUnixNanos < p.SignerAuthorization.ValidFromUnixNanos || p.Receipt.CompletedUnixNanos >= p.SignerAuthorization.ValidUntilUnixNanos) {
 		add(CodeSigner, "receipt.completed_unix_nanos", "receipt outside signer validity")
 	}
-	if _, expectedReceiptDigest, err := ReceiptSigningDigest(p); err != nil || expectedReceiptDigest != p.Receipt.ReceiptDigest {
-		add(CodeDigest, "receipt.receipt_digest", "receipt digest does not match canonical receipt tuple")
-	}
-	if c, err := receiptcommitment.Parse(p.Receipt.CanonicalCBOR); err != nil {
-		add(CodeMalformed, "receipt.canonical_cbor", err.Error())
-	} else if c.ReceiptID != p.Receipt.ReceiptID || c.QuoteID != p.Quote.QuoteID || c.EscrowID != p.Escrow.EscrowID || c.JobID != p.Escrow.JobID || c.PrincipalID != p.PrincipalID || c.ProviderID != p.ProviderID || c.CapabilityID != p.Capability.CapabilityID || c.CapabilityVersion != p.Capability.CapabilityVersion || c.TrustMode != "TRUST_MODE_VERIFIED" || c.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || strings.TrimPrefix(strings.ToLower(c.Result), "execution_result_") != strings.ToLower(p.Receipt.Result) || c.InputCommitment != p.Receipt.InputCommitment || c.OutputCommitment != p.Receipt.OutputCommitment || c.UsageCommitment != p.Receipt.UsageCommitment || c.ExecutionSignerID != p.SignerAuthorization.ExecutionSignerID || c.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || c.CompletedUnixMillis*int64(time.Millisecond) != p.Receipt.CompletedUnixNanos || c.NetworkChargeAtomic != p.Receipt.ChargedAtomic {
-		add(CodeTuple, "receipt.canonical_cbor", "signed Receipt tuple differs from package")
+	if hasExecution {
+		if _, expectedReceiptDigest, err := ReceiptSigningDigest(p); err != nil || expectedReceiptDigest != p.Receipt.ReceiptDigest {
+			add(CodeDigest, "receipt.receipt_digest", "receipt digest does not match canonical receipt tuple")
+		}
+		if c, err := receiptcommitment.Parse(p.Receipt.CanonicalCBOR); err != nil {
+			add(CodeMalformed, "receipt.canonical_cbor", err.Error())
+		} else if c.ReceiptID != p.Receipt.ReceiptID || c.QuoteID != p.Quote.QuoteID || c.EscrowID != p.Escrow.EscrowID || c.JobID != p.Escrow.JobID || c.PrincipalID != p.PrincipalID || c.ProviderID != p.ProviderID || c.CapabilityID != p.Capability.CapabilityID || c.CapabilityVersion != p.Capability.CapabilityVersion || c.TrustMode != "TRUST_MODE_VERIFIED" || c.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || strings.TrimPrefix(strings.ToLower(c.Result), "execution_result_") != strings.ToLower(p.Receipt.Result) || c.InputCommitment != p.Receipt.InputCommitment || c.OutputCommitment != p.Receipt.OutputCommitment || c.UsageCommitment != p.Receipt.UsageCommitment || c.ExecutionSignerID != p.SignerAuthorization.ExecutionSignerID || c.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || c.CompletedUnixMillis*int64(time.Millisecond) != p.Receipt.CompletedUnixNanos || c.NetworkChargeAtomic != p.Receipt.ChargedAtomic {
+			add(CodeTuple, "receipt.canonical_cbor", "signed Receipt tuple differs from package")
+		}
 	}
 	switch p.Outcome.Kind {
 	case "provider_settlement":
@@ -153,7 +195,19 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	refs := []struct {
 		name, kind, id, digest string
 		ref                    Reference
-	}{{"requester_identity_ref", "identity", p.RequesterAgentID, "", p.RequesterIdentityRef}, {"provider_identity_ref", "identity", p.ProviderID, "", p.ProviderIdentityRef}, {"capability.ownership_ref", "capability-ownership", p.Capability.CapabilityID, p.Capability.ManifestDigest, p.Capability.OwnershipRef}, {"quote.commitment_ref", "verified-quote", p.Quote.QuoteID, p.Quote.CommitmentDigest, p.Quote.CommitmentRef}, {"escrow.reservation_ref", "task-escrow-reservation", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ReservationRef}, {"escrow.contract_ref", "task-escrow", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ContractRef}, {"signer.authorization_ref", "execution-signer", p.SignerAuthorization.AuthorizationID, "", p.SignerAuthorization.AuthorizationRef}, {"receipt.receipt_ref", "verified-receipt", p.Receipt.ReceiptID, p.Receipt.ReceiptDigest, p.Receipt.ReceiptRef}, {"outcome.outcome_ref", p.Outcome.Kind, p.Escrow.EscrowID, outcomeDigest(p), p.Outcome.OutcomeRef}, {"proof_of_service.evidence_ref", "proof-of-service", p.ProofOfService.EvidenceID, p.ProofOfService.EvidenceDigest, p.ProofOfService.EvidenceRef}}
+	}{{"requester_identity_ref", "identity", p.PrincipalID, p.RequesterAgentID, p.RequesterIdentityRef}, {"provider_identity_ref", "identity", p.ProviderID, p.ProviderID, p.ProviderIdentityRef}, {"capability.ownership_ref", "capability-ownership", p.Capability.CapabilityID, p.Capability.ManifestDigest, p.Capability.OwnershipRef}, {"quote.commitment_ref", "verified-quote", p.Quote.QuoteID, p.Quote.CommitmentDigest, p.Quote.CommitmentRef}, {"escrow.reservation_ref", "task-escrow-reservation", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ReservationRef}, {"escrow.contract_ref", "task-escrow", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ContractRef}, {"outcome.outcome_ref", p.Outcome.Kind, p.Escrow.EscrowID, outcomeDigest(p), p.Outcome.OutcomeRef}}
+	if hasExecution {
+		refs = append(refs, struct {
+			name, kind, id, digest string
+			ref                    Reference
+		}{"signer.authorization_ref", "execution-signer", p.SignerAuthorization.AuthorizationID, "", p.SignerAuthorization.AuthorizationRef}, struct {
+			name, kind, id, digest string
+			ref                    Reference
+		}{"receipt.receipt_ref", "verified-receipt", p.Receipt.ReceiptID, p.Receipt.ReceiptDigest, p.Receipt.ReceiptRef}, struct {
+			name, kind, id, digest string
+			ref                    Reference
+		}{"proof_of_service.evidence_ref", "proof-of-service", p.ProofOfService.EvidenceID, p.ProofOfService.EvidenceDigest, p.ProofOfService.EvidenceRef})
+	}
 	for _, x := range refs {
 		if err := ValidateReference(p.NetworkID, x.ref); err != nil {
 			add(CodeFinality, x.name, err.Error())
@@ -180,7 +234,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	}
 	if v.Observer == nil {
 		add(CodeUnavailable, "observer", "live observer is required")
-	} else {
+	} else if hasExecution {
 		s, e := v.Observer.ResolveSigner(ctx, p)
 		if e != nil {
 			add(CodeUnavailable, "signer_authorization", e.Error())
@@ -188,10 +242,12 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 			add(CodeSigner, "signer_authorization", "live signer authorization mismatch")
 		}
 	}
-	if len(p.SignerAuthorization.SignerPublicKey) != ed25519.PublicKeySize || len(p.Receipt.Signature) != ed25519.SignatureSize {
+	if hasExecution && (len(p.SignerAuthorization.SignerPublicKey) != ed25519.PublicKeySize || len(p.Receipt.Signature) != ed25519.SignatureSize) {
 		add(CodeSignature, "receipt.signature", "invalid Ed25519 key/signature size")
-	} else if raw, _, e := ReceiptSigningDigest(p); e != nil || !ed25519.Verify(ed25519.PublicKey(p.SignerAuthorization.SignerPublicKey), raw, p.Receipt.Signature) {
-		add(CodeSignature, "receipt.signature", "signature verification failed")
+	} else if hasExecution {
+		if raw, _, e := ReceiptSigningDigest(p); e != nil || !ed25519.Verify(ed25519.PublicKey(p.SignerAuthorization.SignerPublicKey), raw, p.Receipt.Signature) {
+			add(CodeSignature, "receipt.signature", "signature verification failed")
+		}
 	}
 	d, e := Digest(p)
 	if e != nil {
@@ -216,8 +272,21 @@ func equalBytes(a, b []byte) bool {
 	return true
 }
 func outcomeDigest(p Package) string {
-	parts := []string{p.Outcome.Kind, p.Escrow.ReservationDigest, p.Escrow.EscrowID, p.Escrow.JobID, p.Quote.QuoteID, p.Outcome.ChargedAtomic, p.Outcome.RefundedAtomic, p.Outcome.ReleaseDigest, p.Outcome.ReasonCode, p.Outcome.DisputeDigest, p.Outcome.DisputeOutcome}
-	return digestBytes("tos.atos.portable-proof-outcome.v1", []byte(strings.Join(parts, "\x00")))
+	type outcomeCommitment struct {
+		Kind, ReservationDigest, EscrowID, JobID, QuoteID string
+		ChargedAtomic, RefundedAtomic                     string
+		ReleaseDigest, ReasonCode                         string
+		DisputeDigest, DisputeOutcome                     string
+	}
+	digest, err := codec.Digest("tos.atos.portable-proof-outcome.v1", outcomeCommitment{
+		p.Outcome.Kind, p.Escrow.ReservationDigest, p.Escrow.EscrowID, p.Escrow.JobID,
+		p.Quote.QuoteID, p.Outcome.ChargedAtomic, p.Outcome.RefundedAtomic,
+		p.Outcome.ReleaseDigest, p.Outcome.ReasonCode, p.Outcome.DisputeDigest, p.Outcome.DisputeOutcome,
+	})
+	if err != nil {
+		return ""
+	}
+	return digest
 }
 
 var _ = errors.New

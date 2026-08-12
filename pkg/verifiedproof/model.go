@@ -4,7 +4,6 @@
 package verifiedproof
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -111,22 +110,22 @@ type ProofOfService struct {
 }
 
 type Package struct {
-	Version              string              `json:"version"`
-	Canonicalization     string              `json:"canonicalization"`
-	NetworkID            string              `json:"network_id"`
-	GatewayDomain        string              `json:"gateway_domain"`
-	PrincipalID          string              `json:"principal_id"`
-	RequesterAgentID     string              `json:"requester_agent_id"`
-	RequesterIdentityRef Reference           `json:"requester_identity_ref"`
-	ProviderID           string              `json:"provider_id"`
-	ProviderIdentityRef  Reference           `json:"provider_identity_ref"`
-	Capability           Capability          `json:"capability"`
-	Quote                Quote               `json:"quote"`
-	Escrow               Escrow              `json:"escrow"`
-	SignerAuthorization  SignerAuthorization `json:"signer_authorization"`
-	Receipt              Receipt             `json:"receipt"`
-	Outcome              Outcome             `json:"outcome"`
-	ProofOfService       ProofOfService      `json:"proof_of_service"`
+	Version              string               `json:"version"`
+	Canonicalization     string               `json:"canonicalization"`
+	NetworkID            string               `json:"network_id"`
+	GatewayDomain        string               `json:"gateway_domain"`
+	PrincipalID          string               `json:"principal_id"`
+	RequesterAgentID     string               `json:"requester_agent_id"`
+	RequesterIdentityRef Reference            `json:"requester_identity_ref"`
+	ProviderID           string               `json:"provider_id"`
+	ProviderIdentityRef  Reference            `json:"provider_identity_ref"`
+	Capability           Capability           `json:"capability"`
+	Quote                Quote                `json:"quote"`
+	Escrow               Escrow               `json:"escrow"`
+	SignerAuthorization  *SignerAuthorization `json:"signer_authorization,omitempty"`
+	Receipt              *Receipt             `json:"receipt,omitempty"`
+	Outcome              Outcome              `json:"outcome"`
+	ProofOfService       *ProofOfService      `json:"proof_of_service,omitempty"`
 }
 
 func Marshal(p Package) ([]byte, error) { return codec.Marshal(p) }
@@ -171,6 +170,9 @@ type receiptSigningValue struct {
 }
 
 func ReceiptSigningDigest(p Package) ([]byte, string, error) {
+	if p.Receipt == nil {
+		return nil, "", errors.New("receipt is required")
+	}
 	d, err := codec.DigestCanonical(ReceiptDomain, p.Receipt.CanonicalCBOR)
 	if err != nil {
 		return nil, "", err
@@ -185,14 +187,6 @@ func validDigest(value string) bool {
 	}
 	_, err := hex.DecodeString(value[7:])
 	return err == nil && value == strings.ToLower(value)
-}
-
-func digestBytes(domain string, data []byte) string {
-	h := sha256.New()
-	h.Write([]byte(domain))
-	h.Write([]byte{0})
-	h.Write(data)
-	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 func ValidateReference(network string, ref Reference) error {
