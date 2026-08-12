@@ -3,12 +3,18 @@ package atosrpc
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/protobuf/proto"
 )
+
+type capabilityCommitmentRecord struct {
+	Digest string `json:"digest"`
+}
 
 func (s *Server) ResolveCapability(
 	_ context.Context,
@@ -68,7 +74,7 @@ func (s *Server) ResolveCapability(
 }
 
 func (s *Server) VerifyCapabilityOwnership(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.VerifyCapabilityOwnershipRequest],
 ) (*connect.Response[atostosv1.VerifyCapabilityOwnershipResponse], error) {
 	if req == nil || req.Msg == nil {
@@ -84,6 +90,8 @@ func (s *Server) VerifyCapabilityOwnership(
 		return nil, err
 	}
 	response := &atostosv1.VerifyCapabilityOwnershipResponse{ReasonCode: "NOT_FOUND"}
+	var commitmentDigest string
+	var resolvedVersion string
 	err := s.store.view(func(tx *bolt.Tx) error {
 		version := req.Msg.Version
 		if version == "" {
@@ -102,6 +110,7 @@ func (s *Server) VerifyCapabilityOwnership(
 			response.ReasonCode = "PROVIDER_MISMATCH"
 			return nil
 		}
+		resolvedVersion = identity.Version
 		if req.Msg.ExpectedManifestDigest != nil {
 			if identity.ManifestDigest == nil || identity.ManifestDigest.Algorithm != req.Msg.ExpectedManifestDigest.Algorithm ||
 				!bytes.Equal(identity.ManifestDigest.Value, req.Msg.ExpectedManifestDigest.Value) {
@@ -113,10 +122,35 @@ func (s *Server) VerifyCapabilityOwnership(
 		response.ReasonCode = ""
 		response.OwnershipRef = cloneMessage(identity.OwnershipRef)
 		response.ManifestRef = cloneMessage(identity.ManifestRef)
+		var commitment capabilityCommitmentRecord
+		if found, err := s.store.getJSON(tx, bucketCapabilityCommitments, capabilityKey(identity.CapabilityId, identity.Version), &commitment); err != nil {
+			return err
+		} else if found {
+			commitmentDigest = commitment.Digest
+		} else {
+			commitmentDigest = legacyCapabilityDigestTx(tx, identity)
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if response.Verified && s.authority.Supports(TrustModeVerified) {
+		resolver, ok := s.authority.(CommitmentResolver)
+		if !ok || commitmentDigest == "" {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "Capability ownership resolver identity unavailable")
+		}
+		objectID := req.Msg.CapabilityId + "@" + resolvedVersion
+		ownership, e := resolver.ResolveCommitment(ctx, "capability-ownership", objectID, commitmentDigest, response.OwnershipRef)
+		if e != nil || ownership == nil || !ownership.Finalized || ownership.FinalizedCheckpoint == 0 {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "Capability ownership finality unavailable")
+		}
+		manifest, e := resolver.ResolveCommitment(ctx, "capability-manifest", objectID, commitmentDigest, response.ManifestRef)
+		if e != nil || manifest == nil || !manifest.Finalized || manifest.FinalizedCheckpoint == 0 {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "Capability manifest finality unavailable")
+		}
+		response.OwnershipRef = ownership
+		response.ManifestRef = manifest
 	}
 	return connect.NewResponse(response), nil
 }
@@ -222,6 +256,9 @@ func (s *Server) CommitCapabilityManifest(
 			ManifestRef:    &manifestRef, OwnershipRef: &ownershipRef,
 			ActiveTrustModes: activeModes, UpdatedUnixMillis: s.now().UnixMilli(),
 		}
+		if err := s.store.putJSON(tx, bucketCapabilityCommitments, key, capabilityCommitmentRecord{Digest: manifestDigest}); err != nil {
+			return err
+		}
 		if s.router != nil {
 			if route, found := s.router.Resolve(req.Msg.ProviderId, req.Msg.CapabilityId, req.Msg.Version); found {
 				identity.Endpoints = []string{"worker://" + route.ServiceID + "/" + route.Operation + "?model=" + route.Model}
@@ -242,6 +279,33 @@ func (s *Server) CommitCapabilityManifest(
 		return nil, err
 	}
 	return connect.NewResponse(response), nil
+}
+
+func legacyCapabilityDigestTx(tx *bolt.Tx, identity *atostosv1.CapabilityIdentity) string {
+	if tx == nil || identity == nil {
+		return ""
+	}
+	cursor := tx.Bucket(bucketIdempotency).Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		parts := strings.Split(string(key), "\x00")
+		if len(parts) != 3 || parts[1] != "CommitCapabilityManifest" {
+			continue
+		}
+		var record idempotencyRecord
+		if json.Unmarshal(value, &record) != nil {
+			continue
+		}
+		resp := new(atostosv1.CommitCapabilityManifestResponse)
+		if proto.Unmarshal(record.Response, resp) != nil || resp.Capability == nil || resp.Capability.CapabilityId != identity.CapabilityId || resp.Capability.Version != identity.Version {
+			continue
+		}
+		request := &atostosv1.CommitCapabilityManifestRequest{Context: &atostosv1.RequestContext{CallerId: parts[0], IdempotencyKey: parts[2]}, CapabilityId: identity.CapabilityId, ProviderId: identity.ProviderId, Version: identity.Version, ManifestDigest: cloneMessage(identity.ManifestDigest), RequestedTrustModes: append([]atostosv1.TrustMode(nil), identity.ActiveTrustModes...)}
+		d, e := protoDigest("ATOS-TOS-CAPABILITY-MANIFEST-V1", withoutTransportContext(request))
+		if e == nil {
+			return d
+		}
+	}
+	return ""
 }
 
 func containsMode(modes []atostosv1.TrustMode, expected atostosv1.TrustMode) bool {

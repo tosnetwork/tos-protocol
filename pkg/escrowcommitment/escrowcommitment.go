@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
@@ -125,6 +126,21 @@ func Parse(data []byte) (Value, error) {
 		return Value{}, err
 	}
 	return value, nil
+}
+func Proto(data []byte) (*atostosv1.VerifiedEscrowTerms, error) {
+	v, err := Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return &atostosv1.VerifiedEscrowTerms{Version: v.Version, Canonicalization: v.Canonicalization, NetworkId: v.NetworkID, Domain: v.Domain, EscrowId: v.EscrowID, JobId: v.JobID, QuoteId: v.QuoteID, QuoteCommitmentDigest: v.QuoteCommitmentDigest, QuoteCommitmentRef: &atostosv1.NetworkReference{Network: v.QuoteCommitmentRef.Network, Reference: v.QuoteCommitmentRef.Reference}, PrincipalId: v.PrincipalID, RequesterAgentId: v.RequesterAgentID, ProviderId: v.ProviderID, CapabilityId: v.CapabilityID, CapabilityVersion: v.CapabilityVersion, ManifestDigest: parseDigest(v.ManifestDigest), OwnershipRef: &atostosv1.NetworkReference{Network: v.OwnershipRef.Network, Reference: v.OwnershipRef.Reference}, TrustMode: atostosv1.TrustMode(atostosv1.TrustMode_value[v.TrustMode]), ProofProfile: atostosv1.ProofProfile(atostosv1.ProofProfile_value[v.ProofProfile]), Reserve: &atostosv1.NetworkAmount{Asset: v.Reserve.Asset, AtomicAmount: v.Reserve.AtomicAmount}, AssetDecimals: v.AssetDecimals, SettlementBackend: v.SettlementBackend, SettlementAsset: v.SettlementAsset, FundingModel: v.FundingModel, AcceptanceDeadlineUnixMillis: v.AcceptanceDeadlineUnixMillis, ExecutionDeadlineUnixMillis: v.ExecutionDeadlineUnixMillis, EscrowDeadlineUnixMillis: v.EscrowDeadlineUnixMillis, UnderlyingServiceQuoteRef: v.UnderlyingServiceQuoteRef, DisputePolicyDigest: parseDigest(v.DisputePolicyDigest), SignerAuthorizationId: v.SignerAuthorizationID, SignerAuthorizationRef: &atostosv1.NetworkReference{Network: v.SignerAuthorizationRef.Network, Reference: v.SignerAuthorizationRef.Reference}, Subtotal: &atostosv1.NetworkAmount{Asset: v.Subtotal.Asset, AtomicAmount: v.Subtotal.AtomicAmount}, Fees: &atostosv1.NetworkAmount{Asset: v.Fees.Asset, AtomicAmount: v.Fees.AtomicAmount}, TermsDigest: parseDigest(v.TermsDigest)}, nil
+}
+func parseDigest(s string) *atostosv1.Digest {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return nil
+	}
+	b, _ := hex.DecodeString(parts[1])
+	return &atostosv1.Digest{Algorithm: parts[0], Value: b}
 }
 func Digest(v *atostosv1.VerifiedEscrowTerms) (string, error) {
 	value, err := CanonicalValue(v)

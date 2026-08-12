@@ -2,8 +2,10 @@
 package quotecommitment
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
@@ -96,6 +98,25 @@ func Parse(data []byte) (Value, error) {
 		return Value{}, err
 	}
 	return value, nil
+}
+
+// Proto reconstructs the transport object from canonical bytes. It is used by
+// independent read-only observers; the reconstructed protobuf is never an
+// authority by itself.
+func Proto(data []byte) (*atostosv1.QuoteCommitmentInput, error) {
+	v, err := Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return &atostosv1.QuoteCommitmentInput{Version: v.Version, Canonicalization: v.Canonicalization, NetworkId: v.NetworkID, Domain: v.Domain, QuoteId: v.QuoteID, PrincipalId: v.PrincipalID, RequesterAgentId: v.RequesterAgentID, ProviderId: v.ProviderID, CapabilityId: v.CapabilityID, CapabilityVersion: v.CapabilityVersion, ManifestDigest: parseDigest(v.ManifestDigest), OwnershipRef: &atostosv1.NetworkReference{Network: v.OwnershipRef.Network, Reference: v.OwnershipRef.Reference}, TrustMode: atostosv1.TrustMode(atostosv1.TrustMode_value[v.TrustMode]), ProofProfile: atostosv1.ProofProfile(atostosv1.ProofProfile_value[v.ProofProfile]), Subtotal: &atostosv1.Money{Amount: v.Subtotal.Amount, Currency: v.Subtotal.Asset}, Fees: &atostosv1.Money{Amount: v.Fees.Amount, Currency: v.Fees.Asset}, TotalMax: &atostosv1.Money{Amount: v.TotalMax.Amount, Currency: v.TotalMax.Asset}, AssetDecimals: v.AssetDecimals, TermsDigest: parseDigest(v.TermsDigest), DisputePolicyDigest: parseDigest(v.DisputePolicyDigest), AcceptanceDeadlineUnixMillis: v.AcceptanceDeadlineUnixMillis, ExpiresUnixMillis: v.ExpiresUnixMillis, ExecutionDeadlineUnixMillis: v.ExecutionDeadlineUnixMillis, SettlementBackend: v.SettlementBackend, SettlementAsset: v.SettlementAsset, UnderlyingServiceQuoteRef: v.UnderlyingServiceQuoteRef, SignerAuthorizationId: v.SignerAuthorizationID, SignerAuthorizationRef: &atostosv1.NetworkReference{Network: v.SignerAuthorizationRef.Network, Reference: v.SignerAuthorizationRef.Reference}}, nil
+}
+func parseDigest(s string) *atostosv1.Digest {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return nil
+	}
+	b, _ := hex.DecodeString(parts[1])
+	return &atostosv1.Digest{Algorithm: parts[0], Value: b}
 }
 func Digest(v *atostosv1.QuoteCommitmentInput) (string, error) {
 	value, err := CanonicalValue(v)

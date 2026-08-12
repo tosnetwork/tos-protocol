@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/verifiedproof"
@@ -24,6 +25,8 @@ func main() {
 	network := flag.String("network", "", "required TOS network identity")
 	domain := flag.String("domain", "", "required gateway trust domain")
 	observerCommand := flag.String("observer-command", "", "absolute read-only quorum observer executable")
+	protocolURL := flag.String("protocol-url", "", "read-only tos-protocol RPC URL")
+	protocolTokenFile := flag.String("protocol-token-file", "", "file containing the tos-protocol bearer token")
 	flag.Parse()
 	if flag.NArg() != 2 || flag.Arg(0) != "verify" {
 		fmt.Fprintln(os.Stderr, "usage: tos-verified-proof [--json] --network ID --domain DOMAIN verify PACKAGE.cbor")
@@ -35,7 +38,22 @@ func main() {
 		os.Exit(2)
 	}
 	var observer verifiedproof.Observer
-	if *observerCommand != "" {
+	if *protocolURL != "" {
+		if *protocolTokenFile == "" {
+			fmt.Fprintln(os.Stderr, "--protocol-token-file is required with --protocol-url")
+			os.Exit(2)
+		}
+		tokenBytes, e := os.ReadFile(*protocolTokenFile)
+		if e != nil {
+			fmt.Fprintln(os.Stderr, e)
+			os.Exit(2)
+		}
+		observer, e = verifiedproof.NewProtocolObserver(*protocolURL, strings.TrimSpace(string(tokenBytes)))
+		if e != nil {
+			fmt.Fprintln(os.Stderr, e)
+			os.Exit(2)
+		}
+	} else if *observerCommand != "" {
 		if (*observerCommand)[0] != '/' {
 			fmt.Fprintln(os.Stderr, "--observer-command must be absolute")
 			os.Exit(2)

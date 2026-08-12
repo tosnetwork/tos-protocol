@@ -2,11 +2,13 @@ package atosrpc
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/protobuf/proto"
 )
 
 // principalBindingRecord is bucketPrincipalBindings' stored value: the bound
@@ -16,11 +18,14 @@ import (
 // would make Commit's (kind, id, digest) idempotency collapse two different
 // agent_id bindings for the same principal onto the same reference.
 type principalBindingRecord struct {
-	AgentID           string `json:"agent_id"`
-	RefNetwork        string `json:"ref_network"`
-	RefReference      string `json:"ref_reference"`
-	CreatedUnixMillis int64  `json:"created_unix_millis"`
-	UpdatedUnixMillis int64  `json:"updated_unix_millis"`
+	AgentID                string `json:"agent_id"`
+	RefNetwork             string `json:"ref_network"`
+	RefReference           string `json:"ref_reference"`
+	RefFinalized           bool   `json:"ref_finalized,omitempty"`
+	RefFinalizedCheckpoint uint64 `json:"ref_finalized_checkpoint,omitempty"`
+	CommitmentDigest       string `json:"commitment_digest,omitempty"`
+	CreatedUnixMillis      int64  `json:"created_unix_millis"`
+	UpdatedUnixMillis      int64  `json:"updated_unix_millis"`
 }
 
 // SeedIdentity installs a bootstrap identity fact. It is intended for service
@@ -151,7 +156,7 @@ func (s *Server) ResolveAgentIdentity(
 }
 
 func (s *Server) ResolvePrincipalBinding(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.ResolvePrincipalBindingRequest],
 ) (*connect.Response[atostosv1.ResolvePrincipalBindingResponse], error) {
 	if req == nil || req.Msg == nil {
@@ -164,6 +169,7 @@ func (s *Server) ResolvePrincipalBinding(
 		return nil, err
 	}
 	response := &atostosv1.ResolvePrincipalBindingResponse{PrincipalId: req.Msg.PrincipalId}
+	var commitmentDigest string
 	err := s.store.view(func(tx *bolt.Tx) error {
 		var record principalBindingRecord
 		found, err := s.store.getJSON(tx, bucketPrincipalBindings, req.Msg.PrincipalId, &record)
@@ -193,11 +199,39 @@ func (s *Server) ResolvePrincipalBinding(
 		response.Identity = identity
 		response.Bound = true
 		response.Status = atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_ACTIVE
-		response.BindingRef = &NetworkReference{Network: record.RefNetwork, Reference: record.RefReference}
+		response.BindingRef = &NetworkReference{
+			Network: record.RefNetwork, Reference: record.RefReference,
+			Finalized: record.RefFinalized, FinalizedCheckpoint: record.RefFinalizedCheckpoint,
+		}
+		commitmentDigest = record.CommitmentDigest
+		if commitmentDigest == "" {
+			commitmentDigest = legacyPrincipalBindingDigestTx(tx, req.Msg.PrincipalId, record)
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if response.Bound && response.Identity != nil && response.BindingRef != nil && s.authority.Supports(TrustModeVerified) {
+		resolver, ok := s.authority.(CommitmentResolver)
+		if !ok {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding resolver is unavailable")
+		}
+		if commitmentDigest == "" {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding commitment identity is unavailable")
+		}
+		// Legacy projections predate durable finality fields. Recover those
+		// commitments by deterministic tuple, then require the authority result
+		// to match the exact reference retained by the old projection.
+		var expected *NetworkReference
+		if response.BindingRef.Finalized && response.BindingRef.FinalizedCheckpoint != 0 {
+			expected = response.BindingRef
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "principal-binding", req.Msg.PrincipalId, commitmentDigest, expected)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != response.BindingRef.Network || live.Reference != response.BindingRef.Reference {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding finality is unavailable")
+		}
+		response.BindingRef = live
 	}
 	return connect.NewResponse(response), nil
 }
@@ -282,6 +316,8 @@ func (s *Server) CreatePrincipalBinding(
 		now := s.now().UnixMilli()
 		record := principalBindingRecord{
 			AgentID: req.Msg.AgentId, RefNetwork: ref.Network, RefReference: ref.Reference,
+			RefFinalized: ref.Finalized, RefFinalizedCheckpoint: ref.FinalizedCheckpoint,
+			CommitmentDigest:  digest,
 			CreatedUnixMillis: now, UpdatedUnixMillis: now,
 		}
 		if err := s.store.putJSON(tx, bucketPrincipalBindings, req.Msg.PrincipalId, record); err != nil {
@@ -300,6 +336,35 @@ func (s *Server) CreatePrincipalBinding(
 		return nil, err
 	}
 	return connect.NewResponse(response), nil
+}
+
+func legacyPrincipalBindingDigestTx(tx *bolt.Tx, principalID string, binding principalBindingRecord) string {
+	if tx == nil || principalID == "" || binding.AgentID == "" {
+		return ""
+	}
+	cursor := tx.Bucket(bucketIdempotency).Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		parts := strings.Split(string(key), "\x00")
+		if len(parts) != 3 || parts[1] != "CreatePrincipalBinding" {
+			continue
+		}
+		var record idempotencyRecord
+		if err := json.Unmarshal(value, &record); err != nil || len(record.Response) == 0 {
+			continue
+		}
+		response := new(atostosv1.CreatePrincipalBindingResponse)
+		if err := proto.Unmarshal(record.Response, response); err != nil || response.PrincipalId != principalID ||
+			response.Identity == nil || response.Identity.AgentId != binding.AgentID || response.BindingRef == nil ||
+			response.BindingRef.Reference != binding.RefReference {
+			continue
+		}
+		request := &atostosv1.CreatePrincipalBindingRequest{Context: &atostosv1.RequestContext{CallerId: parts[0], IdempotencyKey: parts[2]}, PrincipalId: principalID, AgentId: binding.AgentID}
+		digest, err := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-V1", withoutTransportContext(request))
+		if err == nil {
+			return digest
+		}
+	}
+	return ""
 }
 
 // RevokePrincipalBinding ends a principal's current binding.

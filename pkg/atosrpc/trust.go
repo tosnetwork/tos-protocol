@@ -481,7 +481,7 @@ func (s *Server) RevokeExecutionSigner(
 }
 
 func (s *Server) ResolveExecutionSignerAuthorization(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.ResolveExecutionSignerAuthorizationRequest],
 ) (*connect.Response[atostosv1.ResolveExecutionSignerAuthorizationResponse], error) {
 	if req == nil || req.Msg == nil {
@@ -519,6 +519,21 @@ func (s *Server) ResolveExecutionSignerAuthorization(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if response.Authorization != nil && response.Authorization.Value != nil && response.Authorization.AuthorizationRef != nil && s.authority.Supports(TrustModeVerified) {
+		resolver, ok := s.authority.(CommitmentResolver)
+		if !ok {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer resolver unavailable")
+		}
+		digest, digestErr := protoDigest("ATOS-TOS-SIGNER-AUTHORIZATION-V1", response.Authorization.Value)
+		if digestErr != nil {
+			return nil, digestErr
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "execution-signer", response.Authorization.Value.AuthorizationId, digest, response.Authorization.AuthorizationRef)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer finality unavailable")
+		}
+		response.Authorization.AuthorizationRef = live
 	}
 	return connect.NewResponse(response), nil
 }

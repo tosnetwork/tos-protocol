@@ -133,6 +133,12 @@ func (d *TaskEscrowDriver) ReserveEscrow(
 	ctx context.Context,
 	request ReserveEscrowRequest,
 ) (Result, error) {
+	// The time gate belongs to the mutation boundary. reservationAction is
+	// also used to reconstruct the immutable deploy ActionID during read-only
+	// recovery, which must continue to work after the escrow deadline.
+	if request.DeadlineUnix <= uint64(d.now().Unix()) {
+		return Result{}, errors.New("invalid task escrow reservation deadline")
+	}
 	action, err := d.reservationAction(request)
 	if err != nil {
 		return Result{}, err
@@ -189,6 +195,10 @@ func (d *TaskEscrowDriver) ResolveEscrow(ctx context.Context, request ReserveEsc
 		if err := validateReservedState(transition.State, action); err != nil {
 			return Result{}, false, err
 		}
+	} else if transition.State.Status == chain.TaskEscrowStatusAccepted || transition.State.Status == chain.TaskEscrowStatusResultSubmitted {
+		if err := validateAdvancedReservationState(transition.State, action); err != nil {
+			return Result{}, false, err
+		}
 	} else if transition.State.Status == chain.TaskEscrowStatusSettled {
 		if err := validateSettledReservationState(transition.State, action); err != nil {
 			return Result{}, false, err
@@ -225,7 +235,7 @@ func (d *TaskEscrowDriver) reservationAction(request ReserveEscrowRequest) (chai
 	if creator == agent || verifier == creator || verifier == agent {
 		return chain.TaskEscrowAction{}, errors.New("Task Escrow creator, agent, and verifier must be distinct")
 	}
-	if strings.TrimSpace(request.EscrowID) == "" || request.BudgetNanoTOS == 0 || request.DeadlineUnix <= uint64(d.now().Unix()) || !validDigest(request.PolicyHash) || !validDigest(request.PermissionHash) {
+	if strings.TrimSpace(request.EscrowID) == "" || request.BudgetNanoTOS == 0 || request.DeadlineUnix == 0 || !validDigest(request.PolicyHash) || !validDigest(request.PermissionHash) {
 		return chain.TaskEscrowAction{}, errors.New("invalid task escrow reservation")
 	}
 	funding, ok := addNoOverflow(request.BudgetNanoTOS, d.fundingOverhead)
@@ -411,6 +421,22 @@ func (d *TaskEscrowDriver) SettleProvider(
 	return transitionResult(transition), nil
 }
 
+func (d *TaskEscrowDriver) ResolveSettlement(ctx context.Context, request SettleProviderRequest) (Result, error) {
+	if request.BudgetNanoTOS == 0 || request.PayoutNanoTOS > request.BudgetNanoTOS ||
+		!validDigest(request.ResultHash) || !validDigest(request.EvidenceHash) {
+		return Result{}, errors.New("invalid task escrow settlement recovery")
+	}
+	state, err := d.read(ctx, request.ContractAddress)
+	if err != nil {
+		return Result{}, err
+	}
+	if state.Status != chain.TaskEscrowStatusSettled || state.DisputeHash != zeroDigest() ||
+		state.ResultHash != request.ResultHash || state.EvidenceHash != request.EvidenceHash {
+		return Result{}, errors.New("task escrow is not an ordinary settled outcome")
+	}
+	return d.replaySettlement(ctx, state, request)
+}
+
 func (d *TaskEscrowDriver) RefundPrincipal(
 	ctx context.Context,
 	request RefundPrincipalRequest,
@@ -477,6 +503,59 @@ func (d *TaskEscrowDriver) RefundPrincipal(
 	default:
 		return Result{}, errors.New("task escrow cannot be refunded from current state")
 	}
+}
+
+func (d *TaskEscrowDriver) ResolveRelease(ctx context.Context, request RefundPrincipalRequest) (Result, error) {
+	if request.BudgetNanoTOS == 0 || !validDigest(request.ReleaseDigest) {
+		return Result{}, errors.New("invalid task escrow release recovery")
+	}
+	state, err := d.read(ctx, request.ContractAddress)
+	if err != nil {
+		return Result{}, err
+	}
+	var kind chain.TaskEscrowActionKind
+	switch state.Status {
+	case chain.TaskEscrowStatusCancelled:
+		kind = chain.TaskEscrowActionCancel
+	case chain.TaskEscrowStatusExpired:
+		kind = chain.TaskEscrowActionTimeout
+	case chain.TaskEscrowStatusRejected:
+		kind = chain.TaskEscrowActionReject
+	default:
+		return Result{}, errors.New("task escrow is not a released outcome")
+	}
+	action := chain.TaskEscrowAction{
+		Version: chain.TaskEscrowActionVersion, Network: d.network,
+		Kind: kind, EscrowID: request.EscrowID, ContractAddress: state.ContractAddress,
+		Creator: state.Creator, Agent: state.Agent, Verifier: state.Verifier,
+		BudgetNanoTOS: request.BudgetNanoTOS, DeadlineUnix: state.DeadlineUnix,
+		ReviewPeriod: state.ReviewPeriod, PolicyHash: state.PolicyHash,
+		PermissionHash: state.PermissionHash, ReleaseDigest: request.ReleaseDigest,
+	}
+	if err = d.finishAction(&action); err != nil {
+		return Result{}, err
+	}
+	expectedSender := state.Creator
+	if kind == chain.TaskEscrowActionTimeout {
+		expectedSender = ""
+	} else if kind == chain.TaskEscrowActionReject {
+		expectedSender = state.Agent
+	}
+	transition, err := d.resolveAndObserve(ctx, action, chain.TaskEscrowTransitionReference{
+		ExpectedSender: expectedSender, ExpectedKind: kind,
+		ExpectedQueryID: action.QueryID, ExpectedBodyHash: action.ExpectedBodyHash,
+		ExpectedCreator: state.Creator, ExpectedCreatorMinimum: request.BudgetNanoTOS,
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	if transition.State.Status != state.Status || transition.State.BudgetNanoTOS != 0 ||
+		transition.State.BalanceNanoTOS != 0 || transition.CreatorPaidNanoTOS < request.BudgetNanoTOS {
+		return Result{}, errors.New("task escrow release recovery mismatch")
+	}
+	result := transitionResult(transition)
+	result.ActionID = action.ActionID
+	return result, nil
 }
 
 func (d *TaskEscrowDriver) OpenDispute(
@@ -1002,6 +1081,28 @@ func validateSettledReservationState(state chain.TaskEscrowState, action chain.T
 		state.EvidenceHash == zeroDigest() || state.ReviewDeadlineUnix == 0 ||
 		state.AttestorPublicKey != "" {
 		return errors.New("settled Task Escrow state does not match reservation")
+	}
+	return nil
+}
+
+func validateAdvancedReservationState(state chain.TaskEscrowState, action chain.TaskEscrowAction) error {
+	if (state.Status != chain.TaskEscrowStatusAccepted && state.Status != chain.TaskEscrowStatusResultSubmitted) ||
+		state.Creator != action.Creator || !state.HasAgent || state.Agent != action.Agent ||
+		!state.HasVerifier || state.Verifier != action.Verifier ||
+		state.BudgetNanoTOS != action.BudgetNanoTOS || state.BalanceNanoTOS < action.BudgetNanoTOS ||
+		state.DeadlineUnix != action.DeadlineUnix || state.ReviewPeriod != action.ReviewPeriod ||
+		state.PolicyHash != action.PolicyHash || state.PermissionHash != action.PermissionHash ||
+		state.DisputeHash != zeroDigest() || state.AttestorPublicKey != "" {
+		return errors.New("advanced Task Escrow state does not match reservation")
+	}
+	if state.Status == chain.TaskEscrowStatusAccepted {
+		if state.ResultHash != zeroDigest() || state.EvidenceHash != zeroDigest() || state.ReviewDeadlineUnix != 0 {
+			return errors.New("accepted Task Escrow state has unexpected result evidence")
+		}
+		return nil
+	}
+	if !validNonZeroDigest(state.ResultHash) || !validNonZeroDigest(state.EvidenceHash) || state.ReviewDeadlineUnix == 0 {
+		return errors.New("submitted Task Escrow state is missing result evidence")
 	}
 	return nil
 }

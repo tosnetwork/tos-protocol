@@ -16,35 +16,36 @@ import (
 )
 
 var (
-	bucketMeta                 = []byte("meta-v1")
-	bucketIdentities           = []byte("identities-v1")
-	bucketIdentityURIs         = []byte("identity-uris-v1")
-	bucketPrincipalBindings    = []byte("principal-bindings-v1")
-	bucketPrincipalRevocations = []byte("principal-binding-revocations-v1")
-	bucketCapabilities         = []byte("capabilities-v1")
-	bucketCapabilityLatest     = []byte("capability-latest-v1")
-	bucketQuoteCommitments     = []byte("quote-commitments-v1")
-	bucketSignerAuths          = []byte("signer-authorizations-v1")
-	bucketSignerAuthByAuthID   = []byte("signer-auth-by-authorization-id-v1")
-	bucketEscrows              = []byte("escrows-v1")
-	bucketEscrowByQuote        = []byte("escrow-by-quote-v1")
-	bucketSettlements          = []byte("settlements-v1")
-	bucketSettlementByJob      = []byte("settlement-by-job-v1")
-	bucketSettlementByRcpt     = []byte("settlement-by-receipt-v1")
-	bucketReceipts             = []byte("execution-receipts-v1")
-	bucketReceiptByJob         = []byte("receipt-by-job-v1")
-	bucketEvidence             = []byte("proof-of-service-v1")
-	bucketProofs               = []byte("proofs-v1")
-	bucketServiceQuotes        = []byte("service-quotes-v1")
-	bucketFinancialAnchors     = []byte("managed-financial-anchors-v1")
-	bucketJobs                 = []byte("execution-jobs-v1")
-	bucketIdempotency          = []byte("idempotency-v1")
+	bucketMeta                  = []byte("meta-v1")
+	bucketIdentities            = []byte("identities-v1")
+	bucketIdentityURIs          = []byte("identity-uris-v1")
+	bucketPrincipalBindings     = []byte("principal-bindings-v1")
+	bucketPrincipalRevocations  = []byte("principal-binding-revocations-v1")
+	bucketCapabilities          = []byte("capabilities-v1")
+	bucketCapabilityCommitments = []byte("capability-commitments-v1")
+	bucketCapabilityLatest      = []byte("capability-latest-v1")
+	bucketQuoteCommitments      = []byte("quote-commitments-v1")
+	bucketSignerAuths           = []byte("signer-authorizations-v1")
+	bucketSignerAuthByAuthID    = []byte("signer-auth-by-authorization-id-v1")
+	bucketEscrows               = []byte("escrows-v1")
+	bucketEscrowByQuote         = []byte("escrow-by-quote-v1")
+	bucketSettlements           = []byte("settlements-v1")
+	bucketSettlementByJob       = []byte("settlement-by-job-v1")
+	bucketSettlementByRcpt      = []byte("settlement-by-receipt-v1")
+	bucketReceipts              = []byte("execution-receipts-v1")
+	bucketReceiptByJob          = []byte("receipt-by-job-v1")
+	bucketEvidence              = []byte("proof-of-service-v1")
+	bucketProofs                = []byte("proofs-v1")
+	bucketServiceQuotes         = []byte("service-quotes-v1")
+	bucketFinancialAnchors      = []byte("managed-financial-anchors-v1")
+	bucketJobs                  = []byte("execution-jobs-v1")
+	bucketIdempotency           = []byte("idempotency-v1")
 )
 
 var allBuckets = [][]byte{
 	bucketMeta, bucketIdentities, bucketIdentityURIs, bucketPrincipalBindings,
 	bucketPrincipalRevocations,
-	bucketCapabilities, bucketCapabilityLatest, bucketQuoteCommitments,
+	bucketCapabilities, bucketCapabilityCommitments, bucketCapabilityLatest, bucketQuoteCommitments,
 	bucketSignerAuths, bucketSignerAuthByAuthID, bucketEscrows, bucketEscrowByQuote, bucketSettlements,
 	bucketSettlementByJob, bucketSettlementByRcpt, bucketReceipts,
 	bucketReceiptByJob, bucketEvidence, bucketProofs, bucketServiceQuotes,

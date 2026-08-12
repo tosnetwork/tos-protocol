@@ -109,6 +109,7 @@ type ProofOfService struct {
 	EvidenceRef    Reference `json:"evidence_ref"`
 	ContentDigest  string    `json:"content_digest"`
 	RetrievalRef   string    `json:"retrieval_ref,omitempty"`
+	CanonicalCBOR  []byte    `json:"canonical_cbor"`
 }
 
 type Package struct {
@@ -188,6 +189,15 @@ func validDigest(value string) bool {
 		return false
 	}
 	_, err := hex.DecodeString(value[7:])
+	return err == nil && value == strings.ToLower(value)
+}
+
+func validTVMCodeHash(value string) bool {
+	const prefix = "tvm-cell-sha256:"
+	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+64 {
+		return false
+	}
+	_, err := hex.DecodeString(value[len(prefix):])
 	return err == nil && value == strings.ToLower(value)
 }
 

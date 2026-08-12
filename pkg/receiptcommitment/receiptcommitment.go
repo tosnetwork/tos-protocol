@@ -90,6 +90,23 @@ func Parse(data []byte) (Claims, error) {
 	}
 	return Claims{v.ReceiptID, v.QuoteID, v.EscrowID, v.JobID, v.PrincipalID, v.ProviderID, v.CapabilityID, v.CapabilityVersion, v.TrustMode, v.ProofProfile, v.Result, text(v.InputCommitment), text(v.OutputCommitment), text(v.UsageCommitment), v.ExecutionSignerID, v.SignerAuthorizationID, v.SignatureAlgorithm, v.NetworkCharge.AtomicAmount, v.CompletedUnixMillis}, nil
 }
+func Proto(data []byte) (*atostosv1.ExecutionReceiptEnvelope, error) {
+	var v Value
+	if err := codec.Unmarshal(data, &v); err != nil {
+		return nil, err
+	}
+	r := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: v.ReceiptID, QuoteId: v.QuoteID, EscrowId: v.EscrowID, JobId: v.JobID, PrincipalId: v.PrincipalID, ProviderId: v.ProviderID, CapabilityId: v.CapabilityID, CapabilityVersion: v.CapabilityVersion, TrustMode: atostosv1.TrustMode(atostosv1.TrustMode_value[v.TrustMode]), ProofProfile: atostosv1.ProofProfile(atostosv1.ProofProfile_value[v.ProofProfile]), Result: atostosv1.ExecutionResult(atostosv1.ExecutionResult_value[v.Result]), InputCommitment: protoDigest(v.InputCommitment), OutputCommitment: protoDigest(v.OutputCommitment), UsageCommitment: protoDigest(v.UsageCommitment), Usage: &atostosv1.Usage{InputBytes: v.Usage.InputBytes, OutputBytes: v.Usage.OutputBytes, InputTokens: v.Usage.InputTokens, OutputTokens: v.Usage.OutputTokens, ExecutionMillis: v.Usage.ExecutionMillis}, ClientCharge: &atostosv1.Money{Amount: v.ClientCharge.Amount, Currency: v.ClientCharge.Asset}, NetworkCharge: &atostosv1.NetworkAmount{Asset: v.NetworkCharge.Asset, AtomicAmount: v.NetworkCharge.AtomicAmount}, ExecutionSignerId: v.ExecutionSignerID, SignerAuthorizationId: v.SignerAuthorizationID, SignatureAlgorithm: v.SignatureAlgorithm, CompletedUnixMillis: v.CompletedUnixMillis, ErrorCode: v.ErrorCode}
+	for _, a := range v.Artifacts {
+		r.Artifacts = append(r.Artifacts, &atostosv1.ArtifactCommitment{ArtifactId: a.ID, ContentType: a.MediaType, SizeBytes: a.SizeBytes, Digest: protoDigest(a.Digest)})
+	}
+	if v.Aipow != nil {
+		r.Aipow = &atostosv1.AipowWorkAttribution{CapabilityClass: v.Aipow.CapabilityClass, Unit: v.Aipow.Unit, WorkUnits: v.Aipow.WorkUnits, RateCardVersion: v.Aipow.RateCardVersion, EvidenceLevel: atostosv1.AipowEvidenceLevel(atostosv1.AipowEvidenceLevel_value[v.Aipow.EvidenceLevel]), EarnerIdentityCommitment: protoDigest(v.Aipow.EarnerIdentityCommitment), PayerIdentityCommitment: protoDigest(v.Aipow.PayerIdentityCommitment), ChallengeTask: v.Aipow.ChallengeTask}
+	}
+	return r, nil
+}
+func protoDigest(v digest) *atostosv1.Digest {
+	return &atostosv1.Digest{Algorithm: v.Algorithm, Value: append([]byte(nil), v.Value...)}
+}
 
 func dg(v *atostosv1.Digest) digest {
 	if v == nil {

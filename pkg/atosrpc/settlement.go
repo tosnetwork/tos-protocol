@@ -2,6 +2,7 @@ package atosrpc
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"strings"
 	"time"
@@ -308,8 +309,95 @@ func (s *Server) GetEscrow(
 		}
 		response.Escrow = &atostosv1.Escrow{EscrowId: terms.EscrowId, QuoteId: terms.QuoteId, JobId: terms.JobId, PrincipalId: terms.PrincipalId, ProviderId: terms.ProviderId, CapabilityId: terms.CapabilityId, CapabilityVersion: terms.CapabilityVersion, TrustMode: terms.TrustMode, ProofProfile: terms.ProofProfile, Reserved: cloneMessage(terms.Reserve), State: state, ExpiresUnixMillis: terms.EscrowDeadlineUnixMillis, EscrowRef: &NetworkReference{Network: s.economy.Network(), Reference: resolved.ContractReference, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}, FundingModel: terms.FundingModel, QuoteCommitmentDigest: terms.QuoteCommitmentDigest, QuoteCommitmentRef: cloneMessage(terms.QuoteCommitmentRef), ReservationDigest: reservationDigest, ReservationActionId: resolved.ActionID, ContractCodeHash: resolved.State.CodeHash, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}
 		if state == atostosv1.EscrowState_ESCROW_STATE_RELEASED || state == atostosv1.EscrowState_ESCROW_STATE_SETTLED {
+			if state == atostosv1.EscrowState_ESCROW_STATE_RELEASED {
+				if digestErr := validateDigest(digestMessageFromString(req.Msg.ExpectedReleaseDigest)); digestErr != nil || strings.TrimSpace(req.Msg.ExpectedReleaseReasonCode) == "" {
+					return nil, failedPrecondition("ESCROW_MISMATCH", "expected release tuple is required for terminal recovery")
+				}
+				resolver, ok := s.economy.(economic.ReleaseResolver)
+				if !ok {
+					return nil, unavailable("NETWORK_UNAVAILABLE", "read-only TaskEscrow release resolver unavailable")
+				}
+				terminal, terminalErr := resolver.ResolveRelease(ctx, economic.RefundPrincipalRequest{
+					EscrowID: terms.EscrowId, ContractAddress: resolved.State.ContractAddress,
+					BudgetNanoTOS: reserve.Uint64(), ReleaseDigest: req.Msg.ExpectedReleaseDigest,
+				})
+				if terminalErr != nil || terminal.TransitionReference == "" || terminal.State.ObservedMasterSeqno == 0 {
+					return nil, unavailable("NETWORK_UNAVAILABLE", "canonical release transition unavailable")
+				}
+				if expected := req.Msg.ExpectedTerminalRef; expected != nil &&
+					(expected.Network != s.economy.Network() || expected.Reference != terminal.TransitionReference ||
+						expected.FinalizedCheckpoint > terminal.State.ObservedMasterSeqno) {
+					return nil, conflict("ESCROW_MISMATCH", "canonical release reference mismatch")
+				}
+				resolved.TransitionReference = terminal.TransitionReference
+				resolved.State = terminal.State
+				response.Escrow.ReleaseDigest = req.Msg.ExpectedReleaseDigest
+				response.Escrow.ReleaseReasonCode = req.Msg.ExpectedReleaseReasonCode
+				response.Escrow.ReleaseActionId = terminal.ActionID
+				response.Escrow.ReleaseRef = &NetworkReference{Network: s.economy.Network(), Reference: terminal.TransitionReference, Finalized: true, FinalizedCheckpoint: terminal.State.ObservedMasterSeqno}
+				response.Escrow.FinalizedCheckpoint = terminal.State.ObservedMasterSeqno
+			} else if state == atostosv1.EscrowState_ESCROW_STATE_SETTLED {
+				// ResolveEscrow's transition is the reservation/deploy observation.
+				// A terminal reference is exposed only after the exact settlement
+				// projection can reconstruct and independently observe its action.
+				resolved.TransitionReference = ""
+				resolver, ok := s.economy.(economic.SettlementResolver)
+				if !ok {
+					return nil, unavailable("NETWORK_UNAVAILABLE", "read-only TaskEscrow settlement resolver unavailable")
+				}
+				var settlement *atostosv1.Settlement
+				var receipt *atostosv1.CommittedExecutionReceipt
+				loadErr := s.store.view(func(tx *bolt.Tx) error {
+					id := tx.Bucket(bucketSettlementByJob).Get([]byte(terms.JobId))
+					if id == nil {
+						return errors.New("settlement projection unavailable")
+					}
+					settlement = new(atostosv1.Settlement)
+					found, err := s.store.getProto(tx, bucketSettlements, string(id), settlement)
+					if err != nil || !found {
+						return errors.New("settlement projection unavailable")
+					}
+					receipt = new(atostosv1.CommittedExecutionReceipt)
+					found, err = s.store.getProto(tx, bucketReceipts, settlement.ReceiptId, receipt)
+					if err != nil || !found || receipt.Receipt == nil {
+						return errors.New("settlement receipt unavailable")
+					}
+					return nil
+				})
+				if loadErr != nil {
+					// The chain may have settled immediately before the protocol
+					// projection commit. SettleJob must be allowed to reach its
+					// read-only replay and finish that projection; GetEscrow simply
+					// withholds terminal evidence until then.
+					response.Found = true
+					return connect.NewResponse(response), nil
+				}
+				if settlement.SettlementRef == nil || settlement.Charged == nil {
+					return nil, unavailable("NETWORK_UNAVAILABLE", "canonical settlement projection is malformed")
+				}
+				resultHash, hashErr := digestString(receipt.Receipt.OutputCommitment)
+				if hashErr != nil {
+					return nil, hashErr
+				}
+				evidenceHash, evidenceErr := protoDigest("ATOS-TOS-TASK-EVIDENCE-V1", receipt.Receipt)
+				if evidenceErr != nil {
+					return nil, evidenceErr
+				}
+				charge, chargeErr := parseAtomic(settlement.Charged.AtomicAmount)
+				if chargeErr != nil || !charge.IsUint64() {
+					return nil, failedPrecondition("SETTLEMENT_FAILED", "stored settlement charge is invalid")
+				}
+				terminal, terminalErr := resolver.ResolveSettlement(ctx, economic.SettleProviderRequest{EscrowID: terms.EscrowId, ContractAddress: resolved.State.ContractAddress, BudgetNanoTOS: reserve.Uint64(), ResultHash: resultHash, EvidenceHash: evidenceHash, PayoutNanoTOS: charge.Uint64()})
+				if terminalErr != nil || terminal.TransitionReference != settlement.SettlementRef.Reference || terminal.State.ObservedMasterSeqno == 0 {
+					return nil, unavailable("NETWORK_UNAVAILABLE", "canonical settlement transition unavailable")
+				}
+				resolved.TransitionReference = terminal.TransitionReference
+				resolved.State = terminal.State
+				response.Escrow.FinalizedCheckpoint = terminal.State.ObservedMasterSeqno
+			}
 			if strings.TrimSpace(resolved.TransitionReference) == "" {
-				return nil, unavailable("NETWORK_UNAVAILABLE", "terminal TaskEscrow transition reference unavailable")
+				response.Found = true
+				return connect.NewResponse(response), nil
 			}
 			response.Escrow.TerminalRef = &NetworkReference{Network: s.economy.Network(), Reference: resolved.TransitionReference, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}
 		}
@@ -615,6 +703,7 @@ func (s *Server) SettleJob(
 			SettlementRef: &ref, SettledUnixMillis: s.now().UnixMilli(),
 		}
 		escrow.State = atostosv1.EscrowState_ESCROW_STATE_SETTLED
+		escrow.TerminalRef = cloneMessage(&ref)
 		if err := s.store.putProto(tx, bucketSettlements, settlementID, settlement); err != nil {
 			return err
 		}

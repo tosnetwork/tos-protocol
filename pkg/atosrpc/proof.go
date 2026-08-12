@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/aipow"
+	"github.com/tosnetwork/tos-protocol/pkg/poscommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	bolt "go.etcd.io/bbolt"
@@ -355,7 +356,7 @@ func (s *Server) CommitProofOfServiceEvidence(
 			response.Evidence = existing
 			return nil
 		}
-		digest, err := protoDigest("ATOS-TOS-PROOF-OF-SERVICE-V1", value)
+		digest, err := poscommitment.Digest(value)
 		if err != nil {
 			return err
 		}
@@ -393,7 +394,7 @@ func (s *Server) ResolveProofOfServiceEvidence(ctx context.Context, req *connect
 	if err := requiredIdentifier("evidence_id", v.EvidenceId); err != nil {
 		return nil, err
 	}
-	digest, err := protoDigest("ATOS-TOS-PROOF-OF-SERVICE-V1", v)
+	digest, err := poscommitment.Digest(v)
 	if err != nil {
 		return nil, err
 	}

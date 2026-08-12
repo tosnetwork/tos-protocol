@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/poscommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"math/big"
@@ -58,6 +59,7 @@ type EvidenceRequest struct {
 	ObjectID  string    `json:"object_id"`
 	Digest    string    `json:"digest"`
 	Reference Reference `json:"reference"`
+	Package   *Package  `json:"package,omitempty"`
 }
 type EvidenceObservation struct {
 	Found               bool   `json:"found"`
@@ -133,7 +135,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	if p.Quote.TrustMode != "verified" || p.Quote.ProofProfile != "tos_verified_v1" || p.Quote.SettlementBackend != "tos" || p.Quote.SettlementAsset != "TOS" || p.Quote.AssetDecimals != 9 || p.Quote.FeesAtomic != "0" || strings.TrimSpace(p.Escrow.FundingModel) == "" {
 		add(CodeTuple, "quote", "unsupported Verified commercial tuple")
 	}
-	digests := map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest, "escrow.contract_code_hash": p.Escrow.ContractCodeHash}
+	digests := map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest}
 	if hasExecution {
 		digests["receipt.receipt_digest"] = p.Receipt.ReceiptDigest
 		digests["receipt.input_commitment"] = p.Receipt.InputCommitment
@@ -147,6 +149,9 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 			add(CodeDigest, field, "invalid SHA-256 digest")
 		}
 	}
+	if !validTVMCodeHash(p.Escrow.ContractCodeHash) {
+		add(CodeDigest, "escrow.contract_code_hash", "invalid TVM cell SHA-256 code hash")
+	}
 	if d, err := codec.DigestCanonical(quotecommitment.Domain, p.Quote.CanonicalCBOR); err != nil || d != p.Quote.CommitmentDigest {
 		add(CodeDigest, "quote.canonical_cbor", "canonical Quote bytes do not match commitment digest")
 	} else if q, err := quotecommitment.Parse(p.Quote.CanonicalCBOR); err != nil || q.QuoteID != p.Quote.QuoteID || q.NetworkID != p.NetworkID || q.Domain != p.GatewayDomain || q.PrincipalID != p.PrincipalID || q.ProviderID != p.ProviderID || q.CapabilityID != p.Capability.CapabilityID || q.CapabilityVersion != p.Capability.CapabilityVersion || q.ManifestDigest != p.Capability.ManifestDigest || q.TermsDigest != p.Quote.TermsDigest || q.DisputePolicyDigest != p.Quote.DisputePolicyDigest || q.SettlementBackend != p.Quote.SettlementBackend || q.SettlementAsset != p.Quote.SettlementAsset || q.AssetDecimals != p.Quote.AssetDecimals {
@@ -156,6 +161,13 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 		add(CodeDigest, "escrow.canonical_cbor", "canonical reservation bytes do not match digest")
 	} else if e, err := escrowcommitment.Parse(p.Escrow.CanonicalCBOR); err != nil || e.EscrowID != p.Escrow.EscrowID || e.JobID != p.Escrow.JobID || e.QuoteID != p.Quote.QuoteID || e.NetworkID != p.NetworkID || e.Domain != p.GatewayDomain || e.QuoteCommitmentDigest != p.Quote.CommitmentDigest || e.PrincipalID != p.PrincipalID || e.ProviderID != p.ProviderID || e.CapabilityID != p.Capability.CapabilityID || e.CapabilityVersion != p.Capability.CapabilityVersion || e.ManifestDigest != p.Capability.ManifestDigest || e.ReservedAtomic() != p.Escrow.ReservedAtomic || e.AssetDecimals != p.Quote.AssetDecimals || e.FundingModel != p.Escrow.FundingModel {
 		add(CodeTuple, "escrow.canonical_cbor", "canonical reservation tuple differs from package")
+	}
+	if hasExecution {
+		if d, err := codec.DigestCanonical(poscommitment.Domain, p.ProofOfService.CanonicalCBOR); err != nil || d != p.ProofOfService.EvidenceDigest {
+			add(CodeDigest, "proof_of_service.canonical_cbor", "canonical Proof-of-Service bytes do not match authority digest")
+		} else if claims, err := poscommitment.Parse(p.ProofOfService.CanonicalCBOR); err != nil || claims.EvidenceID != p.ProofOfService.EvidenceID || claims.ReceiptID != p.Receipt.ReceiptID || claims.ProviderID != p.ProviderID || claims.CapabilityID != p.Capability.CapabilityID || claims.CapabilityVersion != p.Capability.CapabilityVersion || claims.EvidenceDigest != p.ProofOfService.ContentDigest {
+			add(CodeTuple, "proof_of_service.canonical_cbor", "canonical Proof-of-Service tuple differs from package")
+		}
 	}
 	amounts := map[string]string{"subtotal": p.Quote.SubtotalAtomic, "fees": p.Quote.FeesAtomic, "total_max": p.Quote.TotalMaxAtomic, "reserved": p.Escrow.ReservedAtomic, "outcome.charge": p.Outcome.ChargedAtomic, "outcome.refund": p.Outcome.RefundedAtomic}
 	if hasExecution {
@@ -230,7 +242,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 			add(CodeRegression, x.name, "checkpoint below verifier floor")
 		}
 		if v.Observer != nil {
-			o, e := v.Observer.Observe(ctx, EvidenceRequest{x.kind, x.id, x.digest, x.ref})
+			o, e := v.Observer.Observe(ctx, EvidenceRequest{Kind: x.kind, ObjectID: x.id, Digest: x.digest, Reference: x.ref, Package: &p})
 			if e != nil {
 				add(CodeUnavailable, x.name, e.Error())
 			} else if !o.Found {

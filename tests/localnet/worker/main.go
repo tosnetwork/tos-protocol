@@ -29,17 +29,27 @@ func (*worker) Health(context.Context, *connect.Request[edgev1.HealthRequest]) (
 
 func (*worker) GetCapabilities(context.Context, *connect.Request[edgev1.GetCapabilitiesRequest]) (*connect.Response[edgev1.GetCapabilitiesResponse], error) {
 	now := time.Now().UTC()
-	return connect.NewResponse(&edgev1.GetCapabilitiesResponse{CapacityRevision: "localnet-capacity-v1", TerminalRevision: "localnet-terminal-v1", CollectedUnixMillis: now.UnixMilli(), ExpiresUnixMillis: now.Add(time.Minute).UnixMilli()}), nil
+	return connect.NewResponse(&edgev1.GetCapabilitiesResponse{
+		Capabilities: []*edgev1.Capability{{
+			ServiceId: "phase4c-localnet", Operation: "invoke", Model: "phase4c-model",
+			ModelDigest: "sha256:" + strings.Repeat("a", 64), Runtime: "localnet",
+			RuntimeRevision: "localnet-runtime-v1", MaxInputBytes: 1 << 20, MaxOutputBytes: 1 << 20,
+			AcceptedPriorities: []edgev1.Priority{edgev1.Priority_PRIORITY_EXTERNAL_SERVICE},
+		}},
+		CapacityRevision: "localnet-capacity-v1", TerminalRevision: "localnet-terminal-v1",
+		CollectedUnixMillis: now.UnixMilli(), ExpiresUnixMillis: now.Add(time.Minute).UnixMilli(),
+	}), nil
 }
 
 func (*worker) Quote(_ context.Context, request *connect.Request[edgev1.QuoteRequest]) (*connect.Response[edgev1.QuoteResponse], error) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	return connect.NewResponse(&edgev1.QuoteResponse{QuoteId: "localnet-" + request.Msg.RequestId, RequestId: request.Msg.RequestId, ExpiresUnixMillis: now.Add(time.Minute).UnixMilli(), CapacityRevision: "localnet-capacity-v1", ModelRevision: "sha256:" + strings.Repeat("a", 64), RuntimeRevision: "localnet-runtime-v1"}), nil
 }
 
 func (*worker) Invoke(_ context.Context, request *connect.Request[edgev1.InvokeRequest]) (*connect.Response[edgev1.InvokeResponse], error) {
 	now := time.Now().UTC()
-	return connect.NewResponse(&edgev1.InvokeResponse{RequestId: request.Msg.RequestId, Output: append([]byte("localnet:"), request.Msg.Payload...), Usage: &edgev1.Usage{InputBytes: uint64(len(request.Msg.Payload)), OutputBytes: uint64(len(request.Msg.Payload) + 9)}, ModelRevision: "sha256:" + strings.Repeat("a", 64), RuntimeRevision: "localnet-runtime-v1", CompletedUnixMillis: now.UnixMilli()}), nil
+	output := []byte(`{"localnet":true}`)
+	return connect.NewResponse(&edgev1.InvokeResponse{RequestId: request.Msg.RequestId, Output: output, Usage: &edgev1.Usage{InputBytes: uint64(len(request.Msg.Payload)), OutputBytes: uint64(len(output))}, ModelRevision: "sha256:" + strings.Repeat("a", 64), RuntimeRevision: "localnet-runtime-v1", CompletedUnixMillis: now.UnixMilli()}), nil
 }
 
 func (*worker) GetTask(context.Context, *connect.Request[edgev1.GetTaskRequest]) (*connect.Response[edgev1.GetTaskResponse], error) {

@@ -103,3 +103,18 @@ type Driver interface {
 	ReadEconomicState(context.Context, string) (chain.TaskEscrowState, error)
 	Close() error
 }
+
+// SettlementResolver is the read-only terminal recovery boundary used by
+// proof production. Typed absence or an unavailable publisher journal fails
+// closed; it never authorizes Publish.
+type SettlementResolver interface {
+	ResolveSettlement(context.Context, SettleProviderRequest) (Result, error)
+}
+
+// ReleaseResolver is the read-only terminal recovery boundary for a refund.
+// It resolves the deterministic release ActionID from the enrolled publisher
+// journal and independently observes the chain transition; absence never
+// authorizes another mutation.
+type ReleaseResolver interface {
+	ResolveRelease(context.Context, RefundPrincipalRequest) (Result, error)
+}

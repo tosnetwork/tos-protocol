@@ -279,6 +279,13 @@ func (e *recordingEconomy) SettleProvider(_ context.Context, request economic.Se
 		},
 	}, nil
 }
+func (e *recordingEconomy) ResolveSettlement(_ context.Context, request economic.SettleProviderRequest) (economic.Result, error) {
+	return economic.Result{
+		ContractReference: e.contract, TransitionReference: e.settlementRef,
+		AgentPaidNanoTOS: request.PayoutNanoTOS, CreatorPaidNanoTOS: request.BudgetNanoTOS - request.PayoutNanoTOS,
+		State: chain.TaskEscrowState{Network: "tos-test", ContractAddress: strings.TrimPrefix(e.contract, "tos:task-escrow:v1:"), Status: chain.TaskEscrowStatusSettled, ObservedMasterSeqno: e.settlementCheckpoint, CodeHash: "tvm-cell-sha256:" + strings.Repeat("aa", 32)},
+	}, nil
+}
 func (*recordingEconomy) RefundPrincipal(context.Context, economic.RefundPrincipalRequest) (economic.Result, error) {
 	return economic.Result{}, errors.New("not used")
 }

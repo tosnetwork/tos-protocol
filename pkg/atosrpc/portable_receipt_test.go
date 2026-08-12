@@ -4,6 +4,7 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/poscommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"path/filepath"
 	"testing"
@@ -51,7 +52,7 @@ func TestResolveProofOfServiceIsReadOnlyWithoutLocalProjection(t *testing.T) {
 	}
 	defer s.Close()
 	v := &atostosv1.ProofOfServiceEvidenceInput{EvidenceId: "pos-r", ReceiptId: "r", ProviderId: "provider", CapabilityId: "cap", CapabilityVersion: "1", EvidenceDigest: &atostosv1.Digest{Algorithm: "sha256", Value: make([]byte, 32)}}
-	d, e := protoDigest("ATOS-TOS-PROOF-OF-SERVICE-V1", v)
+	d, e := poscommitment.Digest(v)
 	if e != nil {
 		t.Fatal(e)
 	}

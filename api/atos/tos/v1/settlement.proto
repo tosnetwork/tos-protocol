@@ -123,6 +123,9 @@ message GetEscrowRequest {
   VerifiedEscrowTerms expected_terms = 4;
   NetworkReference expected_escrow_ref = 5;
   string expected_reservation_digest = 6;
+  NetworkReference expected_terminal_ref = 7;
+  string expected_release_digest = 8;
+  string expected_release_reason_code = 9;
 }
 
 message GetEscrowResponse {

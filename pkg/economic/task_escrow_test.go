@@ -246,6 +246,9 @@ func TestTaskEscrowDriverVerifiedLifecycleAndSettlementReplay(t *testing.T) {
 		// The fixed test clock makes expiry equal; this assertion documents that
 		// expiry is not required to differ for an exact replay.
 	}
+	// Historical proof/recovery must reconstruct the original deploy ActionID
+	// after its deadline. Only a new reserve mutation is time-gated.
+	driver.now = func() time.Time { return now.Add(2 * time.Hour) }
 	recovered, found, err := driver.ResolveEscrow(context.Background(), ReserveEscrowRequest{
 		EscrowID: "esc-test", Creator: testCreator, Agent: testAgent,
 		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
@@ -259,6 +262,13 @@ func TestTaskEscrowDriverVerifiedLifecycleAndSettlementReplay(t *testing.T) {
 		recovered.State.BudgetNanoTOS != 0 || recovered.State.BalanceNanoTOS != 0 ||
 		recovered.ContractReference != first.ContractReference {
 		t.Fatalf("unexpected settled escrow recovery: found=%v result=%#v", found, recovered)
+	}
+	if _, err := driver.ReserveEscrow(context.Background(), ReserveEscrowRequest{
+		EscrowID: "esc-expired-new-mutation", Creator: testCreator, Agent: testAgent,
+		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		PolicyHash: "sha256:" + strings.Repeat("11", 32), PermissionHash: "sha256:" + strings.Repeat("22", 32),
+	}); err == nil {
+		t.Fatal("new reservation accepted a deadline in the past")
 	}
 	harness.state.PermissionHash = "sha256:" + strings.Repeat("99", 32)
 	if _, _, err := driver.ResolveEscrow(context.Background(), ReserveEscrowRequest{
@@ -304,6 +314,47 @@ func TestTaskEscrowDriverRejectsDifferentPayoutAfterSettlement(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("different payout after terminal settlement was accepted")
+	}
+}
+
+func TestTaskEscrowDriverResolvesSubmittedStateBeforeSettlementRecovery(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	harness := newTaskEscrowHarness(now)
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{
+		Observer: harness, Publisher: harness, Network: testNetwork,
+		AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier,
+		FundingOverhead: 50, ReviewPeriod: time.Hour, Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+	request := ReserveEscrowRequest{
+		EscrowID: "esc-submitted", Creator: testCreator, Agent: testAgent,
+		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		PolicyHash: "sha256:" + strings.Repeat("11", 32), PermissionHash: "sha256:" + strings.Repeat("22", 32),
+	}
+	action, err := driver.reservationAction(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	harness.references[action.ActionID] = "tos:tx:v1:0:" + strings.Repeat("44", 32) + ":1:" + strings.Repeat("55", 32)
+	harness.state = chain.TaskEscrowState{
+		Network: testNetwork, ContractAddress: testContract, Creator: testCreator,
+		Agent: testAgent, HasAgent: true, Verifier: testVerifier, HasVerifier: true,
+		BudgetNanoTOS: 1_000, BalanceNanoTOS: 1_050, DeadlineUnix: request.DeadlineUnix,
+		Status: chain.TaskEscrowStatusResultSubmitted, ResultHash: "sha256:" + strings.Repeat("33", 32),
+		EvidenceHash: "sha256:" + strings.Repeat("44", 32), PolicyHash: request.PolicyHash,
+		PermissionHash: request.PermissionHash, ReviewPeriod: 3600,
+		ReviewDeadlineUnix: uint64(now.Add(time.Hour).Unix()), DisputeHash: zeroDigest(),
+		CodeHash: testCodeHash, ObservedMasterSeqno: 101, ObservedAt: now,
+	}
+	resolved, found, err := driver.ResolveEscrow(context.Background(), request)
+	if err != nil || !found || resolved.State.Status != chain.TaskEscrowStatusResultSubmitted {
+		t.Fatalf("submitted reservation recovery failed: found=%v result=%#v err=%v", found, resolved, err)
+	}
+	if harness.publishCalls != 0 {
+		t.Fatalf("read-only reservation recovery published %d action(s)", harness.publishCalls)
 	}
 }
 
@@ -384,6 +435,46 @@ func TestTaskEscrowDriverTerminalSettlementAbsenceNeverPublishes(t *testing.T) {
 	}
 	if harness.publishCalls != 0 {
 		t.Fatalf("terminal settlement recovery published %d action(s)", harness.publishCalls)
+	}
+}
+
+func TestTaskEscrowDriverTerminalReleaseRecoveryIsReadOnly(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	releaseDigest := "sha256:" + strings.Repeat("66", 32)
+	harness := newTaskEscrowHarness(now)
+	harness.state = chain.TaskEscrowState{
+		Network: testNetwork, ContractAddress: testContract,
+		Creator: testCreator, Agent: testAgent, HasAgent: true,
+		Verifier: testVerifier, HasVerifier: true,
+		Status: chain.TaskEscrowStatusCancelled, BudgetNanoTOS: 0, BalanceNanoTOS: 0,
+		DeadlineUnix: uint64(now.Add(time.Hour).Unix()), ReviewPeriod: 3600,
+		ResultHash: zeroDigest(), EvidenceHash: zeroDigest(),
+		PolicyHash: "sha256:" + strings.Repeat("11", 32), PermissionHash: "sha256:" + strings.Repeat("22", 32),
+		DisputeHash: zeroDigest(), CodeHash: testCodeHash, ObservedMasterSeqno: 101, ObservedAt: now,
+	}
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{Observer: harness, Publisher: harness, Network: testNetwork, AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier, FundingOverhead: 50, ReviewPeriod: time.Hour, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+	req := RefundPrincipalRequest{EscrowID: "esc-release", ContractAddress: testContract, BudgetNanoTOS: 1_000, ReleaseDigest: releaseDigest}
+	if _, err = driver.ResolveRelease(context.Background(), req); err == nil {
+		t.Fatal("typed terminal release absence was accepted")
+	}
+	if harness.publishCalls != 0 {
+		t.Fatalf("terminal release absence published %d action(s)", harness.publishCalls)
+	}
+	action := chain.TaskEscrowAction{Version: chain.TaskEscrowActionVersion, Network: testNetwork, Kind: chain.TaskEscrowActionCancel, EscrowID: req.EscrowID, ContractAddress: testContract, Creator: testCreator, Agent: testAgent, Verifier: testVerifier, BudgetNanoTOS: req.BudgetNanoTOS, DeadlineUnix: harness.state.DeadlineUnix, ReviewPeriod: harness.state.ReviewPeriod, PolicyHash: harness.state.PolicyHash, PermissionHash: harness.state.PermissionHash, ReleaseDigest: releaseDigest}
+	if err = driver.finishAction(&action); err != nil {
+		t.Fatal(err)
+	}
+	harness.references[action.ActionID] = "tos:tx:v1:0:" + strings.Repeat("44", 32) + ":8:" + strings.Repeat("55", 32)
+	got, err := driver.ResolveRelease(context.Background(), req)
+	if err != nil || got.TransitionReference == "" || got.ActionID != action.ActionID {
+		t.Fatalf("release recovery=%+v err=%v", got, err)
+	}
+	if harness.publishCalls != 0 {
+		t.Fatalf("successful terminal release recovery published %d action(s)", harness.publishCalls)
 	}
 }
 
