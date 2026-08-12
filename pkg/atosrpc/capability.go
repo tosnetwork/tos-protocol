@@ -137,8 +137,8 @@ func (s *Server) VerifyCapabilityOwnership(
 	}
 	if !response.Verified && req.Msg.Version != "" && req.Msg.ExpectedManifestDigest != nil && req.Msg.ExpectedOwnershipRef != nil && s.authority.Supports(TrustModeVerified) {
 		resolver, ok := s.authority.(CommitmentResolver)
-		commitmentDigest, digestErr := digestString(req.Msg.ExpectedManifestDigest)
-		if !ok || digestErr != nil || commitmentDigest == "" {
+		commitmentDigest := req.Msg.ExpectedOwnershipDigest
+		if !ok || validateDigest(digestMessageFromString(commitmentDigest)) != nil {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "Capability ownership resolver identity unavailable")
 		}
 		objectID := req.Msg.CapabilityId + "@" + req.Msg.Version
@@ -149,6 +149,7 @@ func (s *Server) VerifyCapabilityOwnership(
 		response.Verified = true
 		response.ReasonCode = ""
 		response.OwnershipRef = ownership
+		response.OwnershipDigest = commitmentDigest
 		return connect.NewResponse(response), nil
 	}
 	if response.Verified && s.authority.Supports(TrustModeVerified) {
@@ -167,6 +168,7 @@ func (s *Server) VerifyCapabilityOwnership(
 		}
 		response.OwnershipRef = ownership
 		response.ManifestRef = manifest
+		response.OwnershipDigest = commitmentDigest
 	}
 	return connect.NewResponse(response), nil
 }

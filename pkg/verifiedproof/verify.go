@@ -151,7 +151,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	}
 	validateIdentity("requester_identity", p.RequesterAgentID, p.RequesterIdentity)
 	validateIdentity("provider_identity", p.ProviderAgentID, p.ProviderIdentity)
-	digests := map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest}
+	digests := map[string]string{"manifest_digest": p.Capability.ManifestDigest, "capability.ownership_digest": p.Capability.OwnershipDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest}
 	if hasExecution {
 		digests["receipt.receipt_digest"] = p.Receipt.ReceiptDigest
 		digests["receipt.input_commitment"] = p.Receipt.InputCommitment
@@ -255,7 +255,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	refs := []struct {
 		name, kind, id, digest string
 		ref                    Reference
-	}{{"requester_identity_ref", "principal-binding", p.PrincipalID, p.RequesterAgentID, p.RequesterIdentityRef}, {"requester_identity.identity_ref", "identity", p.RequesterAgentID, "", p.RequesterIdentity.IdentityRef}, {"provider_identity_ref", "principal-binding", p.ProviderID, p.ProviderAgentID, p.ProviderIdentityRef}, {"provider_identity.identity_ref", "identity", p.ProviderAgentID, "", p.ProviderIdentity.IdentityRef}, {"capability.ownership_ref", "capability-ownership", p.Capability.CapabilityID, p.Capability.ManifestDigest, p.Capability.OwnershipRef}, {"quote.commitment_ref", "verified-quote", p.Quote.QuoteID, p.Quote.CommitmentDigest, p.Quote.CommitmentRef}, {"escrow.reservation_ref", "task-escrow-reservation", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ReservationRef}, {"escrow.contract_ref", "task-escrow", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ContractRef}, {"outcome.outcome_ref", p.Outcome.Kind, p.Escrow.EscrowID, outcomeDigest(p), p.Outcome.OutcomeRef}}
+	}{{"requester_identity_ref", "principal-binding", p.PrincipalID, p.RequesterAgentID, p.RequesterIdentityRef}, {"requester_identity.identity_ref", "identity", p.RequesterAgentID, "", p.RequesterIdentity.IdentityRef}, {"provider_identity_ref", "principal-binding", p.ProviderID, p.ProviderAgentID, p.ProviderIdentityRef}, {"provider_identity.identity_ref", "identity", p.ProviderAgentID, "", p.ProviderIdentity.IdentityRef}, {"capability.ownership_ref", "capability-ownership", p.Capability.CapabilityID + "@" + p.Capability.CapabilityVersion, p.Capability.OwnershipDigest, p.Capability.OwnershipRef}, {"quote.commitment_ref", "verified-quote", p.Quote.QuoteID, p.Quote.CommitmentDigest, p.Quote.CommitmentRef}, {"escrow.reservation_ref", "task-escrow-reservation", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ReservationRef}, {"escrow.contract_ref", "task-escrow", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ContractRef}, {"outcome.outcome_ref", p.Outcome.Kind, p.Escrow.EscrowID, outcomeDigest(p), p.Outcome.OutcomeRef}}
 	if hasExecution {
 		refs = append(refs, struct {
 			name, kind, id, digest string

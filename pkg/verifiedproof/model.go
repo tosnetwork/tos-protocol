@@ -29,6 +29,7 @@ type Capability struct {
 	CapabilityID      string    `json:"capability_id"`
 	CapabilityVersion string    `json:"capability_version"`
 	ManifestDigest    string    `json:"manifest_digest"`
+	OwnershipDigest   string    `json:"ownership_digest"`
 	OwnershipRef      Reference `json:"ownership_ref"`
 }
 

@@ -112,7 +112,7 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 		}
 		return observation(r, resp.Msg.Identity.IdentityRef)
 	case "capability-ownership":
-		req := connect.NewRequest(&atostosv1.VerifyCapabilityOwnershipRequest{Context: observerContext(), CapabilityId: p.Capability.CapabilityID, ProviderId: p.ProviderID, Version: p.Capability.CapabilityVersion, ExpectedManifestDigest: protoDigestText(p.Capability.ManifestDigest), ExpectedOwnershipRef: protoRef(p.Capability.OwnershipRef)})
+		req := connect.NewRequest(&atostosv1.VerifyCapabilityOwnershipRequest{Context: observerContext(), CapabilityId: p.Capability.CapabilityID, ProviderId: p.ProviderID, Version: p.Capability.CapabilityVersion, ExpectedManifestDigest: protoDigestText(p.Capability.ManifestDigest), ExpectedOwnershipRef: protoRef(p.Capability.OwnershipRef), ExpectedOwnershipDigest: p.Capability.OwnershipDigest})
 		o.decorate(req)
 		resp, e := o.capability.VerifyCapabilityOwnership(ctx, req)
 		if e != nil {
@@ -120,6 +120,9 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 		}
 		if !resp.Msg.Verified {
 			return EvidenceObservation{}, nil
+		}
+		if resp.Msg.OwnershipDigest != p.Capability.OwnershipDigest {
+			return EvidenceObservation{}, errors.New("live Capability ownership digest mismatch")
 		}
 		return observation(r, resp.Msg.OwnershipRef)
 	case "verified-quote":

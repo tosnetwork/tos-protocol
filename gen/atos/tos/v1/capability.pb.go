@@ -258,15 +258,16 @@ func (x *ResolveCapabilityResponse) GetFound() bool {
 }
 
 type VerifyCapabilityOwnershipRequest struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Context                *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	CapabilityId           string                 `protobuf:"bytes,2,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	ProviderId             string                 `protobuf:"bytes,3,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	Version                string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	ExpectedManifestDigest *Digest                `protobuf:"bytes,5,opt,name=expected_manifest_digest,json=expectedManifestDigest,proto3" json:"expected_manifest_digest,omitempty"`
-	ExpectedOwnershipRef   *NetworkReference      `protobuf:"bytes,6,opt,name=expected_ownership_ref,json=expectedOwnershipRef,proto3" json:"expected_ownership_ref,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Context                 *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	CapabilityId            string                 `protobuf:"bytes,2,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	ProviderId              string                 `protobuf:"bytes,3,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	Version                 string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	ExpectedManifestDigest  *Digest                `protobuf:"bytes,5,opt,name=expected_manifest_digest,json=expectedManifestDigest,proto3" json:"expected_manifest_digest,omitempty"`
+	ExpectedOwnershipRef    *NetworkReference      `protobuf:"bytes,6,opt,name=expected_ownership_ref,json=expectedOwnershipRef,proto3" json:"expected_ownership_ref,omitempty"`
+	ExpectedOwnershipDigest string                 `protobuf:"bytes,7,opt,name=expected_ownership_digest,json=expectedOwnershipDigest,proto3" json:"expected_ownership_digest,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *VerifyCapabilityOwnershipRequest) Reset() {
@@ -341,14 +342,22 @@ func (x *VerifyCapabilityOwnershipRequest) GetExpectedOwnershipRef() *NetworkRef
 	return nil
 }
 
+func (x *VerifyCapabilityOwnershipRequest) GetExpectedOwnershipDigest() string {
+	if x != nil {
+		return x.ExpectedOwnershipDigest
+	}
+	return ""
+}
+
 type VerifyCapabilityOwnershipResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Verified      bool                   `protobuf:"varint,1,opt,name=verified,proto3" json:"verified,omitempty"`
-	OwnershipRef  *NetworkReference      `protobuf:"bytes,2,opt,name=ownership_ref,json=ownershipRef,proto3" json:"ownership_ref,omitempty"`
-	ManifestRef   *NetworkReference      `protobuf:"bytes,3,opt,name=manifest_ref,json=manifestRef,proto3" json:"manifest_ref,omitempty"`
-	ReasonCode    string                 `protobuf:"bytes,4,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Verified        bool                   `protobuf:"varint,1,opt,name=verified,proto3" json:"verified,omitempty"`
+	OwnershipRef    *NetworkReference      `protobuf:"bytes,2,opt,name=ownership_ref,json=ownershipRef,proto3" json:"ownership_ref,omitempty"`
+	ManifestRef     *NetworkReference      `protobuf:"bytes,3,opt,name=manifest_ref,json=manifestRef,proto3" json:"manifest_ref,omitempty"`
+	ReasonCode      string                 `protobuf:"bytes,4,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	OwnershipDigest string                 `protobuf:"bytes,5,opt,name=ownership_digest,json=ownershipDigest,proto3" json:"ownership_digest,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *VerifyCapabilityOwnershipResponse) Reset() {
@@ -405,6 +414,13 @@ func (x *VerifyCapabilityOwnershipResponse) GetManifestRef() *NetworkReference {
 func (x *VerifyCapabilityOwnershipResponse) GetReasonCode() string {
 	if x != nil {
 		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *VerifyCapabilityOwnershipResponse) GetOwnershipDigest() string {
+	if x != nil {
+		return x.OwnershipDigest
 	}
 	return ""
 }
@@ -580,7 +596,7 @@ const file_atos_tos_v1_capability_proto_rawDesc = "" +
 	"\n" +
 	"capability\x18\x01 \x01(\v2\x1f.atos.tos.v1.CapabilityIdentityR\n" +
 	"capability\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"\xdd\x02\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\"\x99\x03\n" +
 	" VerifyCapabilityOwnershipRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12#\n" +
 	"\rcapability_id\x18\x02 \x01(\tR\fcapabilityId\x12\x1f\n" +
@@ -588,13 +604,15 @@ const file_atos_tos_v1_capability_proto_rawDesc = "" +
 	"providerId\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12M\n" +
 	"\x18expected_manifest_digest\x18\x05 \x01(\v2\x13.atos.tos.v1.DigestR\x16expectedManifestDigest\x12S\n" +
-	"\x16expected_ownership_ref\x18\x06 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x14expectedOwnershipRef\"\xe6\x01\n" +
+	"\x16expected_ownership_ref\x18\x06 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x14expectedOwnershipRef\x12:\n" +
+	"\x19expected_ownership_digest\x18\a \x01(\tR\x17expectedOwnershipDigest\"\x91\x02\n" +
 	"!VerifyCapabilityOwnershipResponse\x12\x1a\n" +
 	"\bverified\x18\x01 \x01(\bR\bverified\x12B\n" +
 	"\rownership_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\fownershipRef\x12@\n" +
 	"\fmanifest_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\vmanifestRef\x12\x1f\n" +
 	"\vreason_code\x18\x04 \x01(\tR\n" +
-	"reasonCode\"\xc2\x02\n" +
+	"reasonCode\x12)\n" +
+	"\x10ownership_digest\x18\x05 \x01(\tR\x0fownershipDigest\"\xc2\x02\n" +
 	"\x1fCommitCapabilityManifestRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12#\n" +
 	"\rcapability_id\x18\x02 \x01(\tR\fcapabilityId\x12\x1f\n" +
