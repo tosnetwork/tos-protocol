@@ -50,6 +50,7 @@ type Quote struct {
 	ExecutionDeadlineUnixNanos  int64     `json:"execution_deadline_unix_nanos"`
 	UnderlyingServiceQuoteRef   string    `json:"underlying_service_quote_ref"`
 	DisputePolicyDigest         string    `json:"dispute_policy_digest"`
+	CanonicalCBOR               []byte    `json:"canonical_cbor"`
 }
 
 type Escrow struct {
@@ -62,6 +63,7 @@ type Escrow struct {
 	ReservedAtomic          string    `json:"reserved_atomic"`
 	EscrowDeadlineUnixNanos int64     `json:"escrow_deadline_unix_nanos"`
 	FundingModel            string    `json:"funding_model"`
+	CanonicalCBOR           []byte    `json:"canonical_cbor"`
 }
 
 type SignerAuthorization struct {

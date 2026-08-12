@@ -90,6 +90,13 @@ func Bytes(v *atostosv1.QuoteCommitmentInput) ([]byte, error) {
 	}
 	return codec.Marshal(value)
 }
+func Parse(data []byte) (Value, error) {
+	var value Value
+	if err := codec.Unmarshal(data, &value); err != nil {
+		return Value{}, err
+	}
+	return value, nil
+}
 func Digest(v *atostosv1.QuoteCommitmentInput) (string, error) {
 	value, err := CanonicalValue(v)
 	if err != nil {

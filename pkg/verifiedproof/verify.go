@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
+	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"math/big"
 	"strings"
@@ -144,6 +146,16 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 		if !validDigest(value) {
 			add(CodeDigest, field, "invalid SHA-256 digest")
 		}
+	}
+	if d, err := codec.DigestCanonical(quotecommitment.Domain, p.Quote.CanonicalCBOR); err != nil || d != p.Quote.CommitmentDigest {
+		add(CodeDigest, "quote.canonical_cbor", "canonical Quote bytes do not match commitment digest")
+	} else if q, err := quotecommitment.Parse(p.Quote.CanonicalCBOR); err != nil || q.QuoteID != p.Quote.QuoteID || q.NetworkID != p.NetworkID || q.Domain != p.GatewayDomain || q.PrincipalID != p.PrincipalID || q.ProviderID != p.ProviderID || q.CapabilityID != p.Capability.CapabilityID || q.CapabilityVersion != p.Capability.CapabilityVersion || q.ManifestDigest != p.Capability.ManifestDigest || q.TermsDigest != p.Quote.TermsDigest || q.DisputePolicyDigest != p.Quote.DisputePolicyDigest || q.SettlementBackend != p.Quote.SettlementBackend || q.SettlementAsset != p.Quote.SettlementAsset || q.AssetDecimals != p.Quote.AssetDecimals {
+		add(CodeTuple, "quote.canonical_cbor", "canonical Quote tuple differs from package")
+	}
+	if d, err := codec.DigestCanonical(escrowcommitment.Domain, p.Escrow.CanonicalCBOR); err != nil || d != p.Escrow.ReservationDigest {
+		add(CodeDigest, "escrow.canonical_cbor", "canonical reservation bytes do not match digest")
+	} else if e, err := escrowcommitment.Parse(p.Escrow.CanonicalCBOR); err != nil || e.EscrowID != p.Escrow.EscrowID || e.JobID != p.Escrow.JobID || e.QuoteID != p.Quote.QuoteID || e.NetworkID != p.NetworkID || e.Domain != p.GatewayDomain || e.QuoteCommitmentDigest != p.Quote.CommitmentDigest || e.PrincipalID != p.PrincipalID || e.ProviderID != p.ProviderID || e.CapabilityID != p.Capability.CapabilityID || e.CapabilityVersion != p.Capability.CapabilityVersion || e.ManifestDigest != p.Capability.ManifestDigest || e.ReservedAtomic() != p.Escrow.ReservedAtomic || e.AssetDecimals != p.Quote.AssetDecimals || e.FundingModel != p.Escrow.FundingModel {
+		add(CodeTuple, "escrow.canonical_cbor", "canonical reservation tuple differs from package")
 	}
 	amounts := map[string]string{"subtotal": p.Quote.SubtotalAtomic, "fees": p.Quote.FeesAtomic, "total_max": p.Quote.TotalMaxAtomic, "reserved": p.Escrow.ReservedAtomic, "outcome.charge": p.Outcome.ChargedAtomic, "outcome.refund": p.Outcome.RefundedAtomic}
 	if hasExecution {

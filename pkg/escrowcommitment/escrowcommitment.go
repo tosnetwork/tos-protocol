@@ -72,6 +72,8 @@ type Value struct {
 	TermsDigest                  string    `json:"terms_digest"`
 }
 
+func (v Value) ReservedAtomic() string { return v.Reserve.AtomicAmount }
+
 func ref(v *atostosv1.NetworkReference) reference {
 	if v == nil {
 		return reference{}
@@ -116,6 +118,13 @@ func Bytes(v *atostosv1.VerifiedEscrowTerms) ([]byte, error) {
 		return nil, err
 	}
 	return codec.Marshal(value)
+}
+func Parse(data []byte) (Value, error) {
+	var value Value
+	if err := codec.Unmarshal(data, &value); err != nil {
+		return Value{}, err
+	}
+	return value, nil
 }
 func Digest(v *atostosv1.VerifiedEscrowTerms) (string, error) {
 	value, err := CanonicalValue(v)
