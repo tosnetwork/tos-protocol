@@ -241,6 +241,9 @@ func validateVerifiedQuoteMoney(q *atostosv1.QuoteCommitmentInput) error {
 	if new(big.Int).Add(ints[0], ints[1]).Cmp(ints[2]) != 0 {
 		return invalid("INVALID_ARGUMENT", "quote subtotal plus fees must equal total_max")
 	}
+	if ints[1].Sign() != 0 {
+		return invalid("INVALID_ARGUMENT", "verified Quote fees must be zero until TaskEscrow supports canonical gateway payout")
+	}
 	return nil
 }
 

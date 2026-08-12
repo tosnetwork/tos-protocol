@@ -207,6 +207,7 @@ type recordingEconomy struct {
 	contract             string
 	settlementRef        string
 	settlementCheckpoint uint64
+	settleCalls          int
 }
 
 func (e *recordingEconomy) Network() string { return "tos-test" }
@@ -228,8 +229,28 @@ func (e *recordingEconomy) ReserveEscrow(_ context.Context, request economic.Res
 		},
 	}, nil
 }
-func (e *recordingEconomy) ResolveEscrow(context.Context, economic.ReserveEscrowRequest) (economic.Result, bool, error) {
-	return economic.Result{}, false, nil
+func (e *recordingEconomy) ResolveEscrow(_ context.Context, request economic.ReserveEscrowRequest) (economic.Result, bool, error) {
+	if request.EscrowID == "" || request.EscrowID != e.reserveRequest.EscrowID {
+		return economic.Result{}, false, nil
+	}
+	status := chain.TaskEscrowStatusOpen
+	budget := request.BudgetNanoTOS
+	checkpoint := uint64(42)
+	if e.settleCalls > 0 && e.settlementCheckpoint > 0 {
+		status = chain.TaskEscrowStatusSettled
+		budget = 0
+		checkpoint = e.settlementCheckpoint
+	}
+	return economic.Result{
+		ContractReference: e.contract,
+		State: chain.TaskEscrowState{
+			Network: "tos-test", ContractAddress: strings.TrimPrefix(e.contract, "tos:task-escrow:v1:"),
+			Creator: request.Creator, Agent: request.Agent, HasAgent: true,
+			Verifier: "0:" + strings.Repeat("33", 32), HasVerifier: true,
+			BudgetNanoTOS: budget, Status: status,
+			ObservedMasterSeqno: checkpoint, CodeHash: "tvm-cell-sha256:" + strings.Repeat("aa", 32),
+		},
+	}, true, nil
 }
 func (*recordingEconomy) AcceptEscrow(context.Context, economic.AcceptEscrowRequest) (economic.Result, error) {
 	return economic.Result{}, nil
@@ -241,6 +262,7 @@ func (*recordingEconomy) ReleaseEscrow(context.Context, economic.ReleaseEscrowRe
 	return economic.Result{}, errors.New("not used")
 }
 func (e *recordingEconomy) SettleProvider(_ context.Context, request economic.SettleProviderRequest) (economic.Result, error) {
+	e.settleCalls++
 	e.settleRequest = request
 	return economic.Result{
 		ContractReference: e.contract, TransitionReference: e.settlementRef,
@@ -322,7 +344,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		TrustMode: TrustModeVerified, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1,
 		Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im",
 		RequesterAgentId: principalAgentID, ManifestDigest: digestMessage([]byte("manifest")), OwnershipRef: &NetworkReference{Network: "tos-test", Reference: "ownership"},
-		Subtotal: &atostosv1.Money{Amount: "0.000000900", Currency: "TOS"}, Fees: &atostosv1.Money{Amount: "0.000000100", Currency: "TOS"}, TotalMax: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, AssetDecimals: 9,
+		Subtotal: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, Fees: &atostosv1.Money{Amount: "0.000000000", Currency: "TOS"}, TotalMax: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, AssetDecimals: 9,
 		TermsDigest: digestMessage([]byte("terms")), DisputePolicyDigest: digestMessage([]byte("dispute")), AcceptanceDeadlineUnixMillis: expires, ExpiresUnixMillis: expires, ExecutionDeadlineUnixMillis: expires,
 		SettlementBackend: "tos", SettlementAsset: "TOS", UnderlyingServiceQuoteRef: "service-quote", SignerAuthorizationId: "auth-1", SignerAuthorizationRef: &NetworkReference{Network: "tos-test", Reference: "auth"},
 	}
@@ -341,7 +363,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	terms := &atostosv1.VerifiedEscrowTerms{Version: escrowcommitment.Version, Canonicalization: escrowcommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", JobId: jobID, QuoteId: quoteID, QuoteCommitmentDigest: quoteDigest, QuoteCommitmentRef: &quoteRef, PrincipalId: principalID, RequesterAgentId: principalAgentID, ProviderId: providerID, CapabilityId: capabilityID, CapabilityVersion: "1.0.0", ManifestDigest: quoteValue.ManifestDigest, OwnershipRef: quoteValue.OwnershipRef, TrustMode: TrustModeVerified, ProofProfile: quoteValue.ProofProfile, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "900"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "100"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "task_escrow_v1", AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: expires, EscrowDeadlineUnixMillis: expires, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: quoteValue.DisputePolicyDigest, SignerAuthorizationId: "auth-1", SignerAuthorizationRef: quoteValue.SignerAuthorizationRef, TermsDigest: quoteValue.TermsDigest}
+	terms := &atostosv1.VerifiedEscrowTerms{Version: escrowcommitment.Version, Canonicalization: escrowcommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", JobId: jobID, QuoteId: quoteID, QuoteCommitmentDigest: quoteDigest, QuoteCommitmentRef: &quoteRef, PrincipalId: principalID, RequesterAgentId: principalAgentID, ProviderId: providerID, CapabilityId: capabilityID, CapabilityVersion: "1.0.0", ManifestDigest: quoteValue.ManifestDigest, OwnershipRef: quoteValue.OwnershipRef, TrustMode: TrustModeVerified, ProofProfile: quoteValue.ProofProfile, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "0"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "task_escrow_v1", AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: expires, EscrowDeadlineUnixMillis: expires, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: quoteValue.DisputePolicyDigest, SignerAuthorizationId: "auth-1", SignerAuthorizationRef: quoteValue.SignerAuthorizationRef, TermsDigest: quoteValue.TermsDigest}
 	terms.EscrowId = escrowcommitment.EscrowID(terms.NetworkId, terms.Domain, terms.QuoteId, terms.JobId)
 	misaligned := proto.Clone(terms).(*atostosv1.VerifiedEscrowTerms)
 	misaligned.EscrowDeadlineUnixMillis++
@@ -408,10 +430,43 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		},
 		EscrowId: escrowID, QuoteId: quoteID, JobId: jobID, ReceiptId: receiptID,
 		RequestedCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "700"},
+		ExpectedTerms:   terms, ExpectedEscrowRef: create.Msg.Escrow.EscrowRef,
+		ExpectedReservationDigest: create.Msg.Escrow.ReservationDigest,
+	}
+	unbound := proto.Clone(settleRequest).(*atostosv1.SettleJobRequest)
+	unbound.ExpectedTerms = nil
+	unbound.ExpectedEscrowRef = nil
+	unbound.ExpectedReservationDigest = ""
+	if _, err := server.SettleJob(context.Background(), connect.NewRequest(unbound)); err == nil {
+		t.Fatal("Verified settlement without canonical reservation assertions was accepted")
+	}
+	if economy.settleCalls != 0 {
+		t.Fatal("unbound settlement request reached irreversible mutation")
+	}
+	if err := server.store.update(func(tx *bolt.Tx) error {
+		corrupt := proto.Clone(create.Msg.Escrow).(*atostosv1.Escrow)
+		corrupt.EscrowRef.Reference = "tos:task-escrow:v1:0:" + strings.Repeat("99", 32)
+		return server.store.putProto(tx, bucketEscrows, escrowID, corrupt)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.SettleJob(context.Background(), connect.NewRequest(proto.Clone(settleRequest).(*atostosv1.SettleJobRequest))); err == nil {
+		t.Fatal("settlement accepted a local escrow reference that differed from canonical reservation")
+	}
+	if economy.settleCalls != 0 {
+		t.Fatal("canonical reservation mismatch reached irreversible settlement mutation")
+	}
+	if err := server.store.update(func(tx *bolt.Tx) error {
+		return server.store.putProto(tx, bucketEscrows, escrowID, create.Msg.Escrow)
+	}); err != nil {
+		t.Fatal(err)
 	}
 	economy.settlementCheckpoint = 0
 	if _, err := server.SettleJob(context.Background(), connect.NewRequest(proto.Clone(settleRequest).(*atostosv1.SettleJobRequest))); err == nil {
 		t.Fatal("Verified settlement without a finalized checkpoint was accepted")
+	}
+	if economy.settleCalls != 1 {
+		t.Fatalf("zero-checkpoint settlement mutation calls=%d want 1", economy.settleCalls)
 	}
 	economy.settlementCheckpoint = 43
 	settled, err := server.SettleJob(context.Background(), connect.NewRequest(settleRequest))
@@ -430,5 +485,12 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		economy.settleRequest.PayoutNanoTOS != 700 ||
 		economy.settleRequest.ResultHash == "" || economy.settleRequest.EvidenceHash == "" {
 		t.Fatalf("Verified settlement binding was lost: %#v", economy.settleRequest)
+	}
+	replay, err := server.SettleJob(context.Background(), connect.NewRequest(proto.Clone(settleRequest).(*atostosv1.SettleJobRequest)))
+	if err != nil || replay.Msg.Settlement == nil || replay.Msg.Settlement.SettlementId != settled.Msg.Settlement.SettlementId {
+		t.Fatalf("live canonical settlement replay failed: response=%#v err=%v", replay, err)
+	}
+	if economy.settleCalls != 2 {
+		t.Fatalf("settlement replay published another mutation: calls=%d", economy.settleCalls)
 	}
 }

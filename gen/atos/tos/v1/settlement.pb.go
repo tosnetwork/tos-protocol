@@ -1267,15 +1267,18 @@ func (x *Settlement) GetSettledUnixMillis() int64 {
 }
 
 type SettleJobRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Context         *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	EscrowId        string                 `protobuf:"bytes,2,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
-	QuoteId         string                 `protobuf:"bytes,3,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
-	JobId           string                 `protobuf:"bytes,4,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	ReceiptId       string                 `protobuf:"bytes,5,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
-	RequestedCharge *NetworkAmount         `protobuf:"bytes,6,opt,name=requested_charge,json=requestedCharge,proto3" json:"requested_charge,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	Context                   *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	EscrowId                  string                 `protobuf:"bytes,2,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
+	QuoteId                   string                 `protobuf:"bytes,3,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	JobId                     string                 `protobuf:"bytes,4,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	ReceiptId                 string                 `protobuf:"bytes,5,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	RequestedCharge           *NetworkAmount         `protobuf:"bytes,6,opt,name=requested_charge,json=requestedCharge,proto3" json:"requested_charge,omitempty"`
+	ExpectedTerms             *VerifiedEscrowTerms   `protobuf:"bytes,7,opt,name=expected_terms,json=expectedTerms,proto3" json:"expected_terms,omitempty"`
+	ExpectedEscrowRef         *NetworkReference      `protobuf:"bytes,8,opt,name=expected_escrow_ref,json=expectedEscrowRef,proto3" json:"expected_escrow_ref,omitempty"`
+	ExpectedReservationDigest string                 `protobuf:"bytes,9,opt,name=expected_reservation_digest,json=expectedReservationDigest,proto3" json:"expected_reservation_digest,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *SettleJobRequest) Reset() {
@@ -1348,6 +1351,27 @@ func (x *SettleJobRequest) GetRequestedCharge() *NetworkAmount {
 		return x.RequestedCharge
 	}
 	return nil
+}
+
+func (x *SettleJobRequest) GetExpectedTerms() *VerifiedEscrowTerms {
+	if x != nil {
+		return x.ExpectedTerms
+	}
+	return nil
+}
+
+func (x *SettleJobRequest) GetExpectedEscrowRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedEscrowRef
+	}
+	return nil
+}
+
+func (x *SettleJobRequest) GetExpectedReservationDigest() string {
+	if x != nil {
+		return x.ExpectedReservationDigest
+	}
+	return ""
 }
 
 type SettleJobResponse struct {
@@ -1661,7 +1685,7 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x05state\x18\b \x01(\x0e2\x1c.atos.tos.v1.SettlementStateR\x05state\x12D\n" +
 	"\x0esettlement_ref\x18\t \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rsettlementRef\x12.\n" +
 	"\x13settled_unix_millis\x18\n" +
-	" \x01(\x03R\x11settledUnixMillis\"\xfe\x01\n" +
+	" \x01(\x03R\x11settledUnixMillis\"\xd6\x03\n" +
 	"\x10SettleJobRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1b\n" +
 	"\tescrow_id\x18\x02 \x01(\tR\bescrowId\x12\x19\n" +
@@ -1669,7 +1693,10 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x06job_id\x18\x04 \x01(\tR\x05jobId\x12\x1d\n" +
 	"\n" +
 	"receipt_id\x18\x05 \x01(\tR\treceiptId\x12E\n" +
-	"\x10requested_charge\x18\x06 \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\x0frequestedCharge\"\x93\x01\n" +
+	"\x10requested_charge\x18\x06 \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\x0frequestedCharge\x12G\n" +
+	"\x0eexpected_terms\x18\a \x01(\v2 .atos.tos.v1.VerifiedEscrowTermsR\rexpectedTerms\x12M\n" +
+	"\x13expected_escrow_ref\x18\b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x11expectedEscrowRef\x12>\n" +
+	"\x1bexpected_reservation_digest\x18\t \x01(\tR\x19expectedReservationDigest\"\x93\x01\n" +
 	"\x11SettleJobResponse\x127\n" +
 	"\n" +
 	"settlement\x18\x01 \x01(\v2\x17.atos.tos.v1.SettlementR\n" +
@@ -1784,25 +1811,27 @@ var file_atos_tos_v1_settlement_proto_depIdxs = []int32{
 	18, // 36: atos.tos.v1.Settlement.settlement_ref:type_name -> atos.tos.v1.NetworkReference
 	20, // 37: atos.tos.v1.SettleJobRequest.context:type_name -> atos.tos.v1.RequestContext
 	17, // 38: atos.tos.v1.SettleJobRequest.requested_charge:type_name -> atos.tos.v1.NetworkAmount
-	10, // 39: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
-	2,  // 40: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 41: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
-	10, // 42: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
-	4,  // 43: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
-	6,  // 44: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
-	8,  // 45: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
-	11, // 46: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
-	13, // 47: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
-	5,  // 48: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
-	7,  // 49: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
-	9,  // 50: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
-	12, // 51: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
-	14, // 52: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
-	48, // [48:53] is the sub-list for method output_type
-	43, // [43:48] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	3,  // 39: atos.tos.v1.SettleJobRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	18, // 40: atos.tos.v1.SettleJobRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	10, // 41: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
+	2,  // 42: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
+	20, // 43: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
+	10, // 44: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
+	4,  // 45: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
+	6,  // 46: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
+	8,  // 47: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
+	11, // 48: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
+	13, // 49: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
+	5,  // 50: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
+	7,  // 51: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
+	9,  // 52: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
+	12, // 53: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
+	14, // 54: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
+	50, // [50:55] is the sub-list for method output_type
+	45, // [45:50] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_settlement_proto_init() }

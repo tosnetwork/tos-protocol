@@ -166,6 +166,9 @@ message SettleJobRequest {
   string job_id = 4;
   string receipt_id = 5;
   NetworkAmount requested_charge = 6;
+  VerifiedEscrowTerms expected_terms = 7;
+  NetworkReference expected_escrow_ref = 8;
+  string expected_reservation_digest = 9;
 }
 
 message SettleJobResponse {

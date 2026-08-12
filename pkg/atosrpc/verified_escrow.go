@@ -88,8 +88,8 @@ func (s *Server) validateVerifiedEscrowTerms(ctx context.Context, v *atostosv1.V
 		return nil, "", nil, invalid("INVALID_ARGUMENT", "subtotal is invalid")
 	}
 	fees, err := parseAtomic(v.Fees.AtomicAmount)
-	if err != nil || new(big.Int).Add(subtotal, fees).Cmp(reserve) != 0 {
-		return nil, "", nil, invalid("INVALID_ARGUMENT", "subtotal plus fees must equal reserve")
+	if err != nil || fees.Sign() != 0 || new(big.Int).Add(subtotal, fees).Cmp(reserve) != 0 {
+		return nil, "", nil, invalid("INVALID_ARGUMENT", "verified fees must be zero and subtotal plus fees must equal reserve")
 	}
 	expected, err := verifiedQuoteFromEscrowTerms(v)
 	if err != nil {

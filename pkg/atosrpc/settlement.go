@@ -450,6 +450,9 @@ func (s *Server) SettleJob(
 	if req == nil || req.Msg == nil || req.Msg.RequestedCharge == nil {
 		return nil, invalid("INVALID_ARGUMENT", "settlement charge is required")
 	}
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
+	}
 	for name, value := range map[string]string{
 		"escrow_id": req.Msg.EscrowId, "quote_id": req.Msg.QuoteId,
 		"job_id": req.Msg.JobId, "receipt_id": req.Msg.ReceiptId,
@@ -461,6 +464,26 @@ func (s *Server) SettleJob(
 	charge, err := parseAtomic(req.Msg.RequestedCharge.AtomicAmount)
 	if err != nil || !charge.IsUint64() || strings.TrimSpace(req.Msg.RequestedCharge.Asset) == "" {
 		return nil, invalid("INVALID_ARGUMENT", "requested charge is invalid or outside uint64")
+	}
+	var canonicalEscrow *atostosv1.Escrow
+	if req.Msg.ExpectedTerms != nil || req.Msg.ExpectedEscrowRef != nil || req.Msg.ExpectedReservationDigest != "" {
+		if req.Msg.ExpectedTerms == nil || req.Msg.ExpectedEscrowRef == nil || req.Msg.ExpectedReservationDigest == "" {
+			return nil, invalid("INVALID_ARGUMENT", "complete expected Verified reservation binding is required")
+		}
+		resolved, resolveErr := s.GetEscrow(ctx, connect.NewRequest(&atostosv1.GetEscrowRequest{
+			Context: req.Msg.Context, EscrowId: req.Msg.EscrowId, QuoteId: req.Msg.QuoteId,
+			ExpectedTerms: req.Msg.ExpectedTerms, ExpectedEscrowRef: req.Msg.ExpectedEscrowRef,
+			ExpectedReservationDigest: req.Msg.ExpectedReservationDigest,
+		}))
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if resolved.Msg == nil || !resolved.Msg.Found || resolved.Msg.Escrow == nil ||
+			(resolved.Msg.Escrow.State != atostosv1.EscrowState_ESCROW_STATE_RESERVED &&
+				resolved.Msg.Escrow.State != atostosv1.EscrowState_ESCROW_STATE_SETTLED) {
+			return nil, failedPrecondition("ESCROW_MISMATCH", "canonical Verified TaskEscrow is not reservable or settled")
+		}
+		canonicalEscrow = resolved.Msg.Escrow
 	}
 	response := new(atostosv1.SettleJobResponse)
 	s.mutationMu.Lock()
@@ -474,9 +497,40 @@ func (s *Server) SettleJob(
 		if !found {
 			return notFound("NOT_FOUND", "escrow not found")
 		}
+		if escrow.TrustMode == TrustModeVerified {
+			if canonicalEscrow == nil || !sameVerifiedEscrowBinding(escrow, canonicalEscrow) {
+				return failedPrecondition("ESCROW_MISMATCH", "local escrow projection does not match canonical reservation")
+			}
+			escrow = cloneMessage(canonicalEscrow)
+		}
+		if existingID := tx.Bucket(bucketSettlementByJob).Get([]byte(req.Msg.JobId)); existingID != nil {
+			existing := new(atostosv1.Settlement)
+			found, err := s.store.getProto(tx, bucketSettlements, string(existingID), existing)
+			if err != nil {
+				return err
+			}
+			if found {
+				if existing.EscrowId != req.Msg.EscrowId || existing.QuoteId != req.Msg.QuoteId ||
+					existing.JobId != req.Msg.JobId || existing.ReceiptId != req.Msg.ReceiptId ||
+					!sameAtomic(existing.Charged, req.Msg.RequestedCharge) ||
+					escrow.State != atostosv1.EscrowState_ESCROW_STATE_SETTLED {
+					return conflict("IDEMPOTENCY_CONFLICT", "existing settlement semantics differ")
+				}
+				if escrow.TrustMode == TrustModeVerified && existing.SettlementRef != nil &&
+					escrow.FinalizedCheckpoint > existing.SettlementRef.FinalizedCheckpoint {
+					existing.SettlementRef.Finalized = true
+					existing.SettlementRef.FinalizedCheckpoint = escrow.FinalizedCheckpoint
+				}
+				response.Settlement = existing
+				response.Escrow = escrow
+				return nil
+			}
+		}
+		verifiedRecoverable := escrow.TrustMode == TrustModeVerified &&
+			(escrow.State == atostosv1.EscrowState_ESCROW_STATE_RESERVED || escrow.State == atostosv1.EscrowState_ESCROW_STATE_SETTLED)
 		if escrow.QuoteId != req.Msg.QuoteId ||
 			(escrow.TrustMode == TrustModeVerified && escrow.JobId != req.Msg.JobId) ||
-			escrow.State != atostosv1.EscrowState_ESCROW_STATE_RESERVED {
+			(!verifiedRecoverable && escrow.State != atostosv1.EscrowState_ESCROW_STATE_RESERVED) {
 			return failedPrecondition("SETTLEMENT_FAILED", "escrow is not reservable for this settlement")
 		}
 		if escrow.Reserved == nil || escrow.Reserved.Asset != req.Msg.RequestedCharge.Asset {
@@ -496,18 +550,6 @@ func (s *Server) SettleJob(
 		}
 		if receipt.Receipt.JobId != req.Msg.JobId || receipt.Receipt.QuoteId != req.Msg.QuoteId || receipt.Receipt.EscrowId != req.Msg.EscrowId {
 			return failedPrecondition("SETTLEMENT_FAILED", "receipt binding does not match settlement")
-		}
-		if existingID := tx.Bucket(bucketSettlementByJob).Get([]byte(req.Msg.JobId)); existingID != nil {
-			existing := new(atostosv1.Settlement)
-			found, err := s.store.getProto(tx, bucketSettlements, string(existingID), existing)
-			if err != nil {
-				return err
-			}
-			if found {
-				response.Settlement = existing
-				response.Escrow = escrow
-				return nil
-			}
 		}
 		refund := new(big.Int).Sub(new(big.Int).Set(reserved), charge)
 		digest, err := protoDigest("ATOS-TOS-SETTLEMENT-V1", withoutTransportContext(req.Msg))
@@ -591,6 +633,26 @@ func (s *Server) SettleJob(
 		return nil, err
 	}
 	return connect.NewResponse(response), nil
+}
+
+func sameVerifiedEscrowBinding(local, canonical *atostosv1.Escrow) bool {
+	return local != nil && canonical != nil &&
+		local.EscrowId == canonical.EscrowId && local.QuoteId == canonical.QuoteId && local.JobId == canonical.JobId &&
+		local.PrincipalId == canonical.PrincipalId && local.ProviderId == canonical.ProviderId &&
+		local.CapabilityId == canonical.CapabilityId && local.CapabilityVersion == canonical.CapabilityVersion &&
+		local.TrustMode == canonical.TrustMode && local.ProofProfile == canonical.ProofProfile &&
+		sameAtomic(local.Reserved, canonical.Reserved) && local.FundingModel == canonical.FundingModel &&
+		local.QuoteCommitmentDigest == canonical.QuoteCommitmentDigest &&
+		sameReference(local.QuoteCommitmentRef, canonical.QuoteCommitmentRef) &&
+		local.ReservationDigest == canonical.ReservationDigest &&
+		local.EscrowRef != nil && canonical.EscrowRef != nil &&
+		local.EscrowRef.Network == canonical.EscrowRef.Network && local.EscrowRef.Reference == canonical.EscrowRef.Reference &&
+		local.ContractCodeHash == canonical.ContractCodeHash && local.Finalized && canonical.Finalized &&
+		local.FinalizedCheckpoint <= canonical.FinalizedCheckpoint
+}
+
+func sameAtomic(left, right *atostosv1.NetworkAmount) bool {
+	return left != nil && right != nil && left.Asset == right.Asset && left.AtomicAmount == right.AtomicAmount
 }
 
 func (s *Server) GetSettlement(
