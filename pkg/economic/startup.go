@@ -22,6 +22,8 @@ type TaskEscrowStartupConfig struct {
 	AllowedTaskEscrowCodeHashes []string               `json:"allowedTaskEscrowCodeHashes"`
 	VerifierAddress             string                 `json:"verifierAddress"`
 	PublisherSocket             string                 `json:"publisherSocket"`
+	PublisherJournalIdentity    string                 `json:"publisherJournalIdentity"`
+	PublisherJournalBinding     string                 `json:"publisherJournalBinding"`
 	PublisherTimeoutMillis      uint64                 `json:"publisherTimeoutMillis,omitempty"`
 	PublisherMaxMessageBytes    int                    `json:"publisherMaxMessageBytes,omitempty"`
 	PublisherMaxConcurrent      int                    `json:"publisherMaxConcurrent,omitempty"`
@@ -48,7 +50,7 @@ func (c TaskEscrowStartupConfig) Build() (Driver, error) {
 		return nil, err
 	}
 	publisherConfig := localrpc.DefaultTaskEscrowActionPublisherClientConfig(
-		c.PublisherSocket, c.Chain.Network,
+		c.PublisherSocket, c.Chain.Network, c.PublisherJournalIdentity, c.PublisherJournalBinding,
 	)
 	if c.PublisherTimeoutMillis > 0 {
 		if c.PublisherTimeoutMillis > uint64((2*time.Minute)/time.Millisecond) {

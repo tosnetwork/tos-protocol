@@ -20,6 +20,14 @@ const (
 	Domain           = "tos.atos.verified-task-escrow.v1"
 )
 
+type ReleaseValue struct {
+	ReservationDigest string `json:"reservation_digest"`
+	EscrowID          string `json:"escrow_id"`
+	JobID             string `json:"job_id"`
+	QuoteID           string `json:"quote_id"`
+	ReasonCode        string `json:"reason_code"`
+}
+
 type reference struct {
 	Network   string `json:"network"`
 	Reference string `json:"reference"`
@@ -124,4 +132,14 @@ func EscrowID(network, domain, quoteID, jobID string) string {
 		h.Write([]byte{0})
 	}
 	return "esc_" + hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+func ReleaseDigest(reservationDigest, escrowID, jobID, quoteID, reasonCode string) (string, error) {
+	if reservationDigest == "" || escrowID == "" || jobID == "" || quoteID == "" || reasonCode == "" {
+		return "", errors.New("complete verified escrow release tuple is required")
+	}
+	return codec.Digest("tos.atos.verified-task-escrow-release.v1", ReleaseValue{
+		ReservationDigest: reservationDigest, EscrowID: escrowID, JobID: jobID,
+		QuoteID: quoteID, ReasonCode: reasonCode,
+	})
 }

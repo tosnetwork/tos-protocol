@@ -374,16 +374,21 @@ func TestTaskEscrowRejectedReplayIsBoundToAgentSender(t *testing.T) {
 	defer driver.Close()
 	// Seed the exact reject action so the fake sidecar can replay the original
 	// terminal transaction rather than attempting a second contract call.
-	action, err := driver.operationAction(
-		harness.state, "esc-rejected", 1_000, chain.TaskEscrowActionReject,
-		"", "", "", 0,
-	)
+	releaseDigest := "sha256:" + strings.Repeat("ab", 32)
+	action := chain.TaskEscrowAction{Version: chain.TaskEscrowActionVersion, Network: testNetwork,
+		Kind: chain.TaskEscrowActionReject, EscrowID: "esc-rejected", ContractAddress: testContract,
+		Creator: testCreator, Agent: testAgent, Verifier: testVerifier, BudgetNanoTOS: 1_000,
+		DeadlineUnix: harness.state.DeadlineUnix, ReviewPeriod: 3600,
+		PolicyHash: harness.state.PolicyHash, PermissionHash: harness.state.PermissionHash,
+		ReleaseDigest: releaseDigest}
+	err = driver.finishAction(&action)
 	if err != nil {
 		t.Fatal(err)
 	}
 	harness.references[action.ActionID] = "tos:tx:v1:0:" + strings.Repeat("44", 32) + ":7:" + strings.Repeat("55", 32)
 	result, err := driver.RefundPrincipal(context.Background(), RefundPrincipalRequest{
 		EscrowID: "esc-rejected", ContractAddress: testContract, BudgetNanoTOS: 1_000,
+		ReleaseDigest: releaseDigest,
 	})
 	if err != nil {
 		t.Fatal(err)

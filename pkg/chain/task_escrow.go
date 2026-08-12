@@ -2,6 +2,9 @@ package chain
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"strings"
 	"time"
 
@@ -29,12 +32,24 @@ type StableTaskEscrowAction struct {
 	DisputeHash      string               `json:"dispute_hash,omitempty"`
 	PayoutNanoTOS    uint64               `json:"payout_nano_tos,omitempty"`
 	ExpectedBodyHash string               `json:"expected_body_hash,omitempty"`
+	ReleaseDigest    string               `json:"release_digest,omitempty"`
 }
 
 func StableTaskEscrowActionValue(a TaskEscrowAction) StableTaskEscrowAction {
-	return StableTaskEscrowAction{Version: a.Version, Network: a.Network, Kind: a.Kind, EscrowID: a.EscrowID, ContractAddress: a.ContractAddress, Creator: a.Creator, Agent: a.Agent, Verifier: a.Verifier, BudgetNanoTOS: a.BudgetNanoTOS, FundingNanoTOS: a.FundingNanoTOS, DeadlineUnix: a.DeadlineUnix, ReviewPeriod: a.ReviewPeriod, PolicyHash: a.PolicyHash, PermissionHash: a.PermissionHash, QueryID: a.QueryID, ResultHash: a.ResultHash, EvidenceHash: a.EvidenceHash, DisputeHash: a.DisputeHash, PayoutNanoTOS: a.PayoutNanoTOS, ExpectedBodyHash: a.ExpectedBodyHash}
+	return StableTaskEscrowAction{Version: a.Version, Network: a.Network, Kind: a.Kind, EscrowID: a.EscrowID, ContractAddress: a.ContractAddress, Creator: a.Creator, Agent: a.Agent, Verifier: a.Verifier, BudgetNanoTOS: a.BudgetNanoTOS, FundingNanoTOS: a.FundingNanoTOS, DeadlineUnix: a.DeadlineUnix, ReviewPeriod: a.ReviewPeriod, PolicyHash: a.PolicyHash, PermissionHash: a.PermissionHash, QueryID: a.QueryID, ResultHash: a.ResultHash, EvidenceHash: a.EvidenceHash, DisputeHash: a.DisputeHash, PayoutNanoTOS: a.PayoutNanoTOS, ExpectedBodyHash: a.ExpectedBodyHash, ReleaseDigest: a.ReleaseDigest}
 }
 func TaskEscrowActionID(a TaskEscrowAction) (string, error) {
+	if a.Kind == TaskEscrowActionCancel || a.Kind == TaskEscrowActionTimeout || a.Kind == TaskEscrowActionReject {
+		if a.ReleaseDigest == "" {
+			return "", errors.New("release action digest is required")
+		}
+		h := sha256.New()
+		for _, value := range []string{"tos.task-escrow.release-action.v1", a.EscrowID, a.ReleaseDigest} {
+			h.Write([]byte(value))
+			h.Write([]byte{0})
+		}
+		return "task-action-" + hex.EncodeToString(h.Sum(nil)), nil
+	}
 	digest, err := codec.Digest("tos.task-escrow.action.v1", StableTaskEscrowActionValue(a))
 	if err != nil {
 		return "", err
@@ -97,6 +112,7 @@ type TaskEscrowAction struct {
 	DisputeHash       string               `json:"disputeHash,omitempty"`
 	PayoutNanoTOS     uint64               `json:"payoutNanoTOS,omitempty"`
 	ExpectedBodyHash  string               `json:"expectedBodyHash,omitempty"`
+	ReleaseDigest     string               `json:"releaseDigest,omitempty"`
 	ExpiresUnixMillis int64                `json:"expiresUnixMillis"`
 }
 

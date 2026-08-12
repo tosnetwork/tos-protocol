@@ -23,9 +23,16 @@ type fakeBackend struct {
 	publishCalls   int
 	recoveringSeen bool
 	failFirst      bool
+	binding        string
 }
 
 func (f *fakeBackend) CheckReady(context.Context) error { return nil }
+func (f *fakeBackend) EnrollmentBinding() string {
+	if f.binding != "" {
+		return f.binding
+	}
+	return "sha256:" + strings.Repeat("ee", 32)
+}
 func (f *fakeBackend) Prepare(_ context.Context, action chain.TaskEscrowAction) (PreparedAction, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -60,7 +67,7 @@ func TestServerReplaysCompletedActionAndRejectsSubstitution(t *testing.T) {
 	backend := new(fakeBackend)
 	now := time.Unix(1_800_000_000, 0)
 	statePath := filepath.Join(t.TempDir(), "state.db")
-	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy()); err != nil {
+	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy(), new(fakeBackend).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
@@ -99,7 +106,7 @@ func TestServerRecoversPendingAction(t *testing.T) {
 	backend := &fakeBackend{failFirst: true}
 	now := time.Unix(1_800_000_000, 0)
 	statePath := filepath.Join(t.TempDir(), "state.db")
-	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy()); err != nil {
+	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy(), new(fakeBackend).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
@@ -128,7 +135,7 @@ func TestServerRecoversPendingAction(t *testing.T) {
 func TestHealthUsesExactClientContract(t *testing.T) {
 	backend := new(fakeBackend)
 	statePath := filepath.Join(t.TempDir(), "state.db")
-	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy()); err != nil {
+	if err := InitializeJournal(statePath, "test-journal", "tos-test", testPublisherPolicy(), new(fakeBackend).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{
@@ -149,7 +156,8 @@ func TestHealthUsesExactClientContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	if health["status"] != "ready" || health["network"] != "tos-test" ||
-		health["path"] != localrpc.TaskEscrowActionPath {
+		health["path"] != localrpc.TaskEscrowActionPath || health["journalIdentity"] != "test-journal" ||
+		health["journalBinding"] == "" {
 		t.Fatalf("unexpected health response: %#v", health)
 	}
 }
@@ -159,7 +167,7 @@ func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
 	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-a", Backend: new(fakeBackend), Policy: testPublisherPolicy()}); err == nil {
 		t.Fatal("missing journal was silently initialized")
 	}
-	if err := InitializeJournal(path, "journal-a", "tos-test", testPublisherPolicy()); err != nil {
+	if err := InitializeJournal(path, "journal-a", "tos-test", testPublisherPolicy(), new(fakeBackend).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal-b", Backend: new(fakeBackend), Policy: testPublisherPolicy()}); err == nil {
@@ -188,7 +196,7 @@ func TestPublisherRequiresEnrolledJournalAndTypedResolve(t *testing.T) {
 func TestPublisherJournalEnrollmentRejectsNetworkAndPolicyDrift(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "journal.db")
 	policy := testPublisherPolicy()
-	if err := InitializeJournal(path, "journal", "tos-test", policy); err != nil {
+	if err := InitializeJournal(path, "journal", "tos-test", policy, new(fakeBackend).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Open(Config{Network: "tos-other", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Policy: policy}); err == nil {
@@ -199,12 +207,16 @@ func TestPublisherJournalEnrollmentRejectsNetworkAndPolicyDrift(t *testing.T) {
 	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Policy: changed}); err == nil {
 		t.Fatal("journal enrolled under another spending policy was accepted")
 	}
+	changedBackend := &fakeBackend{binding: "sha256:" + strings.Repeat("dd", 32)}
+	if _, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal", Backend: changedBackend, Policy: policy}); err == nil {
+		t.Fatal("journal enrolled under another backend authority was accepted")
+	}
 }
 
 func TestPublisherRecomputesActionIDAndEnforcesSpendingPolicy(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	path := filepath.Join(t.TempDir(), "journal.db")
-	if err := InitializeJournal(path, "journal", "tos-test", testPublisherPolicy()); err != nil {
+	if err := InitializeJournal(path, "journal", "tos-test", testPublisherPolicy(), new(fakeBackend).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	server, err := Open(Config{Network: "tos-test", StatePath: path, JournalIdentity: "journal", Backend: new(fakeBackend), Now: func() time.Time { return now }, Policy: testPublisherPolicy()})

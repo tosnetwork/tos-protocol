@@ -75,6 +75,7 @@ func (s *Server) validateVerifiedEscrowTerms(ctx context.Context, v *atostosv1.V
 		strings.TrimSpace(v.QuoteCommitmentRef.Reference) == "" || strings.TrimSpace(v.JobId) == "" || strings.TrimSpace(v.PrincipalId) == "" ||
 		strings.TrimSpace(v.ProviderId) == "" || strings.TrimSpace(v.CapabilityVersion) == "" || strings.TrimSpace(v.FundingModel) == "" ||
 		v.AcceptanceDeadlineUnixMillis <= 0 || v.ExecutionDeadlineUnixMillis <= 0 || v.EscrowDeadlineUnixMillis <= 0 ||
+		v.AcceptanceDeadlineUnixMillis%1000 != 0 || v.ExecutionDeadlineUnixMillis%1000 != 0 || v.EscrowDeadlineUnixMillis%1000 != 0 ||
 		v.EscrowDeadlineUnixMillis > v.ExecutionDeadlineUnixMillis || strings.TrimSpace(v.SignerAuthorizationId) == "" {
 		return nil, "", nil, invalid("INVALID_ARGUMENT", "verified escrow terms are incomplete or inconsistent")
 	}

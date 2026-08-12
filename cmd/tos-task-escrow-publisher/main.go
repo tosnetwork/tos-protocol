@@ -48,21 +48,23 @@ func main() {
 		logger.Error("invalid publisher configuration", "error", err)
 		os.Exit(2)
 	}
+	backend, err := taskescrowpublisher.NewTosctlBackend(config.Backend)
+	if err != nil {
+		logger.Error("configure tosctl backend", "error", err)
+		os.Exit(2)
+	}
 	if len(os.Args) == 2 && os.Args[1] == "init-journal" {
-		if err := taskescrowpublisher.InitializeJournal(config.StatePath, config.JournalIdentity, config.Network, config.Policy); err != nil {
+		defer backend.Close()
+		if err := taskescrowpublisher.InitializeJournal(config.StatePath, config.JournalIdentity, config.Network, config.Policy, backend.EnrollmentBinding()); err != nil {
 			logger.Error("initialize TaskEscrow publisher journal", "error", err)
 			os.Exit(1)
 		}
-		logger.Info("TaskEscrow publisher journal initialized", "identity", config.JournalIdentity)
+		binding, _ := taskescrowpublisher.JournalBinding(config.Network, config.Policy, backend.EnrollmentBinding())
+		logger.Info("TaskEscrow publisher journal initialized", "identity", config.JournalIdentity, "binding", binding)
 		return
 	}
 	if len(os.Args) != 1 {
 		logger.Error("usage: tos-task-escrow-publisher [init-journal]")
-		os.Exit(2)
-	}
-	backend, err := taskescrowpublisher.NewTosctlBackend(config.Backend)
-	if err != nil {
-		logger.Error("configure tosctl backend", "error", err)
 		os.Exit(2)
 	}
 	publisher, err := taskescrowpublisher.Open(taskescrowpublisher.Config{

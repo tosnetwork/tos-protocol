@@ -37,16 +37,18 @@ const (
 type TaskEscrowActionPublisherClientConfig struct {
 	SocketPath      string
 	Network         string
+	JournalIdentity string
+	JournalBinding  string
 	Timeout         time.Duration
 	MaxMessageBytes int
 	MaxConcurrent   int
 }
 
 func DefaultTaskEscrowActionPublisherClientConfig(
-	socketPath, network string,
+	socketPath, network, journalIdentity, journalBinding string,
 ) TaskEscrowActionPublisherClientConfig {
 	return TaskEscrowActionPublisherClientConfig{
-		SocketPath: socketPath, Network: network,
+		SocketPath: socketPath, Network: network, JournalIdentity: journalIdentity, JournalBinding: journalBinding,
 		Timeout:         DefaultTaskEscrowActionTimeout,
 		MaxMessageBytes: DefaultTaskEscrowActionMaxMessageBytes,
 		MaxConcurrent:   DefaultTaskEscrowActionMaxConcurrent,
@@ -56,6 +58,8 @@ func DefaultTaskEscrowActionPublisherClientConfig(
 type TaskEscrowActionPublisherClient struct {
 	httpClient      *http.Client
 	network         string
+	journalIdentity string
+	journalBinding  string
 	maxMessageBytes int
 	slots           chan struct{}
 
@@ -68,24 +72,29 @@ type TaskEscrowActionPublisherClient struct {
 }
 
 type taskEscrowActionHealth struct {
-	Status         string `json:"status"`
-	Version        string `json:"version"`
-	Network        string `json:"network"`
-	Path           string `json:"path"`
-	ResolvePath    string `json:"resolvePath"`
-	JournalVersion string `json:"journalVersion"`
+	Status          string `json:"status"`
+	Version         string `json:"version"`
+	Network         string `json:"network"`
+	Path            string `json:"path"`
+	ResolvePath     string `json:"resolvePath"`
+	JournalVersion  string `json:"journalVersion"`
+	JournalIdentity string `json:"journalIdentity"`
+	JournalBinding  string `json:"journalBinding"`
 }
 
 type taskEscrowActionNotFound struct {
-	Version  string `json:"version"`
-	Code     string `json:"code"`
-	ActionID string `json:"actionId"`
+	Version         string `json:"version"`
+	Code            string `json:"code"`
+	ActionID        string `json:"actionId"`
+	JournalIdentity string `json:"journalIdentity"`
+	JournalBinding  string `json:"journalBinding"`
 }
 
 func NewTaskEscrowActionPublisherClient(
 	config TaskEscrowActionPublisherClientConfig,
 ) (*TaskEscrowActionPublisherClient, error) {
 	if strings.TrimSpace(config.Network) == "" || len(config.Network) > 64 ||
+		strings.TrimSpace(config.JournalIdentity) == "" || strings.TrimSpace(config.JournalBinding) == "" ||
 		config.Timeout <= 0 || config.Timeout > maxTaskEscrowActionTimeout ||
 		config.MaxMessageBytes <= 0 || config.MaxMessageBytes > maxTaskEscrowActionMessageBytes ||
 		config.MaxConcurrent <= 0 || config.MaxConcurrent > maxTaskEscrowActionConcurrent {
@@ -99,7 +108,7 @@ func NewTaskEscrowActionPublisherClient(
 		return http.ErrUseLastResponse
 	}
 	return &TaskEscrowActionPublisherClient{
-		httpClient: httpClient, network: config.Network,
+		httpClient: httpClient, network: config.Network, journalIdentity: config.JournalIdentity, journalBinding: config.JournalBinding,
 		maxMessageBytes: config.MaxMessageBytes,
 		slots:           make(chan struct{}, config.MaxConcurrent),
 		active:          make(map[uint64]context.CancelFunc, config.MaxConcurrent),
@@ -206,7 +215,7 @@ func (c *TaskEscrowActionPublisherClient) Resolve(ctx context.Context, action ch
 	}
 	if response.StatusCode == http.StatusNotFound {
 		var missing taskEscrowActionNotFound
-		if jsonstrict.Decode(data, &missing) != nil || missing.Version != chain.TaskEscrowActionVersion || missing.Code != "action_not_found" || missing.ActionID != action.ActionID {
+		if jsonstrict.Decode(data, &missing) != nil || missing.Version != chain.TaskEscrowActionVersion || missing.Code != "action_not_found" || missing.ActionID != action.ActionID || missing.JournalIdentity != c.journalIdentity || missing.JournalBinding != c.journalBinding {
 			return chain.TaskEscrowActionReceipt{}, false, errors.New("task escrow action resolver returned an untyped not-found")
 		}
 		return chain.TaskEscrowActionReceipt{}, false, nil
@@ -256,7 +265,7 @@ func (c *TaskEscrowActionPublisherClient) CheckReady(ctx context.Context) error 
 	if err := jsonstrict.Decode(data, &health); err != nil ||
 		health.Status != "ready" || health.Version != chain.TaskEscrowActionVersion ||
 		health.Network != c.network || health.Path != TaskEscrowActionPath ||
-		health.ResolvePath != TaskEscrowActionResolvePath || health.JournalVersion != "1" {
+		health.ResolvePath != TaskEscrowActionResolvePath || health.JournalVersion != "1" || health.JournalIdentity != c.journalIdentity || health.JournalBinding != c.journalBinding {
 		return errors.New("task escrow action publisher returned an invalid readiness response")
 	}
 	return nil
@@ -281,6 +290,9 @@ func validateTaskEscrowAction(action chain.TaskEscrowAction, network string) err
 		chain.TaskEscrowActionTimeout, chain.TaskEscrowActionReject:
 		if action.ContractAddress == "" || action.QueryID == 0 || action.ExpectedBodyHash == "" {
 			return errors.New("invalid task escrow operation action")
+		}
+		if (action.Kind == chain.TaskEscrowActionCancel || action.Kind == chain.TaskEscrowActionTimeout || action.Kind == chain.TaskEscrowActionReject) && action.ReleaseDigest == "" {
+			return errors.New("invalid task escrow release digest")
 		}
 	case chain.TaskEscrowActionResult:
 		if action.ContractAddress == "" || action.QueryID == 0 || action.ResultHash == "" ||

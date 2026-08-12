@@ -41,18 +41,22 @@ type actionRecord struct {
 	UpdatedAt      int64                          `json:"updatedAtUnixMillis"`
 }
 
-type actionStore struct{ db *bolt.DB }
+type actionStore struct {
+	db       *bolt.DB
+	identity string
+	binding  string
+}
 
 const JournalVersion = "1"
 
 // InitializeJournal explicitly enrolls an empty journal. Normal startup never
 // creates one, so a lost or mistyped volume cannot become authoritative
 // absence for previously broadcast economic actions.
-func InitializeJournal(path, identity, network string, policy PublisherPolicy) error {
+func InitializeJournal(path, identity, network string, policy PublisherPolicy, backendBinding string) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || identity == "" || len(identity) > 256 {
 		return errors.New("invalid task escrow journal enrollment")
 	}
-	binding, err := journalBinding(network, policy)
+	binding, err := journalBinding(network, policy, backendBinding)
 	if err != nil {
 		return err
 	}
@@ -91,7 +95,7 @@ func InitializeJournal(path, identity, network string, policy PublisherPolicy) e
 	return errors.Join(err, closeErr)
 }
 
-func openActionStore(path, identity, network string, policy PublisherPolicy) (*actionStore, error) {
+func openActionStore(path, identity, network string, policy PublisherPolicy, backendBinding string) (*actionStore, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("publisher state path must be absolute and clean")
 	}
@@ -103,7 +107,7 @@ func openActionStore(path, identity, network string, policy PublisherPolicy) (*a
 	if !ok || stat.Uid != uint32(os.Geteuid()) {
 		return nil, errors.New("task escrow journal owner mismatch")
 	}
-	binding, err := journalBinding(network, policy)
+	binding, err := journalBinding(network, policy, backendBinding)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +125,13 @@ func openActionStore(path, identity, network string, policy PublisherPolicy) (*a
 		_ = db.Close()
 		return nil, fmt.Errorf("open enrolled task escrow journal: %w", err)
 	}
-	return &actionStore{db: db}, nil
+	return &actionStore{db: db, identity: identity, binding: binding}, nil
 }
 
-func journalBinding(network string, policy PublisherPolicy) (string, error) {
+func journalBinding(network string, policy PublisherPolicy, backendBinding string) (string, error) {
 	network = strings.TrimSpace(network)
 	validated, err := validatePublisherPolicy(policy)
-	if err != nil || network == "" || len(network) > 64 {
+	if err != nil || network == "" || len(network) > 64 || backendBinding == "" {
 		return "", errors.New("invalid task escrow journal binding")
 	}
 	// Policy slices are sets. Sorting copies makes the enrollment stable while
@@ -143,15 +147,20 @@ func journalBinding(network string, policy PublisherPolicy) (string, error) {
 	validated.AllowedPolicyHashes = sorted(validated.AllowedPolicyHashes)
 	validated.AllowedCodeHashes = sorted(validated.AllowedCodeHashes)
 	encoded, err := json.Marshal(struct {
-		Version string          `json:"version"`
-		Network string          `json:"network"`
-		Policy  PublisherPolicy `json:"policy"`
-	}{Version: JournalVersion, Network: network, Policy: validated})
+		Version        string          `json:"version"`
+		Network        string          `json:"network"`
+		Policy         PublisherPolicy `json:"policy"`
+		BackendBinding string          `json:"backend_binding"`
+	}{Version: JournalVersion, Network: network, Policy: validated, BackendBinding: backendBinding})
 	if err != nil {
 		return "", err
 	}
 	digest := sha256.Sum256(encoded)
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
+}
+
+func JournalBinding(network string, policy PublisherPolicy, backendBinding string) (string, error) {
+	return journalBinding(network, policy, backendBinding)
 }
 
 func (s *actionStore) close() error {

@@ -330,7 +330,7 @@ func (d *TaskEscrowDriver) ReleaseEscrow(
 ) (Result, error) {
 	return d.RefundPrincipal(ctx, RefundPrincipalRequest{
 		EscrowID: request.EscrowID, ContractAddress: request.ContractAddress,
-		BudgetNanoTOS: request.BudgetNanoTOS,
+		BudgetNanoTOS: request.BudgetNanoTOS, ReleaseDigest: request.ReleaseDigest,
 	})
 }
 
@@ -459,7 +459,7 @@ func (d *TaskEscrowDriver) RefundPrincipal(
 		if state.BudgetNanoTOS != request.BudgetNanoTOS {
 			return Result{}, errors.New("task escrow refund budget mismatch")
 		}
-		return d.refundAction(ctx, state, request.EscrowID, request.BudgetNanoTOS, chain.TaskEscrowActionCancel)
+		return d.refundAction(ctx, state, request.EscrowID, request.BudgetNanoTOS, chain.TaskEscrowActionCancel, request.ReleaseDigest)
 	case chain.TaskEscrowStatusAccepted:
 		if uint64(d.now().Unix()) < state.DeadlineUnix {
 			return Result{}, errors.New("accepted task escrow cannot refund before its deadline")
@@ -467,7 +467,7 @@ func (d *TaskEscrowDriver) RefundPrincipal(
 		if state.BudgetNanoTOS != request.BudgetNanoTOS {
 			return Result{}, errors.New("task escrow refund budget mismatch")
 		}
-		return d.refundAction(ctx, state, request.EscrowID, request.BudgetNanoTOS, chain.TaskEscrowActionTimeout)
+		return d.refundAction(ctx, state, request.EscrowID, request.BudgetNanoTOS, chain.TaskEscrowActionTimeout, request.ReleaseDigest)
 	default:
 		return Result{}, errors.New("task escrow cannot be refunded from current state")
 	}
@@ -628,7 +628,7 @@ func (d *TaskEscrowDriver) replayRefund(
 	request RefundPrincipalRequest,
 	kind chain.TaskEscrowActionKind,
 ) (Result, error) {
-	return d.refundAction(ctx, state, request.EscrowID, request.BudgetNanoTOS, kind)
+	return d.refundAction(ctx, state, request.EscrowID, request.BudgetNanoTOS, kind, request.ReleaseDigest)
 }
 
 func (d *TaskEscrowDriver) ReadEconomicState(
@@ -644,8 +644,21 @@ func (d *TaskEscrowDriver) refundAction(
 	escrowID string,
 	budget uint64,
 	kind chain.TaskEscrowActionKind,
+	releaseDigest string,
 ) (Result, error) {
-	action, err := d.operationAction(state, escrowID, budget, kind, "", "", "", 0)
+	if !validDigest(releaseDigest) {
+		return Result{}, errors.New("verified escrow release digest is required")
+	}
+	action := chain.TaskEscrowAction{
+		Version: chain.TaskEscrowActionVersion, Network: d.network,
+		Kind: kind, EscrowID: escrowID, ContractAddress: state.ContractAddress,
+		Creator: state.Creator, Agent: state.Agent, Verifier: state.Verifier,
+		BudgetNanoTOS: budget, DeadlineUnix: state.DeadlineUnix,
+		ReviewPeriod: state.ReviewPeriod, PolicyHash: state.PolicyHash,
+		PermissionHash: state.PermissionHash,
+		ReleaseDigest:  releaseDigest,
+	}
+	err := d.finishAction(&action)
 	if err != nil {
 		return Result{}, err
 	}
@@ -824,6 +837,7 @@ type stableTaskEscrowAction struct {
 	DisputeHash      string                     `json:"dispute_hash,omitempty"`
 	PayoutNanoTOS    uint64                     `json:"payout_nano_tos,omitempty"`
 	ExpectedBodyHash string                     `json:"expected_body_hash,omitempty"`
+	ReleaseDigest    string                     `json:"release_digest,omitempty"`
 }
 
 func stableAction(action chain.TaskEscrowAction) stableTaskEscrowAction {
@@ -837,6 +851,7 @@ func stableAction(action chain.TaskEscrowAction) stableTaskEscrowAction {
 		QueryID: action.QueryID, ResultHash: action.ResultHash,
 		EvidenceHash: action.EvidenceHash, DisputeHash: action.DisputeHash,
 		PayoutNanoTOS: action.PayoutNanoTOS, ExpectedBodyHash: action.ExpectedBodyHash,
+		ReleaseDigest: action.ReleaseDigest,
 	}
 }
 

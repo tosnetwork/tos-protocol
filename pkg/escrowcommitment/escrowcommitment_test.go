@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/chain"
 )
 
 func vectorTerms() *atostosv1.VerifiedEscrowTerms {
@@ -17,6 +18,31 @@ func vectorTerms() *atostosv1.VerifiedEscrowTerms {
 	v := &atostosv1.VerifiedEscrowTerms{Version: Version, Canonicalization: Canonicalization, NetworkId: "tos-test", Domain: "atos.im", JobId: "job-01", QuoteId: "quote-01", QuoteCommitmentDigest: "sha256:" + strings.Repeat("11", 32), QuoteCommitmentRef: ref("quote-tx"), PrincipalId: "principal-01", RequesterAgentId: "agent-requester-01", ProviderId: "provider-01", CapabilityId: "capability-01", CapabilityVersion: "1.0.0", ManifestDigest: digest("m"), OwnershipRef: ref("ownership-tx"), TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1050000000"}, Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000000000"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "50000000"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "gateway_sponsored", AcceptanceDeadlineUnixMillis: 1800000000000, ExecutionDeadlineUnixMillis: 1800000300000, EscrowDeadlineUnixMillis: 1800000300000, UnderlyingServiceQuoteRef: "service-quote-01", DisputePolicyDigest: digest("d"), SignerAuthorizationId: "auth-01", SignerAuthorizationRef: ref("auth-tx"), TermsDigest: digest("t")}
 	v.EscrowId = EscrowID(v.NetworkId, v.Domain, v.QuoteId, v.JobId)
 	return v
+}
+
+func TestReleaseReasonChangesDigestAndActionIdentity(t *testing.T) {
+	first, err := ReleaseDigest("sha256:"+strings.Repeat("11", 32), "esc-1", "job-1", "quote-1", "CANCELED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ReleaseDigest("sha256:"+strings.Repeat("11", 32), "esc-1", "job-1", "quote-1", "EXPIRED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := chain.TaskEscrowAction{Kind: chain.TaskEscrowActionCancel, EscrowID: "esc-1", ReleaseDigest: first}
+	b := a
+	b.ReleaseDigest = second
+	firstID, err := chain.TaskEscrowActionID(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondID, err := chain.TaskEscrowActionID(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second || firstID == secondID {
+		t.Fatal("different release reasons reused commitment or publisher identity")
+	}
 }
 
 func TestNormativeVector(t *testing.T) {

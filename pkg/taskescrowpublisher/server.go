@@ -74,7 +74,8 @@ func Open(config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	state, err := openActionStore(config.StatePath, config.JournalIdentity, config.Network, config.Policy)
+	backendBinding := config.Backend.EnrollmentBinding()
+	state, err := openActionStore(config.StatePath, config.JournalIdentity, config.Network, config.Policy, backendBinding)
 	if err != nil {
 		return nil, err
 	}
@@ -132,8 +133,9 @@ func (s *Server) health(writer http.ResponseWriter, request *http.Request) {
 	_ = json.NewEncoder(writer).Encode(map[string]string{
 		"status": "ready", "version": chain.TaskEscrowActionVersion,
 		"network": s.network, "path": localrpc.TaskEscrowActionPath,
-		"resolvePath":    localrpc.TaskEscrowActionResolvePath,
-		"journalVersion": JournalVersion,
+		"resolvePath":     localrpc.TaskEscrowActionResolvePath,
+		"journalVersion":  JournalVersion,
+		"journalIdentity": s.store.identity, "journalBinding": s.store.binding,
 	})
 }
 
@@ -168,7 +170,7 @@ func (s *Server) resolve(writer http.ResponseWriter, request *http.Request) {
 	}
 	if record == nil {
 		writer.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(writer).Encode(map[string]string{"version": chain.TaskEscrowActionVersion, "code": "action_not_found", "actionId": action.ActionID})
+		_ = json.NewEncoder(writer).Encode(map[string]string{"version": chain.TaskEscrowActionVersion, "code": "action_not_found", "actionId": action.ActionID, "journalIdentity": s.store.identity, "journalBinding": s.store.binding})
 		return
 	}
 	if record.SemanticDigest != digest {
@@ -317,6 +319,9 @@ func validateAction(action chain.TaskEscrowAction, network string, now time.Time
 		chain.TaskEscrowActionTimeout, chain.TaskEscrowActionReject:
 		if action.ContractAddress == "" || action.QueryID == 0 || !validCellHash(action.ExpectedBodyHash) {
 			return errors.New("invalid operation action")
+		}
+		if (action.Kind == chain.TaskEscrowActionCancel || action.Kind == chain.TaskEscrowActionTimeout || action.Kind == chain.TaskEscrowActionReject) && !validDigest(action.ReleaseDigest) {
+			return errors.New("invalid release action digest")
 		}
 	case chain.TaskEscrowActionResult:
 		if action.ContractAddress == "" || action.QueryID == 0 || !validDigest(action.ResultHash) ||

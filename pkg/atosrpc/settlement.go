@@ -92,15 +92,23 @@ func (s *Server) CreateEscrow(
 			value.ProofProfile != req.Msg.ProofProfile {
 			return failedPrecondition("QUOTE_MISMATCH", "escrow request does not match quote commitment")
 		}
-		if existingID := tx.Bucket(bucketEscrowByQuote).Get([]byte(req.Msg.QuoteId)); existingID != nil && req.Msg.TrustMode != TrustModeVerified {
-			existing := new(atostosv1.Escrow)
-			found, err := s.store.getProto(tx, bucketEscrows, string(existingID), existing)
-			if err != nil {
-				return err
+		if existingID := tx.Bucket(bucketEscrowByQuote).Get([]byte(req.Msg.QuoteId)); existingID != nil {
+			if req.Msg.TrustMode == TrustModeVerified && string(existingID) != verifiedTerms.EscrowId {
+				return failedPrecondition("IDEMPOTENCY_CONFLICT", "verified Quote already funded another Job/TaskEscrow")
 			}
-			if found {
-				response.Escrow = existing
-				return nil
+			if req.Msg.TrustMode == TrustModeVerified {
+				// Continue through live canonical resolution; a local record is not
+				// sufficient evidence for a usable Verified escrow.
+			} else {
+				existing := new(atostosv1.Escrow)
+				found, err := s.store.getProto(tx, bucketEscrows, string(existingID), existing)
+				if err != nil {
+					return err
+				}
+				if found {
+					response.Escrow = existing
+					return nil
+				}
 			}
 		}
 		digest, err := protoDigest("ATOS-TOS-ESCROW-V1", withoutTransportContext(req.Msg))
@@ -380,9 +388,16 @@ func (s *Server) ReleaseEscrow(
 			if parseErr != nil || !reserved.IsUint64() {
 				return failedPrecondition("ESCROW_MISMATCH", "escrow reserve is outside uint64")
 			}
+			releaseDigest, digestErr := escrowcommitment.ReleaseDigest(
+				escrow.ReservationDigest, escrow.EscrowId, escrow.JobId, escrow.QuoteId, req.Msg.ReasonCode,
+			)
+			if digestErr != nil {
+				return failedPrecondition("ESCROW_MISMATCH", digestErr.Error())
+			}
 			result, economicErr := s.economy.ReleaseEscrow(ctx, economic.ReleaseEscrowRequest{
 				EscrowID: escrow.EscrowId, ContractAddress: contractAddress,
 				BudgetNanoTOS: reserved.Uint64(), ReasonCode: req.Msg.ReasonCode,
+				ReleaseDigest: releaseDigest,
 			})
 			if economicErr != nil {
 				return economicRPCError(economicErr, "release TOS Task Escrow")
@@ -405,7 +420,7 @@ func (s *Server) ReleaseEscrow(
 			escrow.Finalized = true
 			escrow.FinalizedCheckpoint = economicResult.State.ObservedMasterSeqno
 			escrow.ContractCodeHash = economicResult.State.CodeHash
-			releaseDigest, digestErr := protoDigest("tos.atos.verified-task-escrow-release.v1", withoutTransportContext(req.Msg))
+			releaseDigest, digestErr := escrowcommitment.ReleaseDigest(escrow.ReservationDigest, escrow.EscrowId, escrow.JobId, escrow.QuoteId, req.Msg.ReasonCode)
 			if digestErr != nil {
 				return digestErr
 			}

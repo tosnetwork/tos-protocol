@@ -22,6 +22,7 @@ import (
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 	"github.com/xssnick/tonutils-go/address"
 )
@@ -59,23 +60,24 @@ type TosctlBackendConfig struct {
 }
 
 type TosctlBackend struct {
-	network         string
-	binary          string
-	configFile      *os.File
-	vaultURL        string
-	wallets         map[string]string
-	executorWallet  string
-	workchain       int32
-	operationValue  uint64
-	commandTimeout  time.Duration
-	publishTimeout  time.Duration
-	recoveryWait    time.Duration
-	locator         *transactionLocator
-	environment     []string
-	mu              sync.Mutex
-	configMu        sync.Mutex
-	genesisRootHash string
-	genesisFileHash string
+	network           string
+	binary            string
+	configFile        *os.File
+	vaultURL          string
+	wallets           map[string]string
+	executorWallet    string
+	workchain         int32
+	operationValue    uint64
+	commandTimeout    time.Duration
+	publishTimeout    time.Duration
+	recoveryWait      time.Duration
+	locator           *transactionLocator
+	environment       []string
+	mu                sync.Mutex
+	configMu          sync.Mutex
+	genesisRootHash   string
+	genesisFileHash   string
+	enrollmentBinding string
 }
 
 func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
@@ -150,13 +152,56 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 	if err != nil {
 		return nil, err
 	}
+	binaryDigest, err := fileSHA256(binary)
+	if err != nil {
+		configFile.Close()
+		return nil, err
+	}
+	configSum := sha256.Sum256(rawConfig)
+	vaultSum := sha256.Sum256([]byte(strings.TrimSpace(config.VaultURL)))
+	environmentSum, err := codec.Digest("tos.task-escrow.publisher-environment.v1", config.AdditionalEnvironment)
+	if err != nil {
+		configFile.Close()
+		return nil, err
+	}
+	binding, err := codec.Digest("tos.task-escrow.publisher-backend.v1", struct {
+		Version, ActionVersion, Network, Binary, Config, RPC, GenesisRoot, GenesisFile, Executor, Vault, Environment string
+		Wallets                                                                                                      map[string]string
+		Workchain                                                                                                    int32
+		Operation                                                                                                    uint64
+	}{"tosctl-v1", chain.TaskEscrowActionVersion, config.Network, binaryDigest, "sha256:" + hex.EncodeToString(configSum[:]), configuredRPC, config.GenesisRootHash, config.GenesisFileHash, config.ExecutorWallet, "sha256:" + hex.EncodeToString(vaultSum[:]), environmentSum, wallets, config.Workchain, operationValue})
+	if err != nil {
+		configFile.Close()
+		return nil, err
+	}
 	return &TosctlBackend{
 		network: config.Network, binary: binary, configFile: configFile,
 		vaultURL: config.VaultURL, wallets: wallets, executorWallet: config.ExecutorWallet,
 		workchain: config.Workchain, operationValue: operationValue,
 		commandTimeout: commandTimeout, publishTimeout: publishTimeout,
 		recoveryWait: recoveryWait, locator: locator, environment: environment, genesisRootHash: config.GenesisRootHash, genesisFileHash: config.GenesisFileHash,
+		enrollmentBinding: binding,
 	}, nil
+}
+
+func (b *TosctlBackend) EnrollmentBinding() string {
+	if b == nil {
+		return ""
+	}
+	return b.enrollmentBinding
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err = io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // walletLsEntry mirrors every field tosctl's `wallet ls --format json` emits.

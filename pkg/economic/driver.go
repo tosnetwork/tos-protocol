@@ -45,6 +45,7 @@ type ReleaseEscrowRequest struct {
 	ContractAddress string
 	BudgetNanoTOS   uint64
 	ReasonCode      string
+	ReleaseDigest   string
 }
 
 type SettleProviderRequest struct {
@@ -61,6 +62,7 @@ type RefundPrincipalRequest struct {
 	ContractAddress string
 	BudgetNanoTOS   uint64
 	DisputeHash     string
+	ReleaseDigest   string
 }
 
 type OpenDisputeRequest struct {

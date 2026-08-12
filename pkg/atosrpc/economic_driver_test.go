@@ -16,6 +16,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/protobuf/proto"
 )
 
 type verifiedTestAuthority struct {
@@ -311,7 +312,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	if err := server.bindPrincipal(principalID, principalAgentID); err != nil {
 		t.Fatal(err)
 	}
-	expires := now.Add(time.Hour).UnixMilli()
+	expires := now.Add(time.Hour).Truncate(time.Second).UnixMilli()
 	quoteValue := &atostosv1.QuoteCommitmentInput{
 		QuoteId: quoteID, PrincipalId: principalID, ProviderId: providerID,
 		CapabilityId: capabilityID, CapabilityVersion: "1.0.0",
@@ -339,6 +340,23 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 
 	terms := &atostosv1.VerifiedEscrowTerms{Version: escrowcommitment.Version, Canonicalization: escrowcommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", JobId: jobID, QuoteId: quoteID, QuoteCommitmentDigest: quoteDigest, QuoteCommitmentRef: &quoteRef, PrincipalId: principalID, RequesterAgentId: principalAgentID, ProviderId: providerID, CapabilityId: capabilityID, CapabilityVersion: "1.0.0", ManifestDigest: quoteValue.ManifestDigest, OwnershipRef: quoteValue.OwnershipRef, TrustMode: TrustModeVerified, ProofProfile: quoteValue.ProofProfile, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "900"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "100"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "task_escrow_v1", AcceptanceDeadlineUnixMillis: expires, ExecutionDeadlineUnixMillis: expires, EscrowDeadlineUnixMillis: expires, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: quoteValue.DisputePolicyDigest, SignerAuthorizationId: "auth-1", SignerAuthorizationRef: quoteValue.SignerAuthorizationRef, TermsDigest: quoteValue.TermsDigest}
 	terms.EscrowId = escrowcommitment.EscrowID(terms.NetworkId, terms.Domain, terms.QuoteId, terms.JobId)
+	misaligned := proto.Clone(terms).(*atostosv1.VerifiedEscrowTerms)
+	misaligned.EscrowDeadlineUnixMillis++
+	if _, err := server.CreateEscrow(context.Background(), connect.NewRequest(
+		&atostosv1.CreateEscrowRequest{
+			Context: &atostosv1.RequestContext{
+				RequestId: "request-create-misaligned", CallerId: "caller-test",
+				IdempotencyKey: "idem-create-misaligned", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli(),
+			},
+			QuoteId: quoteID, PrincipalId: principalID, ProviderId: providerID,
+			CapabilityId: capabilityID, TrustMode: TrustModeVerified,
+			ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1,
+			Reserve:      &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"},
+			FundingModel: "task_escrow_v1", ExpiresUnixMillis: expires, VerifiedTerms: misaligned,
+		},
+	)); err == nil {
+		t.Fatal("non-second-aligned Verified escrow deadline was accepted")
+	}
 	create, err := server.CreateEscrow(context.Background(), connect.NewRequest(
 		&atostosv1.CreateEscrowRequest{
 			Context: &atostosv1.RequestContext{

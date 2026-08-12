@@ -18,6 +18,8 @@
   ],
   "verifierAddress": "0:REPLACE_WITH_64_HEX_CHARACTERS",
   "publisherSocket": "/run/tos/atos-task-escrow-publisher.sock",
+  "publisherJournalIdentity": "REPLACE_WITH_ENROLLED_JOURNAL_IDENTITY",
+  "publisherJournalBinding": "REPLACE_WITH_ENROLLED_JOURNAL_BINDING",
   "publisherTimeoutMillis": 20000,
   "publisherMaxMessageBytes": 524288,
   "publisherMaxConcurrent": 8,

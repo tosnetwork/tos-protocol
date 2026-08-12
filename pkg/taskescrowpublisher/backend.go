@@ -25,6 +25,7 @@ type PreparedAction struct {
 // callers independently verify the exact transition on TOS.
 type Backend interface {
 	CheckReady(context.Context) error
+	EnrollmentBinding() string
 	Prepare(context.Context, chain.TaskEscrowAction) (PreparedAction, error)
 	Publish(context.Context, chain.TaskEscrowAction, PreparedAction, bool) (chain.TaskEscrowActionReceipt, error)
 	Close() error

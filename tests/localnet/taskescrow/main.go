@@ -26,17 +26,19 @@ import (
 const maxConfigBytes = int64(128 << 10)
 
 type config struct {
-	Version         string `json:"version"`
-	Network         string `json:"network"`
-	RPCURL          string `json:"rpcUrl"`
-	PublisherSocket string `json:"publisherSocket"`
-	AllowedCodeHash string `json:"allowedCodeHash"`
-	Creator         string `json:"creator"`
-	Agent           string `json:"agent"`
-	Verifier        string `json:"verifier"`
-	BudgetNanoTOS   uint64 `json:"budgetNanoTOS"`
-	PayoutNanoTOS   uint64 `json:"payoutNanoTOS"`
-	FundingOverhead uint64 `json:"fundingOverheadNanoTOS"`
+	Version                  string `json:"version"`
+	Network                  string `json:"network"`
+	RPCURL                   string `json:"rpcUrl"`
+	PublisherSocket          string `json:"publisherSocket"`
+	PublisherJournalIdentity string `json:"publisherJournalIdentity"`
+	PublisherJournalBinding  string `json:"publisherJournalBinding"`
+	AllowedCodeHash          string `json:"allowedCodeHash"`
+	Creator                  string `json:"creator"`
+	Agent                    string `json:"agent"`
+	Verifier                 string `json:"verifier"`
+	BudgetNanoTOS            uint64 `json:"budgetNanoTOS"`
+	PayoutNanoTOS            uint64 `json:"payoutNanoTOS"`
+	FundingOverhead          uint64 `json:"fundingOverheadNanoTOS"`
 }
 
 func main() {
@@ -76,7 +78,7 @@ func run(ctx context.Context, cfg config) error {
 		return err
 	}
 	publisher, err := localrpc.NewTaskEscrowActionPublisherClient(
-		localrpc.DefaultTaskEscrowActionPublisherClientConfig(cfg.PublisherSocket, cfg.Network),
+		localrpc.DefaultTaskEscrowActionPublisherClientConfig(cfg.PublisherSocket, cfg.Network, cfg.PublisherJournalIdentity, cfg.PublisherJournalBinding),
 	)
 	if err != nil {
 		return err
