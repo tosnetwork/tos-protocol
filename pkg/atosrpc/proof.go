@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/aipow"
+	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -39,12 +40,7 @@ func (s *Server) putProofTx(tx *bolt.Tx, ref *NetworkReference, proofType string
 func receiptSigningBytes(receipt *atostosv1.ExecutionReceiptEnvelope) ([]byte, error) {
 	clone := cloneMessage(receipt)
 	clone.Signature = nil
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(clone)
-	if err != nil {
-		return nil, err
-	}
-	prefix := []byte("ATOS-TOS-EXECUTION-RECEIPT-V1\x00")
-	return append(prefix, encoded...), nil
+	return receiptcommitment.SigningBytes(clone)
 }
 
 func (s *Server) signReceipt(receipt *atostosv1.ExecutionReceiptEnvelope) error {
