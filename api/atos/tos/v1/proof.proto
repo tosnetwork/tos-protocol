@@ -11,6 +11,7 @@ service ProofService {
   rpc VerifyExecutionReceipt(VerifyExecutionReceiptRequest) returns (VerifyExecutionReceiptResponse);
   rpc ResolveExecutionReceipt(ResolveExecutionReceiptRequest) returns (ResolveExecutionReceiptResponse);
   rpc CommitProofOfServiceEvidence(CommitProofOfServiceEvidenceRequest) returns (CommitProofOfServiceEvidenceResponse);
+  rpc ResolveProofOfServiceEvidence(ResolveProofOfServiceEvidenceRequest) returns (ResolveProofOfServiceEvidenceResponse);
   rpc ReadProofOfService(ReadProofOfServiceRequest) returns (ReadProofOfServiceResponse);
   rpc ReadReputation(ReadReputationRequest) returns (ReadReputationResponse);
   rpc ReadProof(ReadProofRequest) returns (ReadProofResponse);
@@ -180,6 +181,16 @@ message CommitProofOfServiceEvidenceRequest {
 message CommitProofOfServiceEvidenceResponse {
   ProofOfServiceEvidence evidence = 1;
   bool created = 2;
+}
+message ResolveProofOfServiceEvidenceRequest {
+  RequestContext context = 1;
+  ProofOfServiceEvidenceInput evidence = 2;
+  NetworkReference expected_evidence_ref = 3;
+}
+message ResolveProofOfServiceEvidenceResponse {
+  bool found = 1;
+  Digest evidence_digest = 2;
+  NetworkReference evidence_ref = 3;
 }
 
 message ReadProofOfServiceRequest {

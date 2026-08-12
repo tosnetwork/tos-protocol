@@ -383,6 +383,42 @@ func (s *Server) CommitProofOfServiceEvidence(
 	return connect.NewResponse(response), nil
 }
 
+// ResolveProofOfServiceEvidence performs live, read-only tuple resolution. A
+// local projection miss is never treated as canonical absence.
+func (s *Server) ResolveProofOfServiceEvidence(ctx context.Context, req *connect.Request[atostosv1.ResolveProofOfServiceEvidenceRequest]) (*connect.Response[atostosv1.ResolveProofOfServiceEvidenceResponse], error) {
+	if req == nil || req.Msg == nil || req.Msg.Evidence == nil {
+		return nil, invalid("INVALID_ARGUMENT", "proof-of-service evidence is required")
+	}
+	v := req.Msg.Evidence
+	if err := requiredIdentifier("evidence_id", v.EvidenceId); err != nil {
+		return nil, err
+	}
+	digest, err := protoDigest("ATOS-TOS-PROOF-OF-SERVICE-V1", v)
+	if err != nil {
+		return nil, err
+	}
+	var expected *atostosv1.NetworkReference
+	if req.Msg.ExpectedEvidenceRef != nil && req.Msg.ExpectedEvidenceRef.Reference != "" {
+		expected = req.Msg.ExpectedEvidenceRef
+	}
+	resolver, ok := s.authority.(CommitmentResolver)
+	if !ok {
+		return nil, unavailable("NETWORK_UNAVAILABLE", "Proof-of-Service resolver is unavailable")
+	}
+	live, err := resolver.ResolveCommitment(ctx, "proof-of-service", v.EvidenceId, digest, expected)
+	if err != nil {
+		if errors.Is(err, ErrCommitmentNotFound) {
+			return connect.NewResponse(&atostosv1.ResolveProofOfServiceEvidenceResponse{}), nil
+		}
+		return nil, unavailable("NETWORK_UNAVAILABLE", "Proof-of-Service authority is unavailable")
+	}
+	if live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != s.authority.Network() {
+		return nil, unavailable("NETWORK_UNAVAILABLE", "Proof-of-Service authority returned non-final evidence")
+	}
+	raw, _ := hex.DecodeString(strings.TrimPrefix(digest, "sha256:"))
+	return connect.NewResponse(&atostosv1.ResolveProofOfServiceEvidenceResponse{Found: true, EvidenceDigest: &atostosv1.Digest{Algorithm: "sha256", Value: raw}, EvidenceRef: live}), nil
+}
+
 func (s *Server) ReadProofOfService(
 	_ context.Context,
 	req *connect.Request[atostosv1.ReadProofOfServiceRequest],
