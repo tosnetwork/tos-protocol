@@ -12,17 +12,46 @@ import (
 )
 
 type enrollmentBackend struct {
-	readyErr error
-	checked  bool
+	readyErr         error
+	checked          bool
+	requiredCodeHash string
 }
 
-func (b *enrollmentBackend) CheckReady(context.Context) error {
+func (b *enrollmentBackend) CheckReady(_ context.Context, policy taskescrowpublisher.PublisherPolicy) error {
 	b.checked = true
+	if b.requiredCodeHash != "" {
+		for _, codeHash := range policy.AllowedCodeHashes {
+			if codeHash == b.requiredCodeHash {
+				return b.readyErr
+			}
+		}
+		return errors.New("probe code hash is not enrolled in publisher policy")
+	}
 	return b.readyErr
 }
 func (*enrollmentBackend) EnrollmentBinding() string { return "backend-binding-v1" }
 func (*enrollmentBackend) Prepare(context.Context, chain.TaskEscrowAction) (taskescrowpublisher.PreparedAction, error) {
 	return taskescrowpublisher.PreparedAction{}, errors.New("not used")
+}
+
+func TestInitializeJournalRejectsProbeCodeHashOutsidePolicy(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "journal.db")
+	config := startupConfig{
+		Network: "tos-test", StatePath: statePath, JournalIdentity: "journal-test",
+		Policy: taskescrowpublisher.PublisherPolicy{
+			AllowedCreators: []string{"0:" + repeatHex("11")}, AllowedAgents: []string{"0:" + repeatHex("22")},
+			AllowedPolicyHashes: []string{"sha256:" + repeatHex("33")},
+			AllowedCodeHashes:   []string{"tvm-cell-sha256:" + repeatHex("44")},
+			MaxBudgetNanoTOS:    1, MaxFundingNanoTOS: 1,
+		},
+	}
+	backend := &enrollmentBackend{requiredCodeHash: "tvm-cell-sha256:" + repeatHex("55")}
+	if err := initializeJournal(context.Background(), config, backend); err == nil {
+		t.Fatal("publisher journal enrolled a backend whose probe code hash was outside policy")
+	}
+	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("code-hash mismatch created journal: %v", err)
+	}
 }
 func (*enrollmentBackend) Publish(context.Context, chain.TaskEscrowAction, taskescrowpublisher.PreparedAction, bool) (chain.TaskEscrowActionReceipt, error) {
 	return chain.TaskEscrowActionReceipt{}, errors.New("not used")

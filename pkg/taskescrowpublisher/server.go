@@ -103,7 +103,7 @@ func (s *Server) CheckReady(ctx context.Context) error {
 	if s == nil || s.backend == nil || s.store == nil {
 		return errors.New("invalid task escrow publisher")
 	}
-	return s.backend.CheckReady(ctx)
+	return s.backend.CheckReady(ctx, s.policy)
 }
 
 func (s *Server) Close() error {

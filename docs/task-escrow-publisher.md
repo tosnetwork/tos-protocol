@@ -66,7 +66,9 @@ timeout                   -> configured executor wallet
    `TOS_TASK_ESCROW_PUBLISHER_CONFIG=/absolute/config.json tos-task-escrow-publisher init-journal`.
    Enrollment binds the journal identity, schema, network, wallet/spending
    policy and code-hash allowlist. Normal startup rejects missing, substituted
-   or configuration-mismatched journal state.
+   or configuration-mismatched journal state. Before creating the journal,
+   readiness builds a side-effect-free TaskEscrow StateInit and requires its
+   normalized code hash to match the enrolled allowlist exactly.
 5. Configure `TOS_ATOS_RPC_ECONOMIC_CONFIG` to use the same Unix socket.
 6. Start the publisher before `tos-atos-rpc`.
 

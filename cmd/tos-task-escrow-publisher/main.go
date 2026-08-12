@@ -131,7 +131,7 @@ func initializeJournal(ctx context.Context, config startupConfig, backend taskes
 	// Enrollment is permanent for this journal identity. Prove that the exact
 	// backend being bound can reach the pinned chain, validate genesis, resolve
 	// every configured wallet, and execute the required CLI surface first.
-	if err := backend.CheckReady(ctx); err != nil {
+	if err := backend.CheckReady(ctx, config.Policy); err != nil {
 		return fmt.Errorf("publisher backend is not ready: %w", err)
 	}
 	return taskescrowpublisher.InitializeJournal(

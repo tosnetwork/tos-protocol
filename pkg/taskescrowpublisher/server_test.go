@@ -26,7 +26,7 @@ type fakeBackend struct {
 	binding        string
 }
 
-func (f *fakeBackend) CheckReady(context.Context) error { return nil }
+func (f *fakeBackend) CheckReady(context.Context, PublisherPolicy) error { return nil }
 func (f *fakeBackend) EnrollmentBinding() string {
 	if f.binding != "" {
 		return f.binding

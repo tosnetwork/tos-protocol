@@ -234,7 +234,7 @@ type walletLsEntry struct {
 	Seqno      any    `json:"seqno"`
 }
 
-func (b *TosctlBackend) CheckReady(ctx context.Context) error {
+func (b *TosctlBackend) CheckReady(ctx context.Context, policy PublisherPolicy) error {
 	if b == nil || b.locator == nil || b.locator.client == nil {
 		return errors.New("invalid tosctl publisher backend")
 	}
@@ -308,11 +308,19 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 		return fmt.Errorf("exercise tosctl TaskEscrow build-state: %w", err)
 	}
 	var state taskStateView
+	validatedPolicy, policyErr := validatePublisherPolicy(policy)
 	if err := jsonstrict.Decode(stateOutput, &state); err != nil ||
 		normalizeDigest(state.PolicyHash) != probe.PolicyHash ||
 		normalizeDigest(state.PermissionHash) != probe.PermissionHash ||
-		strings.TrimSpace(state.Address) == "" || strings.TrimSpace(state.CodeHash) == "" {
+		strings.TrimSpace(state.Address) == "" {
 		return errors.New("tosctl TaskEscrow build-state readiness probe is incompatible")
+	}
+	codeHash := normalizeCellDigest(state.CodeHash)
+	if !validCellHash(codeHash) {
+		return errors.New("tosctl TaskEscrow build-state returned an invalid code hash")
+	}
+	if policyErr != nil || !contains(validatedPolicy.AllowedCodeHashes, codeHash) {
+		return errors.New("tosctl TaskEscrow build-state code hash is not enrolled in publisher policy")
 	}
 	return nil
 }

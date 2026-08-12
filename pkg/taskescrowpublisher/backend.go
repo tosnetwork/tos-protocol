@@ -24,7 +24,7 @@ type PreparedAction struct {
 // submission path. It must return a candidate transaction reference only;
 // callers independently verify the exact transition on TOS.
 type Backend interface {
-	CheckReady(context.Context) error
+	CheckReady(context.Context, PublisherPolicy) error
 	EnrollmentBinding() string
 	Prepare(context.Context, chain.TaskEscrowAction) (PreparedAction, error)
 	Publish(context.Context, chain.TaskEscrowAction, PreparedAction, bool) (chain.TaskEscrowActionReceipt, error)
