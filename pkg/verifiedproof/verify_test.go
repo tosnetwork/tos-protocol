@@ -1,9 +1,9 @@
 package verifiedproof
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/hex"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
@@ -35,7 +35,8 @@ func pd(s string) *atostosv1.Digest {
 }
 func fixture(t *testing.T) Package {
 	t.Helper()
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	priv := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x42}, ed25519.SeedSize))
+	pub := priv.Public().(ed25519.PublicKey)
 	p := Package{Version: Version, Canonicalization: Canonicalization, NetworkID: "tos-test", GatewayDomain: "atos.im", PrincipalID: "principal-1", RequesterAgentID: "agent-1", RequesterIdentityRef: ref("tos-test", "id-requester", 10), ProviderID: "provider-1", ProviderIdentityRef: ref("tos-test", "id-provider", 10), Capability: Capability{"cap-1", "1.0.0", d(1), ref("tos-test", "ownership", 11)}, Quote: Quote{"quote-1", d(2), ref("tos-test", "quote", 12), d(3), "verified", "tos_verified_v1", "tos", "TOS", 9, "1000", "0", "1000", 1, 2, 3, "service-quote", d(4), nil}, Escrow: Escrow{"esc-1", "job-1", ref("tos-test", "contract", 13), d(5), d(6), ref("tos-test", "reserve", 13), "1000", 4, "gateway_sponsored", nil}, SignerAuthorization: &SignerAuthorization{"auth-1", "signer-1", ref("tos-test", "auth", 11), "ed25519", pub, 0, 100000000}, Receipt: &Receipt{"receipt-1", "", ref("tos-test", "receipt", 14), "success", d(8), d(9), d(10), 10000000, 20000000, "700", "ed25519", nil, nil}, Outcome: Outcome{Kind: "provider_settlement", OutcomeRef: ref("tos-test", "settle", 15), ChargedAtomic: "700", RefundedAtomic: "300"}, ProofOfService: &ProofOfService{"pos-1", d(11), ref("tos-test", "pos", 16), d(12), ""}}
 	qi := &atostosv1.QuoteCommitmentInput{Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", QuoteId: "quote-1", PrincipalId: "principal-1", RequesterAgentId: "agent-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", ManifestDigest: pd(d(1)), TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Subtotal: &atostosv1.Money{Amount: "1000", Currency: "TOS"}, Fees: &atostosv1.Money{Amount: "0", Currency: "TOS"}, TotalMax: &atostosv1.Money{Amount: "1000", Currency: "TOS"}, AssetDecimals: 9, TermsDigest: pd(d(3)), DisputePolicyDigest: pd(d(4)), AcceptanceDeadlineUnixMillis: 0, ExpiresUnixMillis: 0, ExecutionDeadlineUnixMillis: 0, SettlementBackend: "tos", SettlementAsset: "TOS", UnderlyingServiceQuoteRef: "service-quote"}
 	p.Quote.CanonicalCBOR, _ = quotecommitment.Bytes(qi)
@@ -67,6 +68,21 @@ func TestCanonicalRoundTripAndIndependentVerification(t *testing.T) {
 	r := (Verifier{Observer: o, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), parsed)
 	if !r.Valid {
 		t.Fatalf("failures=%+v", r.Failures)
+	}
+}
+func TestNormativeVector(t *testing.T) {
+	p := fixture(t)
+	b, err := Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Digest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const expectedDigest = "sha256:efa027b5b195165a69d521ca45c7d58a688cb46a3e7140062749215acc877ce8"
+	if d != expectedDigest {
+		t.Fatalf("digest=%s\ncbor=%x", d, b)
 	}
 }
 func TestRejectsNetworkSignerOutcomeAndNonCanonicalCBOR(t *testing.T) {
