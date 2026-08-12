@@ -18,6 +18,7 @@ import (
 var (
 	bucketMeta                  = []byte("meta-v1")
 	bucketIdentities            = []byte("identities-v1")
+	bucketIdentityDigests       = []byte("identity-digests-v2")
 	bucketIdentityURIs          = []byte("identity-uris-v1")
 	bucketPrincipalBindings     = []byte("principal-bindings-v1")
 	bucketPrincipalRevocations  = []byte("principal-binding-revocations-v1")
@@ -43,7 +44,7 @@ var (
 )
 
 var allBuckets = [][]byte{
-	bucketMeta, bucketIdentities, bucketIdentityURIs, bucketPrincipalBindings,
+	bucketMeta, bucketIdentities, bucketIdentityDigests, bucketIdentityURIs, bucketPrincipalBindings,
 	bucketPrincipalRevocations,
 	bucketCapabilities, bucketCapabilityCommitments, bucketCapabilityLatest, bucketQuoteCommitments,
 	bucketSignerAuths, bucketSignerAuthByAuthID, bucketEscrows, bucketEscrowByQuote, bucketSettlements,

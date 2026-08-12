@@ -23,7 +23,7 @@ func verifiedQuoteFixture(t *testing.T) (*Server, *atostosv1.QuoteCommitmentInpu
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	for _, id := range []string{"agent-requester", "provider-1"} {
-		if err := s.SeedIdentity(&atostosv1.AgentIdentity{AgentId: id, CanonicalUri: "atos://" + id, Controllers: []string{testCanonicalController(byte(len(id)))}, IdentityRef: &NetworkReference{Network: "tos-test", Reference: "identity:" + id, Finalized: true}}); err != nil {
+		if err := s.SeedIdentity(&atostosv1.AgentIdentity{AgentId: id, CanonicalUri: "atos://" + id, Controllers: []string{testCanonicalController(byte(len(id)))}, Assurance: "tos_attested", IdentityRef: &NetworkReference{Network: "tos-test", Reference: "identity:" + id, Finalized: true}}); err != nil {
 			t.Fatal(err)
 		}
 	}

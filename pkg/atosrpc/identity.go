@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/identitycommitment"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -36,11 +37,11 @@ func (s *Server) SeedIdentity(identity *atostosv1.AgentIdentity) error {
 		return invalid("INVALID_ARGUMENT", "valid agent identity is required")
 	}
 	copyIdentity := cloneMessage(identity)
+	digest, err := identitycommitment.IdentityDigest(copyIdentity)
+	if err != nil {
+		return err
+	}
 	if copyIdentity.IdentityRef == nil {
-		digest, err := protoDigest("ATOS-TOS-IDENTITY-V1", copyIdentity)
-		if err != nil {
-			return err
-		}
 		ref, err := s.authority.Commit(context.Background(), "identity", copyIdentity.AgentId, digest)
 		if err != nil {
 			return err
@@ -69,8 +70,29 @@ func (s *Server) SeedIdentity(identity *atostosv1.AgentIdentity) error {
 		if err := s.store.putProto(tx, bucketIdentities, copyIdentity.AgentId, copyIdentity); err != nil {
 			return err
 		}
+		if err := tx.Bucket(bucketIdentityDigests).Put([]byte(copyIdentity.AgentId), []byte(digest)); err != nil {
+			return err
+		}
 		return tx.Bucket(bucketIdentityURIs).Put([]byte(copyIdentity.CanonicalUri), []byte(copyIdentity.AgentId))
 	})
+}
+
+// IdentitySeedCurrent distinguishes a v2 canonical seed from a legacy local
+// projection whose visible identity fields happen to be equal. It is used
+// only by trusted startup enrollment so legacy anchors are upgraded exactly
+// once instead of being silently retained forever.
+func (s *Server) IdentitySeedCurrent(identity *atostosv1.AgentIdentity) (bool, error) {
+	digest, err := identitycommitment.IdentityDigest(identity)
+	if err != nil {
+		return false, err
+	}
+	current := false
+	err = s.store.view(func(tx *bolt.Tx) error {
+		stored := tx.Bucket(bucketIdentityDigests).Get([]byte(identity.AgentId))
+		current = string(stored) == digest
+		return nil
+	})
+	return current, err
 }
 
 // bindPrincipal is a test-only helper that binds without going through
@@ -93,9 +115,7 @@ func (s *Server) bindPrincipal(principalID, agentID string) error {
 		if !found {
 			return notFound("NOT_FOUND", "agent identity not found")
 		}
-		digest, err := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-V1", &atostosv1.CreatePrincipalBindingRequest{
-			PrincipalId: principalID, AgentId: agentID,
-		})
+		digest, err := identitycommitment.BindingDigest(principalID, agentID)
 		if err != nil {
 			return err
 		}
@@ -163,7 +183,7 @@ func (s *Server) ResolveAgentIdentity(
 		}
 		expected.IdentityRef = nil
 		expected.UpdatedUnixMillis = 0
-		digest, digestErr := protoDigest("ATOS-TOS-IDENTITY-V1", expected)
+		digest, digestErr := identitycommitment.IdentityDigest(expected)
 		resolver, ok := s.authority.(CommitmentResolver)
 		if digestErr != nil || !ok {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "identity commitment resolver unavailable")
@@ -180,7 +200,7 @@ func (s *Server) ResolveAgentIdentity(
 		ref := cloneMessage(expected.IdentityRef)
 		expected.IdentityRef = nil
 		expected.UpdatedUnixMillis = 0
-		digest, digestErr := protoDigest("ATOS-TOS-IDENTITY-V1", expected)
+		digest, digestErr := identitycommitment.IdentityDigest(expected)
 		resolver, ok := s.authority.(CommitmentResolver)
 		if digestErr != nil || !ok {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "identity commitment resolver unavailable")
@@ -256,7 +276,7 @@ func (s *Server) ResolvePrincipalBinding(
 		if !ok {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding resolver is unavailable")
 		}
-		digest, digestErr := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-V1", &atostosv1.CreatePrincipalBindingRequest{PrincipalId: req.Msg.PrincipalId, AgentId: req.Msg.ExpectedAgentId})
+		digest, digestErr := identitycommitment.BindingDigest(req.Msg.PrincipalId, req.Msg.ExpectedAgentId)
 		if digestErr != nil {
 			return nil, digestErr
 		}
@@ -363,7 +383,7 @@ func (s *Server) CreatePrincipalBinding(
 			// client that switches on reason_code misroute this failure.
 			return failedPrecondition("AGENT_IDENTITY_NOT_VERIFIED", "agent identity is not independently anchored on this server's configured network: "+err.Error())
 		}
-		digest, err := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-V1", withoutTransportContext(req.Msg))
+		digest, err := identitycommitment.BindingDigest(req.Msg.PrincipalId, req.Msg.AgentId)
 		if err != nil {
 			return err
 		}

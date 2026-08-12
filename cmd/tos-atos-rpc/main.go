@@ -331,10 +331,14 @@ func identityAlreadySeeded(server *atosrpc.Server, seed identitySeed) (bool, err
 	// file's own controller pre-validation. Two different-but-equivalent
 	// textual forms can therefore never both appear as valid seed content,
 	// making a canonicalized comparison here a no-op in practice.
-	return existing.CanonicalUri == seed.CanonicalURI &&
+	equal := existing.CanonicalUri == seed.CanonicalURI &&
 		existing.Assurance == seed.Assurance &&
 		slices.Equal(existing.Controllers, seed.Controllers) &&
-		maps.Equal(existing.PublicAttributes, seed.PublicAttrs), nil
+		maps.Equal(existing.PublicAttributes, seed.PublicAttrs)
+	if !equal {
+		return false, nil
+	}
+	return server.IdentitySeedCurrent(&atostosv1.AgentIdentity{AgentId: seed.AgentID, CanonicalUri: seed.CanonicalURI, Controllers: seed.Controllers, Assurance: seed.Assurance})
 }
 
 // resolveAgentIDByCanonicalURI returns the agent_id currently owning
