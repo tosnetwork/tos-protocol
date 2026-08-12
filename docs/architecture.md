@@ -112,7 +112,7 @@ discovery-only.
 
 | Concern | Baseline | Bootstrap status |
 |---|---|---|
-| Language | Go 1.24+ | implemented |
+| Language | Go 1.26.5+ | implemented |
 | Local process API | ConnectRPC + Protobuf over private Unix socket | invocation, `GetTask` recovery and exact-claim cancellation contracts plus opaque validated-result clients implemented: owner/mode, message/deadline, request-digest, task/result/retention binding, priority and no-retry controls; reusable bbolt Worker task table provides bounded atomic claim/replay, owner-local slot reserve, priority-aware capacity, terminal persistence, lookup, cleanup, startup audit and payload-free active-task pagination; synchronous workers can fail interrupted tasks closed, while durable executor/supervisor recovery remains |
 | Public discovery | ARD v0.9 Draft | mandatory bounded `POST /search`, deterministic optional `GET /agents` with pinned List filter/order grammar and view-bound pagination, stable bounded Go client, deterministic privacy-minimized projection, strict known-extension validation, bounded exact-filter indexing, atomic local reload, opt-in cached federation with HTTPS-origin/IP/redirect/body/depth/source/TTL controls, and an opt-in pinned-upstream conformance gate implemented |
 | Base service protocol | TOS v0.1 Draft | schemas, Go types, terminal/resource declarations, canonical encoding and conformance vectors implemented |

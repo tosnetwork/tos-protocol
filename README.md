@@ -10,7 +10,7 @@ Current delivery status and ordered follow-up work are maintained in
 real-chain, key-custody, physical-isolation, network, and load evidence required
 for a production claim.
 
-This repository is an early Go 1.24 foundation. It now includes the draft
+This repository is an early Go 1.26.5 foundation. It now includes the draft
 TOS Service Protocol v0.1 contracts: deterministic signed values, operational
 service manifests, exact profile negotiation, bounded sessions and
 delegations, quote/payment/receipt binding, evidence levels, error semantics,
@@ -64,7 +64,7 @@ make all
 make test-race
 ```
 
-The module declares Go 1.24. Older Go installations with `GOTOOLCHAIN=auto`
+The module declares Go 1.26.5. Older Go installations with `GOTOOLCHAIN=auto`
 will download a compatible toolchain.
 
 ## Commands
