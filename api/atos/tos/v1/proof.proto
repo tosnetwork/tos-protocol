@@ -24,6 +24,52 @@ enum ExecutionResult {
   EXECUTION_RESULT_REJECTED = 5;
 }
 
+// The PoIW (Proof of Intelligent Work) evidence ladder. The ladder is the
+// scoring trust order defined by the PoIW methodology; DECLARED-level work
+// deliberately earns a zero score multiplier there. A receipt states the
+// strongest level its issuer can substantiate; verifiers and scorers may
+// downgrade, never upgrade.
+enum PoiwEvidenceLevel {
+  POIW_EVIDENCE_LEVEL_UNSPECIFIED = 0;
+  POIW_EVIDENCE_LEVEL_DECLARED = 1;
+  POIW_EVIDENCE_LEVEL_OBSERVED = 2;
+  POIW_EVIDENCE_LEVEL_BENCHMARKED = 3;
+  POIW_EVIDENCE_LEVEL_AUDITED = 4;
+  POIW_EVIDENCE_LEVEL_ATTESTED = 5;
+  POIW_EVIDENCE_LEVEL_REPLICATED = 6;
+}
+
+// PoIW work attribution: the scoring-relevant facts of one settled work
+// unit, carried inside the signed receipt so the PoIW scorer never has to
+// infer them. Replaces the interim mapping (settled amount as valuation,
+// one default class) once populated end to end. Purely descriptive: it
+// grants no authority and moves no funds; scoring rules live in the PoIW
+// methodology, not here.
+message PoiwWorkAttribution {
+  // Capability class from the published PoIW capability-class vocabulary
+  // (see the vocabulary document); NOT the marketplace capability_id.
+  string capability_class = 1;
+  // The class's normalized billing unit name, exactly as the vocabulary
+  // defines it (e.g. kilo-output-tokens, call, byte-hour).
+  string unit = 2;
+  // Measured work in whole normalized units, floored per the vocabulary's
+  // normalization rule for the class.
+  uint64 work_units = 3;
+  // Version tag of the rate-card/vocabulary revision the measurement was
+  // normalized against.
+  string rate_card_version = 4;
+  PoiwEvidenceLevel evidence_level = 5;
+  // sha256 commitments to the 32-byte chain account identifiers of the
+  // earning and paying identities (the bonded Capability Registry
+  // accounts), binding the receipt to the on-chain identities the scorer
+  // attributes work to without embedding raw addresses.
+  Digest earner_identity_commitment = 6;
+  Digest payer_identity_commitment = 7;
+  // True when the work is a protocol-issued challenge task: it scores
+  // normally but never counts toward organic settled value.
+  bool challenge_task = 8;
+}
+
 message ExecutionReceiptEnvelope {
   string receipt_id = 1;
   string quote_id = 2;
@@ -49,6 +95,11 @@ message ExecutionReceiptEnvelope {
   string signature_algorithm = 22;
   int64 completed_unix_millis = 23;
   string error_code = 24;
+  // Optional PoIW work attribution. When present it is part of the signed
+  // receipt content; when absent the field is omitted from the canonical
+  // encoding, so receipts issued before this field existed keep their
+  // signatures and digests unchanged.
+  PoiwWorkAttribution poiw = 25;
 }
 
 message CommittedExecutionReceipt {
@@ -96,6 +147,10 @@ message ProofOfServiceEvidenceInput {
   string dispute_outcome = 10;
   Digest evidence_digest = 11;
   int64 observed_unix_millis = 12;
+  // Optional PoIW work attribution mirrored from the underlying receipt,
+  // so proof-of-service evidence streams are scoreable without re-fetching
+  // every receipt.
+  PoiwWorkAttribution poiw = 13;
 }
 
 message ProofOfServiceEvidence {
