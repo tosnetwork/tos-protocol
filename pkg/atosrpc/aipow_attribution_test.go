@@ -17,13 +17,13 @@ func deterministicMarshal(t *testing.T, message proto.Message) []byte {
 	return encoded
 }
 
-func samplePoiwAttribution() *atostosv1.PoiwWorkAttribution {
-	return &atostosv1.PoiwWorkAttribution{
+func sampleAipowAttribution() *atostosv1.AipowWorkAttribution {
+	return &atostosv1.AipowWorkAttribution{
 		CapabilityClass: "text-generation",
 		Unit:            "kilo-output-tokens",
 		WorkUnits:       42,
 		RateCardVersion: "v0",
-		EvidenceLevel:   atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_ATTESTED,
+		EvidenceLevel:   atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_ATTESTED,
 		EarnerIdentityCommitment: &atostosv1.Digest{
 			Algorithm: "sha256", Value: bytes.Repeat([]byte{0x11}, 32),
 		},
@@ -34,20 +34,20 @@ func samplePoiwAttribution() *atostosv1.PoiwWorkAttribution {
 	}
 }
 
-// The proto comment on ExecutionReceiptEnvelope.poiw promises that an
+// The proto comment on ExecutionReceiptEnvelope.aipow promises that an
 // absent attribution leaves the canonical (deterministic proto) encoding
 // of pre-existing receipts unchanged. Pin that promise: setting the field
 // changes the canonical bytes, clearing it restores them exactly, and a
 // populated attribution round-trips losslessly.
-func TestPoiwAttributionAbsenceKeepsReceiptCanonicalBytesStable(t *testing.T) {
+func TestAipowAttributionAbsenceKeepsReceiptCanonicalBytesStable(t *testing.T) {
 	envelope := &atostosv1.ExecutionReceiptEnvelope{
-		ReceiptId:         "rcp-poiw-stability",
-		QuoteId:           "q-poiw-stability",
-		EscrowId:          "esc-poiw-stability",
-		JobId:             "job-poiw-stability",
-		PrincipalId:       "prn-poiw-stability",
-		ProviderId:        "agt-poiw-stability",
-		CapabilityId:      "cap-poiw-stability",
+		ReceiptId:         "rcp-aipow-stability",
+		QuoteId:           "q-aipow-stability",
+		EscrowId:          "esc-aipow-stability",
+		JobId:             "job-aipow-stability",
+		PrincipalId:       "prn-aipow-stability",
+		ProviderId:        "agt-aipow-stability",
+		CapabilityId:      "cap-aipow-stability",
 		CapabilityVersion: "1.0.0",
 		TrustMode:         atostosv1.TrustMode_TRUST_MODE_MANAGED,
 		Result:            atostosv1.ExecutionResult_EXECUTION_RESULT_SUCCESS,
@@ -58,34 +58,34 @@ func TestPoiwAttributionAbsenceKeepsReceiptCanonicalBytesStable(t *testing.T) {
 	if !ok {
 		t.Fatal("clone did not return an ExecutionReceiptEnvelope")
 	}
-	attributed.Poiw = samplePoiwAttribution()
+	attributed.Aipow = sampleAipowAttribution()
 	withAttribution := deterministicMarshal(t, attributed)
 	if bytes.Equal(withoutAttribution, withAttribution) {
-		t.Fatal("setting poiw attribution must change the canonical receipt bytes")
+		t.Fatal("setting aipow attribution must change the canonical receipt bytes")
 	}
 
-	attributed.Poiw = nil
+	attributed.Aipow = nil
 	cleared := deterministicMarshal(t, attributed)
 	if !bytes.Equal(withoutAttribution, cleared) {
-		t.Fatal("clearing poiw attribution must restore the exact pre-existing canonical bytes")
+		t.Fatal("clearing aipow attribution must restore the exact pre-existing canonical bytes")
 	}
 
 	decoded := &atostosv1.ExecutionReceiptEnvelope{}
 	if err := proto.Unmarshal(withAttribution, decoded); err != nil {
 		t.Fatalf("unmarshal attributed receipt: %v", err)
 	}
-	if !proto.Equal(decoded.Poiw, samplePoiwAttribution()) {
-		t.Fatalf("poiw attribution did not round-trip: %v", decoded.Poiw)
+	if !proto.Equal(decoded.Aipow, sampleAipowAttribution()) {
+		t.Fatalf("aipow attribution did not round-trip: %v", decoded.Aipow)
 	}
 }
 
 // The same absence guarantee holds for proof-of-service evidence rows.
-func TestPoiwAttributionAbsenceKeepsEvidenceCanonicalBytesStable(t *testing.T) {
+func TestAipowAttributionAbsenceKeepsEvidenceCanonicalBytesStable(t *testing.T) {
 	evidence := &atostosv1.ProofOfServiceEvidenceInput{
-		EvidenceId:   "ev-poiw-stability",
-		ReceiptId:    "rcp-poiw-stability",
-		ProviderId:   "agt-poiw-stability",
-		CapabilityId: "cap-poiw-stability",
+		EvidenceId:   "ev-aipow-stability",
+		ReceiptId:    "rcp-aipow-stability",
+		ProviderId:   "agt-aipow-stability",
+		CapabilityId: "cap-aipow-stability",
 		Result:       atostosv1.ExecutionResult_EXECUTION_RESULT_SUCCESS,
 	}
 	withoutAttribution := deterministicMarshal(t, evidence)
@@ -94,12 +94,12 @@ func TestPoiwAttributionAbsenceKeepsEvidenceCanonicalBytesStable(t *testing.T) {
 	if !ok {
 		t.Fatal("clone did not return a ProofOfServiceEvidenceInput")
 	}
-	attributed.Poiw = samplePoiwAttribution()
+	attributed.Aipow = sampleAipowAttribution()
 	if bytes.Equal(withoutAttribution, deterministicMarshal(t, attributed)) {
-		t.Fatal("setting poiw attribution must change the canonical evidence bytes")
+		t.Fatal("setting aipow attribution must change the canonical evidence bytes")
 	}
-	attributed.Poiw = nil
+	attributed.Aipow = nil
 	if !bytes.Equal(withoutAttribution, deterministicMarshal(t, attributed)) {
-		t.Fatal("clearing poiw attribution must restore the exact pre-existing canonical bytes")
+		t.Fatal("clearing aipow attribution must restore the exact pre-existing canonical bytes")
 	}
 }

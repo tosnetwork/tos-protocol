@@ -1,11 +1,11 @@
-// Package poiw implements the v0 PoIW (Proof of Intelligent Work)
+// Package aipow implements the v0 AIPoW (Artificial Intelligence Proof of Work)
 // capability-class vocabulary defined by atos-spec's
-// docs/POIW_WORK_ATTRIBUTION.md: the class registry, per-class
+// docs/AIPOW_WORK_ATTRIBUTION.md: the class registry, per-class
 // normalization from receipt usage, and the strict validation verifiers
 // apply. A measurement that cannot be normalized under the vocabulary's
 // rules is reported under the default class, never approximated under a
 // specific one; a malformed attribution is rejected, never repaired.
-package poiw
+package aipow
 
 import (
 	"fmt"
@@ -70,9 +70,9 @@ func textGenerationUnits(outputTokens uint64) uint64 {
 func AttributionFromUsage(
 	usage *atostosv1.Usage,
 	settledAtomicNano uint64,
-	evidence atostosv1.PoiwEvidenceLevel,
-) *atostosv1.PoiwWorkAttribution {
-	attribution := &atostosv1.PoiwWorkAttribution{
+	evidence atostosv1.AipowEvidenceLevel,
+) *atostosv1.AipowWorkAttribution {
+	attribution := &atostosv1.AipowWorkAttribution{
 		RateCardVersion: RateCardVersion,
 		EvidenceLevel:   evidence,
 	}
@@ -106,7 +106,7 @@ func validateCommitment(label string, digest *atostosv1.Digest) error {
 // Validate applies the vocabulary's strict verifier rules. A nil
 // attribution is valid (the field is optional); a present-but-malformed
 // one is an error the caller must treat as a rejection, never a repair.
-func Validate(attribution *atostosv1.PoiwWorkAttribution) error {
+func Validate(attribution *atostosv1.AipowWorkAttribution) error {
 	if attribution == nil {
 		return nil
 	}
@@ -130,8 +130,8 @@ func Validate(attribution *atostosv1.PoiwWorkAttribution) error {
 		// the default class may carry zero (zero-charge settlements).
 		return fmt.Errorf("class %q attribution with zero work units", attribution.CapabilityClass)
 	}
-	if attribution.EvidenceLevel == atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_UNSPECIFIED ||
-		attribution.EvidenceLevel > atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_REPLICATED {
+	if attribution.EvidenceLevel == atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_UNSPECIFIED ||
+		attribution.EvidenceLevel > atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_REPLICATED {
 		return fmt.Errorf("invalid evidence level %d", attribution.EvidenceLevel)
 	}
 	if err := validateCommitment("earner", attribution.EarnerIdentityCommitment); err != nil {

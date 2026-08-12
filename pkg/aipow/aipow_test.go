@@ -1,4 +1,4 @@
-package poiw
+package aipow
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ func TestTextGenerationNormalization(t *testing.T) {
 func TestAttributionFromUsageMeasuresTokensOrFallsToDefault(t *testing.T) {
 	measured := AttributionFromUsage(
 		&atostosv1.Usage{OutputTokens: 2500}, 7_000,
-		atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_OBSERVED,
+		atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_OBSERVED,
 	)
 	if measured.CapabilityClass != ClassTextGeneration || measured.Unit != "kilo-output-tokens" {
 		t.Fatalf("token usage must map to text-generation: %v", measured)
@@ -39,7 +39,7 @@ func TestAttributionFromUsageMeasuresTokensOrFallsToDefault(t *testing.T) {
 
 	fallback := AttributionFromUsage(
 		&atostosv1.Usage{InputBytes: 10}, 7_000,
-		atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_OBSERVED,
+		atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_OBSERVED,
 	)
 	if fallback.CapabilityClass != ClassDefault || fallback.Unit != "settled-nanotos" {
 		t.Fatalf("tokenless usage must fall to the default class: %v", fallback)
@@ -52,7 +52,7 @@ func TestAttributionFromUsageMeasuresTokensOrFallsToDefault(t *testing.T) {
 	}
 
 	zeroCharge := AttributionFromUsage(
-		nil, 0, atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_OBSERVED,
+		nil, 0, atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_OBSERVED,
 	)
 	if err := Validate(zeroCharge); err != nil {
 		t.Fatalf("zero-charge default attribution must validate: %v", err)
@@ -60,13 +60,13 @@ func TestAttributionFromUsageMeasuresTokensOrFallsToDefault(t *testing.T) {
 }
 
 func TestValidateRejectsMalformedNeverRepairs(t *testing.T) {
-	good := func() *atostosv1.PoiwWorkAttribution {
-		return &atostosv1.PoiwWorkAttribution{
+	good := func() *atostosv1.AipowWorkAttribution {
+		return &atostosv1.AipowWorkAttribution{
 			CapabilityClass: ClassEmbedding,
 			Unit:            "call",
 			WorkUnits:       1,
 			RateCardVersion: RateCardVersion,
-			EvidenceLevel:   atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_OBSERVED,
+			EvidenceLevel:   atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_OBSERVED,
 		}
 	}
 	if err := Validate(nil); err != nil {
@@ -78,21 +78,21 @@ func TestValidateRejectsMalformedNeverRepairs(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		mutate func(*atostosv1.PoiwWorkAttribution)
+		mutate func(*atostosv1.AipowWorkAttribution)
 		expect string
 	}{
-		{"unknown class", func(a *atostosv1.PoiwWorkAttribution) { a.CapabilityClass = "rumor-mill" }, "unknown capability class"},
-		{"wrong unit", func(a *atostosv1.PoiwWorkAttribution) { a.Unit = "token" }, "requires unit"},
-		{"unknown version", func(a *atostosv1.PoiwWorkAttribution) { a.RateCardVersion = "v99" }, "unknown rate card version"},
-		{"zero units non-default", func(a *atostosv1.PoiwWorkAttribution) { a.WorkUnits = 0 }, "zero work units"},
-		{"unspecified evidence", func(a *atostosv1.PoiwWorkAttribution) {
-			a.EvidenceLevel = atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_UNSPECIFIED
+		{"unknown class", func(a *atostosv1.AipowWorkAttribution) { a.CapabilityClass = "rumor-mill" }, "unknown capability class"},
+		{"wrong unit", func(a *atostosv1.AipowWorkAttribution) { a.Unit = "token" }, "requires unit"},
+		{"unknown version", func(a *atostosv1.AipowWorkAttribution) { a.RateCardVersion = "v99" }, "unknown rate card version"},
+		{"zero units non-default", func(a *atostosv1.AipowWorkAttribution) { a.WorkUnits = 0 }, "zero work units"},
+		{"unspecified evidence", func(a *atostosv1.AipowWorkAttribution) {
+			a.EvidenceLevel = atostosv1.AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_UNSPECIFIED
 		}, "invalid evidence level"},
-		{"out-of-range evidence", func(a *atostosv1.PoiwWorkAttribution) { a.EvidenceLevel = 99 }, "invalid evidence level"},
-		{"short commitment", func(a *atostosv1.PoiwWorkAttribution) {
+		{"out-of-range evidence", func(a *atostosv1.AipowWorkAttribution) { a.EvidenceLevel = 99 }, "invalid evidence level"},
+		{"short commitment", func(a *atostosv1.AipowWorkAttribution) {
 			a.EarnerIdentityCommitment = &atostosv1.Digest{Algorithm: "sha256", Value: []byte{1, 2}}
 		}, "must be 32 bytes"},
-		{"wrong commitment algorithm", func(a *atostosv1.PoiwWorkAttribution) {
+		{"wrong commitment algorithm", func(a *atostosv1.AipowWorkAttribution) {
 			a.PayerIdentityCommitment = &atostosv1.Digest{
 				Algorithm: "md5", Value: bytes.Repeat([]byte{9}, 32),
 			}

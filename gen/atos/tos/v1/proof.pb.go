@@ -79,81 +79,81 @@ func (ExecutionResult) EnumDescriptor() ([]byte, []int) {
 	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{0}
 }
 
-// The PoIW (Proof of Intelligent Work) evidence ladder. The ladder is the
-// scoring trust order defined by the PoIW methodology; DECLARED-level work
+// The AIPoW (Artificial Intelligence Proof of Work) evidence ladder. The ladder is the
+// scoring trust order defined by the AIPoW methodology; DECLARED-level work
 // deliberately earns a zero score multiplier there. A receipt states the
 // strongest level its issuer can substantiate; verifiers and scorers may
 // downgrade, never upgrade.
-type PoiwEvidenceLevel int32
+type AipowEvidenceLevel int32
 
 const (
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_UNSPECIFIED PoiwEvidenceLevel = 0
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_DECLARED    PoiwEvidenceLevel = 1
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_OBSERVED    PoiwEvidenceLevel = 2
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_BENCHMARKED PoiwEvidenceLevel = 3
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_AUDITED     PoiwEvidenceLevel = 4
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_ATTESTED    PoiwEvidenceLevel = 5
-	PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_REPLICATED  PoiwEvidenceLevel = 6
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_UNSPECIFIED AipowEvidenceLevel = 0
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_DECLARED    AipowEvidenceLevel = 1
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_OBSERVED    AipowEvidenceLevel = 2
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_BENCHMARKED AipowEvidenceLevel = 3
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_AUDITED     AipowEvidenceLevel = 4
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_ATTESTED    AipowEvidenceLevel = 5
+	AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_REPLICATED  AipowEvidenceLevel = 6
 )
 
-// Enum value maps for PoiwEvidenceLevel.
+// Enum value maps for AipowEvidenceLevel.
 var (
-	PoiwEvidenceLevel_name = map[int32]string{
-		0: "POIW_EVIDENCE_LEVEL_UNSPECIFIED",
-		1: "POIW_EVIDENCE_LEVEL_DECLARED",
-		2: "POIW_EVIDENCE_LEVEL_OBSERVED",
-		3: "POIW_EVIDENCE_LEVEL_BENCHMARKED",
-		4: "POIW_EVIDENCE_LEVEL_AUDITED",
-		5: "POIW_EVIDENCE_LEVEL_ATTESTED",
-		6: "POIW_EVIDENCE_LEVEL_REPLICATED",
+	AipowEvidenceLevel_name = map[int32]string{
+		0: "AIPOW_EVIDENCE_LEVEL_UNSPECIFIED",
+		1: "AIPOW_EVIDENCE_LEVEL_DECLARED",
+		2: "AIPOW_EVIDENCE_LEVEL_OBSERVED",
+		3: "AIPOW_EVIDENCE_LEVEL_BENCHMARKED",
+		4: "AIPOW_EVIDENCE_LEVEL_AUDITED",
+		5: "AIPOW_EVIDENCE_LEVEL_ATTESTED",
+		6: "AIPOW_EVIDENCE_LEVEL_REPLICATED",
 	}
-	PoiwEvidenceLevel_value = map[string]int32{
-		"POIW_EVIDENCE_LEVEL_UNSPECIFIED": 0,
-		"POIW_EVIDENCE_LEVEL_DECLARED":    1,
-		"POIW_EVIDENCE_LEVEL_OBSERVED":    2,
-		"POIW_EVIDENCE_LEVEL_BENCHMARKED": 3,
-		"POIW_EVIDENCE_LEVEL_AUDITED":     4,
-		"POIW_EVIDENCE_LEVEL_ATTESTED":    5,
-		"POIW_EVIDENCE_LEVEL_REPLICATED":  6,
+	AipowEvidenceLevel_value = map[string]int32{
+		"AIPOW_EVIDENCE_LEVEL_UNSPECIFIED": 0,
+		"AIPOW_EVIDENCE_LEVEL_DECLARED":    1,
+		"AIPOW_EVIDENCE_LEVEL_OBSERVED":    2,
+		"AIPOW_EVIDENCE_LEVEL_BENCHMARKED": 3,
+		"AIPOW_EVIDENCE_LEVEL_AUDITED":     4,
+		"AIPOW_EVIDENCE_LEVEL_ATTESTED":    5,
+		"AIPOW_EVIDENCE_LEVEL_REPLICATED":  6,
 	}
 )
 
-func (x PoiwEvidenceLevel) Enum() *PoiwEvidenceLevel {
-	p := new(PoiwEvidenceLevel)
+func (x AipowEvidenceLevel) Enum() *AipowEvidenceLevel {
+	p := new(AipowEvidenceLevel)
 	*p = x
 	return p
 }
 
-func (x PoiwEvidenceLevel) String() string {
+func (x AipowEvidenceLevel) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (PoiwEvidenceLevel) Descriptor() protoreflect.EnumDescriptor {
+func (AipowEvidenceLevel) Descriptor() protoreflect.EnumDescriptor {
 	return file_atos_tos_v1_proof_proto_enumTypes[1].Descriptor()
 }
 
-func (PoiwEvidenceLevel) Type() protoreflect.EnumType {
+func (AipowEvidenceLevel) Type() protoreflect.EnumType {
 	return &file_atos_tos_v1_proof_proto_enumTypes[1]
 }
 
-func (x PoiwEvidenceLevel) Number() protoreflect.EnumNumber {
+func (x AipowEvidenceLevel) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use PoiwEvidenceLevel.Descriptor instead.
-func (PoiwEvidenceLevel) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use AipowEvidenceLevel.Descriptor instead.
+func (AipowEvidenceLevel) EnumDescriptor() ([]byte, []int) {
 	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{1}
 }
 
-// PoIW work attribution: the scoring-relevant facts of one settled work
-// unit, carried inside the signed receipt so the PoIW scorer never has to
+// AIPoW work attribution: the scoring-relevant facts of one settled work
+// unit, carried inside the signed receipt so the AIPoW scorer never has to
 // infer them. Replaces the interim mapping (settled amount as valuation,
 // one default class) once populated end to end. Purely descriptive: it
-// grants no authority and moves no funds; scoring rules live in the PoIW
+// grants no authority and moves no funds; scoring rules live in the AIPoW
 // methodology, not here.
-type PoiwWorkAttribution struct {
+type AipowWorkAttribution struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Capability class from the published PoIW capability-class vocabulary
+	// Capability class from the published AIPoW capability-class vocabulary
 	// (see the vocabulary document); NOT the marketplace capability_id.
 	CapabilityClass string `protobuf:"bytes,1,opt,name=capability_class,json=capabilityClass,proto3" json:"capability_class,omitempty"`
 	// The class's normalized billing unit name, exactly as the vocabulary
@@ -164,8 +164,8 @@ type PoiwWorkAttribution struct {
 	WorkUnits uint64 `protobuf:"varint,3,opt,name=work_units,json=workUnits,proto3" json:"work_units,omitempty"`
 	// Version tag of the rate-card/vocabulary revision the measurement was
 	// normalized against.
-	RateCardVersion string            `protobuf:"bytes,4,opt,name=rate_card_version,json=rateCardVersion,proto3" json:"rate_card_version,omitempty"`
-	EvidenceLevel   PoiwEvidenceLevel `protobuf:"varint,5,opt,name=evidence_level,json=evidenceLevel,proto3,enum=atos.tos.v1.PoiwEvidenceLevel" json:"evidence_level,omitempty"`
+	RateCardVersion string             `protobuf:"bytes,4,opt,name=rate_card_version,json=rateCardVersion,proto3" json:"rate_card_version,omitempty"`
+	EvidenceLevel   AipowEvidenceLevel `protobuf:"varint,5,opt,name=evidence_level,json=evidenceLevel,proto3,enum=atos.tos.v1.AipowEvidenceLevel" json:"evidence_level,omitempty"`
 	// sha256 commitments to the 32-byte chain account identifiers of the
 	// earning and paying identities (the bonded Capability Registry
 	// accounts), binding the receipt to the on-chain identities the scorer
@@ -179,20 +179,20 @@ type PoiwWorkAttribution struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PoiwWorkAttribution) Reset() {
-	*x = PoiwWorkAttribution{}
+func (x *AipowWorkAttribution) Reset() {
+	*x = AipowWorkAttribution{}
 	mi := &file_atos_tos_v1_proof_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PoiwWorkAttribution) String() string {
+func (x *AipowWorkAttribution) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PoiwWorkAttribution) ProtoMessage() {}
+func (*AipowWorkAttribution) ProtoMessage() {}
 
-func (x *PoiwWorkAttribution) ProtoReflect() protoreflect.Message {
+func (x *AipowWorkAttribution) ProtoReflect() protoreflect.Message {
 	mi := &file_atos_tos_v1_proof_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -204,61 +204,61 @@ func (x *PoiwWorkAttribution) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PoiwWorkAttribution.ProtoReflect.Descriptor instead.
-func (*PoiwWorkAttribution) Descriptor() ([]byte, []int) {
+// Deprecated: Use AipowWorkAttribution.ProtoReflect.Descriptor instead.
+func (*AipowWorkAttribution) Descriptor() ([]byte, []int) {
 	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *PoiwWorkAttribution) GetCapabilityClass() string {
+func (x *AipowWorkAttribution) GetCapabilityClass() string {
 	if x != nil {
 		return x.CapabilityClass
 	}
 	return ""
 }
 
-func (x *PoiwWorkAttribution) GetUnit() string {
+func (x *AipowWorkAttribution) GetUnit() string {
 	if x != nil {
 		return x.Unit
 	}
 	return ""
 }
 
-func (x *PoiwWorkAttribution) GetWorkUnits() uint64 {
+func (x *AipowWorkAttribution) GetWorkUnits() uint64 {
 	if x != nil {
 		return x.WorkUnits
 	}
 	return 0
 }
 
-func (x *PoiwWorkAttribution) GetRateCardVersion() string {
+func (x *AipowWorkAttribution) GetRateCardVersion() string {
 	if x != nil {
 		return x.RateCardVersion
 	}
 	return ""
 }
 
-func (x *PoiwWorkAttribution) GetEvidenceLevel() PoiwEvidenceLevel {
+func (x *AipowWorkAttribution) GetEvidenceLevel() AipowEvidenceLevel {
 	if x != nil {
 		return x.EvidenceLevel
 	}
-	return PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_UNSPECIFIED
+	return AipowEvidenceLevel_AIPOW_EVIDENCE_LEVEL_UNSPECIFIED
 }
 
-func (x *PoiwWorkAttribution) GetEarnerIdentityCommitment() *Digest {
+func (x *AipowWorkAttribution) GetEarnerIdentityCommitment() *Digest {
 	if x != nil {
 		return x.EarnerIdentityCommitment
 	}
 	return nil
 }
 
-func (x *PoiwWorkAttribution) GetPayerIdentityCommitment() *Digest {
+func (x *AipowWorkAttribution) GetPayerIdentityCommitment() *Digest {
 	if x != nil {
 		return x.PayerIdentityCommitment
 	}
 	return nil
 }
 
-func (x *PoiwWorkAttribution) GetChallengeTask() bool {
+func (x *AipowWorkAttribution) GetChallengeTask() bool {
 	if x != nil {
 		return x.ChallengeTask
 	}
@@ -291,11 +291,11 @@ type ExecutionReceiptEnvelope struct {
 	SignatureAlgorithm    string                 `protobuf:"bytes,22,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
 	CompletedUnixMillis   int64                  `protobuf:"varint,23,opt,name=completed_unix_millis,json=completedUnixMillis,proto3" json:"completed_unix_millis,omitempty"`
 	ErrorCode             string                 `protobuf:"bytes,24,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	// Optional PoIW work attribution. When present it is part of the signed
+	// Optional AIPoW work attribution. When present it is part of the signed
 	// receipt content; when absent the field is omitted from the canonical
 	// encoding, so receipts issued before this field existed keep their
 	// signatures and digests unchanged.
-	Poiw          *PoiwWorkAttribution `protobuf:"bytes,25,opt,name=poiw,proto3" json:"poiw,omitempty"`
+	Aipow         *AipowWorkAttribution `protobuf:"bytes,25,opt,name=aipow,proto3" json:"aipow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -498,9 +498,9 @@ func (x *ExecutionReceiptEnvelope) GetErrorCode() string {
 	return ""
 }
 
-func (x *ExecutionReceiptEnvelope) GetPoiw() *PoiwWorkAttribution {
+func (x *ExecutionReceiptEnvelope) GetAipow() *AipowWorkAttribution {
 	if x != nil {
-		return x.Poiw
+		return x.Aipow
 	}
 	return nil
 }
@@ -835,10 +835,10 @@ type ProofOfServiceEvidenceInput struct {
 	DisputeOutcome     string                 `protobuf:"bytes,10,opt,name=dispute_outcome,json=disputeOutcome,proto3" json:"dispute_outcome,omitempty"`
 	EvidenceDigest     *Digest                `protobuf:"bytes,11,opt,name=evidence_digest,json=evidenceDigest,proto3" json:"evidence_digest,omitempty"`
 	ObservedUnixMillis int64                  `protobuf:"varint,12,opt,name=observed_unix_millis,json=observedUnixMillis,proto3" json:"observed_unix_millis,omitempty"`
-	// Optional PoIW work attribution mirrored from the underlying receipt,
+	// Optional AIPoW work attribution mirrored from the underlying receipt,
 	// so proof-of-service evidence streams are scoreable without re-fetching
 	// every receipt.
-	Poiw          *PoiwWorkAttribution `protobuf:"bytes,13,opt,name=poiw,proto3" json:"poiw,omitempty"`
+	Aipow         *AipowWorkAttribution `protobuf:"bytes,13,opt,name=aipow,proto3" json:"aipow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -957,9 +957,9 @@ func (x *ProofOfServiceEvidenceInput) GetObservedUnixMillis() int64 {
 	return 0
 }
 
-func (x *ProofOfServiceEvidenceInput) GetPoiw() *PoiwWorkAttribution {
+func (x *ProofOfServiceEvidenceInput) GetAipow() *AipowWorkAttribution {
 	if x != nil {
-		return x.Poiw
+		return x.Aipow
 	}
 	return nil
 }
@@ -1624,17 +1624,17 @@ var File_atos_tos_v1_proof_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\n" +
-	"\x17atos/tos/v1/proof.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\xb1\x03\n" +
-	"\x13PoiwWorkAttribution\x12)\n" +
+	"\x17atos/tos/v1/proof.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\xb3\x03\n" +
+	"\x14AipowWorkAttribution\x12)\n" +
 	"\x10capability_class\x18\x01 \x01(\tR\x0fcapabilityClass\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x1d\n" +
 	"\n" +
 	"work_units\x18\x03 \x01(\x04R\tworkUnits\x12*\n" +
-	"\x11rate_card_version\x18\x04 \x01(\tR\x0frateCardVersion\x12E\n" +
-	"\x0eevidence_level\x18\x05 \x01(\x0e2\x1e.atos.tos.v1.PoiwEvidenceLevelR\revidenceLevel\x12Q\n" +
+	"\x11rate_card_version\x18\x04 \x01(\tR\x0frateCardVersion\x12F\n" +
+	"\x0eevidence_level\x18\x05 \x01(\x0e2\x1f.atos.tos.v1.AipowEvidenceLevelR\revidenceLevel\x12Q\n" +
 	"\x1aearner_identity_commitment\x18\x06 \x01(\v2\x13.atos.tos.v1.DigestR\x18earnerIdentityCommitment\x12O\n" +
 	"\x19payer_identity_commitment\x18\a \x01(\v2\x13.atos.tos.v1.DigestR\x17payerIdentityCommitment\x12%\n" +
-	"\x0echallenge_task\x18\b \x01(\bR\rchallengeTask\"\xb4\t\n" +
+	"\x0echallenge_task\x18\b \x01(\bR\rchallengeTask\"\xb7\t\n" +
 	"\x18ExecutionReceiptEnvelope\x12\x1d\n" +
 	"\n" +
 	"receipt_id\x18\x01 \x01(\tR\treceiptId\x12\x19\n" +
@@ -1664,8 +1664,8 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\x13signature_algorithm\x18\x16 \x01(\tR\x12signatureAlgorithm\x122\n" +
 	"\x15completed_unix_millis\x18\x17 \x01(\x03R\x13completedUnixMillis\x12\x1d\n" +
 	"\n" +
-	"error_code\x18\x18 \x01(\tR\terrorCode\x124\n" +
-	"\x04poiw\x18\x19 \x01(\v2 .atos.tos.v1.PoiwWorkAttributionR\x04poiw\"\xa2\x02\n" +
+	"error_code\x18\x18 \x01(\tR\terrorCode\x127\n" +
+	"\x05aipow\x18\x19 \x01(\v2!.atos.tos.v1.AipowWorkAttributionR\x05aipow\"\xa2\x02\n" +
 	"\x19CommittedExecutionReceipt\x12?\n" +
 	"\areceipt\x18\x01 \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\areceipt\x12>\n" +
 	"\vreceipt_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
@@ -1689,7 +1689,7 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +
 	"reasonCode\x127\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1f.atos.tos.v1.VerificationStatusR\x06status\x12:\n" +
-	"\tproof_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\bproofRef\"\xe3\x04\n" +
+	"\tproof_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\bproofRef\"\xe6\x04\n" +
 	"\x1bProofOfServiceEvidenceInput\x12\x1f\n" +
 	"\vevidence_id\x18\x01 \x01(\tR\n" +
 	"evidenceId\x12\x1d\n" +
@@ -1706,8 +1706,8 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\x0fdispute_outcome\x18\n" +
 	" \x01(\tR\x0edisputeOutcome\x12<\n" +
 	"\x0fevidence_digest\x18\v \x01(\v2\x13.atos.tos.v1.DigestR\x0eevidenceDigest\x120\n" +
-	"\x14observed_unix_millis\x18\f \x01(\x03R\x12observedUnixMillis\x124\n" +
-	"\x04poiw\x18\r \x01(\v2 .atos.tos.v1.PoiwWorkAttributionR\x04poiw\"\xce\x01\n" +
+	"\x14observed_unix_millis\x18\f \x01(\x03R\x12observedUnixMillis\x127\n" +
+	"\x05aipow\x18\r \x01(\v2!.atos.tos.v1.AipowWorkAttributionR\x05aipow\"\xce\x01\n" +
 	"\x16ProofOfServiceEvidence\x12>\n" +
 	"\x05value\x18\x01 \x01(\v2(.atos.tos.v1.ProofOfServiceEvidenceInputR\x05value\x12@\n" +
 	"\fevidence_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\vevidenceRef\x122\n" +
@@ -1771,15 +1771,15 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\x17EXECUTION_RESULT_FAILED\x10\x02\x12\x1d\n" +
 	"\x19EXECUTION_RESULT_CANCELED\x10\x03\x12\x1e\n" +
 	"\x1aEXECUTION_RESULT_TIMED_OUT\x10\x04\x12\x1d\n" +
-	"\x19EXECUTION_RESULT_REJECTED\x10\x05*\x88\x02\n" +
-	"\x11PoiwEvidenceLevel\x12#\n" +
-	"\x1fPOIW_EVIDENCE_LEVEL_UNSPECIFIED\x10\x00\x12 \n" +
-	"\x1cPOIW_EVIDENCE_LEVEL_DECLARED\x10\x01\x12 \n" +
-	"\x1cPOIW_EVIDENCE_LEVEL_OBSERVED\x10\x02\x12#\n" +
-	"\x1fPOIW_EVIDENCE_LEVEL_BENCHMARKED\x10\x03\x12\x1f\n" +
-	"\x1bPOIW_EVIDENCE_LEVEL_AUDITED\x10\x04\x12 \n" +
-	"\x1cPOIW_EVIDENCE_LEVEL_ATTESTED\x10\x05\x12\"\n" +
-	"\x1ePOIW_EVIDENCE_LEVEL_REPLICATED\x10\x062\x88\x05\n" +
+	"\x19EXECUTION_RESULT_REJECTED\x10\x05*\x90\x02\n" +
+	"\x12AipowEvidenceLevel\x12$\n" +
+	" AIPOW_EVIDENCE_LEVEL_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dAIPOW_EVIDENCE_LEVEL_DECLARED\x10\x01\x12!\n" +
+	"\x1dAIPOW_EVIDENCE_LEVEL_OBSERVED\x10\x02\x12$\n" +
+	" AIPOW_EVIDENCE_LEVEL_BENCHMARKED\x10\x03\x12 \n" +
+	"\x1cAIPOW_EVIDENCE_LEVEL_AUDITED\x10\x04\x12!\n" +
+	"\x1dAIPOW_EVIDENCE_LEVEL_ATTESTED\x10\x05\x12#\n" +
+	"\x1fAIPOW_EVIDENCE_LEVEL_REPLICATED\x10\x062\x88\x05\n" +
 	"\fProofService\x12q\n" +
 	"\x16CommitExecutionReceipt\x12*.atos.tos.v1.CommitExecutionReceiptRequest\x1a+.atos.tos.v1.CommitExecutionReceiptResponse\x12q\n" +
 	"\x16VerifyExecutionReceipt\x12*.atos.tos.v1.VerifyExecutionReceiptRequest\x1a+.atos.tos.v1.VerifyExecutionReceiptResponse\x12\x83\x01\n" +
@@ -1804,8 +1804,8 @@ var file_atos_tos_v1_proof_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_atos_tos_v1_proof_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_atos_tos_v1_proof_proto_goTypes = []any{
 	(ExecutionResult)(0),                         // 0: atos.tos.v1.ExecutionResult
-	(PoiwEvidenceLevel)(0),                       // 1: atos.tos.v1.PoiwEvidenceLevel
-	(*PoiwWorkAttribution)(nil),                  // 2: atos.tos.v1.PoiwWorkAttribution
+	(AipowEvidenceLevel)(0),                      // 1: atos.tos.v1.AipowEvidenceLevel
+	(*AipowWorkAttribution)(nil),                 // 2: atos.tos.v1.AipowWorkAttribution
 	(*ExecutionReceiptEnvelope)(nil),             // 3: atos.tos.v1.ExecutionReceiptEnvelope
 	(*CommittedExecutionReceipt)(nil),            // 4: atos.tos.v1.CommittedExecutionReceipt
 	(*CommitExecutionReceiptRequest)(nil),        // 5: atos.tos.v1.CommitExecutionReceiptRequest
@@ -1837,9 +1837,9 @@ var file_atos_tos_v1_proof_proto_goTypes = []any{
 	(*PageResponse)(nil),                         // 31: atos.tos.v1.PageResponse
 }
 var file_atos_tos_v1_proof_proto_depIdxs = []int32{
-	1,  // 0: atos.tos.v1.PoiwWorkAttribution.evidence_level:type_name -> atos.tos.v1.PoiwEvidenceLevel
-	20, // 1: atos.tos.v1.PoiwWorkAttribution.earner_identity_commitment:type_name -> atos.tos.v1.Digest
-	20, // 2: atos.tos.v1.PoiwWorkAttribution.payer_identity_commitment:type_name -> atos.tos.v1.Digest
+	1,  // 0: atos.tos.v1.AipowWorkAttribution.evidence_level:type_name -> atos.tos.v1.AipowEvidenceLevel
+	20, // 1: atos.tos.v1.AipowWorkAttribution.earner_identity_commitment:type_name -> atos.tos.v1.Digest
+	20, // 2: atos.tos.v1.AipowWorkAttribution.payer_identity_commitment:type_name -> atos.tos.v1.Digest
 	21, // 3: atos.tos.v1.ExecutionReceiptEnvelope.trust_mode:type_name -> atos.tos.v1.TrustMode
 	22, // 4: atos.tos.v1.ExecutionReceiptEnvelope.proof_profile:type_name -> atos.tos.v1.ProofProfile
 	0,  // 5: atos.tos.v1.ExecutionReceiptEnvelope.result:type_name -> atos.tos.v1.ExecutionResult
@@ -1850,7 +1850,7 @@ var file_atos_tos_v1_proof_proto_depIdxs = []int32{
 	24, // 10: atos.tos.v1.ExecutionReceiptEnvelope.usage:type_name -> atos.tos.v1.Usage
 	25, // 11: atos.tos.v1.ExecutionReceiptEnvelope.client_charge:type_name -> atos.tos.v1.Money
 	26, // 12: atos.tos.v1.ExecutionReceiptEnvelope.network_charge:type_name -> atos.tos.v1.NetworkAmount
-	2,  // 13: atos.tos.v1.ExecutionReceiptEnvelope.poiw:type_name -> atos.tos.v1.PoiwWorkAttribution
+	2,  // 13: atos.tos.v1.ExecutionReceiptEnvelope.aipow:type_name -> atos.tos.v1.AipowWorkAttribution
 	3,  // 14: atos.tos.v1.CommittedExecutionReceipt.receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
 	27, // 15: atos.tos.v1.CommittedExecutionReceipt.receipt_ref:type_name -> atos.tos.v1.NetworkReference
 	28, // 16: atos.tos.v1.CommittedExecutionReceipt.verification_status:type_name -> atos.tos.v1.VerificationStatus
@@ -1865,7 +1865,7 @@ var file_atos_tos_v1_proof_proto_depIdxs = []int32{
 	0,  // 25: atos.tos.v1.ProofOfServiceEvidenceInput.result:type_name -> atos.tos.v1.ExecutionResult
 	26, // 26: atos.tos.v1.ProofOfServiceEvidenceInput.settlement_volume:type_name -> atos.tos.v1.NetworkAmount
 	20, // 27: atos.tos.v1.ProofOfServiceEvidenceInput.evidence_digest:type_name -> atos.tos.v1.Digest
-	2,  // 28: atos.tos.v1.ProofOfServiceEvidenceInput.poiw:type_name -> atos.tos.v1.PoiwWorkAttribution
+	2,  // 28: atos.tos.v1.ProofOfServiceEvidenceInput.aipow:type_name -> atos.tos.v1.AipowWorkAttribution
 	9,  // 29: atos.tos.v1.ProofOfServiceEvidence.value:type_name -> atos.tos.v1.ProofOfServiceEvidenceInput
 	27, // 30: atos.tos.v1.ProofOfServiceEvidence.evidence_ref:type_name -> atos.tos.v1.NetworkReference
 	29, // 31: atos.tos.v1.CommitProofOfServiceEvidenceRequest.context:type_name -> atos.tos.v1.RequestContext

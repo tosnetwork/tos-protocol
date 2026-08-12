@@ -12,7 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/poiw"
+	"github.com/tosnetwork/tos-protocol/pkg/aipow"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -86,10 +86,10 @@ func (s *Server) verifyReceiptTx(tx *bolt.Tx, receipt *atostosv1.ExecutionReceip
 	if !s.supportsMode(receipt.TrustMode) {
 		return false, "TRUST_MODE_UNAVAILABLE", nil, nil
 	}
-	// A malformed PoIW attribution is rejected, never repaired (an absent
+	// A malformed AIPoW attribution is rejected, never repaired (an absent
 	// one is valid -- the field is optional).
-	if err := poiw.Validate(receipt.Poiw); err != nil {
-		return false, "POIW_ATTRIBUTION_INVALID", nil, nil
+	if err := aipow.Validate(receipt.Aipow); err != nil {
+		return false, "AIPOW_ATTRIBUTION_INVALID", nil, nil
 	}
 	quote := new(atostosv1.QuoteCommitment)
 	found, err := s.store.getProto(tx, bucketQuoteCommitments, receipt.QuoteId, quote)
