@@ -88,6 +88,7 @@ type Receipt struct {
 	ChargedAtomic      string    `json:"charged_atomic"`
 	SignatureAlgorithm string    `json:"signature_algorithm"`
 	Signature          []byte    `json:"signature"`
+	CanonicalCBOR      []byte    `json:"canonical_cbor"`
 }
 
 type Outcome struct {
@@ -170,8 +171,7 @@ type receiptSigningValue struct {
 }
 
 func ReceiptSigningDigest(p Package) ([]byte, string, error) {
-	v := receiptSigningValue{p.NetworkID, p.GatewayDomain, p.PrincipalID, p.RequesterAgentID, p.ProviderID, p.Capability, p.Quote.QuoteID, p.Escrow.EscrowID, p.Escrow.JobID, p.Receipt.ReceiptID, p.Receipt.Result, p.Receipt.InputCommitment, p.Receipt.OutputCommitment, p.Receipt.UsageCommitment, p.Receipt.StartedUnixNanos, p.Receipt.CompletedUnixNanos, p.Receipt.ChargedAtomic, p.Receipt.SignatureAlgorithm}
-	d, err := codec.Digest(ReceiptDomain, v)
+	d, err := codec.DigestCanonical(ReceiptDomain, p.Receipt.CanonicalCBOR)
 	if err != nil {
 		return nil, "", err
 	}

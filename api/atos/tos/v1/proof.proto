@@ -9,6 +9,7 @@ import "atos/tos/v1/common.proto";
 service ProofService {
   rpc CommitExecutionReceipt(CommitExecutionReceiptRequest) returns (CommitExecutionReceiptResponse);
   rpc VerifyExecutionReceipt(VerifyExecutionReceiptRequest) returns (VerifyExecutionReceiptResponse);
+  rpc ResolveExecutionReceipt(ResolveExecutionReceiptRequest) returns (ResolveExecutionReceiptResponse);
   rpc CommitProofOfServiceEvidence(CommitProofOfServiceEvidenceRequest) returns (CommitProofOfServiceEvidenceResponse);
   rpc ReadProofOfService(ReadProofOfServiceRequest) returns (ReadProofOfServiceResponse);
   rpc ReadReputation(ReadReputationRequest) returns (ReadReputationResponse);
@@ -132,6 +133,18 @@ message VerifyExecutionReceiptResponse {
   string reason_code = 2;
   VerificationStatus status = 3;
   NetworkReference proof_ref = 4;
+}
+
+message ResolveExecutionReceiptRequest {
+  RequestContext context = 1;
+  ExecutionReceiptEnvelope receipt = 2;
+  NetworkReference expected_receipt_ref = 3;
+}
+
+message ResolveExecutionReceiptResponse {
+  bool found = 1;
+  Digest receipt_digest = 2;
+  NetworkReference receipt_ref = 3;
 }
 
 message ProofOfServiceEvidenceInput {

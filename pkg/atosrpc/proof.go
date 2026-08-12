@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/aipow"
+	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
@@ -274,6 +275,39 @@ func (s *Server) VerifyExecutionReceipt(
 		return nil, err
 	}
 	return connect.NewResponse(response), nil
+}
+
+func (s *Server) ResolveExecutionReceipt(ctx context.Context, req *connect.Request[atostosv1.ResolveExecutionReceiptRequest]) (*connect.Response[atostosv1.ResolveExecutionReceiptResponse], error) {
+	if req == nil || req.Msg == nil || req.Msg.Receipt == nil {
+		return nil, invalid("INVALID_ARGUMENT", "execution receipt is required")
+	}
+	if err := validateReadContext(req.Msg.Context, s.now()); err != nil {
+		return nil, err
+	}
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
+	}
+	digestText, err := receiptcommitment.Digest(req.Msg.Receipt)
+	if err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
+	}
+	resolver, ok := s.authority.(CommitmentResolver)
+	if !ok {
+		return nil, unavailable("NETWORK_UNAVAILABLE", "authority does not support read-only receipt resolution")
+	}
+	known := req.Msg.ExpectedReceiptRef
+	live, err := resolver.ResolveCommitment(ctx, "verified-receipt", req.Msg.Receipt.ReceiptId, digestText, known)
+	if err != nil {
+		if errors.Is(err, ErrCommitmentNotFound) {
+			return connect.NewResponse(&atostosv1.ResolveExecutionReceiptResponse{}), nil
+		}
+		return nil, unavailable("NETWORK_UNAVAILABLE", "receipt authority is unavailable")
+	}
+	if live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != s.authority.Network() {
+		return nil, unavailable("NETWORK_UNAVAILABLE", "receipt authority returned non-final or mismatched evidence")
+	}
+	raw, _ := hex.DecodeString(strings.TrimPrefix(digestText, "sha256:"))
+	return connect.NewResponse(&atostosv1.ResolveExecutionReceiptResponse{Found: true, ReceiptDigest: &atostosv1.Digest{Algorithm: "sha256", Value: raw}, ReceiptRef: live}), nil
 }
 
 func (s *Server) CommitProofOfServiceEvidence(

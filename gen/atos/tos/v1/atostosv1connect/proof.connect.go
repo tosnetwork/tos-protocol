@@ -39,6 +39,9 @@ const (
 	// ProofServiceVerifyExecutionReceiptProcedure is the fully-qualified name of the ProofService's
 	// VerifyExecutionReceipt RPC.
 	ProofServiceVerifyExecutionReceiptProcedure = "/atos.tos.v1.ProofService/VerifyExecutionReceipt"
+	// ProofServiceResolveExecutionReceiptProcedure is the fully-qualified name of the ProofService's
+	// ResolveExecutionReceipt RPC.
+	ProofServiceResolveExecutionReceiptProcedure = "/atos.tos.v1.ProofService/ResolveExecutionReceipt"
 	// ProofServiceCommitProofOfServiceEvidenceProcedure is the fully-qualified name of the
 	// ProofService's CommitProofOfServiceEvidence RPC.
 	ProofServiceCommitProofOfServiceEvidenceProcedure = "/atos.tos.v1.ProofService/CommitProofOfServiceEvidence"
@@ -56,6 +59,7 @@ const (
 type ProofServiceClient interface {
 	CommitExecutionReceipt(context.Context, *connect.Request[v1.CommitExecutionReceiptRequest]) (*connect.Response[v1.CommitExecutionReceiptResponse], error)
 	VerifyExecutionReceipt(context.Context, *connect.Request[v1.VerifyExecutionReceiptRequest]) (*connect.Response[v1.VerifyExecutionReceiptResponse], error)
+	ResolveExecutionReceipt(context.Context, *connect.Request[v1.ResolveExecutionReceiptRequest]) (*connect.Response[v1.ResolveExecutionReceiptResponse], error)
 	CommitProofOfServiceEvidence(context.Context, *connect.Request[v1.CommitProofOfServiceEvidenceRequest]) (*connect.Response[v1.CommitProofOfServiceEvidenceResponse], error)
 	ReadProofOfService(context.Context, *connect.Request[v1.ReadProofOfServiceRequest]) (*connect.Response[v1.ReadProofOfServiceResponse], error)
 	ReadReputation(context.Context, *connect.Request[v1.ReadReputationRequest]) (*connect.Response[v1.ReadReputationResponse], error)
@@ -83,6 +87,12 @@ func NewProofServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ProofServiceVerifyExecutionReceiptProcedure,
 			connect.WithSchema(proofServiceMethods.ByName("VerifyExecutionReceipt")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveExecutionReceipt: connect.NewClient[v1.ResolveExecutionReceiptRequest, v1.ResolveExecutionReceiptResponse](
+			httpClient,
+			baseURL+ProofServiceResolveExecutionReceiptProcedure,
+			connect.WithSchema(proofServiceMethods.ByName("ResolveExecutionReceipt")),
 			connect.WithClientOptions(opts...),
 		),
 		commitProofOfServiceEvidence: connect.NewClient[v1.CommitProofOfServiceEvidenceRequest, v1.CommitProofOfServiceEvidenceResponse](
@@ -116,6 +126,7 @@ func NewProofServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type proofServiceClient struct {
 	commitExecutionReceipt       *connect.Client[v1.CommitExecutionReceiptRequest, v1.CommitExecutionReceiptResponse]
 	verifyExecutionReceipt       *connect.Client[v1.VerifyExecutionReceiptRequest, v1.VerifyExecutionReceiptResponse]
+	resolveExecutionReceipt      *connect.Client[v1.ResolveExecutionReceiptRequest, v1.ResolveExecutionReceiptResponse]
 	commitProofOfServiceEvidence *connect.Client[v1.CommitProofOfServiceEvidenceRequest, v1.CommitProofOfServiceEvidenceResponse]
 	readProofOfService           *connect.Client[v1.ReadProofOfServiceRequest, v1.ReadProofOfServiceResponse]
 	readReputation               *connect.Client[v1.ReadReputationRequest, v1.ReadReputationResponse]
@@ -130,6 +141,11 @@ func (c *proofServiceClient) CommitExecutionReceipt(ctx context.Context, req *co
 // VerifyExecutionReceipt calls atos.tos.v1.ProofService.VerifyExecutionReceipt.
 func (c *proofServiceClient) VerifyExecutionReceipt(ctx context.Context, req *connect.Request[v1.VerifyExecutionReceiptRequest]) (*connect.Response[v1.VerifyExecutionReceiptResponse], error) {
 	return c.verifyExecutionReceipt.CallUnary(ctx, req)
+}
+
+// ResolveExecutionReceipt calls atos.tos.v1.ProofService.ResolveExecutionReceipt.
+func (c *proofServiceClient) ResolveExecutionReceipt(ctx context.Context, req *connect.Request[v1.ResolveExecutionReceiptRequest]) (*connect.Response[v1.ResolveExecutionReceiptResponse], error) {
+	return c.resolveExecutionReceipt.CallUnary(ctx, req)
 }
 
 // CommitProofOfServiceEvidence calls atos.tos.v1.ProofService.CommitProofOfServiceEvidence.
@@ -156,6 +172,7 @@ func (c *proofServiceClient) ReadProof(ctx context.Context, req *connect.Request
 type ProofServiceHandler interface {
 	CommitExecutionReceipt(context.Context, *connect.Request[v1.CommitExecutionReceiptRequest]) (*connect.Response[v1.CommitExecutionReceiptResponse], error)
 	VerifyExecutionReceipt(context.Context, *connect.Request[v1.VerifyExecutionReceiptRequest]) (*connect.Response[v1.VerifyExecutionReceiptResponse], error)
+	ResolveExecutionReceipt(context.Context, *connect.Request[v1.ResolveExecutionReceiptRequest]) (*connect.Response[v1.ResolveExecutionReceiptResponse], error)
 	CommitProofOfServiceEvidence(context.Context, *connect.Request[v1.CommitProofOfServiceEvidenceRequest]) (*connect.Response[v1.CommitProofOfServiceEvidenceResponse], error)
 	ReadProofOfService(context.Context, *connect.Request[v1.ReadProofOfServiceRequest]) (*connect.Response[v1.ReadProofOfServiceResponse], error)
 	ReadReputation(context.Context, *connect.Request[v1.ReadReputationRequest]) (*connect.Response[v1.ReadReputationResponse], error)
@@ -179,6 +196,12 @@ func NewProofServiceHandler(svc ProofServiceHandler, opts ...connect.HandlerOpti
 		ProofServiceVerifyExecutionReceiptProcedure,
 		svc.VerifyExecutionReceipt,
 		connect.WithSchema(proofServiceMethods.ByName("VerifyExecutionReceipt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	proofServiceResolveExecutionReceiptHandler := connect.NewUnaryHandler(
+		ProofServiceResolveExecutionReceiptProcedure,
+		svc.ResolveExecutionReceipt,
+		connect.WithSchema(proofServiceMethods.ByName("ResolveExecutionReceipt")),
 		connect.WithHandlerOptions(opts...),
 	)
 	proofServiceCommitProofOfServiceEvidenceHandler := connect.NewUnaryHandler(
@@ -211,6 +234,8 @@ func NewProofServiceHandler(svc ProofServiceHandler, opts ...connect.HandlerOpti
 			proofServiceCommitExecutionReceiptHandler.ServeHTTP(w, r)
 		case ProofServiceVerifyExecutionReceiptProcedure:
 			proofServiceVerifyExecutionReceiptHandler.ServeHTTP(w, r)
+		case ProofServiceResolveExecutionReceiptProcedure:
+			proofServiceResolveExecutionReceiptHandler.ServeHTTP(w, r)
 		case ProofServiceCommitProofOfServiceEvidenceProcedure:
 			proofServiceCommitProofOfServiceEvidenceHandler.ServeHTTP(w, r)
 		case ProofServiceReadProofOfServiceProcedure:
@@ -234,6 +259,10 @@ func (UnimplementedProofServiceHandler) CommitExecutionReceipt(context.Context, 
 
 func (UnimplementedProofServiceHandler) VerifyExecutionReceipt(context.Context, *connect.Request[v1.VerifyExecutionReceiptRequest]) (*connect.Response[v1.VerifyExecutionReceiptResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.ProofService.VerifyExecutionReceipt is not implemented"))
+}
+
+func (UnimplementedProofServiceHandler) ResolveExecutionReceipt(context.Context, *connect.Request[v1.ResolveExecutionReceiptRequest]) (*connect.Response[v1.ResolveExecutionReceiptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.ProofService.ResolveExecutionReceipt is not implemented"))
 }
 
 func (UnimplementedProofServiceHandler) CommitProofOfServiceEvidence(context.Context, *connect.Request[v1.CommitProofOfServiceEvidenceRequest]) (*connect.Response[v1.CommitProofOfServiceEvidenceResponse], error) {

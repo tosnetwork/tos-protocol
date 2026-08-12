@@ -821,6 +821,126 @@ func (x *VerifyExecutionReceiptResponse) GetProofRef() *NetworkReference {
 	return nil
 }
 
+type ResolveExecutionReceiptRequest struct {
+	state              protoimpl.MessageState    `protogen:"open.v1"`
+	Context            *RequestContext           `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Receipt            *ExecutionReceiptEnvelope `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	ExpectedReceiptRef *NetworkReference         `protobuf:"bytes,3,opt,name=expected_receipt_ref,json=expectedReceiptRef,proto3" json:"expected_receipt_ref,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ResolveExecutionReceiptRequest) Reset() {
+	*x = ResolveExecutionReceiptRequest{}
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveExecutionReceiptRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveExecutionReceiptRequest) ProtoMessage() {}
+
+func (x *ResolveExecutionReceiptRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveExecutionReceiptRequest.ProtoReflect.Descriptor instead.
+func (*ResolveExecutionReceiptRequest) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ResolveExecutionReceiptRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ResolveExecutionReceiptRequest) GetReceipt() *ExecutionReceiptEnvelope {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+func (x *ResolveExecutionReceiptRequest) GetExpectedReceiptRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedReceiptRef
+	}
+	return nil
+}
+
+type ResolveExecutionReceiptResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	ReceiptDigest *Digest                `protobuf:"bytes,2,opt,name=receipt_digest,json=receiptDigest,proto3" json:"receipt_digest,omitempty"`
+	ReceiptRef    *NetworkReference      `protobuf:"bytes,3,opt,name=receipt_ref,json=receiptRef,proto3" json:"receipt_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveExecutionReceiptResponse) Reset() {
+	*x = ResolveExecutionReceiptResponse{}
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveExecutionReceiptResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveExecutionReceiptResponse) ProtoMessage() {}
+
+func (x *ResolveExecutionReceiptResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveExecutionReceiptResponse.ProtoReflect.Descriptor instead.
+func (*ResolveExecutionReceiptResponse) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ResolveExecutionReceiptResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *ResolveExecutionReceiptResponse) GetReceiptDigest() *Digest {
+	if x != nil {
+		return x.ReceiptDigest
+	}
+	return nil
+}
+
+func (x *ResolveExecutionReceiptResponse) GetReceiptRef() *NetworkReference {
+	if x != nil {
+		return x.ReceiptRef
+	}
+	return nil
+}
+
 type ProofOfServiceEvidenceInput struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	EvidenceId         string                 `protobuf:"bytes,1,opt,name=evidence_id,json=evidenceId,proto3" json:"evidence_id,omitempty"`
@@ -845,7 +965,7 @@ type ProofOfServiceEvidenceInput struct {
 
 func (x *ProofOfServiceEvidenceInput) Reset() {
 	*x = ProofOfServiceEvidenceInput{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[7]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -857,7 +977,7 @@ func (x *ProofOfServiceEvidenceInput) String() string {
 func (*ProofOfServiceEvidenceInput) ProtoMessage() {}
 
 func (x *ProofOfServiceEvidenceInput) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[7]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -870,7 +990,7 @@ func (x *ProofOfServiceEvidenceInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProofOfServiceEvidenceInput.ProtoReflect.Descriptor instead.
 func (*ProofOfServiceEvidenceInput) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{7}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ProofOfServiceEvidenceInput) GetEvidenceId() string {
@@ -975,7 +1095,7 @@ type ProofOfServiceEvidence struct {
 
 func (x *ProofOfServiceEvidence) Reset() {
 	*x = ProofOfServiceEvidence{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[8]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -987,7 +1107,7 @@ func (x *ProofOfServiceEvidence) String() string {
 func (*ProofOfServiceEvidence) ProtoMessage() {}
 
 func (x *ProofOfServiceEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[8]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1000,7 +1120,7 @@ func (x *ProofOfServiceEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProofOfServiceEvidence.ProtoReflect.Descriptor instead.
 func (*ProofOfServiceEvidence) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{8}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ProofOfServiceEvidence) GetValue() *ProofOfServiceEvidenceInput {
@@ -1034,7 +1154,7 @@ type CommitProofOfServiceEvidenceRequest struct {
 
 func (x *CommitProofOfServiceEvidenceRequest) Reset() {
 	*x = CommitProofOfServiceEvidenceRequest{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[9]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1046,7 +1166,7 @@ func (x *CommitProofOfServiceEvidenceRequest) String() string {
 func (*CommitProofOfServiceEvidenceRequest) ProtoMessage() {}
 
 func (x *CommitProofOfServiceEvidenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[9]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1059,7 +1179,7 @@ func (x *CommitProofOfServiceEvidenceRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CommitProofOfServiceEvidenceRequest.ProtoReflect.Descriptor instead.
 func (*CommitProofOfServiceEvidenceRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{9}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CommitProofOfServiceEvidenceRequest) GetContext() *RequestContext {
@@ -1086,7 +1206,7 @@ type CommitProofOfServiceEvidenceResponse struct {
 
 func (x *CommitProofOfServiceEvidenceResponse) Reset() {
 	*x = CommitProofOfServiceEvidenceResponse{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[10]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1098,7 +1218,7 @@ func (x *CommitProofOfServiceEvidenceResponse) String() string {
 func (*CommitProofOfServiceEvidenceResponse) ProtoMessage() {}
 
 func (x *CommitProofOfServiceEvidenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[10]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1111,7 +1231,7 @@ func (x *CommitProofOfServiceEvidenceResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use CommitProofOfServiceEvidenceResponse.ProtoReflect.Descriptor instead.
 func (*CommitProofOfServiceEvidenceResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{10}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CommitProofOfServiceEvidenceResponse) GetEvidence() *ProofOfServiceEvidence {
@@ -1140,7 +1260,7 @@ type ReadProofOfServiceRequest struct {
 
 func (x *ReadProofOfServiceRequest) Reset() {
 	*x = ReadProofOfServiceRequest{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[11]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1152,7 +1272,7 @@ func (x *ReadProofOfServiceRequest) String() string {
 func (*ReadProofOfServiceRequest) ProtoMessage() {}
 
 func (x *ReadProofOfServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[11]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1165,7 +1285,7 @@ func (x *ReadProofOfServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadProofOfServiceRequest.ProtoReflect.Descriptor instead.
 func (*ReadProofOfServiceRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{11}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReadProofOfServiceRequest) GetContext() *RequestContext {
@@ -1206,7 +1326,7 @@ type ReadProofOfServiceResponse struct {
 
 func (x *ReadProofOfServiceResponse) Reset() {
 	*x = ReadProofOfServiceResponse{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[12]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1218,7 +1338,7 @@ func (x *ReadProofOfServiceResponse) String() string {
 func (*ReadProofOfServiceResponse) ProtoMessage() {}
 
 func (x *ReadProofOfServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[12]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1231,7 +1351,7 @@ func (x *ReadProofOfServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadProofOfServiceResponse.ProtoReflect.Descriptor instead.
 func (*ReadProofOfServiceResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{12}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ReadProofOfServiceResponse) GetEvidence() []*ProofOfServiceEvidence {
@@ -1267,7 +1387,7 @@ type ReputationSummary struct {
 
 func (x *ReputationSummary) Reset() {
 	*x = ReputationSummary{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[13]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1279,7 +1399,7 @@ func (x *ReputationSummary) String() string {
 func (*ReputationSummary) ProtoMessage() {}
 
 func (x *ReputationSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[13]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1292,7 +1412,7 @@ func (x *ReputationSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReputationSummary.ProtoReflect.Descriptor instead.
 func (*ReputationSummary) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{13}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ReputationSummary) GetProviderId() string {
@@ -1383,7 +1503,7 @@ type ReadReputationRequest struct {
 
 func (x *ReadReputationRequest) Reset() {
 	*x = ReadReputationRequest{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[14]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1395,7 +1515,7 @@ func (x *ReadReputationRequest) String() string {
 func (*ReadReputationRequest) ProtoMessage() {}
 
 func (x *ReadReputationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[14]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1408,7 +1528,7 @@ func (x *ReadReputationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadReputationRequest.ProtoReflect.Descriptor instead.
 func (*ReadReputationRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{14}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ReadReputationRequest) GetContext() *RequestContext {
@@ -1442,7 +1562,7 @@ type ReadReputationResponse struct {
 
 func (x *ReadReputationResponse) Reset() {
 	*x = ReadReputationResponse{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[15]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1574,7 @@ func (x *ReadReputationResponse) String() string {
 func (*ReadReputationResponse) ProtoMessage() {}
 
 func (x *ReadReputationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[15]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1587,7 @@ func (x *ReadReputationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadReputationResponse.ProtoReflect.Descriptor instead.
 func (*ReadReputationResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{15}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ReadReputationResponse) GetReputation() *ReputationSummary {
@@ -1494,7 +1614,7 @@ type ReadProofRequest struct {
 
 func (x *ReadProofRequest) Reset() {
 	*x = ReadProofRequest{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[16]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1506,7 +1626,7 @@ func (x *ReadProofRequest) String() string {
 func (*ReadProofRequest) ProtoMessage() {}
 
 func (x *ReadProofRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[16]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1519,7 +1639,7 @@ func (x *ReadProofRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadProofRequest.ProtoReflect.Descriptor instead.
 func (*ReadProofRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{16}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ReadProofRequest) GetContext() *RequestContext {
@@ -1550,7 +1670,7 @@ type ReadProofResponse struct {
 
 func (x *ReadProofResponse) Reset() {
 	*x = ReadProofResponse{}
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[17]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1562,7 +1682,7 @@ func (x *ReadProofResponse) String() string {
 func (*ReadProofResponse) ProtoMessage() {}
 
 func (x *ReadProofResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_proof_proto_msgTypes[17]
+	mi := &file_atos_tos_v1_proof_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1575,7 +1695,7 @@ func (x *ReadProofResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadProofResponse.ProtoReflect.Descriptor instead.
 func (*ReadProofResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{17}
+	return file_atos_tos_v1_proof_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ReadProofResponse) GetProofRef() string {
@@ -1689,7 +1809,16 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +
 	"reasonCode\x127\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1f.atos.tos.v1.VerificationStatusR\x06status\x12:\n" +
-	"\tproof_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\bproofRef\"\xe6\x04\n" +
+	"\tproof_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\bproofRef\"\xe9\x01\n" +
+	"\x1eResolveExecutionReceiptRequest\x125\n" +
+	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12?\n" +
+	"\areceipt\x18\x02 \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\areceipt\x12O\n" +
+	"\x14expected_receipt_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"\xb3\x01\n" +
+	"\x1fResolveExecutionReceiptResponse\x12\x14\n" +
+	"\x05found\x18\x01 \x01(\bR\x05found\x12:\n" +
+	"\x0ereceipt_digest\x18\x02 \x01(\v2\x13.atos.tos.v1.DigestR\rreceiptDigest\x12>\n" +
+	"\vreceipt_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
+	"receiptRef\"\xe6\x04\n" +
 	"\x1bProofOfServiceEvidenceInput\x12\x1f\n" +
 	"\vevidence_id\x18\x01 \x01(\tR\n" +
 	"evidenceId\x12\x1d\n" +
@@ -1779,10 +1908,11 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	" AIPOW_EVIDENCE_LEVEL_BENCHMARKED\x10\x03\x12 \n" +
 	"\x1cAIPOW_EVIDENCE_LEVEL_AUDITED\x10\x04\x12!\n" +
 	"\x1dAIPOW_EVIDENCE_LEVEL_ATTESTED\x10\x05\x12#\n" +
-	"\x1fAIPOW_EVIDENCE_LEVEL_REPLICATED\x10\x062\x88\x05\n" +
+	"\x1fAIPOW_EVIDENCE_LEVEL_REPLICATED\x10\x062\xfe\x05\n" +
 	"\fProofService\x12q\n" +
 	"\x16CommitExecutionReceipt\x12*.atos.tos.v1.CommitExecutionReceiptRequest\x1a+.atos.tos.v1.CommitExecutionReceiptResponse\x12q\n" +
-	"\x16VerifyExecutionReceipt\x12*.atos.tos.v1.VerifyExecutionReceiptRequest\x1a+.atos.tos.v1.VerifyExecutionReceiptResponse\x12\x83\x01\n" +
+	"\x16VerifyExecutionReceipt\x12*.atos.tos.v1.VerifyExecutionReceiptRequest\x1a+.atos.tos.v1.VerifyExecutionReceiptResponse\x12t\n" +
+	"\x17ResolveExecutionReceipt\x12+.atos.tos.v1.ResolveExecutionReceiptRequest\x1a,.atos.tos.v1.ResolveExecutionReceiptResponse\x12\x83\x01\n" +
 	"\x1cCommitProofOfServiceEvidence\x120.atos.tos.v1.CommitProofOfServiceEvidenceRequest\x1a1.atos.tos.v1.CommitProofOfServiceEvidenceResponse\x12e\n" +
 	"\x12ReadProofOfService\x12&.atos.tos.v1.ReadProofOfServiceRequest\x1a'.atos.tos.v1.ReadProofOfServiceResponse\x12Y\n" +
 	"\x0eReadReputation\x12\".atos.tos.v1.ReadReputationRequest\x1a#.atos.tos.v1.ReadReputationResponse\x12J\n" +
@@ -1801,7 +1931,7 @@ func file_atos_tos_v1_proof_proto_rawDescGZIP() []byte {
 }
 
 var file_atos_tos_v1_proof_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_atos_tos_v1_proof_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_atos_tos_v1_proof_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_atos_tos_v1_proof_proto_goTypes = []any{
 	(ExecutionResult)(0),                         // 0: atos.tos.v1.ExecutionResult
 	(AipowEvidenceLevel)(0),                      // 1: atos.tos.v1.AipowEvidenceLevel
@@ -1812,92 +1942,101 @@ var file_atos_tos_v1_proof_proto_goTypes = []any{
 	(*CommitExecutionReceiptResponse)(nil),       // 6: atos.tos.v1.CommitExecutionReceiptResponse
 	(*VerifyExecutionReceiptRequest)(nil),        // 7: atos.tos.v1.VerifyExecutionReceiptRequest
 	(*VerifyExecutionReceiptResponse)(nil),       // 8: atos.tos.v1.VerifyExecutionReceiptResponse
-	(*ProofOfServiceEvidenceInput)(nil),          // 9: atos.tos.v1.ProofOfServiceEvidenceInput
-	(*ProofOfServiceEvidence)(nil),               // 10: atos.tos.v1.ProofOfServiceEvidence
-	(*CommitProofOfServiceEvidenceRequest)(nil),  // 11: atos.tos.v1.CommitProofOfServiceEvidenceRequest
-	(*CommitProofOfServiceEvidenceResponse)(nil), // 12: atos.tos.v1.CommitProofOfServiceEvidenceResponse
-	(*ReadProofOfServiceRequest)(nil),            // 13: atos.tos.v1.ReadProofOfServiceRequest
-	(*ReadProofOfServiceResponse)(nil),           // 14: atos.tos.v1.ReadProofOfServiceResponse
-	(*ReputationSummary)(nil),                    // 15: atos.tos.v1.ReputationSummary
-	(*ReadReputationRequest)(nil),                // 16: atos.tos.v1.ReadReputationRequest
-	(*ReadReputationResponse)(nil),               // 17: atos.tos.v1.ReadReputationResponse
-	(*ReadProofRequest)(nil),                     // 18: atos.tos.v1.ReadProofRequest
-	(*ReadProofResponse)(nil),                    // 19: atos.tos.v1.ReadProofResponse
-	(*Digest)(nil),                               // 20: atos.tos.v1.Digest
-	(TrustMode)(0),                               // 21: atos.tos.v1.TrustMode
-	(ProofProfile)(0),                            // 22: atos.tos.v1.ProofProfile
-	(*ArtifactCommitment)(nil),                   // 23: atos.tos.v1.ArtifactCommitment
-	(*Usage)(nil),                                // 24: atos.tos.v1.Usage
-	(*Money)(nil),                                // 25: atos.tos.v1.Money
-	(*NetworkAmount)(nil),                        // 26: atos.tos.v1.NetworkAmount
-	(*NetworkReference)(nil),                     // 27: atos.tos.v1.NetworkReference
-	(VerificationStatus)(0),                      // 28: atos.tos.v1.VerificationStatus
-	(*RequestContext)(nil),                       // 29: atos.tos.v1.RequestContext
-	(*PageRequest)(nil),                          // 30: atos.tos.v1.PageRequest
-	(*PageResponse)(nil),                         // 31: atos.tos.v1.PageResponse
+	(*ResolveExecutionReceiptRequest)(nil),       // 9: atos.tos.v1.ResolveExecutionReceiptRequest
+	(*ResolveExecutionReceiptResponse)(nil),      // 10: atos.tos.v1.ResolveExecutionReceiptResponse
+	(*ProofOfServiceEvidenceInput)(nil),          // 11: atos.tos.v1.ProofOfServiceEvidenceInput
+	(*ProofOfServiceEvidence)(nil),               // 12: atos.tos.v1.ProofOfServiceEvidence
+	(*CommitProofOfServiceEvidenceRequest)(nil),  // 13: atos.tos.v1.CommitProofOfServiceEvidenceRequest
+	(*CommitProofOfServiceEvidenceResponse)(nil), // 14: atos.tos.v1.CommitProofOfServiceEvidenceResponse
+	(*ReadProofOfServiceRequest)(nil),            // 15: atos.tos.v1.ReadProofOfServiceRequest
+	(*ReadProofOfServiceResponse)(nil),           // 16: atos.tos.v1.ReadProofOfServiceResponse
+	(*ReputationSummary)(nil),                    // 17: atos.tos.v1.ReputationSummary
+	(*ReadReputationRequest)(nil),                // 18: atos.tos.v1.ReadReputationRequest
+	(*ReadReputationResponse)(nil),               // 19: atos.tos.v1.ReadReputationResponse
+	(*ReadProofRequest)(nil),                     // 20: atos.tos.v1.ReadProofRequest
+	(*ReadProofResponse)(nil),                    // 21: atos.tos.v1.ReadProofResponse
+	(*Digest)(nil),                               // 22: atos.tos.v1.Digest
+	(TrustMode)(0),                               // 23: atos.tos.v1.TrustMode
+	(ProofProfile)(0),                            // 24: atos.tos.v1.ProofProfile
+	(*ArtifactCommitment)(nil),                   // 25: atos.tos.v1.ArtifactCommitment
+	(*Usage)(nil),                                // 26: atos.tos.v1.Usage
+	(*Money)(nil),                                // 27: atos.tos.v1.Money
+	(*NetworkAmount)(nil),                        // 28: atos.tos.v1.NetworkAmount
+	(*NetworkReference)(nil),                     // 29: atos.tos.v1.NetworkReference
+	(VerificationStatus)(0),                      // 30: atos.tos.v1.VerificationStatus
+	(*RequestContext)(nil),                       // 31: atos.tos.v1.RequestContext
+	(*PageRequest)(nil),                          // 32: atos.tos.v1.PageRequest
+	(*PageResponse)(nil),                         // 33: atos.tos.v1.PageResponse
 }
 var file_atos_tos_v1_proof_proto_depIdxs = []int32{
 	1,  // 0: atos.tos.v1.AipowWorkAttribution.evidence_level:type_name -> atos.tos.v1.AipowEvidenceLevel
-	20, // 1: atos.tos.v1.AipowWorkAttribution.earner_identity_commitment:type_name -> atos.tos.v1.Digest
-	20, // 2: atos.tos.v1.AipowWorkAttribution.payer_identity_commitment:type_name -> atos.tos.v1.Digest
-	21, // 3: atos.tos.v1.ExecutionReceiptEnvelope.trust_mode:type_name -> atos.tos.v1.TrustMode
-	22, // 4: atos.tos.v1.ExecutionReceiptEnvelope.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	22, // 1: atos.tos.v1.AipowWorkAttribution.earner_identity_commitment:type_name -> atos.tos.v1.Digest
+	22, // 2: atos.tos.v1.AipowWorkAttribution.payer_identity_commitment:type_name -> atos.tos.v1.Digest
+	23, // 3: atos.tos.v1.ExecutionReceiptEnvelope.trust_mode:type_name -> atos.tos.v1.TrustMode
+	24, // 4: atos.tos.v1.ExecutionReceiptEnvelope.proof_profile:type_name -> atos.tos.v1.ProofProfile
 	0,  // 5: atos.tos.v1.ExecutionReceiptEnvelope.result:type_name -> atos.tos.v1.ExecutionResult
-	20, // 6: atos.tos.v1.ExecutionReceiptEnvelope.input_commitment:type_name -> atos.tos.v1.Digest
-	20, // 7: atos.tos.v1.ExecutionReceiptEnvelope.output_commitment:type_name -> atos.tos.v1.Digest
-	20, // 8: atos.tos.v1.ExecutionReceiptEnvelope.usage_commitment:type_name -> atos.tos.v1.Digest
-	23, // 9: atos.tos.v1.ExecutionReceiptEnvelope.artifacts:type_name -> atos.tos.v1.ArtifactCommitment
-	24, // 10: atos.tos.v1.ExecutionReceiptEnvelope.usage:type_name -> atos.tos.v1.Usage
-	25, // 11: atos.tos.v1.ExecutionReceiptEnvelope.client_charge:type_name -> atos.tos.v1.Money
-	26, // 12: atos.tos.v1.ExecutionReceiptEnvelope.network_charge:type_name -> atos.tos.v1.NetworkAmount
+	22, // 6: atos.tos.v1.ExecutionReceiptEnvelope.input_commitment:type_name -> atos.tos.v1.Digest
+	22, // 7: atos.tos.v1.ExecutionReceiptEnvelope.output_commitment:type_name -> atos.tos.v1.Digest
+	22, // 8: atos.tos.v1.ExecutionReceiptEnvelope.usage_commitment:type_name -> atos.tos.v1.Digest
+	25, // 9: atos.tos.v1.ExecutionReceiptEnvelope.artifacts:type_name -> atos.tos.v1.ArtifactCommitment
+	26, // 10: atos.tos.v1.ExecutionReceiptEnvelope.usage:type_name -> atos.tos.v1.Usage
+	27, // 11: atos.tos.v1.ExecutionReceiptEnvelope.client_charge:type_name -> atos.tos.v1.Money
+	28, // 12: atos.tos.v1.ExecutionReceiptEnvelope.network_charge:type_name -> atos.tos.v1.NetworkAmount
 	2,  // 13: atos.tos.v1.ExecutionReceiptEnvelope.aipow:type_name -> atos.tos.v1.AipowWorkAttribution
 	3,  // 14: atos.tos.v1.CommittedExecutionReceipt.receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
-	27, // 15: atos.tos.v1.CommittedExecutionReceipt.receipt_ref:type_name -> atos.tos.v1.NetworkReference
-	28, // 16: atos.tos.v1.CommittedExecutionReceipt.verification_status:type_name -> atos.tos.v1.VerificationStatus
-	29, // 17: atos.tos.v1.CommitExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
+	29, // 15: atos.tos.v1.CommittedExecutionReceipt.receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	30, // 16: atos.tos.v1.CommittedExecutionReceipt.verification_status:type_name -> atos.tos.v1.VerificationStatus
+	31, // 17: atos.tos.v1.CommitExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
 	3,  // 18: atos.tos.v1.CommitExecutionReceiptRequest.receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
 	4,  // 19: atos.tos.v1.CommitExecutionReceiptResponse.receipt:type_name -> atos.tos.v1.CommittedExecutionReceipt
-	29, // 20: atos.tos.v1.VerifyExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
+	31, // 20: atos.tos.v1.VerifyExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
 	3,  // 21: atos.tos.v1.VerifyExecutionReceiptRequest.receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
-	22, // 22: atos.tos.v1.VerifyExecutionReceiptRequest.required_profile:type_name -> atos.tos.v1.ProofProfile
-	28, // 23: atos.tos.v1.VerifyExecutionReceiptResponse.status:type_name -> atos.tos.v1.VerificationStatus
-	27, // 24: atos.tos.v1.VerifyExecutionReceiptResponse.proof_ref:type_name -> atos.tos.v1.NetworkReference
-	0,  // 25: atos.tos.v1.ProofOfServiceEvidenceInput.result:type_name -> atos.tos.v1.ExecutionResult
-	26, // 26: atos.tos.v1.ProofOfServiceEvidenceInput.settlement_volume:type_name -> atos.tos.v1.NetworkAmount
-	20, // 27: atos.tos.v1.ProofOfServiceEvidenceInput.evidence_digest:type_name -> atos.tos.v1.Digest
-	2,  // 28: atos.tos.v1.ProofOfServiceEvidenceInput.aipow:type_name -> atos.tos.v1.AipowWorkAttribution
-	9,  // 29: atos.tos.v1.ProofOfServiceEvidence.value:type_name -> atos.tos.v1.ProofOfServiceEvidenceInput
-	27, // 30: atos.tos.v1.ProofOfServiceEvidence.evidence_ref:type_name -> atos.tos.v1.NetworkReference
-	29, // 31: atos.tos.v1.CommitProofOfServiceEvidenceRequest.context:type_name -> atos.tos.v1.RequestContext
-	9,  // 32: atos.tos.v1.CommitProofOfServiceEvidenceRequest.evidence:type_name -> atos.tos.v1.ProofOfServiceEvidenceInput
-	10, // 33: atos.tos.v1.CommitProofOfServiceEvidenceResponse.evidence:type_name -> atos.tos.v1.ProofOfServiceEvidence
-	29, // 34: atos.tos.v1.ReadProofOfServiceRequest.context:type_name -> atos.tos.v1.RequestContext
-	30, // 35: atos.tos.v1.ReadProofOfServiceRequest.page:type_name -> atos.tos.v1.PageRequest
-	10, // 36: atos.tos.v1.ReadProofOfServiceResponse.evidence:type_name -> atos.tos.v1.ProofOfServiceEvidence
-	31, // 37: atos.tos.v1.ReadProofOfServiceResponse.page:type_name -> atos.tos.v1.PageResponse
-	27, // 38: atos.tos.v1.ReputationSummary.summary_ref:type_name -> atos.tos.v1.NetworkReference
-	29, // 39: atos.tos.v1.ReadReputationRequest.context:type_name -> atos.tos.v1.RequestContext
-	15, // 40: atos.tos.v1.ReadReputationResponse.reputation:type_name -> atos.tos.v1.ReputationSummary
-	29, // 41: atos.tos.v1.ReadProofRequest.context:type_name -> atos.tos.v1.RequestContext
-	20, // 42: atos.tos.v1.ReadProofResponse.proof_digest:type_name -> atos.tos.v1.Digest
-	27, // 43: atos.tos.v1.ReadProofResponse.network_ref:type_name -> atos.tos.v1.NetworkReference
-	5,  // 44: atos.tos.v1.ProofService.CommitExecutionReceipt:input_type -> atos.tos.v1.CommitExecutionReceiptRequest
-	7,  // 45: atos.tos.v1.ProofService.VerifyExecutionReceipt:input_type -> atos.tos.v1.VerifyExecutionReceiptRequest
-	11, // 46: atos.tos.v1.ProofService.CommitProofOfServiceEvidence:input_type -> atos.tos.v1.CommitProofOfServiceEvidenceRequest
-	13, // 47: atos.tos.v1.ProofService.ReadProofOfService:input_type -> atos.tos.v1.ReadProofOfServiceRequest
-	16, // 48: atos.tos.v1.ProofService.ReadReputation:input_type -> atos.tos.v1.ReadReputationRequest
-	18, // 49: atos.tos.v1.ProofService.ReadProof:input_type -> atos.tos.v1.ReadProofRequest
-	6,  // 50: atos.tos.v1.ProofService.CommitExecutionReceipt:output_type -> atos.tos.v1.CommitExecutionReceiptResponse
-	8,  // 51: atos.tos.v1.ProofService.VerifyExecutionReceipt:output_type -> atos.tos.v1.VerifyExecutionReceiptResponse
-	12, // 52: atos.tos.v1.ProofService.CommitProofOfServiceEvidence:output_type -> atos.tos.v1.CommitProofOfServiceEvidenceResponse
-	14, // 53: atos.tos.v1.ProofService.ReadProofOfService:output_type -> atos.tos.v1.ReadProofOfServiceResponse
-	17, // 54: atos.tos.v1.ProofService.ReadReputation:output_type -> atos.tos.v1.ReadReputationResponse
-	19, // 55: atos.tos.v1.ProofService.ReadProof:output_type -> atos.tos.v1.ReadProofResponse
-	50, // [50:56] is the sub-list for method output_type
-	44, // [44:50] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	24, // 22: atos.tos.v1.VerifyExecutionReceiptRequest.required_profile:type_name -> atos.tos.v1.ProofProfile
+	30, // 23: atos.tos.v1.VerifyExecutionReceiptResponse.status:type_name -> atos.tos.v1.VerificationStatus
+	29, // 24: atos.tos.v1.VerifyExecutionReceiptResponse.proof_ref:type_name -> atos.tos.v1.NetworkReference
+	31, // 25: atos.tos.v1.ResolveExecutionReceiptRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 26: atos.tos.v1.ResolveExecutionReceiptRequest.receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
+	29, // 27: atos.tos.v1.ResolveExecutionReceiptRequest.expected_receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	22, // 28: atos.tos.v1.ResolveExecutionReceiptResponse.receipt_digest:type_name -> atos.tos.v1.Digest
+	29, // 29: atos.tos.v1.ResolveExecutionReceiptResponse.receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	0,  // 30: atos.tos.v1.ProofOfServiceEvidenceInput.result:type_name -> atos.tos.v1.ExecutionResult
+	28, // 31: atos.tos.v1.ProofOfServiceEvidenceInput.settlement_volume:type_name -> atos.tos.v1.NetworkAmount
+	22, // 32: atos.tos.v1.ProofOfServiceEvidenceInput.evidence_digest:type_name -> atos.tos.v1.Digest
+	2,  // 33: atos.tos.v1.ProofOfServiceEvidenceInput.aipow:type_name -> atos.tos.v1.AipowWorkAttribution
+	11, // 34: atos.tos.v1.ProofOfServiceEvidence.value:type_name -> atos.tos.v1.ProofOfServiceEvidenceInput
+	29, // 35: atos.tos.v1.ProofOfServiceEvidence.evidence_ref:type_name -> atos.tos.v1.NetworkReference
+	31, // 36: atos.tos.v1.CommitProofOfServiceEvidenceRequest.context:type_name -> atos.tos.v1.RequestContext
+	11, // 37: atos.tos.v1.CommitProofOfServiceEvidenceRequest.evidence:type_name -> atos.tos.v1.ProofOfServiceEvidenceInput
+	12, // 38: atos.tos.v1.CommitProofOfServiceEvidenceResponse.evidence:type_name -> atos.tos.v1.ProofOfServiceEvidence
+	31, // 39: atos.tos.v1.ReadProofOfServiceRequest.context:type_name -> atos.tos.v1.RequestContext
+	32, // 40: atos.tos.v1.ReadProofOfServiceRequest.page:type_name -> atos.tos.v1.PageRequest
+	12, // 41: atos.tos.v1.ReadProofOfServiceResponse.evidence:type_name -> atos.tos.v1.ProofOfServiceEvidence
+	33, // 42: atos.tos.v1.ReadProofOfServiceResponse.page:type_name -> atos.tos.v1.PageResponse
+	29, // 43: atos.tos.v1.ReputationSummary.summary_ref:type_name -> atos.tos.v1.NetworkReference
+	31, // 44: atos.tos.v1.ReadReputationRequest.context:type_name -> atos.tos.v1.RequestContext
+	17, // 45: atos.tos.v1.ReadReputationResponse.reputation:type_name -> atos.tos.v1.ReputationSummary
+	31, // 46: atos.tos.v1.ReadProofRequest.context:type_name -> atos.tos.v1.RequestContext
+	22, // 47: atos.tos.v1.ReadProofResponse.proof_digest:type_name -> atos.tos.v1.Digest
+	29, // 48: atos.tos.v1.ReadProofResponse.network_ref:type_name -> atos.tos.v1.NetworkReference
+	5,  // 49: atos.tos.v1.ProofService.CommitExecutionReceipt:input_type -> atos.tos.v1.CommitExecutionReceiptRequest
+	7,  // 50: atos.tos.v1.ProofService.VerifyExecutionReceipt:input_type -> atos.tos.v1.VerifyExecutionReceiptRequest
+	9,  // 51: atos.tos.v1.ProofService.ResolveExecutionReceipt:input_type -> atos.tos.v1.ResolveExecutionReceiptRequest
+	13, // 52: atos.tos.v1.ProofService.CommitProofOfServiceEvidence:input_type -> atos.tos.v1.CommitProofOfServiceEvidenceRequest
+	15, // 53: atos.tos.v1.ProofService.ReadProofOfService:input_type -> atos.tos.v1.ReadProofOfServiceRequest
+	18, // 54: atos.tos.v1.ProofService.ReadReputation:input_type -> atos.tos.v1.ReadReputationRequest
+	20, // 55: atos.tos.v1.ProofService.ReadProof:input_type -> atos.tos.v1.ReadProofRequest
+	6,  // 56: atos.tos.v1.ProofService.CommitExecutionReceipt:output_type -> atos.tos.v1.CommitExecutionReceiptResponse
+	8,  // 57: atos.tos.v1.ProofService.VerifyExecutionReceipt:output_type -> atos.tos.v1.VerifyExecutionReceiptResponse
+	10, // 58: atos.tos.v1.ProofService.ResolveExecutionReceipt:output_type -> atos.tos.v1.ResolveExecutionReceiptResponse
+	14, // 59: atos.tos.v1.ProofService.CommitProofOfServiceEvidence:output_type -> atos.tos.v1.CommitProofOfServiceEvidenceResponse
+	16, // 60: atos.tos.v1.ProofService.ReadProofOfService:output_type -> atos.tos.v1.ReadProofOfServiceResponse
+	19, // 61: atos.tos.v1.ProofService.ReadReputation:output_type -> atos.tos.v1.ReadReputationResponse
+	21, // 62: atos.tos.v1.ProofService.ReadProof:output_type -> atos.tos.v1.ReadProofResponse
+	56, // [56:63] is the sub-list for method output_type
+	49, // [49:56] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_proof_proto_init() }
@@ -1912,7 +2051,7 @@ func file_atos_tos_v1_proof_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_tos_v1_proof_proto_rawDesc), len(file_atos_tos_v1_proof_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

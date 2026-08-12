@@ -140,6 +140,27 @@ func Digest(domain string, value interface{}) (string, error) {
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
+// DigestCanonical hashes already encoded canonical CBOR under domain after
+// independently checking its canonical representation.
+func DigestCanonical(domain string, encoded []byte) (string, error) {
+	if err := validateDomain(domain); err != nil {
+		return "", err
+	}
+	var value interface{}
+	if err := Unmarshal(encoded, &value); err != nil {
+		return "", err
+	}
+	hasher := sha256.New()
+	hasher.Write([]byte("TOS-PROTOCOL-CBOR"))
+	hasher.Write([]byte{0})
+	var length [2]byte
+	binary.BigEndian.PutUint16(length[:], uint16(len(domain)))
+	hasher.Write(length[:])
+	hasher.Write([]byte(domain))
+	hasher.Write(encoded)
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
 func decodeJSONModel(data []byte) (interface{}, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
