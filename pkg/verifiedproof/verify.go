@@ -5,8 +5,10 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"math/big"
 	"strings"
+	"time"
 )
 
 type Code string
@@ -98,7 +100,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	if v.GatewayDomain != "" && p.GatewayDomain != v.GatewayDomain {
 		add(CodeDomain, "gateway_domain", "package domain differs from verifier")
 	}
-	if p.Quote.TrustMode != "verified" || p.Quote.ProofProfile != "tos_verified_v1" || p.Quote.SettlementBackend != "tos" || p.Quote.SettlementAsset != "TOS" || p.Quote.AssetDecimals != 9 || p.Quote.FeesAtomic != "0" || p.Escrow.FundingModel != "task_escrow_v1" {
+	if p.Quote.TrustMode != "verified" || p.Quote.ProofProfile != "tos_verified_v1" || p.Quote.SettlementBackend != "tos" || p.Quote.SettlementAsset != "TOS" || p.Quote.AssetDecimals != 9 || p.Quote.FeesAtomic != "0" || strings.TrimSpace(p.Escrow.FundingModel) == "" {
 		add(CodeTuple, "quote", "unsupported Verified commercial tuple")
 	}
 	for field, value := range map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest, "escrow.contract_code_hash": p.Escrow.ContractCodeHash, "receipt.receipt_digest": p.Receipt.ReceiptDigest, "receipt.input_commitment": p.Receipt.InputCommitment, "receipt.output_commitment": p.Receipt.OutputCommitment, "receipt.usage_commitment": p.Receipt.UsageCommitment, "proof_of_service.evidence_digest": p.ProofOfService.EvidenceDigest, "proof_of_service.content_digest": p.ProofOfService.ContentDigest} {
@@ -126,6 +128,11 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	}
 	if _, expectedReceiptDigest, err := ReceiptSigningDigest(p); err != nil || expectedReceiptDigest != p.Receipt.ReceiptDigest {
 		add(CodeDigest, "receipt.receipt_digest", "receipt digest does not match canonical receipt tuple")
+	}
+	if c, err := receiptcommitment.Parse(p.Receipt.CanonicalCBOR); err != nil {
+		add(CodeMalformed, "receipt.canonical_cbor", err.Error())
+	} else if c.ReceiptID != p.Receipt.ReceiptID || c.QuoteID != p.Quote.QuoteID || c.EscrowID != p.Escrow.EscrowID || c.JobID != p.Escrow.JobID || c.PrincipalID != p.PrincipalID || c.ProviderID != p.ProviderID || c.CapabilityID != p.Capability.CapabilityID || c.CapabilityVersion != p.Capability.CapabilityVersion || c.TrustMode != "TRUST_MODE_VERIFIED" || c.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || strings.TrimPrefix(strings.ToLower(c.Result), "execution_result_") != strings.ToLower(p.Receipt.Result) || c.InputCommitment != p.Receipt.InputCommitment || c.OutputCommitment != p.Receipt.OutputCommitment || c.UsageCommitment != p.Receipt.UsageCommitment || c.ExecutionSignerID != p.SignerAuthorization.ExecutionSignerID || c.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || c.CompletedUnixMillis*int64(time.Millisecond) != p.Receipt.CompletedUnixNanos || c.NetworkChargeAtomic != p.Receipt.ChargedAtomic {
+		add(CodeTuple, "receipt.canonical_cbor", "signed Receipt tuple differs from package")
 	}
 	switch p.Outcome.Kind {
 	case "provider_settlement":

@@ -77,6 +77,20 @@ type Value struct {
 	Aipow                 *aipow        `json:"aipow,omitempty"`
 }
 
+type Claims struct {
+	ReceiptID, QuoteID, EscrowID, JobID, PrincipalID, ProviderID, CapabilityID, CapabilityVersion, TrustMode, ProofProfile, Result, InputCommitment, OutputCommitment, UsageCommitment, ExecutionSignerID, SignerAuthorizationID, SignatureAlgorithm, NetworkChargeAtomic string
+	CompletedUnixMillis                                                                                                                                                                                                                                                   int64
+}
+
+func text(v digest) string { return v.Algorithm + ":" + hex.EncodeToString(v.Value) }
+func Parse(data []byte) (Claims, error) {
+	var v Value
+	if err := codec.Unmarshal(data, &v); err != nil {
+		return Claims{}, err
+	}
+	return Claims{v.ReceiptID, v.QuoteID, v.EscrowID, v.JobID, v.PrincipalID, v.ProviderID, v.CapabilityID, v.CapabilityVersion, v.TrustMode, v.ProofProfile, v.Result, text(v.InputCommitment), text(v.OutputCommitment), text(v.UsageCommitment), v.ExecutionSignerID, v.SignerAuthorizationID, v.SignatureAlgorithm, v.NetworkCharge.AtomicAmount, v.CompletedUnixMillis}, nil
+}
+
 func dg(v *atostosv1.Digest) digest {
 	if v == nil {
 		return digest{}

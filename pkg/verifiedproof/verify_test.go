@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"github.com/tosnetwork/tos-protocol/pkg/codec"
+	"encoding/hex"
+	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"testing"
 )
 
@@ -25,11 +27,16 @@ func d(c byte) string {
 	return "sha256:" + string(b)
 }
 func ref(n, s string, c uint64) Reference { return Reference{n, s, c} }
+func pd(s string) *atostosv1.Digest {
+	b, _ := hex.DecodeString(s[7:])
+	return &atostosv1.Digest{Algorithm: "sha256", Value: b}
+}
 func fixture(t *testing.T) Package {
 	t.Helper()
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	p := Package{Version: Version, Canonicalization: Canonicalization, NetworkID: "tos-test", GatewayDomain: "atos.im", PrincipalID: "principal-1", RequesterAgentID: "agent-1", RequesterIdentityRef: ref("tos-test", "id-requester", 10), ProviderID: "provider-1", ProviderIdentityRef: ref("tos-test", "id-provider", 10), Capability: Capability{"cap-1", "1.0.0", d(1), ref("tos-test", "ownership", 11)}, Quote: Quote{"quote-1", d(2), ref("tos-test", "quote", 12), d(3), "verified", "tos_verified_v1", "tos", "TOS", 9, "1000", "0", "1000", 1, 2, 3, "service-quote", d(4)}, Escrow: Escrow{"esc-1", "job-1", ref("tos-test", "contract", 13), d(5), d(6), ref("tos-test", "reserve", 13), "1000", 4, "task_escrow_v1"}, SignerAuthorization: SignerAuthorization{"auth-1", "signer-1", ref("tos-test", "auth", 11), "ed25519", pub, 0, 100}, Receipt: Receipt{"receipt-1", "", ref("tos-test", "receipt", 14), "success", d(8), d(9), d(10), 10, 20, "700", "ed25519", nil, nil}, Outcome: Outcome{Kind: "provider_settlement", OutcomeRef: ref("tos-test", "settle", 15), ChargedAtomic: "700", RefundedAtomic: "300"}, ProofOfService: ProofOfService{"pos-1", d(11), ref("tos-test", "pos", 16), d(12), ""}}
-	p.Receipt.CanonicalCBOR, _ = codec.Marshal(map[string]any{"receipt_id": "receipt-1", "job_id": "job-1", "charge": "700"})
+	p := Package{Version: Version, Canonicalization: Canonicalization, NetworkID: "tos-test", GatewayDomain: "atos.im", PrincipalID: "principal-1", RequesterAgentID: "agent-1", RequesterIdentityRef: ref("tos-test", "id-requester", 10), ProviderID: "provider-1", ProviderIdentityRef: ref("tos-test", "id-provider", 10), Capability: Capability{"cap-1", "1.0.0", d(1), ref("tos-test", "ownership", 11)}, Quote: Quote{"quote-1", d(2), ref("tos-test", "quote", 12), d(3), "verified", "tos_verified_v1", "tos", "TOS", 9, "1000", "0", "1000", 1, 2, 3, "service-quote", d(4)}, Escrow: Escrow{"esc-1", "job-1", ref("tos-test", "contract", 13), d(5), d(6), ref("tos-test", "reserve", 13), "1000", 4, "gateway_sponsored"}, SignerAuthorization: SignerAuthorization{"auth-1", "signer-1", ref("tos-test", "auth", 11), "ed25519", pub, 0, 100000000}, Receipt: Receipt{"receipt-1", "", ref("tos-test", "receipt", 14), "success", d(8), d(9), d(10), 10000000, 20000000, "700", "ed25519", nil, nil}, Outcome: Outcome{Kind: "provider_settlement", OutcomeRef: ref("tos-test", "settle", 15), ChargedAtomic: "700", RefundedAtomic: "300"}, ProofOfService: ProofOfService{"pos-1", d(11), ref("tos-test", "pos", 16), d(12), ""}}
+	env := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: "receipt-1", QuoteId: "quote-1", EscrowId: "esc-1", JobId: "job-1", PrincipalId: "principal-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Result: atostosv1.ExecutionResult_EXECUTION_RESULT_SUCCESS, InputCommitment: pd(d(8)), OutputCommitment: pd(d(9)), UsageCommitment: pd(d(10)), NetworkCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "700"}, ExecutionSignerId: "signer-1", SignerAuthorizationId: "auth-1", SignatureAlgorithm: "ed25519", CompletedUnixMillis: 20}
+	p.Receipt.CanonicalCBOR, _ = receiptcommitment.Bytes(env)
 	raw, receiptDigest, err := ReceiptSigningDigest(p)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +47,7 @@ func fixture(t *testing.T) Package {
 }
 func TestCanonicalRoundTripAndIndependentVerification(t *testing.T) {
 	p := fixture(t)
-	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidFromUnixNanos: 0, ValidUntilUnixNanos: 100, FinalizedCheckpoint: 11}}
+	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidFromUnixNanos: 0, ValidUntilUnixNanos: 100000000, FinalizedCheckpoint: 11}}
 	b, e := Marshal(p)
 	if e != nil {
 		t.Fatal(e)
@@ -56,7 +63,7 @@ func TestCanonicalRoundTripAndIndependentVerification(t *testing.T) {
 }
 func TestRejectsNetworkSignerOutcomeAndNonCanonicalCBOR(t *testing.T) {
 	p := fixture(t)
-	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100}}
+	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100000000}}
 	p.NetworkID = "tos-other"
 	p.Outcome.RefundedAtomic = "301"
 	r := (Verifier{Observer: o, Network: "tos-test"}).Verify(context.Background(), p)
