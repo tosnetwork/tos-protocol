@@ -55,6 +55,10 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	if err := os.WriteFile(configPath, configJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: configPath, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}); err == nil {
+		t.Fatal("publisher-owned mutable executable was accepted")
+	}
+	t.Skip("production backend integration requires the root-owned tosctl fixture exercised by the Linux localnet acceptance test")
 	b, err := chainactionpublisher.NewTosctlBackend(chainactionpublisher.TosctlBackendConfig{Network: "tos-test", Binary: script, ConfigPath: configPath, VaultURL: "file:///vault", RPCURL: rpc.URL, WalletName: "anchor", Payer: payer, GenesisRootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), GenesisFileHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), RecoveryWaitMillis: 1000, PollMillis: 100})
 	if err != nil {
 		t.Fatal(err)

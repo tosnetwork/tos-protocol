@@ -3,13 +3,17 @@ package chainactionpublisher
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,20 +42,26 @@ type TosctlBackendConfig struct {
 }
 type TosctlBackend struct {
 	network, binary, vaultURL, walletName, payer string
+	binaryIdentity                               chainExecutableIdentity
 	configFile                                   *os.File
 	client                                       *chain.Client
 	genesisRootHash, genesisFileHash             string
 	lookback                                     int
 	recoveryWait, poll                           time.Duration
+	enrollmentBinding                            string
 	mu, configMu                                 sync.Mutex
 }
 
 func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
+	if runtime.GOOS != "linux" {
+		return nil, errors.New("production tosctl chain publisher is supported only on Linux")
+	}
 	if c.Network == "" || c.WalletName == "" || c.VaultURL == "" || !filepath.IsAbs(c.Binary) || filepath.Clean(c.Binary) != c.Binary || !filepath.IsAbs(c.ConfigPath) || filepath.Clean(c.ConfigPath) != c.ConfigPath {
 		return nil, errors.New("invalid tosctl chain publisher config")
 	}
-	if info, err := os.Stat(c.Binary); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
-		return nil, errors.New("tosctl binary is unavailable")
+	binaryIdentity, err := captureChainExecutableIdentity(c.Binary)
+	if err != nil {
+		return nil, fmt.Errorf("tosctl binary: %w", err)
 	}
 	configInfo, err := os.Lstat(c.ConfigPath)
 	if err != nil || !configInfo.Mode().IsRegular() || configInfo.Mode().Perm()&0o077 != 0 {
@@ -104,7 +114,19 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TosctlBackend{network: c.Network, binary: c.Binary, configFile: configFile, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, lookback: c.Lookback, recoveryWait: recovery, poll: poll}, nil
+	bindingBytes, _ := json.Marshal(struct {
+		Version, ActionVersion, Network, RPCURL, GenesisRootHash, GenesisFileHash, WalletName, Payer, ConfigDigest, BinaryDigest, VaultDigest string
+		Lookback                                                                                                                              int
+		RecoveryWaitMillis, PollMillis                                                                                                        int64
+	}{"1", chain.ChainActionVersion, c.Network, c.RPCURL, c.GenesisRootHash, c.GenesisFileHash, c.WalletName, payer, sha256Text(rawConfig), binaryIdentity.digest, sha256Text([]byte(strings.TrimSpace(c.VaultURL))), c.Lookback, recovery.Milliseconds(), poll.Milliseconds()})
+	return &TosctlBackend{network: c.Network, binary: c.Binary, binaryIdentity: binaryIdentity, configFile: configFile, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, lookback: c.Lookback, recoveryWait: recovery, poll: poll, enrollmentBinding: sha256Text(bindingBytes)}, nil
+}
+
+func (b *TosctlBackend) EnrollmentBinding() string { return b.enrollmentBinding }
+
+func sha256Text(value []byte) string {
+	digest := sha256.Sum256(value)
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 type tosctlWallet struct {
@@ -217,12 +239,17 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	if b.configFile == nil {
 		return nil, errors.New("tosctl backend is closed")
 	}
+	executable, err := openVerifiedChainExecutable(b.binary, b.binaryIdentity)
+	if err != nil {
+		return nil, err
+	}
+	defer executable.Close()
 	if _, err := b.configFile.Seek(0, 0); err != nil {
 		return nil, errors.New("seek pinned tosctl config")
 	}
 	args = append(args, "--config-fd", "3", "--config-format", "json")
-	command := exec.CommandContext(ctx, b.binary, args...)
-	command.ExtraFiles = []*os.File{b.configFile}
+	command := exec.CommandContext(ctx, "/proc/self/fd/4", args...)
+	command.ExtraFiles = []*os.File{b.configFile, executable}
 	command.Env = backendEnvironment(b.vaultURL)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -234,6 +261,96 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 		return nil, errors.New("tosctl output too large")
 	}
 	return stdout.Bytes(), nil
+}
+
+type chainExecutableIdentity struct {
+	device uint64
+	inode  uint64
+	size   int64
+	digest string
+}
+
+func captureChainExecutableIdentity(path string) (chainExecutableIdentity, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 || pathInfo.Mode().Perm()&0o111 == 0 {
+		return chainExecutableIdentity{}, errors.New("executable is not a regular executable file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return chainExecutableIdentity{}, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		return chainExecutableIdentity{}, errors.New("executable changed while its identity was captured")
+	}
+	if err := validateChainExecutablePath(path, info); err != nil {
+		return chainExecutableIdentity{}, err
+	}
+	return chainExecutableIdentityFromFile(file, info)
+}
+
+func validateChainExecutablePath(path string, info os.FileInfo) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || os.Geteuid() == 0 || info.Mode().Perm()&0o022 != 0 {
+		return errors.New("executable must be root-owned, non-group-writable, and used by an unprivileged publisher")
+	}
+	for directory := filepath.Dir(path); ; directory = filepath.Dir(directory) {
+		directoryInfo, err := os.Lstat(directory)
+		if err != nil || !directoryInfo.IsDir() || directoryInfo.Mode()&os.ModeSymlink != 0 || directoryInfo.Mode().Perm()&0o022 != 0 {
+			return errors.New("executable path contains an untrusted directory")
+		}
+		directoryStat, ok := directoryInfo.Sys().(*syscall.Stat_t)
+		if !ok || directoryStat.Uid != 0 {
+			return errors.New("executable path is not rooted in root-owned directories")
+		}
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	return nil
+}
+
+func chainExecutableIdentityFromFile(file *os.File, info os.FileInfo) (chainExecutableIdentity, error) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return chainExecutableIdentity{}, errors.New("executable identity is unavailable")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return chainExecutableIdentity{}, err
+	}
+	return chainExecutableIdentity{device: uint64(stat.Dev), inode: stat.Ino, size: info.Size(), digest: "sha256:" + hex.EncodeToString(hash.Sum(nil))}, nil
+}
+
+func openVerifiedChainExecutable(path string, expected chainExecutableIdentity) (*os.File, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || pathInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("enrolled tosctl executable path is unavailable")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		file.Close()
+		return nil, errors.New("enrolled tosctl executable changed while opening")
+	}
+	if err := validateChainExecutablePath(path, info); err != nil {
+		file.Close()
+		return nil, err
+	}
+	actual, err := chainExecutableIdentityFromFile(file, info)
+	if err != nil || actual != expected {
+		file.Close()
+		return nil, errors.New("enrolled tosctl executable identity changed")
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
 }
 func (b *TosctlBackend) Close() error {
 	if b == nil {

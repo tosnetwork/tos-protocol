@@ -25,7 +25,12 @@ type backend struct {
 func (*backend) CheckReady(context.Context) (chainactionpublisher.BackendCapabilities, error) {
 	return chainactionpublisher.BackendCapabilities{Version: "1", Network: "tos-test", RecoverByActionID: true, SearchBeforeBroadcast: true}, nil
 }
-func (*backend) Close() error { return nil }
+func (*backend) EnrollmentBinding() string { return "sha256:test-backend-binding" }
+
+type substitutedBackend struct{ backend }
+
+func (*substitutedBackend) EnrollmentBinding() string { return "sha256:substituted-backend-binding" }
+func (*backend) Close() error                         { return nil }
 func (b *backend) Publish(_ context.Context, a chain.Action, recovering bool) (chain.ActionReceipt, error) {
 	b.calls++
 	if b.lose && !recovering {
@@ -72,10 +77,10 @@ func TestRealServerTypedAbsenceAndDurableCrashRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := filepath.Join(dir, "journal.db")
-	if err := chainactionpublisher.InitializeJournal(state, "test-journal"); err != nil {
+	b := &backend{lose: true}
+	if err := chainactionpublisher.InitializeJournal(state, "test-journal", "tos-test", policy(), b.EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
-	b := &backend{lose: true}
 	s, c := start(t, state, filepath.Join(dir, "one.sock"), b)
 	if err := c.CheckReady(context.Background()); err != nil {
 		t.Fatal(err)
@@ -109,19 +114,22 @@ func TestMissingOrSubstitutedJournalFailsClosed(t *testing.T) {
 	if _, err := chainactionpublisher.Open(chainactionpublisher.Config{Network: "tos-test", StatePath: path, JournalIdentity: "enrolled", Policy: policy(), Backend: &backend{}}); err == nil {
 		t.Fatal("missing journal started")
 	}
-	if err := chainactionpublisher.InitializeJournal(path, "enrolled"); err != nil {
+	if err := chainactionpublisher.InitializeJournal(path, "enrolled", "tos-test", policy(), (&backend{}).EnrollmentBinding()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := chainactionpublisher.Open(chainactionpublisher.Config{Network: "tos-test", StatePath: path, JournalIdentity: "other", Policy: policy(), Backend: &backend{}}); err == nil {
 		t.Fatal("substituted journal started")
+	}
+	if _, err := chainactionpublisher.Open(chainactionpublisher.Config{Network: "tos-test", StatePath: path, JournalIdentity: "enrolled", Policy: policy(), Backend: &substitutedBackend{}}); err == nil {
+		t.Fatal("journal accepted substituted executable/config/backend enrollment")
 	}
 }
 func TestSpendingPolicyRejectsSubstitution(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0o700)
 	state := filepath.Join(dir, "journal.db")
-	_ = chainactionpublisher.InitializeJournal(state, "test-journal")
 	b := &backend{}
+	_ = chainactionpublisher.InitializeJournal(state, "test-journal", "tos-test", policy(), b.EnrollmentBinding())
 	s, c := start(t, state, filepath.Join(dir, "policy.sock"), b)
 	defer s.Close()
 	for _, mutate := range []func(*chain.Action){func(a *chain.Action) { a.Payee = a.Payer }, func(a *chain.Action) { a.AmountNanoTOS++ }, func(a *chain.Action) { a.ActionID = "anchor-" + string(make([]byte, 64)) }} {
