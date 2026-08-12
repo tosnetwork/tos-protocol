@@ -13,6 +13,7 @@ import (
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/poiw"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -664,6 +665,19 @@ func (s *Server) completeDurableJob(jobID string, stored *storedExecutionJob, re
 	}); err != nil {
 		return nil, err
 	}
+	// PoIW work attribution joins the receipt before the id is derived and
+	// the signature is applied, so it is part of the signed content. Work
+	// settled through this managed flow substantiates OBSERVED evidence;
+	// nothing here may upgrade it.
+	settledAtomic, err := parseAtomic(receipt.NetworkCharge.GetAtomicAmount())
+	if err != nil || !settledAtomic.IsUint64() {
+		return nil, failedPrecondition("NETWORK_CHARGE_INVALID",
+			"escrow reserve is not a valid uint64 atomic amount")
+	}
+	receipt.Poiw = poiw.AttributionFromUsage(
+		usage, settledAtomic.Uint64(),
+		atostosv1.PoiwEvidenceLevel_POIW_EVIDENCE_LEVEL_OBSERVED,
+	)
 	receiptSeed, err := protoDigest("ATOS-TOS-RECEIPT-ID-V1", receipt)
 	if err != nil {
 		return nil, err
