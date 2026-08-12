@@ -26,17 +26,20 @@ import (
 const maxConfigBytes = int64(128 << 10)
 
 type config struct {
-	Version         string `json:"version"`
-	Network         string `json:"network"`
-	RPCURL          string `json:"rpcUrl"`
-	PublisherSocket string `json:"publisherSocket"`
-	AllowedCodeHash string `json:"allowedCodeHash"`
-	Creator         string `json:"creator"`
-	Agent           string `json:"agent"`
-	Verifier        string `json:"verifier"`
-	BudgetNanoTOS   uint64 `json:"budgetNanoTOS"`
-	PayoutNanoTOS   uint64 `json:"payoutNanoTOS"`
-	FundingOverhead uint64 `json:"fundingOverheadNanoTOS"`
+	Version                  string   `json:"version"`
+	Network                  string   `json:"network"`
+	RPCURL                   string   `json:"rpcUrl"`
+	RPCURLs                  []string `json:"rpcUrls,omitempty"`
+	PublisherSocket          string   `json:"publisherSocket"`
+	PublisherJournalIdentity string   `json:"publisherJournalIdentity"`
+	PublisherJournalBinding  string   `json:"publisherJournalBinding"`
+	AllowedCodeHash          string   `json:"allowedCodeHash"`
+	Creator                  string   `json:"creator"`
+	Agent                    string   `json:"agent"`
+	Verifier                 string   `json:"verifier"`
+	BudgetNanoTOS            uint64   `json:"budgetNanoTOS"`
+	PayoutNanoTOS            uint64   `json:"payoutNanoTOS"`
+	FundingOverhead          uint64   `json:"fundingOverheadNanoTOS"`
 }
 
 func main() {
@@ -57,17 +60,25 @@ func main() {
 }
 
 func run(ctx context.Context, cfg config) error {
-	proxies, endpoints, err := startQuorumProxies(cfg.RPCURL, 3)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		for _, proxy := range proxies {
-			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = proxy.Shutdown(shutdown)
-			cancel()
+	var proxies []*http.Server
+	endpoints := append([]string(nil), cfg.RPCURLs...)
+	if len(endpoints) == 0 {
+		var err error
+		proxies, endpoints, err = startQuorumProxies(cfg.RPCURL, 3)
+		if err != nil {
+			return err
 		}
-	}()
+		defer func() {
+			for _, proxy := range proxies {
+				shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_ = proxy.Shutdown(shutdown)
+				cancel()
+			}
+		}()
+	}
+	if len(endpoints) != 3 {
+		return errors.New("localnet acceptance requires exactly three independent validator RPC endpoints")
+	}
 	adapter, err := toschain.New(toschain.Config{
 		Network: cfg.Network, Endpoints: endpoints, Quorum: 2,
 		QueryTimeout: 10 * time.Second, ReadinessMaxAge: 10 * time.Minute,
@@ -76,7 +87,7 @@ func run(ctx context.Context, cfg config) error {
 		return err
 	}
 	publisher, err := localrpc.NewTaskEscrowActionPublisherClient(
-		localrpc.DefaultTaskEscrowActionPublisherClientConfig(cfg.PublisherSocket, cfg.Network),
+		localrpc.DefaultTaskEscrowActionPublisherClientConfig(cfg.PublisherSocket, cfg.Network, cfg.PublisherJournalIdentity, cfg.PublisherJournalBinding),
 	)
 	if err != nil {
 		return err
@@ -170,6 +181,7 @@ func run(ctx context.Context, cfg config) error {
 		EscrowID:        cancelRequest.EscrowID,
 		ContractAddress: cancelledReserve.State.ContractAddress,
 		BudgetNanoTOS:   cfg.BudgetNanoTOS, ReasonCode: "localnet_cancel",
+		ReleaseDigest: "sha256:" + strings.Repeat("55", 32),
 	})
 	if err != nil {
 		return fmt.Errorf("release TaskEscrow: %w", err)

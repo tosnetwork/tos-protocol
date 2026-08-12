@@ -4,21 +4,26 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 	"github.com/xssnick/tonutils-go/address"
 )
@@ -41,6 +46,8 @@ type TosctlBackendConfig struct {
 	TosctlConfig           string            `json:"tosctlConfig"`
 	VaultURL               string            `json:"vaultUrl"`
 	RPCURL                 string            `json:"rpcUrl"`
+	GenesisRootHash        string            `json:"genesisRootHash"`
+	GenesisFileHash        string            `json:"genesisFileHash"`
 	Wallets                map[string]string `json:"wallets"`
 	ExecutorWallet         string            `json:"executorWallet"`
 	Workchain              int32             `json:"workchain"`
@@ -54,23 +61,31 @@ type TosctlBackendConfig struct {
 }
 
 type TosctlBackend struct {
-	network        string
-	binary         string
-	configPath     string
-	vaultURL       string
-	wallets        map[string]string
-	executorWallet string
-	workchain      int32
-	operationValue uint64
-	commandTimeout time.Duration
-	publishTimeout time.Duration
-	recoveryWait   time.Duration
-	locator        *transactionLocator
-	environment    []string
-	mu             sync.Mutex
+	network           string
+	binary            string
+	binaryIdentity    executableIdentity
+	configFile        *os.File
+	vaultURL          string
+	wallets           map[string]string
+	executorWallet    string
+	workchain         int32
+	operationValue    uint64
+	commandTimeout    time.Duration
+	publishTimeout    time.Duration
+	recoveryWait      time.Duration
+	locator           *transactionLocator
+	environment       []string
+	mu                sync.Mutex
+	configMu          sync.Mutex
+	genesisRootHash   string
+	genesisFileHash   string
+	enrollmentBinding string
 }
 
 func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
+	if runtime.GOOS != "linux" {
+		return nil, errors.New("production tosctl TaskEscrow publisher is supported only on Linux")
+	}
 	if strings.TrimSpace(config.Network) == "" || len(config.Network) > 64 ||
 		strings.TrimSpace(config.VaultURL) == "" || strings.TrimSpace(config.ExecutorWallet) == "" ||
 		len(config.Wallets) == 0 || len(config.Wallets) > 256 {
@@ -83,6 +98,21 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 	configPath, err := validateRegularPath(config.TosctlConfig, false)
 	if err != nil {
 		return nil, fmt.Errorf("tosctl config: %w", err)
+	}
+	rawConfig, err := os.ReadFile(configPath)
+	if err != nil || len(rawConfig) > 2<<20 {
+		return nil, errors.New("read tosctl configuration snapshot")
+	}
+	configuredRPC, err := taskEscrowTosctlRPCURL(rawConfig)
+	if err != nil || configuredRPC != config.RPCURL {
+		return nil, errors.New("tosctl send RPC does not match recovery RPC")
+	}
+	if !validBase64Hash(config.GenesisRootHash) || !validBase64Hash(config.GenesisFileHash) {
+		return nil, errors.New("invalid expected TOS genesis identity")
+	}
+	configFile, err := pinnedTaskEscrowConfig(rawConfig)
+	if err != nil {
+		return nil, err
 	}
 	wallets := make(map[string]string, len(config.Wallets))
 	for rawAddress, name := range config.Wallets {
@@ -127,13 +157,57 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 	if err != nil {
 		return nil, err
 	}
+	binaryIdentity, err := captureExecutableIdentity(binary)
+	if err != nil {
+		configFile.Close()
+		return nil, err
+	}
+	binaryDigest := binaryIdentity.digest
+	configSum := sha256.Sum256(rawConfig)
+	vaultSum := sha256.Sum256([]byte(strings.TrimSpace(config.VaultURL)))
+	environmentSum, err := codec.Digest("tos.task-escrow.publisher-environment.v1", config.AdditionalEnvironment)
+	if err != nil {
+		configFile.Close()
+		return nil, err
+	}
+	binding, err := codec.Digest("tos.task-escrow.publisher-backend.v1", struct {
+		Version, ActionVersion, Network, Binary, Config, RPC, GenesisRoot, GenesisFile, Executor, Vault, Environment string
+		Wallets                                                                                                      map[string]string
+		Workchain                                                                                                    int32
+		Operation                                                                                                    uint64
+	}{"tosctl-v1", chain.TaskEscrowActionVersion, config.Network, binaryDigest, "sha256:" + hex.EncodeToString(configSum[:]), configuredRPC, config.GenesisRootHash, config.GenesisFileHash, config.ExecutorWallet, "sha256:" + hex.EncodeToString(vaultSum[:]), environmentSum, wallets, config.Workchain, operationValue})
+	if err != nil {
+		configFile.Close()
+		return nil, err
+	}
 	return &TosctlBackend{
-		network: config.Network, binary: binary, configPath: configPath,
+		network: config.Network, binary: binary, binaryIdentity: binaryIdentity, configFile: configFile,
 		vaultURL: config.VaultURL, wallets: wallets, executorWallet: config.ExecutorWallet,
 		workchain: config.Workchain, operationValue: operationValue,
 		commandTimeout: commandTimeout, publishTimeout: publishTimeout,
-		recoveryWait: recoveryWait, locator: locator, environment: environment,
+		recoveryWait: recoveryWait, locator: locator, environment: environment, genesisRootHash: config.GenesisRootHash, genesisFileHash: config.GenesisFileHash,
+		enrollmentBinding: binding,
 	}, nil
+}
+
+func (b *TosctlBackend) EnrollmentBinding() string {
+	if b == nil {
+		return ""
+	}
+	return b.enrollmentBinding
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err = io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // walletLsEntry mirrors every field tosctl's `wallet ls --format json` emits.
@@ -152,9 +226,12 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if b == nil || b.locator == nil || b.locator.client == nil {
 		return errors.New("invalid tosctl publisher backend")
 	}
-	var master map[string]any
+	var master masterchainInformation
 	if err := b.locator.client.Call(ctx, "getMasterchainInfo", struct{}{}, &master); err != nil {
 		return fmt.Errorf("TOS JSON-RPC is unavailable: %w", err)
+	}
+	if master.Init.RootHash != b.genesisRootHash || master.Init.FileHash != b.genesisFileHash {
+		return errors.New("TOS genesis identity mismatch")
 	}
 	output, err := b.run(ctx, "wallet", "ls", "--format", "json")
 	if err != nil {
@@ -221,6 +298,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 		return PreparedAction{}, errors.New("task escrow action signer wallet is unavailable")
 	}
 	contractAddress := action.ContractAddress
+	codeHash := ""
 	if action.Kind == chain.TaskEscrowActionDeploy {
 		output, err := b.run(ctx, b.buildStateArgs(action)...)
 		if err != nil {
@@ -235,6 +313,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 			normalizeDigest(state.PolicyHash) != action.PolicyHash {
 			return PreparedAction{}, errors.New("tosctl build-state changed immutable escrow fields")
 		}
+		codeHash = normalizeCellDigest(state.CodeHash)
 	} else {
 		var err error
 		contractAddress, err = toschain.CanonicalAddress(contractAddress)
@@ -248,7 +327,7 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 	}
 	return PreparedAction{
 		ContractAddress: contractAddress, BaselineLT: baseline.LT,
-		BaselineHash: baseline.Hash, PreparedAt: time.Now().UTC().UnixMilli(),
+		BaselineHash: baseline.Hash, PreparedAt: time.Now().UTC().UnixMilli(), CodeHash: codeHash,
 	}, nil
 }
 
@@ -269,6 +348,9 @@ func (b *TosctlBackend) Publish(
 		} else if found {
 			return taskEscrowReceipt(action, prepared.ContractAddress, reference), nil
 		}
+		// The configured lookup is bounded and therefore cannot prove the
+		// original broadcast absent. Never send again from an uncertain intent.
+		return chain.TaskEscrowActionReceipt{}, errors.New("task escrow action outcome remains uncertain after bounded recovery")
 	}
 	if _, err := b.run(ctx, b.publishArgs(action, prepared.ContractAddress)...); err != nil {
 		// A process can lose the CLI response after the chain accepted the action.
@@ -288,7 +370,16 @@ func (b *TosctlBackend) Publish(
 	return taskEscrowReceipt(action, prepared.ContractAddress, reference), nil
 }
 
-func (b *TosctlBackend) Close() error { return nil }
+func (b *TosctlBackend) Close() error {
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.configFile == nil {
+		return nil
+	}
+	err := b.configFile.Close()
+	b.configFile = nil
+	return err
+}
 
 func (b *TosctlBackend) buildStateArgs(action chain.TaskEscrowAction) []string {
 	return []string{
@@ -366,8 +457,35 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	}
 	commandContext, cancel := context.WithTimeout(ctx, b.commandTimeout)
 	defer cancel()
-	args = append(args, "-c", b.configPath)
-	command := exec.CommandContext(commandContext, b.binary, args...)
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.configFile == nil {
+		return nil, errors.New("tosctl backend is closed")
+	}
+	executable, err := openVerifiedExecutable(b.binary, b.binaryIdentity)
+	if err != nil {
+		return nil, err
+	}
+	defer executable.Close()
+	if _, err := b.configFile.Seek(0, 0); err != nil {
+		return nil, errors.New("seek pinned tosctl config")
+	}
+	dir, err := os.MkdirTemp("", "tos-task-escrow-config-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	target := "/proc/self/fd/3"
+	if runtime.GOOS == "darwin" {
+		target = "/dev/fd/3"
+	}
+	snapshotPath := filepath.Join(dir, "config.json")
+	if err = os.Symlink(target, snapshotPath); err != nil {
+		return nil, err
+	}
+	args = append(args, "-c", snapshotPath)
+	command := exec.CommandContext(commandContext, "/proc/self/fd/4", args...)
+	command.ExtraFiles = []*os.File{b.configFile, executable}
 	command.Env = append([]string(nil), b.environment...)
 	var stdout, stderr limitedBuffer
 	stdout.limit, stderr.limit = maxCommandOutputBytes, maxCommandOutputBytes
@@ -382,6 +500,80 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 		return nil, errors.New("tosctl output exceeded byte limit")
 	}
 	return bytes.TrimSpace(stdout.Bytes()), nil
+}
+
+func taskEscrowTosctlRPCURL(raw []byte) (string, error) {
+	var config struct {
+		ChainRPC struct {
+			URLs   []json.RawMessage `json:"urls"`
+			URL    string            `json:"url"`
+			APIKey *string           `json:"api_key"`
+		} `json:"chain_rpc"`
+	}
+	if json.Unmarshal(raw, &config) != nil {
+		return "", errors.New("decode tosctl RPC config")
+	}
+	if config.ChainRPC.APIKey != nil {
+		return "", errors.New("RPC API keys are unsupported")
+	}
+	var out []string
+	seen := map[string]bool{}
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	add(config.ChainRPC.URL)
+	for _, rawValue := range config.ChainRPC.URLs {
+		var direct string
+		if json.Unmarshal(rawValue, &direct) == nil {
+			add(direct)
+			continue
+		}
+		var entry struct {
+			URL    string  `json:"url"`
+			APIKey *string `json:"api_key"`
+		}
+		if json.Unmarshal(rawValue, &entry) != nil || entry.APIKey != nil {
+			return "", errors.New("invalid tosctl RPC endpoint")
+		}
+		add(entry.URL)
+	}
+	if len(out) != 1 {
+		return "", errors.New("tosctl must resolve to exactly one RPC endpoint")
+	}
+	return out[0], nil
+}
+func pinnedTaskEscrowConfig(raw []byte) (*os.File, error) {
+	file, err := os.CreateTemp("", "tos-task-escrow-pinned-*")
+	if err != nil {
+		return nil, err
+	}
+	path := file.Name()
+	if err = os.Remove(path); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err = file.Chmod(0600); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if _, err = file.Write(raw); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err = file.Sync(); err != nil {
+		file.Close()
+		return nil, err
+	}
+	_, err = file.Seek(0, 0)
+	return file, err
+}
+func validBase64Hash(value string) bool {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	return err == nil && len(decoded) == 32
 }
 
 type limitedBuffer struct {
@@ -432,6 +624,12 @@ func normalizeDigest(value string) string {
 	value = strings.TrimPrefix(value, "sha256:")
 	return "sha256:" + strings.ToLower(value)
 }
+func normalizeCellDigest(value string) string {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "0x")
+	value = strings.TrimPrefix(value, "sha256:")
+	value = strings.TrimPrefix(value, "tvm-cell-sha256:")
+	return "tvm-cell-sha256:" + strings.ToLower(value)
+}
 
 func boundedDuration(valueMillis uint64, defaultValue, maximum time.Duration) (time.Duration, error) {
 	if valueMillis == 0 {
@@ -473,7 +671,112 @@ func validateExecutable(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tosctl binary: %w", err)
 	}
+	if _, err := captureExecutableIdentity(path); err != nil {
+		return "", fmt.Errorf("tosctl binary: %w", err)
+	}
 	return path, nil
+}
+
+type executableIdentity struct {
+	device uint64
+	inode  uint64
+	size   int64
+	digest string
+}
+
+func captureExecutableIdentity(path string) (executableIdentity, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 || pathInfo.Mode().Perm()&0o111 == 0 {
+		return executableIdentity{}, errors.New("executable is not a regular executable file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return executableIdentity{}, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		return executableIdentity{}, errors.New("executable changed while its identity was captured")
+	}
+	if err := validateTrustedExecutablePath(path, info); err != nil {
+		return executableIdentity{}, err
+	}
+	return executableIdentityFromFile(file, info)
+}
+
+func validateTrustedExecutablePath(path string, info os.FileInfo) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || os.Geteuid() == 0 || info.Mode().Perm()&0o022 != 0 {
+		return errors.New("executable must be root-owned, non-group-writable, and used by an unprivileged publisher")
+	}
+	for directory := filepath.Dir(path); ; directory = filepath.Dir(directory) {
+		directoryInfo, err := os.Lstat(directory)
+		if err != nil || !directoryInfo.IsDir() || directoryInfo.Mode()&os.ModeSymlink != 0 || directoryInfo.Mode().Perm()&0o022 != 0 {
+			return errors.New("executable path contains an untrusted directory")
+		}
+		directoryStat, ok := directoryInfo.Sys().(*syscall.Stat_t)
+		if !ok || directoryStat.Uid != 0 {
+			return errors.New("executable path is not rooted in root-owned directories")
+		}
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	return nil
+}
+
+func executableIdentityFromFile(file *os.File, info os.FileInfo) (executableIdentity, error) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return executableIdentity{}, errors.New("executable identity is unavailable")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return executableIdentity{}, err
+	}
+	digest := "sha256:" + hex.EncodeToString(hash.Sum(nil))
+	return executableIdentity{device: uint64(stat.Dev), inode: stat.Ino, size: info.Size(), digest: digest}, nil
+}
+
+func openVerifiedExecutable(path string, expected executableIdentity) (*os.File, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || pathInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("enrolled tosctl executable path is unavailable")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		_ = file.Close()
+		return nil, errors.New("enrolled tosctl executable changed while opening")
+	}
+	if err := validateTrustedExecutablePath(path, info); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	actual, err := executableIdentityFromFile(file, info)
+	if err != nil || actual != expected {
+		_ = file.Close()
+		return nil, errors.New("enrolled tosctl executable identity changed")
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func verifyExecutableIdentity(path string, expected executableIdentity) error {
+	actual, err := captureExecutableIdentity(path)
+	if err != nil {
+		return fmt.Errorf("verify enrolled tosctl executable: %w", err)
+	}
+	if actual != expected {
+		return errors.New("enrolled tosctl executable identity changed")
+	}
+	return nil
 }
 
 func validateRegularPath(path string, executable bool) (string, error) {

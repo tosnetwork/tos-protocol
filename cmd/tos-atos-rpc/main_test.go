@@ -526,6 +526,8 @@ func TestBuildEconomicDriverLoadsStrictTaskEscrowConfig(t *testing.T) {
 	  "allowedTaskEscrowCodeHashes":["tvm-cell-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
 	  "verifierAddress":"0:3333333333333333333333333333333333333333333333333333333333333333",
 	  "publisherSocket":"` + filepath.Join(t.TempDir(), "task-escrow-publisher.sock") + `",
+	  "publisherJournalIdentity":"journal-test",
+	  "publisherJournalBinding":"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 	  "fundingOverheadNanoTOS":50
 	}`
 	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {

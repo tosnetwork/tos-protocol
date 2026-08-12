@@ -17,6 +17,7 @@ type PreparedAction struct {
 	BaselineLT      uint64 `json:"baselineLt,omitempty"`
 	BaselineHash    string `json:"baselineHash,omitempty"`
 	PreparedAt      int64  `json:"preparedAtUnixMillis"`
+	CodeHash        string `json:"codeHash,omitempty"`
 }
 
 // Backend owns the key-custody-specific transaction construction and
@@ -24,6 +25,7 @@ type PreparedAction struct {
 // callers independently verify the exact transition on TOS.
 type Backend interface {
 	CheckReady(context.Context) error
+	EnrollmentBinding() string
 	Prepare(context.Context, chain.TaskEscrowAction) (PreparedAction, error)
 	Publish(context.Context, chain.TaskEscrowAction, PreparedAction, bool) (chain.TaskEscrowActionReceipt, error)
 	Close() error

@@ -3,6 +3,7 @@
   "network": "tos-mainnet",
   "socketPath": "/run/tos/task-escrow-publisher.sock",
   "statePath": "/var/lib/tos/task-escrow-publisher/state.db",
+  "journalIdentity": "REPLACE_WITH_ENROLLED_JOURNAL_IDENTITY",
   "maxBodyBytes": 524288,
   "backend": {
     "network": "tos-mainnet",
@@ -10,6 +11,8 @@
     "tosctlConfig": "/etc/tos/tosctl.json",
     "vaultUrl": "file:///var/lib/tos/key-vault.json?master_key=REPLACE_ME",
     "rpcUrl": "https://rpc-operator.example/jsonRPC",
+    "genesisRootHash": "REPLACE_WITH_BASE64_GENESIS_ROOT_HASH",
+    "genesisFileHash": "REPLACE_WITH_BASE64_GENESIS_FILE_HASH",
     "wallets": {
       "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "atos-principal",
       "0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": "atos-provider",
@@ -23,5 +26,24 @@
     "recoveryWaitMillis": 30000,
     "pollIntervalMillis": 1000,
     "transactionLookback": 32
+  },
+  "policy": {
+    "allowedCreators": [
+      "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "allowedAgents": [
+      "0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    ],
+    "allowedVerifiers": [
+      "0:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    ],
+    "allowedPolicyHashes": [
+      "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    ],
+    "allowedCodeHashes": [
+      "tvm-cell-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    ],
+    "maxBudgetNanoTOS": 100000000000,
+    "maxFundingNanoTOS": 101000000000
   }
 }

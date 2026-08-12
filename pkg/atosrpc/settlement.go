@@ -8,7 +8,10 @@ import (
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
+	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -18,6 +21,9 @@ func (s *Server) CreateEscrow(
 ) (*connect.Response[atostosv1.CreateEscrowResponse], error) {
 	if req == nil || req.Msg == nil {
 		return nil, invalid("INVALID_ARGUMENT", "request is required")
+	}
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
 	}
 	for name, value := range map[string]string{
 		"quote_id": req.Msg.QuoteId, "principal_id": req.Msg.PrincipalId,
@@ -46,6 +52,25 @@ func (s *Server) CreateEscrow(
 	if req.Msg.ExpiresUnixMillis <= s.now().UnixMilli() {
 		return nil, invalid("INVALID_ARGUMENT", "escrow expiry must be in the future")
 	}
+	var verifiedTerms *atostosv1.VerifiedEscrowTerms
+	var reservationDigest string
+	if req.Msg.TrustMode == TrustModeVerified {
+		verifiedTerms = req.Msg.VerifiedTerms
+		if _, _, _, err := s.validateVerifiedEscrowTerms(ctx, verifiedTerms); err != nil {
+			return nil, err
+		}
+		if verifiedTerms.QuoteId != req.Msg.QuoteId || verifiedTerms.PrincipalId != req.Msg.PrincipalId ||
+			verifiedTerms.ProviderId != req.Msg.ProviderId || verifiedTerms.CapabilityId != req.Msg.CapabilityId ||
+			verifiedTerms.TrustMode != req.Msg.TrustMode || verifiedTerms.ProofProfile != req.Msg.ProofProfile ||
+			verifiedTerms.FundingModel != req.Msg.FundingModel || verifiedTerms.EscrowDeadlineUnixMillis != req.Msg.ExpiresUnixMillis ||
+			verifiedTerms.Reserve == nil || verifiedTerms.Reserve.Asset != req.Msg.Reserve.Asset || verifiedTerms.Reserve.AtomicAmount != req.Msg.Reserve.AtomicAmount {
+			return nil, failedPrecondition("QUOTE_MISMATCH", "legacy escrow fields do not match verified terms")
+		}
+		reservationDigest, err = escrowcommitment.Digest(verifiedTerms)
+		if err != nil {
+			return nil, invalid("INVALID_ARGUMENT", "verified escrow terms cannot be canonicalized")
+		}
+	}
 	response := new(atostosv1.CreateEscrowResponse)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -55,24 +80,35 @@ func (s *Server) CreateEscrow(
 		if err != nil {
 			return err
 		}
-		if !found || quote.Value == nil {
+		if (!found || quote.Value == nil) && req.Msg.TrustMode != TrustModeVerified {
 			return failedPrecondition("QUOTE_MISMATCH", "quote commitment is not available")
 		}
 		value := quote.Value
+		if req.Msg.TrustMode == TrustModeVerified {
+			value, _ = verifiedQuoteFromEscrowTerms(verifiedTerms)
+		}
 		if value.PrincipalId != req.Msg.PrincipalId || value.ProviderId != req.Msg.ProviderId ||
 			value.CapabilityId != req.Msg.CapabilityId || value.TrustMode != req.Msg.TrustMode ||
 			value.ProofProfile != req.Msg.ProofProfile {
 			return failedPrecondition("QUOTE_MISMATCH", "escrow request does not match quote commitment")
 		}
 		if existingID := tx.Bucket(bucketEscrowByQuote).Get([]byte(req.Msg.QuoteId)); existingID != nil {
-			existing := new(atostosv1.Escrow)
-			found, err := s.store.getProto(tx, bucketEscrows, string(existingID), existing)
-			if err != nil {
-				return err
+			if req.Msg.TrustMode == TrustModeVerified && string(existingID) != verifiedTerms.EscrowId {
+				return failedPrecondition("IDEMPOTENCY_CONFLICT", "verified Quote already funded another Job/TaskEscrow")
 			}
-			if found {
-				response.Escrow = existing
-				return nil
+			if req.Msg.TrustMode == TrustModeVerified {
+				// Continue through live canonical resolution; a local record is not
+				// sufficient evidence for a usable Verified escrow.
+			} else {
+				existing := new(atostosv1.Escrow)
+				found, err := s.store.getProto(tx, bucketEscrows, string(existingID), existing)
+				if err != nil {
+					return err
+				}
+				if found {
+					response.Escrow = existing
+					return nil
+				}
 			}
 		}
 		digest, err := protoDigest("ATOS-TOS-ESCROW-V1", withoutTransportContext(req.Msg))
@@ -80,7 +116,11 @@ func (s *Server) CreateEscrow(
 			return err
 		}
 		escrowID := shortID("esc-", digest)
+		if req.Msg.TrustMode == TrustModeVerified {
+			escrowID = verifiedTerms.EscrowId
+		}
 		var ref NetworkReference
+		var economicResult economic.Result
 		switch req.Msg.TrustMode {
 		case TrustModeManaged:
 			ref, err = s.authority.Commit(ctx, "escrow", escrowID, digest)
@@ -94,31 +134,37 @@ func (s *Server) CreateEscrow(
 			if partyErr != nil {
 				return partyErr
 			}
-			policyHash, policyErr := protoDigest("ATOS-TOS-TASK-ESCROW-POLICY-V1", value)
+			// The fixed dispute policy is the contract policy that the
+			// key-custody publisher can allowlist. The unique reservation tuple
+			// is already bound by permissionHash below.
+			policyHash, policyErr := digestString(verifiedTerms.DisputePolicyDigest)
 			if policyErr != nil {
 				return policyErr
 			}
-			permissionHash := bytesDigest(
-				"ATOS-TOS-TASK-ESCROW-PERMISSION-V1",
-				[]byte(strings.Join([]string{
-					"principal_id", req.Msg.PrincipalId,
-					"provider_id", req.Msg.ProviderId,
-					"capability_id", req.Msg.CapabilityId,
-					"quote_id", req.Msg.QuoteId,
-				}, "\x00")),
-			)
-			result, economicErr := s.economy.ReserveEscrow(ctx, economic.ReserveEscrowRequest{
+			permissionHash := reservationDigest
+			reserveRequest := economic.ReserveEscrowRequest{
 				EscrowID: escrowID, Creator: creator, Agent: agent,
 				BudgetNanoTOS: reserveAmount.Uint64(),
 				DeadlineUnix:  uint64(req.Msg.ExpiresUnixMillis / 1000),
 				PolicyHash:    policyHash, PermissionHash: permissionHash,
-			})
+			}
+			result, recovered, economicErr := s.economy.ResolveEscrow(ctx, reserveRequest)
+			if economicErr == nil && recovered && result.State.Status != chain.TaskEscrowStatusOpen {
+				return failedPrecondition("ESCROW_MISMATCH", "released or terminal TaskEscrow cannot be revived")
+			}
+			if economicErr == nil && !recovered {
+				result, economicErr = s.economy.ReserveEscrow(ctx, reserveRequest)
+			}
 			if economicErr != nil {
 				return economicRPCError(economicErr, "reserve TOS Task Escrow")
+			}
+			if result.State.ObservedMasterSeqno == 0 || strings.TrimSpace(result.State.CodeHash) == "" || result.TransitionReference == "" {
+				return failedPrecondition("ECONOMIC_TRANSITION_FAILED", "TaskEscrow reservation is not independently finalized")
 			}
 			ref = NetworkReference{
 				Network: s.economy.Network(), Reference: result.ContractReference,
 			}
+			economicResult = result
 		default:
 			return failedPrecondition("TRUST_MODE_UNAVAILABLE", "economic escrow mode is unavailable")
 		}
@@ -130,6 +176,18 @@ func (s *Server) CreateEscrow(
 			State:             atostosv1.EscrowState_ESCROW_STATE_RESERVED,
 			CreatedUnixMillis: s.now().UnixMilli(), ExpiresUnixMillis: req.Msg.ExpiresUnixMillis,
 			EscrowRef: &ref, FundingModel: req.Msg.FundingModel,
+		}
+		if verifiedTerms != nil {
+			escrow.JobId = verifiedTerms.JobId
+			escrow.CapabilityVersion = verifiedTerms.CapabilityVersion
+			escrow.QuoteCommitmentDigest = verifiedTerms.QuoteCommitmentDigest
+			escrow.QuoteCommitmentRef = cloneMessage(verifiedTerms.QuoteCommitmentRef)
+			escrow.ReservationDigest = reservationDigest
+			escrow.Finalized = true
+			// ReserveEscrow returns only after independent quorum observation.
+			escrow.FinalizedCheckpoint = economicResult.State.ObservedMasterSeqno
+			escrow.ContractCodeHash = economicResult.State.CodeHash
+			escrow.ReservationActionId = economicResult.ActionID
 		}
 		if err := s.store.putProto(tx, bucketEscrows, escrowID, escrow); err != nil {
 			return err
@@ -151,11 +209,14 @@ func (s *Server) CreateEscrow(
 }
 
 func (s *Server) GetEscrow(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.GetEscrowRequest],
 ) (*connect.Response[atostosv1.GetEscrowResponse], error) {
 	if req == nil || req.Msg == nil {
 		return nil, invalid("INVALID_ARGUMENT", "request is required")
+	}
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
 	}
 	if err := validateReadContext(req.Msg.Context, s.now()); err != nil {
 		return nil, err
@@ -186,6 +247,68 @@ func (s *Server) GetEscrow(
 	if err != nil {
 		return nil, err
 	}
+	if req.Msg.ExpectedTerms != nil {
+		terms := req.Msg.ExpectedTerms
+		_, _, _, validationErr := s.validateVerifiedEscrowTerms(ctx, terms)
+		if validationErr != nil {
+			return nil, validationErr
+		}
+		if req.Msg.EscrowId != "" && req.Msg.EscrowId != terms.EscrowId {
+			return nil, conflict("ESCROW_MISMATCH", "expected escrow identity mismatch")
+		}
+		if req.Msg.QuoteId != "" && req.Msg.QuoteId != terms.QuoteId {
+			return nil, conflict("QUOTE_MISMATCH", "expected Quote identity mismatch")
+		}
+		reservationDigest, digestErr := escrowcommitment.Digest(terms)
+		if digestErr != nil || (req.Msg.ExpectedReservationDigest != "" && req.Msg.ExpectedReservationDigest != reservationDigest) {
+			return nil, conflict("ESCROW_MISMATCH", "reservation digest mismatch")
+		}
+		var creator, agent string
+		partyErr := s.store.view(func(tx *bolt.Tx) error {
+			var err error
+			creator, agent, err = s.economicPartiesTx(tx, terms.PrincipalId, terms.ProviderId)
+			return err
+		})
+		if partyErr != nil {
+			return nil, partyErr
+		}
+		reserve, parseErr := parseAtomic(terms.Reserve.AtomicAmount)
+		if parseErr != nil || !reserve.IsUint64() {
+			return nil, invalid("INVALID_ARGUMENT", "invalid reserve")
+		}
+		policyHash, policyErr := digestString(terms.DisputePolicyDigest)
+		if policyErr != nil {
+			return nil, policyErr
+		}
+		resolved, found, resolveErr := s.economy.ResolveEscrow(ctx, economic.ReserveEscrowRequest{EscrowID: terms.EscrowId, Creator: creator, Agent: agent, BudgetNanoTOS: reserve.Uint64(), DeadlineUnix: uint64(terms.EscrowDeadlineUnixMillis / 1000), PolicyHash: policyHash, PermissionHash: reservationDigest})
+		if resolveErr != nil {
+			return nil, economicRPCError(resolveErr, "resolve TOS Task Escrow")
+		}
+		if !found {
+			return connect.NewResponse(&atostosv1.GetEscrowResponse{}), nil
+		}
+		if req.Msg.ExpectedEscrowRef != nil && (req.Msg.ExpectedEscrowRef.Network != s.economy.Network() || req.Msg.ExpectedEscrowRef.Reference != resolved.ContractReference || req.Msg.ExpectedEscrowRef.FinalizedCheckpoint > resolved.State.ObservedMasterSeqno) {
+			return nil, conflict("ESCROW_MISMATCH", "canonical escrow reference mismatch")
+		}
+		if response.Found && response.Escrow.FinalizedCheckpoint > resolved.State.ObservedMasterSeqno {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "TaskEscrow checkpoint regressed")
+		}
+		state := atostosv1.EscrowState_ESCROW_STATE_UNSPECIFIED
+		switch resolved.State.Status {
+		case chain.TaskEscrowStatusOpen, chain.TaskEscrowStatusAccepted:
+			state = atostosv1.EscrowState_ESCROW_STATE_RESERVED
+		case chain.TaskEscrowStatusCancelled, chain.TaskEscrowStatusExpired, chain.TaskEscrowStatusRejected:
+			state = atostosv1.EscrowState_ESCROW_STATE_RELEASED
+		case chain.TaskEscrowStatusSettled:
+			state = atostosv1.EscrowState_ESCROW_STATE_SETTLED
+		case chain.TaskEscrowStatusDisputed:
+			state = atostosv1.EscrowState_ESCROW_STATE_DISPUTED
+		default:
+			return nil, failedPrecondition("ESCROW_MISMATCH", "canonical TaskEscrow state is not legal for this lifecycle")
+		}
+		response.Escrow = &atostosv1.Escrow{EscrowId: terms.EscrowId, QuoteId: terms.QuoteId, JobId: terms.JobId, PrincipalId: terms.PrincipalId, ProviderId: terms.ProviderId, CapabilityId: terms.CapabilityId, CapabilityVersion: terms.CapabilityVersion, TrustMode: terms.TrustMode, ProofProfile: terms.ProofProfile, Reserved: cloneMessage(terms.Reserve), State: state, ExpiresUnixMillis: terms.EscrowDeadlineUnixMillis, EscrowRef: &NetworkReference{Network: s.economy.Network(), Reference: resolved.ContractReference, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}, FundingModel: terms.FundingModel, QuoteCommitmentDigest: terms.QuoteCommitmentDigest, QuoteCommitmentRef: cloneMessage(terms.QuoteCommitmentRef), ReservationDigest: reservationDigest, ReservationActionId: resolved.ActionID, ContractCodeHash: resolved.State.CodeHash, Finalized: true, FinalizedCheckpoint: resolved.State.ObservedMasterSeqno}
+		response.Found = true
+	}
 	return connect.NewResponse(response), nil
 }
 
@@ -196,8 +319,25 @@ func (s *Server) ReleaseEscrow(
 	if req == nil || req.Msg == nil {
 		return nil, invalid("INVALID_ARGUMENT", "request is required")
 	}
+	if err := quotecommitment.RejectUnknown(req.Msg); err != nil {
+		return nil, invalid("INVALID_ARGUMENT", err.Error())
+	}
 	if err := requiredIdentifier("escrow_id", req.Msg.EscrowId); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(req.Msg.ReasonCode) == "" || len(req.Msg.ReasonCode) > 128 {
+		return nil, invalid("INVALID_ARGUMENT", "release reason_code is required")
+	}
+	var canonicalEscrow *atostosv1.Escrow
+	if req.Msg.ExpectedTerms != nil {
+		lookup, lookupErr := s.GetEscrow(ctx, connect.NewRequest(&atostosv1.GetEscrowRequest{Context: req.Msg.Context, EscrowId: req.Msg.EscrowId, QuoteId: req.Msg.QuoteId, ExpectedTerms: req.Msg.ExpectedTerms, ExpectedEscrowRef: req.Msg.ExpectedEscrowRef, ExpectedReservationDigest: req.Msg.ExpectedReservationDigest}))
+		if lookupErr != nil {
+			return nil, lookupErr
+		}
+		if lookup.Msg == nil || !lookup.Msg.Found || lookup.Msg.Escrow == nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "canonical TaskEscrow reservation is not recoverable")
+		}
+		canonicalEscrow = lookup.Msg.Escrow
 	}
 	response := new(atostosv1.ReleaseEscrowResponse)
 	s.mutationMu.Lock()
@@ -208,6 +348,10 @@ func (s *Server) ReleaseEscrow(
 		if err != nil {
 			return err
 		}
+		if !found && canonicalEscrow != nil {
+			escrow = cloneMessage(canonicalEscrow)
+			found = true
+		}
 		if !found {
 			return notFound("NOT_FOUND", "escrow not found")
 		}
@@ -217,9 +361,9 @@ func (s *Server) ReleaseEscrow(
 		if escrow.State == atostosv1.EscrowState_ESCROW_STATE_SETTLED {
 			return failedPrecondition("SETTLEMENT_FAILED", "settled escrow cannot be released")
 		}
-		if escrow.State == atostosv1.EscrowState_ESCROW_STATE_RELEASED {
+		if escrow.State == atostosv1.EscrowState_ESCROW_STATE_RELEASED && escrow.TrustMode != TrustModeVerified {
 			response.Escrow = escrow
-			response.ReleaseRef = cloneMessage(escrow.EscrowRef)
+			response.ReleaseRef = cloneMessage(escrow.ReleaseRef)
 			response.Released = true
 			return nil
 		}
@@ -228,6 +372,7 @@ func (s *Server) ReleaseEscrow(
 			return err
 		}
 		var ref NetworkReference
+		var economicResult economic.Result
 		switch escrow.TrustMode {
 		case TrustModeManaged:
 			ref, err = s.authority.Commit(ctx, "escrow-release", escrow.EscrowId, digest)
@@ -235,6 +380,9 @@ func (s *Server) ReleaseEscrow(
 				return unavailable("NETWORK_UNAVAILABLE", "escrow release authority is unavailable")
 			}
 		case TrustModeVerified:
+			if req.Msg.ExpectedTerms == nil || escrow.ReservationDigest != req.Msg.ExpectedReservationDigest && req.Msg.ExpectedReservationDigest != "" {
+				return failedPrecondition("ESCROW_MISMATCH", "verified release requires the original reservation tuple")
+			}
 			contractAddress, addressErr := economicContractAddress(escrow.EscrowRef)
 			if addressErr != nil {
 				return failedPrecondition("ESCROW_MISMATCH", addressErr.Error())
@@ -243,9 +391,16 @@ func (s *Server) ReleaseEscrow(
 			if parseErr != nil || !reserved.IsUint64() {
 				return failedPrecondition("ESCROW_MISMATCH", "escrow reserve is outside uint64")
 			}
+			releaseDigest, digestErr := escrowcommitment.ReleaseDigest(
+				escrow.ReservationDigest, escrow.EscrowId, escrow.JobId, escrow.QuoteId, req.Msg.ReasonCode,
+			)
+			if digestErr != nil {
+				return failedPrecondition("ESCROW_MISMATCH", digestErr.Error())
+			}
 			result, economicErr := s.economy.ReleaseEscrow(ctx, economic.ReleaseEscrowRequest{
 				EscrowID: escrow.EscrowId, ContractAddress: contractAddress,
 				BudgetNanoTOS: reserved.Uint64(), ReasonCode: req.Msg.ReasonCode,
+				ReleaseDigest: releaseDigest,
 			})
 			if economicErr != nil {
 				return economicRPCError(economicErr, "release TOS Task Escrow")
@@ -254,10 +409,26 @@ func (s *Server) ReleaseEscrow(
 				return failedPrecondition("ECONOMIC_TRANSITION_FAILED", "released Task Escrow has no finalized transition reference")
 			}
 			ref = NetworkReference{Network: s.economy.Network(), Reference: result.TransitionReference}
+			ref.Finalized = true
+			ref.FinalizedCheckpoint = result.State.ObservedMasterSeqno
+			economicResult = result
 		default:
 			return failedPrecondition("TRUST_MODE_UNAVAILABLE", "economic escrow mode is unavailable")
 		}
 		escrow.State = atostosv1.EscrowState_ESCROW_STATE_RELEASED
+		if escrow.TrustMode == TrustModeVerified {
+			escrow.ReleaseRef = cloneMessage(&ref)
+			escrow.ReleaseReasonCode = req.Msg.ReasonCode
+			escrow.ReleaseActionId = economicResult.ActionID
+			escrow.Finalized = true
+			escrow.FinalizedCheckpoint = economicResult.State.ObservedMasterSeqno
+			escrow.ContractCodeHash = economicResult.State.CodeHash
+			releaseDigest, digestErr := escrowcommitment.ReleaseDigest(escrow.ReservationDigest, escrow.EscrowId, escrow.JobId, escrow.QuoteId, req.Msg.ReasonCode)
+			if digestErr != nil {
+				return digestErr
+			}
+			escrow.ReleaseDigest = releaseDigest
+		}
 		if err := s.store.putProto(tx, bucketEscrows, escrow.EscrowId, escrow); err != nil {
 			return err
 		}

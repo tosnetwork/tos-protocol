@@ -43,8 +43,14 @@ func main() {
 		logger.Error("invalid publisher config", "error", err)
 		os.Exit(2)
 	}
+	backend, err := chainactionpublisher.NewTosctlBackend(c.Backend)
+	if err != nil {
+		logger.Error("invalid backend", "error", err)
+		os.Exit(2)
+	}
 	if len(os.Args) == 2 && os.Args[1] == "init-journal" {
-		if err := chainactionpublisher.InitializeJournal(c.StatePath, c.JournalIdentity); err != nil {
+		defer backend.Close()
+		if err := chainactionpublisher.InitializeJournal(c.StatePath, c.JournalIdentity, c.Network, c.Policy, backend.EnrollmentBinding()); err != nil {
 			logger.Error("initialize publisher journal", "error", err)
 			os.Exit(1)
 		}
@@ -53,11 +59,6 @@ func main() {
 	}
 	if len(os.Args) != 1 {
 		logger.Error("usage: tos-chain-action-publisher [init-journal]")
-		os.Exit(2)
-	}
-	backend, err := chainactionpublisher.NewTosctlBackend(c.Backend)
-	if err != nil {
-		logger.Error("invalid backend", "error", err)
 		os.Exit(2)
 	}
 	publisher, err := chainactionpublisher.Open(chainactionpublisher.Config{Network: c.Network, StatePath: c.StatePath, JournalIdentity: c.JournalIdentity, Policy: c.Policy, Backend: backend, MaxBodyBytes: c.MaxBodyBytes, Logger: logger})

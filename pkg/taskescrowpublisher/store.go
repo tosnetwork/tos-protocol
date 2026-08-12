@@ -1,11 +1,16 @@
 package taskescrowpublisher
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
@@ -13,6 +18,9 @@ import (
 )
 
 var actionBucket = []byte("task-escrow-actions-v1")
+var metadataBucket = []byte("task-escrow-publisher-metadata-v1")
+var journalIdentityKey = []byte("journal-identity")
+var journalBindingKey = []byte("journal-binding-v1")
 
 const (
 	recordStatePending   = "pending"
@@ -33,27 +41,126 @@ type actionRecord struct {
 	UpdatedAt      int64                          `json:"updatedAtUnixMillis"`
 }
 
-type actionStore struct{ db *bolt.DB }
+type actionStore struct {
+	db       *bolt.DB
+	identity string
+	binding  string
+}
 
-func openActionStore(path string) (*actionStore, error) {
+const JournalVersion = "1"
+
+// InitializeJournal explicitly enrolls an empty journal. Normal startup never
+// creates one, so a lost or mistyped volume cannot become authoritative
+// absence for previously broadcast economic actions.
+func InitializeJournal(path, identity, network string, policy PublisherPolicy, backendBinding string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || identity == "" || len(identity) > 256 {
+		return errors.New("invalid task escrow journal enrollment")
+	}
+	binding, err := journalBinding(network, policy, backendBinding)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("create task escrow journal: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2 * time.Second})
+	if err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	err = db.Update(func(tx *bolt.Tx) error {
+		if _, err := tx.CreateBucket(actionBucket); err != nil {
+			return err
+		}
+		metadata, err := tx.CreateBucket(metadataBucket)
+		if err != nil {
+			return err
+		}
+		if err := metadata.Put(journalIdentityKey, []byte(identity)); err != nil {
+			return err
+		}
+		return metadata.Put(journalBindingKey, []byte(binding))
+	})
+	closeErr := db.Close()
+	if err != nil || closeErr != nil {
+		_ = os.Remove(path)
+	}
+	return errors.Join(err, closeErr)
+}
+
+func openActionStore(path, identity, network string, policy PublisherPolicy, backendBinding string) (*actionStore, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("publisher state path must be absolute and clean")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("create publisher state directory: %w", err)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.New("enrolled owner-private task escrow journal is missing")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != uint32(os.Geteuid()) {
+		return nil, errors.New("task escrow journal owner mismatch")
+	}
+	binding, err := journalBinding(network, policy, backendBinding)
+	if err != nil {
+		return nil, err
 	}
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2 * time.Second, NoGrowSync: false})
 	if err != nil {
 		return nil, fmt.Errorf("open publisher state: %w", err)
 	}
-	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(actionBucket)
-		return err
+	if err := db.View(func(tx *bolt.Tx) error {
+		actions, metadata := tx.Bucket(actionBucket), tx.Bucket(metadataBucket)
+		if actions == nil || metadata == nil || identity == "" || string(metadata.Get(journalIdentityKey)) != identity || string(metadata.Get(journalBindingKey)) != binding {
+			return errors.New("task escrow journal identity mismatch")
+		}
+		return nil
 	}); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("initialize publisher state: %w", err)
+		return nil, fmt.Errorf("open enrolled task escrow journal: %w", err)
 	}
-	return &actionStore{db: db}, nil
+	return &actionStore{db: db, identity: identity, binding: binding}, nil
+}
+
+func journalBinding(network string, policy PublisherPolicy, backendBinding string) (string, error) {
+	network = strings.TrimSpace(network)
+	validated, err := validatePublisherPolicy(policy)
+	if err != nil || network == "" || len(network) > 64 || backendBinding == "" {
+		return "", errors.New("invalid task escrow journal binding")
+	}
+	// Policy slices are sets. Sorting copies makes the enrollment stable while
+	// preserving the caller's in-memory configuration.
+	sorted := func(values []string) []string {
+		out := append([]string(nil), values...)
+		sort.Strings(out)
+		return out
+	}
+	validated.AllowedCreators = sorted(validated.AllowedCreators)
+	validated.AllowedAgents = sorted(validated.AllowedAgents)
+	validated.AllowedVerifiers = sorted(validated.AllowedVerifiers)
+	validated.AllowedPolicyHashes = sorted(validated.AllowedPolicyHashes)
+	validated.AllowedCodeHashes = sorted(validated.AllowedCodeHashes)
+	encoded, err := json.Marshal(struct {
+		Version        string          `json:"version"`
+		Network        string          `json:"network"`
+		Policy         PublisherPolicy `json:"policy"`
+		BackendBinding string          `json:"backend_binding"`
+	}{Version: JournalVersion, Network: network, Policy: validated, BackendBinding: backendBinding})
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
+}
+
+func JournalBinding(network string, policy PublisherPolicy, backendBinding string) (string, error) {
+	return journalBinding(network, policy, backendBinding)
 }
 
 func (s *actionStore) close() error {

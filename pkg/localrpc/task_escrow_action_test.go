@@ -11,6 +11,9 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 )
 
+const testJournalIdentity = "journal-test"
+const testJournalBinding = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+
 func TestTaskEscrowActionPublisherClientPublishesExactAction(t *testing.T) {
 	action := testTaskEscrowAction(chain.TaskEscrowActionSettle)
 	var calls int
@@ -22,6 +25,8 @@ func TestTaskEscrowActionPublisherClientPublishesExactAction(t *testing.T) {
 				_ = json.NewEncoder(writer).Encode(taskEscrowActionHealth{
 					Status: "ready", Version: chain.TaskEscrowActionVersion,
 					Network: action.Network, Path: TaskEscrowActionPath,
+					ResolvePath: TaskEscrowActionResolvePath, JournalVersion: "1",
+					JournalIdentity: testJournalIdentity, JournalBinding: testJournalBinding,
 				})
 			case request.Method == http.MethodPost && request.URL.Path == TaskEscrowActionPath:
 				var got chain.TaskEscrowAction
@@ -43,7 +48,7 @@ func TestTaskEscrowActionPublisherClientPublishesExactAction(t *testing.T) {
 	))
 	defer stop()
 	client, err := NewTaskEscrowActionPublisherClient(
-		DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network),
+		DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network, testJournalIdentity, testJournalBinding),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +81,7 @@ func TestTaskEscrowActionPublisherRejectsChangedContract(t *testing.T) {
 	))
 	defer stop()
 	client, err := NewTaskEscrowActionPublisherClient(
-		DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network),
+		DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network, testJournalIdentity, testJournalBinding),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +89,42 @@ func TestTaskEscrowActionPublisherRejectsChangedContract(t *testing.T) {
 	defer client.Close()
 	if _, err := client.Publish(context.Background(), action); err == nil {
 		t.Fatal("publisher contract substitution was accepted")
+	}
+}
+
+func TestTaskEscrowResolverRejectsGeneric404(t *testing.T) {
+	action := testTaskEscrowAction(chain.TaskEscrowActionAccept)
+	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("not found"))
+	}))
+	defer stop()
+	client, err := NewTaskEscrowActionPublisherClient(DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network, testJournalIdentity, testJournalBinding))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if _, found, err := client.Resolve(context.Background(), action); err == nil || found {
+		t.Fatal("generic 404 authorized TaskEscrow mutation replay")
+	}
+}
+
+func TestTaskEscrowResolverRejectsTypedAbsenceFromSubstitutedJournal(t *testing.T) {
+	action := testTaskEscrowAction(chain.TaskEscrowActionAccept)
+	socketPath, stop := startReceiptSignerHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(taskEscrowActionNotFound{Version: chain.TaskEscrowActionVersion, Code: "action_not_found", ActionID: action.ActionID, JournalIdentity: "replacement-journal", JournalBinding: testJournalBinding})
+	}))
+	defer stop()
+	client, err := NewTaskEscrowActionPublisherClient(DefaultTaskEscrowActionPublisherClientConfig(socketPath, action.Network, testJournalIdentity, testJournalBinding))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if _, found, err := client.Resolve(context.Background(), action); err == nil || found {
+		t.Fatal("typed absence from a substituted empty journal authorized replay")
 	}
 }
 
@@ -96,7 +137,7 @@ func TestTaskEscrowActionRequiresOriginalBudget(t *testing.T) {
 }
 
 func testTaskEscrowAction(kind chain.TaskEscrowActionKind) chain.TaskEscrowAction {
-	return chain.TaskEscrowAction{
+	action := chain.TaskEscrowAction{
 		Version:  chain.TaskEscrowActionVersion,
 		ActionID: "task-action-" + strings.Repeat("11", 32),
 		Network:  "tos-test", Kind: kind, EscrowID: "esc-test",
@@ -114,4 +155,8 @@ func testTaskEscrowAction(kind chain.TaskEscrowActionKind) chain.TaskEscrowActio
 		ExpectedBodyHash:  "tvm-cell-sha256:" + strings.Repeat("99", 32),
 		ExpiresUnixMillis: time.Now().Add(time.Minute).UnixMilli(),
 	}
+	if kind == chain.TaskEscrowActionCancel || kind == chain.TaskEscrowActionTimeout || kind == chain.TaskEscrowActionReject {
+		action.ReleaseDigest = "sha256:" + strings.Repeat("aa", 32)
+	}
+	return action
 }

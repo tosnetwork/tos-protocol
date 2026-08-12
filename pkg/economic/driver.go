@@ -45,6 +45,7 @@ type ReleaseEscrowRequest struct {
 	ContractAddress string
 	BudgetNanoTOS   uint64
 	ReasonCode      string
+	ReleaseDigest   string
 }
 
 type SettleProviderRequest struct {
@@ -61,6 +62,7 @@ type RefundPrincipalRequest struct {
 	ContractAddress string
 	BudgetNanoTOS   uint64
 	DisputeHash     string
+	ReleaseDigest   string
 }
 
 type OpenDisputeRequest struct {
@@ -82,6 +84,7 @@ type Result struct {
 	TransitionReference string
 	AgentPaidNanoTOS    uint64
 	CreatorPaidNanoTOS  uint64
+	ActionID            string
 }
 
 type Driver interface {
@@ -89,6 +92,7 @@ type Driver interface {
 	Supports(TrustMode) bool
 	CheckReady(context.Context) error
 	ReserveEscrow(context.Context, ReserveEscrowRequest) (Result, error)
+	ResolveEscrow(context.Context, ReserveEscrowRequest) (Result, bool, error)
 	AcceptEscrow(context.Context, AcceptEscrowRequest) (Result, error)
 	CommitResult(context.Context, CommitResultRequest) (Result, error)
 	ReleaseEscrow(context.Context, ReleaseEscrowRequest) (Result, error)

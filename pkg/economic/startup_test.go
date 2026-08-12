@@ -57,8 +57,10 @@ func validTaskEscrowStartupConfig(socket string) TaskEscrowStartupConfig {
 		AllowedTaskEscrowCodeHashes: []string{
 			"tvm-cell-sha256:" + strings.Repeat("a", 64),
 		},
-		VerifierAddress:        testVerifier,
-		PublisherSocket:        socket,
-		FundingOverheadNanoTOS: 50,
+		VerifierAddress:          testVerifier,
+		PublisherSocket:          socket,
+		PublisherJournalIdentity: "journal-test",
+		PublisherJournalBinding:  "sha256:" + strings.Repeat("e", 64),
+		FundingOverheadNanoTOS:   50,
 	}
 }

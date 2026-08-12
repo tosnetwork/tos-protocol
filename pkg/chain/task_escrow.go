@@ -2,8 +2,60 @@ package chain
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"strings"
 	"time"
+
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 )
+
+type StableTaskEscrowAction struct {
+	Version          string               `json:"version"`
+	Network          string               `json:"network"`
+	Kind             TaskEscrowActionKind `json:"kind"`
+	EscrowID         string               `json:"escrow_id"`
+	ContractAddress  string               `json:"contract_address,omitempty"`
+	Creator          string               `json:"creator"`
+	Agent            string               `json:"agent"`
+	Verifier         string               `json:"verifier,omitempty"`
+	BudgetNanoTOS    uint64               `json:"budget_nano_tos"`
+	FundingNanoTOS   uint64               `json:"funding_nano_tos,omitempty"`
+	DeadlineUnix     uint64               `json:"deadline_unix"`
+	ReviewPeriod     uint32               `json:"review_period"`
+	PolicyHash       string               `json:"policy_hash"`
+	PermissionHash   string               `json:"permission_hash"`
+	QueryID          uint64               `json:"query_id,omitempty"`
+	ResultHash       string               `json:"result_hash,omitempty"`
+	EvidenceHash     string               `json:"evidence_hash,omitempty"`
+	DisputeHash      string               `json:"dispute_hash,omitempty"`
+	PayoutNanoTOS    uint64               `json:"payout_nano_tos,omitempty"`
+	ExpectedBodyHash string               `json:"expected_body_hash,omitempty"`
+	ReleaseDigest    string               `json:"release_digest,omitempty"`
+}
+
+func StableTaskEscrowActionValue(a TaskEscrowAction) StableTaskEscrowAction {
+	return StableTaskEscrowAction{Version: a.Version, Network: a.Network, Kind: a.Kind, EscrowID: a.EscrowID, ContractAddress: a.ContractAddress, Creator: a.Creator, Agent: a.Agent, Verifier: a.Verifier, BudgetNanoTOS: a.BudgetNanoTOS, FundingNanoTOS: a.FundingNanoTOS, DeadlineUnix: a.DeadlineUnix, ReviewPeriod: a.ReviewPeriod, PolicyHash: a.PolicyHash, PermissionHash: a.PermissionHash, QueryID: a.QueryID, ResultHash: a.ResultHash, EvidenceHash: a.EvidenceHash, DisputeHash: a.DisputeHash, PayoutNanoTOS: a.PayoutNanoTOS, ExpectedBodyHash: a.ExpectedBodyHash, ReleaseDigest: a.ReleaseDigest}
+}
+func TaskEscrowActionID(a TaskEscrowAction) (string, error) {
+	if a.Kind == TaskEscrowActionCancel || a.Kind == TaskEscrowActionTimeout || a.Kind == TaskEscrowActionReject {
+		if a.ReleaseDigest == "" {
+			return "", errors.New("release action digest is required")
+		}
+		h := sha256.New()
+		for _, value := range []string{"tos.task-escrow.release-action.v1", a.EscrowID, a.ReleaseDigest} {
+			h.Write([]byte(value))
+			h.Write([]byte{0})
+		}
+		return "task-action-" + hex.EncodeToString(h.Sum(nil)), nil
+	}
+	digest, err := codec.Digest("tos.task-escrow.action.v1", StableTaskEscrowActionValue(a))
+	if err != nil {
+		return "", err
+	}
+	return "task-action-" + strings.TrimPrefix(digest, "sha256:"), nil
+}
 
 const TaskEscrowActionVersion = "1"
 
@@ -60,6 +112,7 @@ type TaskEscrowAction struct {
 	DisputeHash       string               `json:"disputeHash,omitempty"`
 	PayoutNanoTOS     uint64               `json:"payoutNanoTOS,omitempty"`
 	ExpectedBodyHash  string               `json:"expectedBodyHash,omitempty"`
+	ReleaseDigest     string               `json:"releaseDigest,omitempty"`
 	ExpiresUnixMillis int64                `json:"expiresUnixMillis"`
 }
 
@@ -133,6 +186,9 @@ type TaskEscrowTransition struct {
 
 type TaskEscrowActionPublisher interface {
 	CheckReady(context.Context) error
+	// Resolve is read-only. found=false is permitted only when the enrolled
+	// durable journal returns a typed Action-ID-bound authoritative absence.
+	Resolve(context.Context, TaskEscrowAction) (TaskEscrowActionReceipt, bool, error)
 	Publish(context.Context, TaskEscrowAction) (TaskEscrowActionReceipt, error)
 	Close() error
 }

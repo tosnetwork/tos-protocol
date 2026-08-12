@@ -1,6 +1,10 @@
 package taskescrowpublisher
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +14,51 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 	"github.com/xssnick/tonutils-go/address"
 )
+
+func TestEnrolledExecutableRejectsWritableOrReplacedBinary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tosctl")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureExecutableIdentity(path); err == nil {
+		t.Fatal("publisher-owned executable was accepted as immutable")
+	}
+	if runtime.GOOS != "linux" || os.Geteuid() == 0 {
+		return
+	}
+	path = "/usr/bin/true"
+	identity, err := captureExecutableIdentity(path)
+	if err != nil {
+		t.Fatalf("trusted system executable unavailable: %v", err)
+	}
+	configFile, err := pinnedTaskEscrowConfig([]byte(`{"chain_rpc":{"url":"http://127.0.0.1:1"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer configFile.Close()
+	backend := &TosctlBackend{
+		binary: path, binaryIdentity: identity, configFile: configFile,
+		commandTimeout: time.Second, environment: []string{"PATH=/usr/bin:/bin"},
+	}
+	if output, err := backend.run(context.Background(), "version"); err != nil || string(output) != "" {
+		t.Fatalf("execute pinned descriptor: output=%q err=%v", output, err)
+	}
+	changed := identity
+	changed.inode++
+	if _, err := openVerifiedExecutable(path, changed); err == nil {
+		t.Fatal("executable with a different enrolled inode was accepted")
+	}
+}
+
+func TestTosctlBackendRejectsUnsupportedProductionPlatform(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("Linux is the explicitly supported production platform")
+	}
+	if _, err := NewTosctlBackend(TosctlBackendConfig{}); err == nil || !strings.Contains(err.Error(), "only on Linux") {
+		t.Fatalf("unsupported platform did not fail closed: %v", err)
+	}
+}
 
 func TestTosctlArgumentsPreserveAtomicEconomics(t *testing.T) {
 	backend := &TosctlBackend{
@@ -166,6 +215,22 @@ func TestAccountInformationAcceptsFullGetAddressInformationShape(t *testing.T) {
 	}
 	if info.State != "active" || info.LastTransactionID.LT != "123" {
 		t.Fatalf("unexpected decode result: %+v", info)
+	}
+}
+
+func TestMasterchainInformationAcceptsRealDaemonShape(t *testing.T) {
+	payload := []byte(`{
+		"@type":"blocks.masterchainInfo",
+		"last":{"@type":"tos.blockIdExt","workchain":-1,"shard":"-9223372036854775808","seqno":64,"root_hash":"root","file_hash":"file"},
+		"state_root_hash":"state",
+		"init":{"@type":"tos.blockIdExt","workchain":-1,"shard":"-9223372036854775808","seqno":0,"root_hash":"genesis-root","file_hash":"genesis-file"}
+	}`)
+	var info masterchainInformation
+	if err := jsonstrict.Decode(payload, &info); err != nil {
+		t.Fatalf("decode real getMasterchainInfo payload: %v", err)
+	}
+	if info.Type != "blocks.masterchainInfo" || info.Last.Seqno != 64 || info.Init.RootHash != "genesis-root" {
+		t.Fatalf("unexpected masterchain info: %+v", info)
 	}
 }
 

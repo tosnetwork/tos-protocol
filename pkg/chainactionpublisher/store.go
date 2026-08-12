@@ -1,6 +1,8 @@
 package chainactionpublisher
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,7 @@ const JournalVersion = "1"
 var actionBucket = []byte("chain-actions-v1")
 var metadataBucket = []byte("chain-action-publisher-metadata-v1")
 var journalIdentityKey = []byte("journal-identity")
+var journalBindingKey = []byte("journal-binding-v1")
 
 type record struct {
 	Version  string               `json:"version"`
@@ -32,7 +35,7 @@ type journal struct{ db *bolt.DB }
 // InitializeJournal performs the explicit, one-time enrollment of a journal.
 // Normal publisher startup never creates state: a missing enrolled volume is
 // therefore an availability failure, not authoritative absence.
-func InitializeJournal(path, identity string) error {
+func InitializeJournal(path, identity, network string, policy SpendingPolicy, backendBinding string) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || identity == "" || len(identity) > 256 {
 		return errors.New("invalid publisher journal enrollment")
 	}
@@ -51,6 +54,10 @@ func InitializeJournal(path, identity string) error {
 		_ = os.Remove(path)
 		return err
 	}
+	binding, err := chainJournalBinding(network, policy, backendBinding)
+	if err != nil {
+		return err
+	}
 	err = db.Update(func(tx *bolt.Tx) error {
 		if _, err := tx.CreateBucket(actionBucket); err != nil {
 			return err
@@ -59,7 +66,10 @@ func InitializeJournal(path, identity string) error {
 		if err != nil {
 			return err
 		}
-		return metadata.Put(journalIdentityKey, []byte(identity))
+		if err := metadata.Put(journalIdentityKey, []byte(identity)); err != nil {
+			return err
+		}
+		return metadata.Put(journalBindingKey, []byte(binding))
 	})
 	closeErr := db.Close()
 	if err != nil || closeErr != nil {
@@ -68,7 +78,7 @@ func InitializeJournal(path, identity string) error {
 	return errors.Join(err, closeErr)
 }
 
-func openJournal(path, identity string) (*journal, error) {
+func openJournal(path, identity, network string, policy SpendingPolicy, backendBinding string) (*journal, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("publisher journal path must be absolute and clean")
 	}
@@ -80,13 +90,17 @@ func openJournal(path, identity string) (*journal, error) {
 	if !ok || stat.Uid != uint32(os.Geteuid()) {
 		return nil, errors.New("publisher journal owner mismatch")
 	}
+	binding, err := chainJournalBinding(network, policy, backendBinding)
+	if err != nil {
+		return nil, err
+	}
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2_000_000_000, ReadOnly: false})
 	if err != nil {
 		return nil, fmt.Errorf("open publisher journal: %w", err)
 	}
 	if err := db.View(func(tx *bolt.Tx) error {
 		actions, metadata := tx.Bucket(actionBucket), tx.Bucket(metadataBucket)
-		if actions == nil || metadata == nil || string(metadata.Get(journalIdentityKey)) != identity || identity == "" {
+		if actions == nil || metadata == nil || string(metadata.Get(journalIdentityKey)) != identity || string(metadata.Get(journalBindingKey)) != binding || identity == "" {
 			return errors.New("publisher journal identity mismatch")
 		}
 		return nil
@@ -95,6 +109,22 @@ func openJournal(path, identity string) (*journal, error) {
 		return nil, fmt.Errorf("open enrolled publisher journal: %w", err)
 	}
 	return &journal{db: db}, nil
+}
+
+func chainJournalBinding(network string, policy SpendingPolicy, backendBinding string) (string, error) {
+	policy, err := validatePolicy(policy)
+	if err != nil || network == "" || backendBinding == "" {
+		return "", errors.New("invalid publisher journal binding")
+	}
+	raw, err := json.Marshal(struct {
+		Version, Network, Backend string
+		Policy                    SpendingPolicy
+	}{"1", network, backendBinding, policy})
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 func (j *journal) close() error {
 	if j == nil || j.db == nil {

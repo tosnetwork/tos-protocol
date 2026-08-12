@@ -26,6 +26,7 @@ const ProtocolVersion = "1"
 const statePending, stateCompleted = "pending", "completed"
 
 type Backend interface {
+	EnrollmentBinding() string
 	CheckReady(context.Context) (BackendCapabilities, error)
 	Publish(context.Context, chain.Action, bool) (chain.ActionReceipt, error)
 	Close() error
@@ -78,7 +79,7 @@ func Open(c Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	j, err := openJournal(c.StatePath, c.JournalIdentity)
+	j, err := openJournal(c.StatePath, c.JournalIdentity, c.Network, policy, c.Backend.EnrollmentBinding())
 	if err != nil {
 		return nil, err
 	}
