@@ -83,6 +83,9 @@ type TosctlBackend struct {
 }
 
 func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
+	if runtime.GOOS != "linux" {
+		return nil, errors.New("production tosctl TaskEscrow publisher is supported only on Linux")
+	}
 	if strings.TrimSpace(config.Network) == "" || len(config.Network) > 64 ||
 		strings.TrimSpace(config.VaultURL) == "" || strings.TrimSpace(config.ExecutorWallet) == "" ||
 		len(config.Wallets) == 0 || len(config.Wallets) > 256 {
@@ -481,11 +484,7 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 		return nil, err
 	}
 	args = append(args, "-c", snapshotPath)
-	executableTarget := "/proc/self/fd/4"
-	if runtime.GOOS == "darwin" {
-		executableTarget = "/dev/fd/4"
-	}
-	command := exec.CommandContext(commandContext, executableTarget, args...)
+	command := exec.CommandContext(commandContext, "/proc/self/fd/4", args...)
 	command.ExtraFiles = []*os.File{b.configFile, executable}
 	command.Env = append([]string(nil), b.environment...)
 	var stdout, stderr limitedBuffer
@@ -699,20 +698,37 @@ func captureExecutableIdentity(path string) (executableIdentity, error) {
 	if err != nil || !os.SameFile(pathInfo, info) {
 		return executableIdentity{}, errors.New("executable changed while its identity was captured")
 	}
+	if err := validateTrustedExecutablePath(path, info); err != nil {
+		return executableIdentity{}, err
+	}
 	return executableIdentityFromFile(file, info)
+}
+
+func validateTrustedExecutablePath(path string, info os.FileInfo) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || os.Geteuid() == 0 || info.Mode().Perm()&0o022 != 0 {
+		return errors.New("executable must be root-owned, non-group-writable, and used by an unprivileged publisher")
+	}
+	for directory := filepath.Dir(path); ; directory = filepath.Dir(directory) {
+		directoryInfo, err := os.Lstat(directory)
+		if err != nil || !directoryInfo.IsDir() || directoryInfo.Mode()&os.ModeSymlink != 0 || directoryInfo.Mode().Perm()&0o022 != 0 {
+			return errors.New("executable path contains an untrusted directory")
+		}
+		directoryStat, ok := directoryInfo.Sys().(*syscall.Stat_t)
+		if !ok || directoryStat.Uid != 0 {
+			return errors.New("executable path is not rooted in root-owned directories")
+		}
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	return nil
 }
 
 func executableIdentityFromFile(file *os.File, info os.FileInfo) (executableIdentity, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return executableIdentity{}, errors.New("executable identity is unavailable")
-	}
-	// The custody process must not execute a binary writable by itself, its
-	// group, or everyone. A root-owned 0755 binary remains valid for an
-	// unprivileged service account; an owner-writable service-owned binary does
-	// not.
-	if info.Mode().Perm()&0o022 != 0 || stat.Uid == uint32(os.Geteuid()) && info.Mode().Perm()&0o200 != 0 {
-		return executableIdentity{}, errors.New("executable is writable by the publisher security domain")
 	}
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
@@ -735,6 +751,10 @@ func openVerifiedExecutable(path string, expected executableIdentity) (*os.File,
 	if err != nil || !os.SameFile(pathInfo, info) {
 		_ = file.Close()
 		return nil, errors.New("enrolled tosctl executable changed while opening")
+	}
+	if err := validateTrustedExecutablePath(path, info); err != nil {
+		_ = file.Close()
+		return nil, err
 	}
 	actual, err := executableIdentityFromFile(file, info)
 	if err != nil || actual != expected {

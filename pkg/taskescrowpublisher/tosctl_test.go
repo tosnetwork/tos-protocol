@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,12 +21,16 @@ func TestEnrolledExecutableRejectsWritableOrReplacedBinary(t *testing.T) {
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o500); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := captureExecutableIdentity(path); err == nil {
+		t.Fatal("publisher-owned executable was accepted as immutable")
+	}
+	if runtime.GOOS != "linux" || os.Geteuid() == 0 {
+		return
+	}
+	path = "/usr/bin/true"
 	identity, err := captureExecutableIdentity(path)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := verifyExecutableIdentity(path, identity); err != nil {
-		t.Fatalf("unchanged executable rejected: %v", err)
+		t.Fatalf("trusted system executable unavailable: %v", err)
 	}
 	configFile, err := pinnedTaskEscrowConfig([]byte(`{"chain_rpc":{"url":"http://127.0.0.1:1"}}`))
 	if err != nil {
@@ -39,27 +44,19 @@ func TestEnrolledExecutableRejectsWritableOrReplacedBinary(t *testing.T) {
 	if output, err := backend.run(context.Background(), "version"); err != nil || string(output) != "" {
 		t.Fatalf("execute pinned descriptor: output=%q err=%v", output, err)
 	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		t.Fatal(err)
+	changed := identity
+	changed.inode++
+	if _, err := openVerifiedExecutable(path, changed); err == nil {
+		t.Fatal("executable with a different enrolled inode was accepted")
 	}
-	if _, err := captureExecutableIdentity(path); err == nil {
-		t.Fatal("publisher-owned writable executable was accepted")
+}
+
+func TestTosctlBackendRejectsUnsupportedProductionPlatform(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("Linux is the explicitly supported production platform")
 	}
-	if err := os.Chmod(path, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	replacement := filepath.Join(dir, "replacement")
-	if err := os.WriteFile(replacement, []byte("#!/bin/sh\nexit 1\n"), 0o500); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(replacement, path); err != nil {
-		t.Fatal(err)
-	}
-	if err := verifyExecutableIdentity(path, identity); err == nil {
-		t.Fatal("replaced executable retained the enrolled authority")
-	}
-	if _, err := backend.run(context.Background(), "version"); err == nil {
-		t.Fatal("execution path ran a binary substituted after enrollment")
+	if _, err := NewTosctlBackend(TosctlBackendConfig{}); err == nil || !strings.Contains(err.Error(), "only on Linux") {
+		t.Fatalf("unsupported platform did not fail closed: %v", err)
 	}
 }
 
