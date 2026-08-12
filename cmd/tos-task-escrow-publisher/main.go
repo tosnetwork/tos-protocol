@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	configVersion  = "1"
-	maxConfigBytes = int64(256 << 10)
+	configVersion           = "1"
+	maxConfigBytes          = int64(256 << 10)
+	backendReadinessTimeout = 30 * time.Second
 )
 
 type startupConfig struct {
@@ -55,7 +56,10 @@ func main() {
 	}
 	if len(os.Args) == 2 && os.Args[1] == "init-journal" {
 		defer backend.Close()
-		if err := taskescrowpublisher.InitializeJournal(config.StatePath, config.JournalIdentity, config.Network, config.Policy, backend.EnrollmentBinding()); err != nil {
+		readyCtx, cancel := context.WithTimeout(context.Background(), backendReadinessTimeout)
+		err := initializeJournal(readyCtx, config, backend)
+		cancel()
+		if err != nil {
 			logger.Error("initialize TaskEscrow publisher journal", "error", err)
 			os.Exit(1)
 		}
@@ -79,7 +83,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer publisher.Close()
-	readyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	readyCtx, cancel := context.WithTimeout(context.Background(), backendReadinessTimeout)
 	err = publisher.CheckReady(readyCtx)
 	cancel()
 	if err != nil {
@@ -118,6 +122,22 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func initializeJournal(ctx context.Context, config startupConfig, backend taskescrowpublisher.Backend) error {
+	if ctx == nil || backend == nil {
+		return errors.New("journal initialization requires a backend readiness context")
+	}
+	// Enrollment is permanent for this journal identity. Prove that the exact
+	// backend being bound can reach the pinned chain, validate genesis, resolve
+	// every configured wallet, and execute the required CLI surface first.
+	if err := backend.CheckReady(ctx); err != nil {
+		return fmt.Errorf("publisher backend is not ready: %w", err)
+	}
+	return taskescrowpublisher.InitializeJournal(
+		config.StatePath, config.JournalIdentity, config.Network, config.Policy,
+		backend.EnrollmentBinding(),
+	)
 }
 
 func loadConfig(path string) (startupConfig, error) {

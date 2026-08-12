@@ -23,6 +23,7 @@ const (
 	ServerConfigVersion = "1"
 	DefaultMaxBodyBytes = int64(512 << 10)
 	maxBodyBytes        = int64(2 << 20)
+	healthReadyTimeout  = 30 * time.Second
 )
 
 type Config struct {
@@ -123,9 +124,10 @@ func (s *Server) health(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(request.Context(), healthReadyTimeout)
 	defer cancel()
 	if err := s.CheckReady(ctx); err != nil {
+		s.logger.Warn("TaskEscrow publisher health check failed", "error", err)
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(writer).Encode(map[string]string{"status": "unavailable"})
 		return

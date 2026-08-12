@@ -233,7 +233,10 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if master.Init.RootHash != b.genesisRootHash || master.Init.FileHash != b.genesisFileHash {
 		return errors.New("TOS genesis identity mismatch")
 	}
-	output, err := b.run(ctx, "wallet", "ls", "--format", "json")
+	// Chain/genesis readiness is checked above through the pinned Go client.
+	// Resolve wallet custody identities offline so readiness cannot be delayed
+	// by unrelated per-wallet balance/state queries.
+	output, err := b.run(ctx, "wallet", "ls", "--format", "json", "--offline")
 	if err != nil {
 		return fmt.Errorf("list tosctl wallets: %w", err)
 	}
