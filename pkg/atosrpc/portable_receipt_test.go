@@ -42,3 +42,31 @@ func TestResolveExecutionReceiptIsReadOnlyAndRequiresLiveFinality(t *testing.T) 
 		t.Fatal("authority outage accepted")
 	}
 }
+
+func TestResolveProofOfServiceIsReadOnlyWithoutLocalProjection(t *testing.T) {
+	a := &verifiedTestAuthority{}
+	s, e := Open(Config{StatePath: filepath.Join(t.TempDir(), "state.db"), BearerToken: "x", Authority: a})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	v := &atostosv1.ProofOfServiceEvidenceInput{EvidenceId: "pos-r", ReceiptId: "r", ProviderId: "provider", CapabilityId: "cap", CapabilityVersion: "1", EvidenceDigest: &atostosv1.Digest{Algorithm: "sha256", Value: make([]byte, 32)}}
+	d, e := protoDigest("ATOS-TOS-PROOF-OF-SERVICE-V1", v)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = a.Commit(context.Background(), "proof-of-service", v.EvidenceId, d); e != nil {
+		t.Fatal(e)
+	}
+	before := a.commits
+	resp, e := s.ResolveProofOfServiceEvidence(context.Background(), connect.NewRequest(&atostosv1.ResolveProofOfServiceEvidenceRequest{Context: &atostosv1.RequestContext{RequestId: "resolve-pos", CallerId: "principal"}, Evidence: v}))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !resp.Msg.Found || resp.Msg.EvidenceRef.FinalizedCheckpoint == 0 {
+		t.Fatalf("response=%+v", resp.Msg)
+	}
+	if a.commits != before {
+		t.Fatal("resolver mutated authority")
+	}
+}
