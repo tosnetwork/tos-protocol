@@ -43,6 +43,7 @@ message VerifyCapabilityOwnershipRequest {
   string provider_id = 3;
   string version = 4;
   Digest expected_manifest_digest = 5;
+  NetworkReference expected_ownership_ref = 6;
 }
 
 message VerifyCapabilityOwnershipResponse {

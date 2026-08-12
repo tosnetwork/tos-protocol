@@ -295,9 +295,12 @@ type ExecutionReceiptEnvelope struct {
 	// receipt content; when absent the field is omitted from the canonical
 	// encoding, so receipts issued before this field existed keep their
 	// signatures and digests unchanged.
-	Aipow         *AipowWorkAttribution `protobuf:"bytes,25,opt,name=aipow,proto3" json:"aipow,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Aipow *AipowWorkAttribution `protobuf:"bytes,25,opt,name=aipow,proto3" json:"aipow,omitempty"`
+	// Frozen execution start time. Together with completed_unix_millis this is
+	// part of the signed canonical Receipt tuple.
+	StartedUnixMillis int64 `protobuf:"varint,26,opt,name=started_unix_millis,json=startedUnixMillis,proto3" json:"started_unix_millis,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ExecutionReceiptEnvelope) Reset() {
@@ -503,6 +506,13 @@ func (x *ExecutionReceiptEnvelope) GetAipow() *AipowWorkAttribution {
 		return x.Aipow
 	}
 	return nil
+}
+
+func (x *ExecutionReceiptEnvelope) GetStartedUnixMillis() int64 {
+	if x != nil {
+		return x.StartedUnixMillis
+	}
+	return 0
 }
 
 type CommittedExecutionReceipt struct {
@@ -1874,7 +1884,7 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\x0eevidence_level\x18\x05 \x01(\x0e2\x1f.atos.tos.v1.AipowEvidenceLevelR\revidenceLevel\x12Q\n" +
 	"\x1aearner_identity_commitment\x18\x06 \x01(\v2\x13.atos.tos.v1.DigestR\x18earnerIdentityCommitment\x12O\n" +
 	"\x19payer_identity_commitment\x18\a \x01(\v2\x13.atos.tos.v1.DigestR\x17payerIdentityCommitment\x12%\n" +
-	"\x0echallenge_task\x18\b \x01(\bR\rchallengeTask\"\xb7\t\n" +
+	"\x0echallenge_task\x18\b \x01(\bR\rchallengeTask\"\xe7\t\n" +
 	"\x18ExecutionReceiptEnvelope\x12\x1d\n" +
 	"\n" +
 	"receipt_id\x18\x01 \x01(\tR\treceiptId\x12\x19\n" +
@@ -1905,7 +1915,8 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\x15completed_unix_millis\x18\x17 \x01(\x03R\x13completedUnixMillis\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\x18 \x01(\tR\terrorCode\x127\n" +
-	"\x05aipow\x18\x19 \x01(\v2!.atos.tos.v1.AipowWorkAttributionR\x05aipow\"\xa2\x02\n" +
+	"\x05aipow\x18\x19 \x01(\v2!.atos.tos.v1.AipowWorkAttributionR\x05aipow\x12.\n" +
+	"\x13started_unix_millis\x18\x1a \x01(\x03R\x11startedUnixMillis\"\xa2\x02\n" +
 	"\x19CommittedExecutionReceipt\x12?\n" +
 	"\areceipt\x18\x01 \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\areceipt\x12>\n" +
 	"\vreceipt_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +

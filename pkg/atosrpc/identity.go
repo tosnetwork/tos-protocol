@@ -116,7 +116,7 @@ func (s *Server) bindPrincipal(principalID, agentID string) error {
 }
 
 func (s *Server) ResolveAgentIdentity(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[atostosv1.ResolveAgentIdentityRequest],
 ) (*connect.Response[atostosv1.ResolveAgentIdentityResponse], error) {
 	if req == nil || req.Msg == nil {
@@ -151,6 +151,45 @@ func (s *Server) ResolveAgentIdentity(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if !response.Found && req.Msg.ExpectedIdentity != nil && req.Msg.ExpectedIdentityRef != nil && s.authority.Supports(TrustModeVerified) {
+		expected := cloneMessage(req.Msg.ExpectedIdentity)
+		if expected.AgentId != req.Msg.AgentId || (req.Msg.CanonicalUri != "" && expected.CanonicalUri != req.Msg.CanonicalUri) {
+			return nil, conflict("IDENTITY_MISMATCH", "expected identity lookup tuple mismatch")
+		}
+		expected.IdentityRef = cloneMessage(req.Msg.ExpectedIdentityRef)
+		if _, err := verifiedTOSController(expected, s.authority.Network()); err != nil {
+			return nil, failedPrecondition("IDENTITY_MISMATCH", err.Error())
+		}
+		expected.IdentityRef = nil
+		expected.UpdatedUnixMillis = 0
+		digest, digestErr := protoDigest("ATOS-TOS-IDENTITY-V1", expected)
+		resolver, ok := s.authority.(CommitmentResolver)
+		if digestErr != nil || !ok {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "identity commitment resolver unavailable")
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "identity", expected.AgentId, digest, req.Msg.ExpectedIdentityRef)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != req.Msg.ExpectedIdentityRef.Network || live.Reference != req.Msg.ExpectedIdentityRef.Reference {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "identity finality unavailable")
+		}
+		expected.IdentityRef = live
+		response.Identity, response.Found = expected, true
+	}
+	if response.Found && response.Identity != nil && response.Identity.IdentityRef != nil && req.Msg.ExpectedIdentityRef != nil && s.authority.Supports(TrustModeVerified) {
+		expected := cloneMessage(response.Identity)
+		ref := cloneMessage(expected.IdentityRef)
+		expected.IdentityRef = nil
+		expected.UpdatedUnixMillis = 0
+		digest, digestErr := protoDigest("ATOS-TOS-IDENTITY-V1", expected)
+		resolver, ok := s.authority.(CommitmentResolver)
+		if digestErr != nil || !ok {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "identity commitment resolver unavailable")
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "identity", expected.AgentId, digest, ref)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "identity finality unavailable")
+		}
+		response.Identity.IdentityRef = live
 	}
 	return connect.NewResponse(response), nil
 }
@@ -211,6 +250,25 @@ func (s *Server) ResolvePrincipalBinding(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if !response.Bound && req.Msg.ExpectedAgentId != "" && req.Msg.ExpectedBindingRef != nil && s.authority.Supports(TrustModeVerified) {
+		resolver, ok := s.authority.(CommitmentResolver)
+		if !ok {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding resolver is unavailable")
+		}
+		digest, digestErr := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-V1", &atostosv1.CreatePrincipalBindingRequest{PrincipalId: req.Msg.PrincipalId, AgentId: req.Msg.ExpectedAgentId})
+		if digestErr != nil {
+			return nil, digestErr
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "principal-binding", req.Msg.PrincipalId, digest, req.Msg.ExpectedBindingRef)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != req.Msg.ExpectedBindingRef.Network || live.Reference != req.Msg.ExpectedBindingRef.Reference {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding finality unavailable")
+		}
+		response.Identity = &atostosv1.AgentIdentity{AgentId: req.Msg.ExpectedAgentId}
+		response.Bound = true
+		response.Status = atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_ACTIVE
+		response.BindingRef = live
+		return connect.NewResponse(response), nil
 	}
 	if response.Bound && response.Identity != nil && response.BindingRef != nil && s.authority.Supports(TrustModeVerified) {
 		resolver, ok := s.authority.(CommitmentResolver)

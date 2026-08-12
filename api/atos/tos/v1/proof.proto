@@ -102,6 +102,9 @@ message ExecutionReceiptEnvelope {
   // encoding, so receipts issued before this field existed keep their
   // signatures and digests unchanged.
   AipowWorkAttribution aipow = 25;
+  // Frozen execution start time. Together with completed_unix_millis this is
+  // part of the signed canonical Receipt tuple.
+  int64 started_unix_millis = 26;
 }
 
 message CommittedExecutionReceipt {

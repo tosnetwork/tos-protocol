@@ -467,6 +467,7 @@ func (s *Server) RevokeExecutionSigner(
 		}
 		authorization.Revoked = true
 		authorization.RevocationRef = &ref
+		authorization.RevokedUnixMillis = s.now().UnixMilli()
 		if err := s.store.putProto(tx, bucketSignerAuths, key, authorization); err != nil {
 			return err
 		}
@@ -498,14 +499,14 @@ func (s *Server) ResolveExecutionSignerAuthorization(
 		if err != nil || !found {
 			return err
 		}
-		if authorization.Revoked {
-			response.Authorization = authorization
-			response.ReasonCode = "REVOKED"
-			return nil
-		}
 		at := req.Msg.AtUnixMillis
 		if at == 0 {
 			at = s.now().UnixMilli()
+		}
+		if authorization.Revoked && (authorization.RevokedUnixMillis == 0 || at >= authorization.RevokedUnixMillis) {
+			response.Authorization = authorization
+			response.ReasonCode = "REVOKED"
+			return nil
 		}
 		if authorization.Value == nil || at < authorization.Value.ValidFromUnixMillis || at >= authorization.Value.ValidUntilUnixMillis {
 			response.Authorization = authorization
@@ -519,6 +520,32 @@ func (s *Server) ResolveExecutionSignerAuthorization(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if response.Authorization == nil && req.Msg.ExpectedAuthorization != nil && req.Msg.ExpectedAuthorizationRef != nil && s.authority.Supports(TrustModeVerified) {
+		expected := req.Msg.ExpectedAuthorization
+		if expected.ProviderId != req.Msg.ProviderId || expected.CapabilityId != req.Msg.CapabilityId || expected.CapabilityVersion != req.Msg.CapabilityVersion || expected.ExecutionSignerId != req.Msg.ExecutionSignerId {
+			return nil, conflict("SIGNER_MISMATCH", "expected signer authorization tuple mismatch")
+		}
+		digest, digestErr := protoDigest("ATOS-TOS-SIGNER-AUTHORIZATION-V1", expected)
+		resolver, ok := s.authority.(CommitmentResolver)
+		if digestErr != nil || !ok {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer resolver unavailable")
+		}
+		live, resolveErr := resolver.ResolveCommitment(ctx, "execution-signer", expected.AuthorizationId, digest, req.Msg.ExpectedAuthorizationRef)
+		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != req.Msg.ExpectedAuthorizationRef.Network || live.Reference != req.Msg.ExpectedAuthorizationRef.Reference {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer finality unavailable")
+		}
+		at := req.Msg.AtUnixMillis
+		if at == 0 {
+			at = s.now().UnixMilli()
+		}
+		if at < expected.ValidFromUnixMillis || at >= expected.ValidUntilUnixMillis {
+			return connect.NewResponse(response), nil
+		}
+		response.Authorization = &atostosv1.ExecutionSignerAuthorization{Value: cloneMessage(expected), AuthorizationRef: live}
+		response.Authorized = true
+		response.ReasonCode = ""
+		return connect.NewResponse(response), nil
 	}
 	if response.Authorization != nil && response.Authorization.Value != nil && response.Authorization.AuthorizationRef != nil && s.authority.Supports(TrustModeVerified) {
 		resolver, ok := s.authority.(CommitmentResolver)

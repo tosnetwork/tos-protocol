@@ -32,6 +32,14 @@ type Capability struct {
 	OwnershipRef      Reference `json:"ownership_ref"`
 }
 
+type Identity struct {
+	AgentID      string    `json:"agent_id"`
+	CanonicalURI string    `json:"canonical_uri"`
+	Controllers  []string  `json:"controllers"`
+	Assurance    string    `json:"assurance"`
+	IdentityRef  Reference `json:"identity_ref"`
+}
+
 type Quote struct {
 	QuoteID                     string    `json:"quote_id"`
 	CommitmentDigest            string    `json:"commitment_digest"`
@@ -102,7 +110,9 @@ type Outcome struct {
 	DisputeDigest    string    `json:"dispute_digest,omitempty"`
 	DisputeRef       Reference `json:"dispute_ref,omitempty"`
 	ResolutionDigest string    `json:"resolution_digest,omitempty"`
+	ResolutionRef    Reference `json:"resolution_ref,omitempty"`
 	DisputeOutcome   string    `json:"dispute_outcome,omitempty"`
+	ResolutionCBOR   []byte    `json:"resolution_cbor,omitempty"`
 }
 
 type ProofOfService struct {
@@ -122,8 +132,11 @@ type Package struct {
 	PrincipalID          string               `json:"principal_id"`
 	RequesterAgentID     string               `json:"requester_agent_id"`
 	RequesterIdentityRef Reference            `json:"requester_identity_ref"`
+	RequesterIdentity    Identity             `json:"requester_identity"`
 	ProviderID           string               `json:"provider_id"`
+	ProviderAgentID      string               `json:"provider_agent_id"`
 	ProviderIdentityRef  Reference            `json:"provider_identity_ref"`
+	ProviderIdentity     Identity             `json:"provider_identity"`
 	Capability           Capability           `json:"capability"`
 	Quote                Quote                `json:"quote"`
 	Escrow               Escrow               `json:"escrow"`

@@ -163,12 +163,14 @@ func (x *AgentIdentity) GetPublicAttributes() map[string]string {
 }
 
 type ResolveAgentIdentityRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	CanonicalUri  string                 `protobuf:"bytes,3,opt,name=canonical_uri,json=canonicalUri,proto3" json:"canonical_uri,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Context             *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	AgentId             string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	CanonicalUri        string                 `protobuf:"bytes,3,opt,name=canonical_uri,json=canonicalUri,proto3" json:"canonical_uri,omitempty"`
+	ExpectedIdentity    *AgentIdentity         `protobuf:"bytes,4,opt,name=expected_identity,json=expectedIdentity,proto3" json:"expected_identity,omitempty"`
+	ExpectedIdentityRef *NetworkReference      `protobuf:"bytes,5,opt,name=expected_identity_ref,json=expectedIdentityRef,proto3" json:"expected_identity_ref,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ResolveAgentIdentityRequest) Reset() {
@@ -220,6 +222,20 @@ func (x *ResolveAgentIdentityRequest) GetCanonicalUri() string {
 		return x.CanonicalUri
 	}
 	return ""
+}
+
+func (x *ResolveAgentIdentityRequest) GetExpectedIdentity() *AgentIdentity {
+	if x != nil {
+		return x.ExpectedIdentity
+	}
+	return nil
+}
+
+func (x *ResolveAgentIdentityRequest) GetExpectedIdentityRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedIdentityRef
+	}
+	return nil
 }
 
 type ResolveAgentIdentityResponse struct {
@@ -275,11 +291,13 @@ func (x *ResolveAgentIdentityResponse) GetFound() bool {
 }
 
 type ResolvePrincipalBindingRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	PrincipalId   string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Context            *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	PrincipalId        string                 `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	ExpectedAgentId    string                 `protobuf:"bytes,3,opt,name=expected_agent_id,json=expectedAgentId,proto3" json:"expected_agent_id,omitempty"`
+	ExpectedBindingRef *NetworkReference      `protobuf:"bytes,4,opt,name=expected_binding_ref,json=expectedBindingRef,proto3" json:"expected_binding_ref,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ResolvePrincipalBindingRequest) Reset() {
@@ -324,6 +342,20 @@ func (x *ResolvePrincipalBindingRequest) GetPrincipalId() string {
 		return x.PrincipalId
 	}
 	return ""
+}
+
+func (x *ResolvePrincipalBindingRequest) GetExpectedAgentId() string {
+	if x != nil {
+		return x.ExpectedAgentId
+	}
+	return ""
+}
+
+func (x *ResolvePrincipalBindingRequest) GetExpectedBindingRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedBindingRef
+	}
+	return nil
 }
 
 type ResolvePrincipalBindingResponse struct {
@@ -665,17 +697,21 @@ const file_atos_tos_v1_identity_proto_rawDesc = "" +
 	"\x11public_attributes\x18\a \x03(\v20.atos.tos.v1.AgentIdentity.PublicAttributesEntryR\x10publicAttributes\x1aC\n" +
 	"\x15PublicAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x94\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\x02\n" +
 	"\x1bResolveAgentIdentityRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12#\n" +
-	"\rcanonical_uri\x18\x03 \x01(\tR\fcanonicalUri\"l\n" +
+	"\rcanonical_uri\x18\x03 \x01(\tR\fcanonicalUri\x12G\n" +
+	"\x11expected_identity\x18\x04 \x01(\v2\x1a.atos.tos.v1.AgentIdentityR\x10expectedIdentity\x12Q\n" +
+	"\x15expected_identity_ref\x18\x05 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x13expectedIdentityRef\"l\n" +
 	"\x1cResolveAgentIdentityResponse\x126\n" +
 	"\bidentity\x18\x01 \x01(\v2\x1a.atos.tos.v1.AgentIdentityR\bidentity\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"z\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\"\xf7\x01\n" +
 	"\x1eResolvePrincipalBindingRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12!\n" +
-	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\"\xc5\x02\n" +
+	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x12*\n" +
+	"\x11expected_agent_id\x18\x03 \x01(\tR\x0fexpectedAgentId\x12O\n" +
+	"\x14expected_binding_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedBindingRef\"\xc5\x02\n" +
 	"\x1fResolvePrincipalBindingResponse\x12!\n" +
 	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x126\n" +
 	"\bidentity\x18\x02 \x01(\v2\x1a.atos.tos.v1.AgentIdentityR\bidentity\x12\x14\n" +
@@ -745,29 +781,32 @@ var file_atos_tos_v1_identity_proto_depIdxs = []int32{
 	11, // 0: atos.tos.v1.AgentIdentity.identity_ref:type_name -> atos.tos.v1.NetworkReference
 	10, // 1: atos.tos.v1.AgentIdentity.public_attributes:type_name -> atos.tos.v1.AgentIdentity.PublicAttributesEntry
 	12, // 2: atos.tos.v1.ResolveAgentIdentityRequest.context:type_name -> atos.tos.v1.RequestContext
-	1,  // 3: atos.tos.v1.ResolveAgentIdentityResponse.identity:type_name -> atos.tos.v1.AgentIdentity
-	12, // 4: atos.tos.v1.ResolvePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
-	1,  // 5: atos.tos.v1.ResolvePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
-	11, // 6: atos.tos.v1.ResolvePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
-	0,  // 7: atos.tos.v1.ResolvePrincipalBindingResponse.status:type_name -> atos.tos.v1.PrincipalBindingStatus
-	12, // 8: atos.tos.v1.CreatePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
-	1,  // 9: atos.tos.v1.CreatePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
-	11, // 10: atos.tos.v1.CreatePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
-	12, // 11: atos.tos.v1.RevokePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
-	11, // 12: atos.tos.v1.RevokePrincipalBindingResponse.revocation_ref:type_name -> atos.tos.v1.NetworkReference
-	2,  // 13: atos.tos.v1.IdentityService.ResolveAgentIdentity:input_type -> atos.tos.v1.ResolveAgentIdentityRequest
-	4,  // 14: atos.tos.v1.IdentityService.ResolvePrincipalBinding:input_type -> atos.tos.v1.ResolvePrincipalBindingRequest
-	6,  // 15: atos.tos.v1.IdentityService.CreatePrincipalBinding:input_type -> atos.tos.v1.CreatePrincipalBindingRequest
-	8,  // 16: atos.tos.v1.IdentityService.RevokePrincipalBinding:input_type -> atos.tos.v1.RevokePrincipalBindingRequest
-	3,  // 17: atos.tos.v1.IdentityService.ResolveAgentIdentity:output_type -> atos.tos.v1.ResolveAgentIdentityResponse
-	5,  // 18: atos.tos.v1.IdentityService.ResolvePrincipalBinding:output_type -> atos.tos.v1.ResolvePrincipalBindingResponse
-	7,  // 19: atos.tos.v1.IdentityService.CreatePrincipalBinding:output_type -> atos.tos.v1.CreatePrincipalBindingResponse
-	9,  // 20: atos.tos.v1.IdentityService.RevokePrincipalBinding:output_type -> atos.tos.v1.RevokePrincipalBindingResponse
-	17, // [17:21] is the sub-list for method output_type
-	13, // [13:17] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	1,  // 3: atos.tos.v1.ResolveAgentIdentityRequest.expected_identity:type_name -> atos.tos.v1.AgentIdentity
+	11, // 4: atos.tos.v1.ResolveAgentIdentityRequest.expected_identity_ref:type_name -> atos.tos.v1.NetworkReference
+	1,  // 5: atos.tos.v1.ResolveAgentIdentityResponse.identity:type_name -> atos.tos.v1.AgentIdentity
+	12, // 6: atos.tos.v1.ResolvePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
+	11, // 7: atos.tos.v1.ResolvePrincipalBindingRequest.expected_binding_ref:type_name -> atos.tos.v1.NetworkReference
+	1,  // 8: atos.tos.v1.ResolvePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
+	11, // 9: atos.tos.v1.ResolvePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
+	0,  // 10: atos.tos.v1.ResolvePrincipalBindingResponse.status:type_name -> atos.tos.v1.PrincipalBindingStatus
+	12, // 11: atos.tos.v1.CreatePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
+	1,  // 12: atos.tos.v1.CreatePrincipalBindingResponse.identity:type_name -> atos.tos.v1.AgentIdentity
+	11, // 13: atos.tos.v1.CreatePrincipalBindingResponse.binding_ref:type_name -> atos.tos.v1.NetworkReference
+	12, // 14: atos.tos.v1.RevokePrincipalBindingRequest.context:type_name -> atos.tos.v1.RequestContext
+	11, // 15: atos.tos.v1.RevokePrincipalBindingResponse.revocation_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 16: atos.tos.v1.IdentityService.ResolveAgentIdentity:input_type -> atos.tos.v1.ResolveAgentIdentityRequest
+	4,  // 17: atos.tos.v1.IdentityService.ResolvePrincipalBinding:input_type -> atos.tos.v1.ResolvePrincipalBindingRequest
+	6,  // 18: atos.tos.v1.IdentityService.CreatePrincipalBinding:input_type -> atos.tos.v1.CreatePrincipalBindingRequest
+	8,  // 19: atos.tos.v1.IdentityService.RevokePrincipalBinding:input_type -> atos.tos.v1.RevokePrincipalBindingRequest
+	3,  // 20: atos.tos.v1.IdentityService.ResolveAgentIdentity:output_type -> atos.tos.v1.ResolveAgentIdentityResponse
+	5,  // 21: atos.tos.v1.IdentityService.ResolvePrincipalBinding:output_type -> atos.tos.v1.ResolvePrincipalBindingResponse
+	7,  // 22: atos.tos.v1.IdentityService.CreatePrincipalBinding:output_type -> atos.tos.v1.CreatePrincipalBindingResponse
+	9,  // 23: atos.tos.v1.IdentityService.RevokePrincipalBinding:output_type -> atos.tos.v1.RevokePrincipalBindingResponse
+	20, // [20:24] is the sub-list for method output_type
+	16, // [16:20] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_identity_proto_init() }

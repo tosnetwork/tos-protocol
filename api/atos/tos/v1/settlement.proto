@@ -71,6 +71,7 @@ message Escrow {
   string dispute_outcome = 33;
   string result_digest = 34;
   string result_evidence_digest = 35;
+  NetworkReference dispute_resolution_ref = 36;
 }
 
 message VerifiedEscrowTerms {
@@ -141,6 +142,15 @@ message GetEscrowRequest {
   string expected_dispute_digest = 10;
   NetworkReference expected_dispute_ref = 11;
   NetworkAmount expected_dispute_payout = 12;
+  string expected_dispute_resolution_digest = 13;
+  string expected_dispute_outcome = 14;
+  ExecutionReceiptEnvelope expected_receipt = 15;
+  NetworkReference expected_receipt_ref = 16;
+  NetworkAmount expected_settlement_charge = 17;
+  VerifiedDisputeResolution expected_dispute_resolution = 18;
+  NetworkReference expected_dispute_resolution_ref = 19;
+  string expected_creator_address = 20;
+  string expected_agent_address = 21;
 }
 
 message GetEscrowResponse {

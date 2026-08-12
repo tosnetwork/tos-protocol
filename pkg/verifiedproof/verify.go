@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/tosnetwork/tos-protocol/pkg/codec"
+	"github.com/tosnetwork/tos-protocol/pkg/disputecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/poscommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 	"math/big"
 	"strings"
 	"time"
@@ -135,6 +137,20 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	if p.Quote.TrustMode != "verified" || p.Quote.ProofProfile != "tos_verified_v1" || p.Quote.SettlementBackend != "tos" || p.Quote.SettlementAsset != "TOS" || p.Quote.AssetDecimals != 9 || p.Quote.FeesAtomic != "0" || strings.TrimSpace(p.Escrow.FundingModel) == "" {
 		add(CodeTuple, "quote", "unsupported Verified commercial tuple")
 	}
+	validateIdentity := func(field, expectedAgent string, identity Identity) {
+		if identity.AgentID != expectedAgent || identity.CanonicalURI == "" || identity.Assurance == "" || strings.EqualFold(identity.Assurance, "self_asserted") || len(identity.Controllers) != 1 {
+			add(CodeTuple, field, "incomplete independently anchored identity tuple")
+			return
+		}
+		if _, err := toschain.CanonicalAddress(identity.Controllers[0]); err != nil {
+			add(CodeTuple, field+".controllers", "invalid canonical TOS controller")
+		}
+		if err := ValidateReference(p.NetworkID, identity.IdentityRef); err != nil {
+			add(CodeFinality, field+".identity_ref", err.Error())
+		}
+	}
+	validateIdentity("requester_identity", p.RequesterAgentID, p.RequesterIdentity)
+	validateIdentity("provider_identity", p.ProviderAgentID, p.ProviderIdentity)
 	digests := map[string]string{"manifest_digest": p.Capability.ManifestDigest, "quote.commitment_digest": p.Quote.CommitmentDigest, "quote.terms_digest": p.Quote.TermsDigest, "quote.dispute_policy_digest": p.Quote.DisputePolicyDigest, "escrow.reservation_digest": p.Escrow.ReservationDigest}
 	if hasExecution {
 		digests["receipt.receipt_digest"] = p.Receipt.ReceiptDigest
@@ -154,12 +170,20 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	}
 	if d, err := codec.DigestCanonical(quotecommitment.Domain, p.Quote.CanonicalCBOR); err != nil || d != p.Quote.CommitmentDigest {
 		add(CodeDigest, "quote.canonical_cbor", "canonical Quote bytes do not match commitment digest")
-	} else if q, err := quotecommitment.Parse(p.Quote.CanonicalCBOR); err != nil || q.QuoteID != p.Quote.QuoteID || q.NetworkID != p.NetworkID || q.Domain != p.GatewayDomain || q.PrincipalID != p.PrincipalID || q.ProviderID != p.ProviderID || q.CapabilityID != p.Capability.CapabilityID || q.CapabilityVersion != p.Capability.CapabilityVersion || q.ManifestDigest != p.Capability.ManifestDigest || q.TermsDigest != p.Quote.TermsDigest || q.DisputePolicyDigest != p.Quote.DisputePolicyDigest || q.SettlementBackend != p.Quote.SettlementBackend || q.SettlementAsset != p.Quote.SettlementAsset || q.AssetDecimals != p.Quote.AssetDecimals {
+	} else if q, err := quotecommitment.Parse(p.Quote.CanonicalCBOR); err != nil {
+		add(CodeMalformed, "quote.canonical_cbor", "canonical Quote tuple is malformed")
+	} else if subtotal, e1 := decimalToAtomic(q.Subtotal.Amount, q.AssetDecimals); e1 != nil || q.Subtotal.Asset != p.Quote.SettlementAsset || subtotal != p.Quote.SubtotalAtomic || func() bool {
+		fees, e := decimalToAtomic(q.Fees.Amount, q.AssetDecimals)
+		return e != nil || q.Fees.Asset != p.Quote.SettlementAsset || fees != p.Quote.FeesAtomic
+	}() || func() bool {
+		total, e := decimalToAtomic(q.TotalMax.Amount, q.AssetDecimals)
+		return e != nil || q.TotalMax.Asset != p.Quote.SettlementAsset || total != p.Quote.TotalMaxAtomic
+	}() || q.QuoteID != p.Quote.QuoteID || q.NetworkID != p.NetworkID || q.Domain != p.GatewayDomain || q.PrincipalID != p.PrincipalID || q.RequesterAgentID != p.RequesterAgentID || q.ProviderID != p.ProviderID || q.CapabilityID != p.Capability.CapabilityID || q.CapabilityVersion != p.Capability.CapabilityVersion || q.ManifestDigest != p.Capability.ManifestDigest || q.TermsDigest != p.Quote.TermsDigest || q.DisputePolicyDigest != p.Quote.DisputePolicyDigest || q.TrustMode != "TRUST_MODE_VERIFIED" || q.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || q.SettlementBackend != p.Quote.SettlementBackend || q.SettlementAsset != p.Quote.SettlementAsset || q.AssetDecimals != p.Quote.AssetDecimals || q.AcceptanceDeadlineUnixMillis*int64(time.Millisecond) != p.Quote.AcceptanceDeadlineUnixNanos || q.ExpiresUnixMillis*int64(time.Millisecond) != p.Quote.QuoteExpiryUnixNanos || q.ExecutionDeadlineUnixMillis*int64(time.Millisecond) != p.Quote.ExecutionDeadlineUnixNanos || q.UnderlyingServiceQuoteRef != p.Quote.UnderlyingServiceQuoteRef || (p.SignerAuthorization != nil && (q.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || q.SignerAuthorizationRef.Network != p.SignerAuthorization.AuthorizationRef.Network || q.SignerAuthorizationRef.Reference != p.SignerAuthorization.AuthorizationRef.Reference)) {
 		add(CodeTuple, "quote.canonical_cbor", "canonical Quote tuple differs from package")
 	}
 	if d, err := codec.DigestCanonical(escrowcommitment.Domain, p.Escrow.CanonicalCBOR); err != nil || d != p.Escrow.ReservationDigest {
 		add(CodeDigest, "escrow.canonical_cbor", "canonical reservation bytes do not match digest")
-	} else if e, err := escrowcommitment.Parse(p.Escrow.CanonicalCBOR); err != nil || e.EscrowID != p.Escrow.EscrowID || e.JobID != p.Escrow.JobID || e.QuoteID != p.Quote.QuoteID || e.NetworkID != p.NetworkID || e.Domain != p.GatewayDomain || e.QuoteCommitmentDigest != p.Quote.CommitmentDigest || e.PrincipalID != p.PrincipalID || e.ProviderID != p.ProviderID || e.CapabilityID != p.Capability.CapabilityID || e.CapabilityVersion != p.Capability.CapabilityVersion || e.ManifestDigest != p.Capability.ManifestDigest || e.ReservedAtomic() != p.Escrow.ReservedAtomic || e.AssetDecimals != p.Quote.AssetDecimals || e.FundingModel != p.Escrow.FundingModel {
+	} else if e, err := escrowcommitment.Parse(p.Escrow.CanonicalCBOR); err != nil || e.EscrowID != p.Escrow.EscrowID || e.JobID != p.Escrow.JobID || e.QuoteID != p.Quote.QuoteID || e.NetworkID != p.NetworkID || e.Domain != p.GatewayDomain || e.QuoteCommitmentDigest != p.Quote.CommitmentDigest || e.QuoteCommitmentRef.Network != p.Quote.CommitmentRef.Network || e.QuoteCommitmentRef.Reference != p.Quote.CommitmentRef.Reference || e.PrincipalID != p.PrincipalID || e.RequesterAgentID != p.RequesterAgentID || e.ProviderID != p.ProviderID || e.CapabilityID != p.Capability.CapabilityID || e.CapabilityVersion != p.Capability.CapabilityVersion || e.ManifestDigest != p.Capability.ManifestDigest || e.ReservedAtomic() != p.Escrow.ReservedAtomic || e.Reserve.Asset != p.Quote.SettlementAsset || e.AssetDecimals != p.Quote.AssetDecimals || e.FundingModel != p.Escrow.FundingModel || e.TrustMode != "TRUST_MODE_VERIFIED" || e.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || e.SettlementBackend != p.Quote.SettlementBackend || e.SettlementAsset != p.Quote.SettlementAsset || e.AcceptanceDeadlineUnixMillis*int64(time.Millisecond) != p.Quote.AcceptanceDeadlineUnixNanos || e.ExecutionDeadlineUnixMillis*int64(time.Millisecond) != p.Quote.ExecutionDeadlineUnixNanos || e.EscrowDeadlineUnixMillis*int64(time.Millisecond) != p.Escrow.EscrowDeadlineUnixNanos || e.UnderlyingServiceQuoteRef != p.Quote.UnderlyingServiceQuoteRef || e.DisputePolicyDigest != p.Quote.DisputePolicyDigest || e.TermsDigest != p.Quote.TermsDigest || e.Subtotal.AtomicAmount != p.Quote.SubtotalAtomic || e.Fees.AtomicAmount != p.Quote.FeesAtomic || (p.SignerAuthorization != nil && (e.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || e.SignerAuthorizationRef.Network != p.SignerAuthorization.AuthorizationRef.Network || e.SignerAuthorizationRef.Reference != p.SignerAuthorization.AuthorizationRef.Reference)) {
 		add(CodeTuple, "escrow.canonical_cbor", "canonical reservation tuple differs from package")
 	}
 	if hasExecution {
@@ -184,7 +208,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	}
 	if len(parsed) == len(amounts) {
 		receiptMustEqualOutcome := hasExecution && p.Outcome.Kind == "provider_settlement"
-		if parsed["total_max"].Cmp(parsed["reserved"]) != 0 || (receiptMustEqualOutcome && parsed["receipt.charge"].Cmp(parsed["outcome.charge"]) != 0) || new(big.Int).Add(parsed["outcome.charge"], parsed["outcome.refund"]).Cmp(parsed["reserved"]) != 0 {
+		if new(big.Int).Add(parsed["subtotal"], parsed["fees"]).Cmp(parsed["total_max"]) != 0 || parsed["total_max"].Cmp(parsed["reserved"]) != 0 || (receiptMustEqualOutcome && parsed["receipt.charge"].Cmp(parsed["outcome.charge"]) != 0) || new(big.Int).Add(parsed["outcome.charge"], parsed["outcome.refund"]).Cmp(parsed["reserved"]) != 0 {
 			add(CodeOutcome, "outcome", "monetary conservation failed")
 		}
 	}
@@ -197,7 +221,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 		}
 		if c, err := receiptcommitment.Parse(p.Receipt.CanonicalCBOR); err != nil {
 			add(CodeMalformed, "receipt.canonical_cbor", err.Error())
-		} else if c.ReceiptID != p.Receipt.ReceiptID || c.QuoteID != p.Quote.QuoteID || c.EscrowID != p.Escrow.EscrowID || c.JobID != p.Escrow.JobID || c.PrincipalID != p.PrincipalID || c.ProviderID != p.ProviderID || c.CapabilityID != p.Capability.CapabilityID || c.CapabilityVersion != p.Capability.CapabilityVersion || c.TrustMode != "TRUST_MODE_VERIFIED" || c.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || strings.TrimPrefix(strings.ToLower(c.Result), "execution_result_") != strings.ToLower(p.Receipt.Result) || c.InputCommitment != p.Receipt.InputCommitment || c.OutputCommitment != p.Receipt.OutputCommitment || c.UsageCommitment != p.Receipt.UsageCommitment || c.ExecutionSignerID != p.SignerAuthorization.ExecutionSignerID || c.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || c.CompletedUnixMillis*int64(time.Millisecond) != p.Receipt.CompletedUnixNanos || c.NetworkChargeAtomic != p.Receipt.ChargedAtomic {
+		} else if c.ReceiptID != p.Receipt.ReceiptID || c.QuoteID != p.Quote.QuoteID || c.EscrowID != p.Escrow.EscrowID || c.JobID != p.Escrow.JobID || c.PrincipalID != p.PrincipalID || c.ProviderID != p.ProviderID || c.CapabilityID != p.Capability.CapabilityID || c.CapabilityVersion != p.Capability.CapabilityVersion || c.TrustMode != "TRUST_MODE_VERIFIED" || c.ProofProfile != "PROOF_PROFILE_TOS_VERIFIED_V1" || strings.TrimPrefix(strings.ToLower(c.Result), "execution_result_") != strings.ToLower(p.Receipt.Result) || c.InputCommitment != p.Receipt.InputCommitment || c.OutputCommitment != p.Receipt.OutputCommitment || c.UsageCommitment != p.Receipt.UsageCommitment || c.ExecutionSignerID != p.SignerAuthorization.ExecutionSignerID || c.SignerAuthorizationID != p.SignerAuthorization.AuthorizationID || c.SignatureAlgorithm != strings.ToLower(p.Receipt.SignatureAlgorithm) || c.SignatureAlgorithm != strings.ToLower(p.SignerAuthorization.SignatureAlgorithm) || c.StartedUnixMillis*int64(time.Millisecond) != p.Receipt.StartedUnixNanos || c.CompletedUnixMillis*int64(time.Millisecond) != p.Receipt.CompletedUnixNanos || c.NetworkChargeAtomic != p.Receipt.ChargedAtomic {
 			add(CodeTuple, "receipt.canonical_cbor", "signed Receipt tuple differs from package")
 		}
 	}
@@ -207,15 +231,23 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 			add(CodeOutcome, "outcome", "settlement has release/dispute fields")
 		}
 	case "requester_release":
-		if !validDigest(p.Outcome.ReleaseDigest) || p.Outcome.ReasonCode == "" || p.Outcome.DisputeDigest != "" {
+		if !validDigest(p.Outcome.ReleaseDigest) || p.Outcome.ReasonCode == "" || p.Outcome.DisputeDigest != "" || p.Outcome.ChargedAtomic != "0" || p.Outcome.RefundedAtomic != p.Escrow.ReservedAtomic {
 			add(CodeOutcome, "outcome", "invalid release tuple")
 		}
 	case "dispute_resolution":
-		if !validDigest(p.Outcome.DisputeDigest) || !validDigest(p.Outcome.ResolutionDigest) || p.Outcome.DisputeOutcome == "" || p.Outcome.ReleaseDigest != "" {
+		if !validDigest(p.Outcome.DisputeDigest) || !validDigest(p.Outcome.ResolutionDigest) || p.Outcome.DisputeOutcome == "" || p.Outcome.ReleaseDigest != "" || len(p.Outcome.ResolutionCBOR) == 0 {
 			add(CodeOutcome, "outcome", "invalid dispute tuple")
+		}
+		resolution, resolutionErr := disputecommitment.ParseResolution(p.Outcome.ResolutionCBOR)
+		resolutionDigest, digestErr := codec.DigestCanonical(disputecommitment.ResolutionDomain, p.Outcome.ResolutionCBOR)
+		if resolutionErr != nil || digestErr != nil || resolutionDigest != p.Outcome.ResolutionDigest || resolution.NetworkID != p.NetworkID || resolution.GatewayDomain != p.GatewayDomain || resolution.EscrowID != p.Escrow.EscrowID || resolution.JobID != p.Escrow.JobID || resolution.QuoteID != p.Quote.QuoteID || resolution.ReceiptID != p.Receipt.ReceiptID || resolution.DisputeDigest != p.Outcome.DisputeDigest || resolution.Outcome != p.Outcome.DisputeOutcome || resolution.Reserved.Asset != p.Quote.SettlementAsset || resolution.Reserved.AtomicAmount != p.Escrow.ReservedAtomic || resolution.ProviderPayout.AtomicAmount != p.Outcome.ChargedAtomic || resolution.RequesterRefund.AtomicAmount != p.Outcome.RefundedAtomic || resolution.ProviderPayout.Asset != p.Quote.SettlementAsset || resolution.RequesterRefund.Asset != p.Quote.SettlementAsset {
+			add(CodeOutcome, "outcome.resolution_cbor", "canonical dispute resolution tuple differs from package")
 		}
 		if err := ValidateReference(p.NetworkID, p.Outcome.DisputeRef); err != nil {
 			add(CodeFinality, "outcome.dispute_ref", err.Error())
+		}
+		if err := ValidateReference(p.NetworkID, p.Outcome.ResolutionRef); err != nil {
+			add(CodeFinality, "outcome.resolution_ref", err.Error())
 		}
 	default:
 		add(CodeOutcome, "outcome.kind", "unsupported outcome")
@@ -223,7 +255,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	refs := []struct {
 		name, kind, id, digest string
 		ref                    Reference
-	}{{"requester_identity_ref", "identity", p.PrincipalID, p.RequesterAgentID, p.RequesterIdentityRef}, {"provider_identity_ref", "identity", p.ProviderID, p.ProviderID, p.ProviderIdentityRef}, {"capability.ownership_ref", "capability-ownership", p.Capability.CapabilityID, p.Capability.ManifestDigest, p.Capability.OwnershipRef}, {"quote.commitment_ref", "verified-quote", p.Quote.QuoteID, p.Quote.CommitmentDigest, p.Quote.CommitmentRef}, {"escrow.reservation_ref", "task-escrow-reservation", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ReservationRef}, {"escrow.contract_ref", "task-escrow", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ContractRef}, {"outcome.outcome_ref", p.Outcome.Kind, p.Escrow.EscrowID, outcomeDigest(p), p.Outcome.OutcomeRef}}
+	}{{"requester_identity_ref", "principal-binding", p.PrincipalID, p.RequesterAgentID, p.RequesterIdentityRef}, {"requester_identity.identity_ref", "identity", p.RequesterAgentID, "", p.RequesterIdentity.IdentityRef}, {"provider_identity_ref", "principal-binding", p.ProviderID, p.ProviderAgentID, p.ProviderIdentityRef}, {"provider_identity.identity_ref", "identity", p.ProviderAgentID, "", p.ProviderIdentity.IdentityRef}, {"capability.ownership_ref", "capability-ownership", p.Capability.CapabilityID, p.Capability.ManifestDigest, p.Capability.OwnershipRef}, {"quote.commitment_ref", "verified-quote", p.Quote.QuoteID, p.Quote.CommitmentDigest, p.Quote.CommitmentRef}, {"escrow.reservation_ref", "task-escrow-reservation", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ReservationRef}, {"escrow.contract_ref", "task-escrow", p.Escrow.EscrowID, p.Escrow.ReservationDigest, p.Escrow.ContractRef}, {"outcome.outcome_ref", p.Outcome.Kind, p.Escrow.EscrowID, outcomeDigest(p), p.Outcome.OutcomeRef}}
 	if hasExecution {
 		refs = append(refs, struct {
 			name, kind, id, digest string
@@ -235,6 +267,15 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 			name, kind, id, digest string
 			ref                    Reference
 		}{"proof_of_service.evidence_ref", "proof-of-service", p.ProofOfService.EvidenceID, p.ProofOfService.EvidenceDigest, p.ProofOfService.EvidenceRef})
+	}
+	if p.Outcome.Kind == "dispute_resolution" {
+		refs = append(refs, struct {
+			name, kind, id, digest string
+			ref                    Reference
+		}{"outcome.resolution_ref", "dispute-resolution", func() string {
+			resolution, _ := disputecommitment.ParseResolution(p.Outcome.ResolutionCBOR)
+			return resolution.DisputeID
+		}(), p.Outcome.ResolutionDigest, p.Outcome.ResolutionRef})
 	}
 	for _, x := range refs {
 		if err := ValidateReference(p.NetworkID, x.ref); err != nil {
@@ -286,6 +327,31 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	}
 	r.Valid = len(r.Failures) == 0
 	return r
+}
+
+func decimalToAtomic(value string, decimals uint32) (string, error) {
+	if value == "" || strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
+		return "", errors.New("invalid decimal amount")
+	}
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 || parts[0] == "" {
+		return "", errors.New("invalid decimal amount")
+	}
+	fraction := ""
+	if len(parts) == 2 {
+		fraction = parts[1]
+	}
+	if len(fraction) > int(decimals) {
+		return "", errors.New("amount exceeds asset precision")
+	}
+	for len(fraction) < int(decimals) {
+		fraction += "0"
+	}
+	n, ok := new(big.Int).SetString(parts[0]+fraction, 10)
+	if !ok || n.Sign() < 0 {
+		return "", errors.New("invalid decimal amount")
+	}
+	return n.String(), nil
 }
 
 func equalBytes(a, b []byte) bool {

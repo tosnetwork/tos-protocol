@@ -418,6 +418,18 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		economy.reserveRequest.PermissionHash == "" {
 		t.Fatalf("Verified reservation binding was lost: %#v", economy.reserveRequest)
 	}
+	// A verifier replica has an empty bbolt projection. The complete expected
+	// tuple and canonical identity controllers must still recover the same
+	// escrow through the shared live authority/economy without a mutation.
+	fresh, freshErr := Open(Config{StatePath: filepath.Join(t.TempDir(), "fresh-verifier.db"), BearerToken: "test-secret", Authority: server.authority, EconomicDriver: economy, Now: func() time.Time { return now }})
+	if freshErr != nil {
+		t.Fatal(freshErr)
+	}
+	defer fresh.Close()
+	freshGet, freshErr := fresh.GetEscrow(context.Background(), connect.NewRequest(&atostosv1.GetEscrowRequest{Context: &atostosv1.RequestContext{RequestId: "fresh-empty-projection", CallerId: "independent-verifier", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli()}, EscrowId: terms.EscrowId, QuoteId: quoteID, ExpectedTerms: terms, ExpectedReservationDigest: create.Msg.Escrow.ReservationDigest, ExpectedEscrowRef: create.Msg.Escrow.EscrowRef, ExpectedCreatorAddress: creator, ExpectedAgentAddress: agent}))
+	if freshErr != nil || !freshGet.Msg.Found || freshGet.Msg.Escrow == nil || freshGet.Msg.Escrow.EscrowRef.Reference != economy.contract {
+		t.Fatalf("fresh protocol replica failed canonical recovery: response=%+v err=%v", freshGet, freshErr)
+	}
 
 	escrowID := create.Msg.Escrow.EscrowId
 	receipt := &atostosv1.ExecutionReceiptEnvelope{

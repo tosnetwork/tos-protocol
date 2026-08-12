@@ -135,6 +135,22 @@ func (s *Server) VerifyCapabilityOwnership(
 	if err != nil {
 		return nil, err
 	}
+	if !response.Verified && req.Msg.Version != "" && req.Msg.ExpectedManifestDigest != nil && req.Msg.ExpectedOwnershipRef != nil && s.authority.Supports(TrustModeVerified) {
+		resolver, ok := s.authority.(CommitmentResolver)
+		commitmentDigest, digestErr := digestString(req.Msg.ExpectedManifestDigest)
+		if !ok || digestErr != nil || commitmentDigest == "" {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "Capability ownership resolver identity unavailable")
+		}
+		objectID := req.Msg.CapabilityId + "@" + req.Msg.Version
+		ownership, resolveErr := resolver.ResolveCommitment(ctx, "capability-ownership", objectID, commitmentDigest, req.Msg.ExpectedOwnershipRef)
+		if resolveErr != nil || ownership == nil || !ownership.Finalized || ownership.FinalizedCheckpoint == 0 || ownership.Network != req.Msg.ExpectedOwnershipRef.Network || ownership.Reference != req.Msg.ExpectedOwnershipRef.Reference {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "Capability ownership finality unavailable")
+		}
+		response.Verified = true
+		response.ReasonCode = ""
+		response.OwnershipRef = ownership
+		return connect.NewResponse(response), nil
+	}
 	if response.Verified && s.authority.Supports(TrustModeVerified) {
 		resolver, ok := s.authority.(CommitmentResolver)
 		if !ok || commitmentDigest == "" {

@@ -72,6 +72,7 @@ type Value struct {
 	ExecutionSignerID     string        `json:"execution_signer_id"`
 	SignerAuthorizationID string        `json:"signer_authorization_id"`
 	SignatureAlgorithm    string        `json:"signature_algorithm"`
+	StartedUnixMillis     int64         `json:"started_unix_millis"`
 	CompletedUnixMillis   int64         `json:"completed_unix_millis"`
 	ErrorCode             string        `json:"error_code"`
 	Aipow                 *aipow        `json:"aipow,omitempty"`
@@ -79,7 +80,7 @@ type Value struct {
 
 type Claims struct {
 	ReceiptID, QuoteID, EscrowID, JobID, PrincipalID, ProviderID, CapabilityID, CapabilityVersion, TrustMode, ProofProfile, Result, InputCommitment, OutputCommitment, UsageCommitment, ExecutionSignerID, SignerAuthorizationID, SignatureAlgorithm, NetworkChargeAtomic string
-	CompletedUnixMillis                                                                                                                                                                                                                                                   int64
+	StartedUnixMillis, CompletedUnixMillis                                                                                                                                                                                                                                int64
 }
 
 func text(v digest) string { return v.Algorithm + ":" + hex.EncodeToString(v.Value) }
@@ -88,14 +89,14 @@ func Parse(data []byte) (Claims, error) {
 	if err := codec.Unmarshal(data, &v); err != nil {
 		return Claims{}, err
 	}
-	return Claims{v.ReceiptID, v.QuoteID, v.EscrowID, v.JobID, v.PrincipalID, v.ProviderID, v.CapabilityID, v.CapabilityVersion, v.TrustMode, v.ProofProfile, v.Result, text(v.InputCommitment), text(v.OutputCommitment), text(v.UsageCommitment), v.ExecutionSignerID, v.SignerAuthorizationID, v.SignatureAlgorithm, v.NetworkCharge.AtomicAmount, v.CompletedUnixMillis}, nil
+	return Claims{v.ReceiptID, v.QuoteID, v.EscrowID, v.JobID, v.PrincipalID, v.ProviderID, v.CapabilityID, v.CapabilityVersion, v.TrustMode, v.ProofProfile, v.Result, text(v.InputCommitment), text(v.OutputCommitment), text(v.UsageCommitment), v.ExecutionSignerID, v.SignerAuthorizationID, v.SignatureAlgorithm, v.NetworkCharge.AtomicAmount, v.StartedUnixMillis, v.CompletedUnixMillis}, nil
 }
 func Proto(data []byte) (*atostosv1.ExecutionReceiptEnvelope, error) {
 	var v Value
 	if err := codec.Unmarshal(data, &v); err != nil {
 		return nil, err
 	}
-	r := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: v.ReceiptID, QuoteId: v.QuoteID, EscrowId: v.EscrowID, JobId: v.JobID, PrincipalId: v.PrincipalID, ProviderId: v.ProviderID, CapabilityId: v.CapabilityID, CapabilityVersion: v.CapabilityVersion, TrustMode: atostosv1.TrustMode(atostosv1.TrustMode_value[v.TrustMode]), ProofProfile: atostosv1.ProofProfile(atostosv1.ProofProfile_value[v.ProofProfile]), Result: atostosv1.ExecutionResult(atostosv1.ExecutionResult_value[v.Result]), InputCommitment: protoDigest(v.InputCommitment), OutputCommitment: protoDigest(v.OutputCommitment), UsageCommitment: protoDigest(v.UsageCommitment), Usage: &atostosv1.Usage{InputBytes: v.Usage.InputBytes, OutputBytes: v.Usage.OutputBytes, InputTokens: v.Usage.InputTokens, OutputTokens: v.Usage.OutputTokens, ExecutionMillis: v.Usage.ExecutionMillis}, ClientCharge: &atostosv1.Money{Amount: v.ClientCharge.Amount, Currency: v.ClientCharge.Asset}, NetworkCharge: &atostosv1.NetworkAmount{Asset: v.NetworkCharge.Asset, AtomicAmount: v.NetworkCharge.AtomicAmount}, ExecutionSignerId: v.ExecutionSignerID, SignerAuthorizationId: v.SignerAuthorizationID, SignatureAlgorithm: v.SignatureAlgorithm, CompletedUnixMillis: v.CompletedUnixMillis, ErrorCode: v.ErrorCode}
+	r := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: v.ReceiptID, QuoteId: v.QuoteID, EscrowId: v.EscrowID, JobId: v.JobID, PrincipalId: v.PrincipalID, ProviderId: v.ProviderID, CapabilityId: v.CapabilityID, CapabilityVersion: v.CapabilityVersion, TrustMode: atostosv1.TrustMode(atostosv1.TrustMode_value[v.TrustMode]), ProofProfile: atostosv1.ProofProfile(atostosv1.ProofProfile_value[v.ProofProfile]), Result: atostosv1.ExecutionResult(atostosv1.ExecutionResult_value[v.Result]), InputCommitment: protoDigest(v.InputCommitment), OutputCommitment: protoDigest(v.OutputCommitment), UsageCommitment: protoDigest(v.UsageCommitment), Usage: &atostosv1.Usage{InputBytes: v.Usage.InputBytes, OutputBytes: v.Usage.OutputBytes, InputTokens: v.Usage.InputTokens, OutputTokens: v.Usage.OutputTokens, ExecutionMillis: v.Usage.ExecutionMillis}, ClientCharge: &atostosv1.Money{Amount: v.ClientCharge.Amount, Currency: v.ClientCharge.Asset}, NetworkCharge: &atostosv1.NetworkAmount{Asset: v.NetworkCharge.Asset, AtomicAmount: v.NetworkCharge.AtomicAmount}, ExecutionSignerId: v.ExecutionSignerID, SignerAuthorizationId: v.SignerAuthorizationID, SignatureAlgorithm: v.SignatureAlgorithm, StartedUnixMillis: v.StartedUnixMillis, CompletedUnixMillis: v.CompletedUnixMillis, ErrorCode: v.ErrorCode}
 	for _, a := range v.Artifacts {
 		r.Artifacts = append(r.Artifacts, &atostosv1.ArtifactCommitment{ArtifactId: a.ID, ContentType: a.MediaType, SizeBytes: a.SizeBytes, Digest: protoDigest(a.Digest)})
 	}
@@ -121,7 +122,7 @@ func CanonicalValue(r *atostosv1.ExecutionReceiptEnvelope) (Value, error) {
 	if err := quotecommitment.RejectUnknown(r); err != nil {
 		return Value{}, err
 	}
-	v := Value{ReceiptID: r.ReceiptId, QuoteID: r.QuoteId, EscrowID: r.EscrowId, JobID: r.JobId, PrincipalID: r.PrincipalId, ProviderID: r.ProviderId, CapabilityID: r.CapabilityId, CapabilityVersion: r.CapabilityVersion, TrustMode: r.TrustMode.String(), ProofProfile: r.ProofProfile.String(), Result: r.Result.String(), InputCommitment: dg(r.InputCommitment), OutputCommitment: dg(r.OutputCommitment), UsageCommitment: dg(r.UsageCommitment), ExecutionSignerID: r.ExecutionSignerId, SignerAuthorizationID: r.SignerAuthorizationId, SignatureAlgorithm: strings.ToLower(r.SignatureAlgorithm), CompletedUnixMillis: r.CompletedUnixMillis, ErrorCode: r.ErrorCode}
+	v := Value{ReceiptID: r.ReceiptId, QuoteID: r.QuoteId, EscrowID: r.EscrowId, JobID: r.JobId, PrincipalID: r.PrincipalId, ProviderID: r.ProviderId, CapabilityID: r.CapabilityId, CapabilityVersion: r.CapabilityVersion, TrustMode: r.TrustMode.String(), ProofProfile: r.ProofProfile.String(), Result: r.Result.String(), InputCommitment: dg(r.InputCommitment), OutputCommitment: dg(r.OutputCommitment), UsageCommitment: dg(r.UsageCommitment), ExecutionSignerID: r.ExecutionSignerId, SignerAuthorizationID: r.SignerAuthorizationId, SignatureAlgorithm: strings.ToLower(r.SignatureAlgorithm), StartedUnixMillis: r.StartedUnixMillis, CompletedUnixMillis: r.CompletedUnixMillis, ErrorCode: r.ErrorCode}
 	if r.ClientCharge != nil {
 		v.ClientCharge = money{r.ClientCharge.Amount, r.ClientCharge.Currency}
 	}

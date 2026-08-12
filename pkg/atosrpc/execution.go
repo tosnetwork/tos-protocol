@@ -635,6 +635,7 @@ func (s *Server) completeDurableJob(jobID string, stored *storedExecutionJob, re
 		UsageCommitment: digestMessage(usageEncoded), Usage: usage,
 		ExecutionSignerId:     s.signerID,
 		SignerAuthorizationId: authorization.Value.AuthorizationId,
+		StartedUnixMillis:     record.CreatedUnixMillis,
 		CompletedUnixMillis:   completion.CompletedAt.UnixMilli(),
 	}
 	// Principal identity and the client-visible maximum charge are recovered

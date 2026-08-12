@@ -22,7 +22,7 @@ type digest struct {
 	Algorithm string `json:"algorithm"`
 	Value     []byte `json:"value"`
 }
-type amount struct {
+type Amount struct {
 	Asset        string `json:"asset"`
 	AtomicAmount string `json:"atomic_amount"`
 }
@@ -61,9 +61,9 @@ type ResolutionValue struct {
 	DisputeDigest       string `json:"dispute_digest"`
 	Outcome             string `json:"outcome"`
 	ReviewerPrincipalID string `json:"reviewer_principal_id"`
-	Reserved            amount `json:"reserved"`
-	ProviderPayout      amount `json:"provider_payout"`
-	RequesterRefund     amount `json:"requester_refund"`
+	Reserved            Amount `json:"reserved"`
+	ProviderPayout      Amount `json:"provider_payout"`
+	RequesterRefund     Amount `json:"requester_refund"`
 	ResolvedUnixMillis  int64  `json:"resolved_unix_millis"`
 }
 
@@ -73,11 +73,11 @@ func dg(v *atostosv1.Digest) digest {
 	}
 	return digest{v.Algorithm, append([]byte(nil), v.Value...)}
 }
-func amt(v *atostosv1.NetworkAmount) amount {
+func amt(v *atostosv1.NetworkAmount) Amount {
 	if v == nil {
-		return amount{}
+		return Amount{}
 	}
-	return amount{v.Asset, v.AtomicAmount}
+	return Amount{v.Asset, v.AtomicAmount}
 }
 
 func OpenDigest(v *atostosv1.VerifiedDisputeOpen) (string, error) {
@@ -126,28 +126,60 @@ func OpenDigest(v *atostosv1.VerifiedDisputeOpen) (string, error) {
 }
 
 func ResolutionDigest(v *atostosv1.VerifiedDisputeResolution) (string, error) {
-	if v == nil {
-		return "", errors.New("verified dispute resolution tuple is required")
-	}
-	if err := quotecommitment.RejectUnknown(v); err != nil {
+	x, err := ResolutionCanonicalValue(v)
+	if err != nil {
 		return "", err
 	}
+	return codec.Digest(ResolutionDomain, x)
+}
+
+func ResolutionCanonicalValue(v *atostosv1.VerifiedDisputeResolution) (ResolutionValue, error) {
+	if v == nil {
+		return ResolutionValue{}, errors.New("verified dispute resolution tuple is required")
+	}
+	if err := quotecommitment.RejectUnknown(v); err != nil {
+		return ResolutionValue{}, err
+	}
 	if v.Version != "atos_verified_dispute_resolution_v1" || v.ResolvedUnixMillis <= 0 {
-		return "", errors.New("invalid verified dispute resolution version or time")
+		return ResolutionValue{}, errors.New("invalid verified dispute resolution version or time")
 	}
 	for name, value := range map[string]string{"network": v.NetworkId, "domain": v.GatewayDomain, "dispute": v.DisputeId, "escrow": v.EscrowId, "job": v.JobId, "quote": v.QuoteId, "receipt": v.ReceiptId, "dispute_digest": v.DisputeDigest, "outcome": v.Outcome, "reviewer": v.ReviewerPrincipalId} {
 		if strings.TrimSpace(value) == "" {
-			return "", errors.New("missing verified dispute resolution field: " + name)
+			return ResolutionValue{}, errors.New("missing verified dispute resolution field: " + name)
 		}
 	}
 	if !validDigestString(v.DisputeDigest) {
-		return "", errors.New("invalid dispute digest")
+		return ResolutionValue{}, errors.New("invalid dispute digest")
 	}
 	if !validAmount(v.Reserved) || !validAmount(v.ProviderPayout) || !validAmount(v.RequesterRefund) || v.Reserved.Asset != v.ProviderPayout.Asset || v.Reserved.Asset != v.RequesterRefund.Asset {
-		return "", errors.New("invalid dispute resolution amounts")
+		return ResolutionValue{}, errors.New("invalid dispute resolution amounts")
 	}
 	x := ResolutionValue{v.Version, v.NetworkId, v.GatewayDomain, v.DisputeId, v.EscrowId, v.JobId, v.QuoteId, v.ReceiptId, v.DisputeDigest, v.Outcome, v.ReviewerPrincipalId, amt(v.Reserved), amt(v.ProviderPayout), amt(v.RequesterRefund), v.ResolvedUnixMillis}
-	return codec.Digest(ResolutionDomain, x)
+	return x, nil
+}
+
+func ResolutionBytes(v *atostosv1.VerifiedDisputeResolution) ([]byte, error) {
+	x, err := ResolutionCanonicalValue(v)
+	if err != nil {
+		return nil, err
+	}
+	return codec.Marshal(x)
+}
+
+func ParseResolution(data []byte) (ResolutionValue, error) {
+	var value ResolutionValue
+	if err := codec.Unmarshal(data, &value); err != nil {
+		return ResolutionValue{}, err
+	}
+	return value, nil
+}
+
+func ResolutionProto(data []byte) (*atostosv1.VerifiedDisputeResolution, error) {
+	v, err := ParseResolution(data)
+	if err != nil {
+		return nil, err
+	}
+	return &atostosv1.VerifiedDisputeResolution{Version: v.Version, NetworkId: v.NetworkID, GatewayDomain: v.GatewayDomain, DisputeId: v.DisputeID, EscrowId: v.EscrowID, JobId: v.JobID, QuoteId: v.QuoteID, ReceiptId: v.ReceiptID, DisputeDigest: v.DisputeDigest, Outcome: v.Outcome, ReviewerPrincipalId: v.ReviewerPrincipalID, Reserved: &atostosv1.NetworkAmount{Asset: v.Reserved.Asset, AtomicAmount: v.Reserved.AtomicAmount}, ProviderPayout: &atostosv1.NetworkAmount{Asset: v.ProviderPayout.Asset, AtomicAmount: v.ProviderPayout.AtomicAmount}, RequesterRefund: &atostosv1.NetworkAmount{Asset: v.RequesterRefund.Asset, AtomicAmount: v.RequesterRefund.AtomicAmount}, ResolvedUnixMillis: v.ResolvedUnixMillis}, nil
 }
 
 func validDigest(v *atostosv1.Digest) bool {

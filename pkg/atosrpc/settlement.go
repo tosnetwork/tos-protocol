@@ -16,6 +16,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -229,6 +230,7 @@ func (s *Server) GetEscrow(
 		return nil, invalid("INVALID_ARGUMENT", "escrow_id or quote_id is required")
 	}
 	response := new(atostosv1.GetEscrowResponse)
+	var projectedResolutionDigest, projectedDisputeOutcome string
 	err := s.store.view(func(tx *bolt.Tx) error {
 		escrowID := req.Msg.EscrowId
 		if escrowID == "" {
@@ -245,6 +247,7 @@ func (s *Server) GetEscrow(
 		}
 		if found {
 			response.Escrow, response.Found = escrow, true
+			projectedResolutionDigest, projectedDisputeOutcome = escrow.DisputeResolutionDigest, escrow.DisputeOutcome
 		}
 		return nil
 	})
@@ -274,7 +277,22 @@ func (s *Server) GetEscrow(
 			return err
 		})
 		if partyErr != nil {
-			return nil, partyErr
+			if req.Msg.ExpectedCreatorAddress == "" || req.Msg.ExpectedAgentAddress == "" {
+				return nil, partyErr
+			}
+			creator, partyErr = toschain.CanonicalAddress(req.Msg.ExpectedCreatorAddress)
+			if partyErr == nil {
+				agent, partyErr = toschain.CanonicalAddress(req.Msg.ExpectedAgentAddress)
+			}
+			if partyErr != nil {
+				return nil, conflict("ESCROW_MISMATCH", "expected economic identity controller is invalid")
+			}
+		} else if req.Msg.ExpectedCreatorAddress != "" || req.Msg.ExpectedAgentAddress != "" {
+			expectedCreator, creatorErr := toschain.CanonicalAddress(req.Msg.ExpectedCreatorAddress)
+			expectedAgent, agentErr := toschain.CanonicalAddress(req.Msg.ExpectedAgentAddress)
+			if creatorErr != nil || agentErr != nil || expectedCreator != creator || expectedAgent != agent {
+				return nil, conflict("ESCROW_MISMATCH", "expected economic identity controller mismatch")
+			}
 		}
 		reserve, parseErr := parseAtomic(terms.Reserve.AtomicAmount)
 		if parseErr != nil || !reserve.IsUint64() {
@@ -345,6 +363,24 @@ func (s *Server) GetEscrow(
 				// projection can reconstruct and independently observe its action.
 				resolved.TransitionReference = ""
 				if req.Msg.ExpectedDisputeDigest != "" {
+					if req.Msg.ExpectedDisputeResolution == nil {
+						return nil, failedPrecondition("DISPUTE_MISMATCH", "complete canonical dispute resolution is required")
+					}
+					resolutionDigest, resolutionErr := disputecommitment.ResolutionDigest(req.Msg.ExpectedDisputeResolution)
+					if resolutionErr != nil || resolutionDigest != req.Msg.ExpectedDisputeResolutionDigest || req.Msg.ExpectedDisputeResolution.DisputeDigest != req.Msg.ExpectedDisputeDigest || req.Msg.ExpectedDisputeResolution.Outcome != req.Msg.ExpectedDisputeOutcome {
+						return nil, conflict("DISPUTE_MISMATCH", "canonical dispute resolution projection mismatch")
+					}
+					resolverAuthority, ok := s.authority.(CommitmentResolver)
+					if !ok || req.Msg.ExpectedDisputeResolutionRef == nil {
+						return nil, unavailable("NETWORK_UNAVAILABLE", "dispute resolution commitment resolver unavailable")
+					}
+					liveResolution, liveResolutionErr := resolverAuthority.ResolveCommitment(ctx, "dispute-resolution", req.Msg.ExpectedDisputeResolution.DisputeId, resolutionDigest, req.Msg.ExpectedDisputeResolutionRef)
+					if liveResolutionErr != nil || liveResolution == nil || !liveResolution.Finalized || liveResolution.FinalizedCheckpoint == 0 {
+						return nil, unavailable("NETWORK_UNAVAILABLE", "dispute resolution commitment unavailable")
+					}
+					if projectedResolutionDigest != "" && (projectedResolutionDigest != resolutionDigest || projectedDisputeOutcome != req.Msg.ExpectedDisputeOutcome) {
+						return nil, conflict("DISPUTE_MISMATCH", "local dispute resolution projection mismatch")
+					}
 					payout, payoutErr := parseAtomic(req.Msg.ExpectedDisputePayout.GetAtomicAmount())
 					resolver, ok := s.economy.(economic.DisputeResolver)
 					if payoutErr != nil || !payout.IsUint64() || !ok {
@@ -360,6 +396,9 @@ func (s *Server) GetEscrow(
 					resolved.TransitionReference, resolved.State = terminal.TransitionReference, terminal.State
 					response.Escrow.DisputeDigest = req.Msg.ExpectedDisputeDigest
 					response.Escrow.DisputeRef = cloneMessage(req.Msg.ExpectedDisputeRef)
+					response.Escrow.DisputeResolutionDigest = resolutionDigest
+					response.Escrow.DisputeResolutionRef = liveResolution
+					response.Escrow.DisputeOutcome = req.Msg.ExpectedDisputeOutcome
 					response.Escrow.FinalizedCheckpoint = terminal.State.ObservedMasterSeqno
 				} else {
 					resolver, ok := s.economy.(economic.SettlementResolver)
@@ -386,12 +425,19 @@ func (s *Server) GetEscrow(
 						return nil
 					})
 					if loadErr != nil {
-						// The chain may have settled immediately before the protocol
-						// projection commit. SettleJob must be allowed to reach its
-						// read-only replay and finish that projection; GetEscrow simply
-						// withholds terminal evidence until then.
-						response.Found = true
-						return connect.NewResponse(response), nil
+						if req.Msg.ExpectedTerminalRef == nil {
+							response.Found = true
+							return connect.NewResponse(response), nil
+						}
+						if req.Msg.ExpectedReceipt == nil || req.Msg.ExpectedReceiptRef == nil || req.Msg.ExpectedSettlementCharge == nil {
+							return nil, unavailable("NETWORK_UNAVAILABLE", "complete expected settlement tuple is required for projection-free recovery")
+						}
+						resolvedReceipt, receiptErr := s.resolveExpectedReceipt(ctx, req.Msg.Context, req.Msg.ExpectedReceipt, req.Msg.ExpectedReceiptRef)
+						if receiptErr != nil || resolvedReceipt.JobId != terms.JobId || resolvedReceipt.QuoteId != terms.QuoteId || resolvedReceipt.EscrowId != terms.EscrowId {
+							return nil, conflict("SETTLEMENT_FAILED", "canonical settlement receipt mismatch")
+						}
+						settlement = &atostosv1.Settlement{ReceiptId: resolvedReceipt.ReceiptId, Charged: cloneMessage(req.Msg.ExpectedSettlementCharge), SettlementRef: cloneMessage(req.Msg.ExpectedTerminalRef)}
+						receipt = &atostosv1.CommittedExecutionReceipt{Receipt: cloneMessage(resolvedReceipt), ReceiptRef: cloneMessage(req.Msg.ExpectedReceiptRef)}
 					}
 					if settlement.SettlementRef == nil || settlement.Charged == nil {
 						return nil, unavailable("NETWORK_UNAVAILABLE", "canonical settlement projection is malformed")
@@ -803,10 +849,15 @@ func (s *Server) ResolveVerifiedDispute(ctx context.Context, req *connect.Reques
 		return nil, failedPrecondition("ECONOMIC_TRANSITION_FAILED", "TaskEscrow dispute resolution is not finalized")
 	}
 	ref := &NetworkReference{Network: s.economy.Network(), Reference: result.TransitionReference, Finalized: true, FinalizedCheckpoint: result.State.ObservedMasterSeqno}
+	resolutionRef, resolutionCommitErr := s.authority.Commit(ctx, "dispute-resolution", r.DisputeId, digest)
+	if resolutionCommitErr != nil || !resolutionRef.Finalized || resolutionRef.FinalizedCheckpoint == 0 {
+		return nil, unavailable("NETWORK_UNAVAILABLE", "dispute resolution commitment unavailable")
+	}
 	settlement := &atostosv1.Settlement{SettlementId: "dispute-settlement:" + r.DisputeId, EscrowId: r.EscrowId, QuoteId: r.QuoteId, JobId: r.JobId, ReceiptId: r.ReceiptId, Charged: cloneMessage(r.ProviderPayout), Refunded: cloneMessage(r.RequesterRefund), State: atostosv1.SettlementState_SETTLEMENT_STATE_SETTLED, SettlementRef: ref, SettledUnixMillis: s.now().UnixMilli()}
 	escrow.State = atostosv1.EscrowState_ESCROW_STATE_SETTLED
 	escrow.TerminalRef = ref
 	escrow.DisputeResolutionDigest = digest
+	escrow.DisputeResolutionRef = &resolutionRef
 	escrow.DisputeOutcome = r.Outcome
 	escrow.FinalizedCheckpoint = result.State.ObservedMasterSeqno
 	if e = s.store.update(func(tx *bolt.Tx) error {
@@ -817,7 +868,7 @@ func (s *Server) ResolveVerifiedDispute(ctx context.Context, req *connect.Reques
 	}); e != nil {
 		return nil, e
 	}
-	return connect.NewResponse(&atostosv1.ResolveVerifiedDisputeResponse{Escrow: escrow, Settlement: settlement, ResolutionDigest: digest, ResolutionRef: ref, Resolved: true}), nil
+	return connect.NewResponse(&atostosv1.ResolveVerifiedDisputeResponse{Escrow: escrow, Settlement: settlement, ResolutionDigest: digest, ResolutionRef: &resolutionRef, Resolved: true}), nil
 }
 
 func (s *Server) SettleJob(

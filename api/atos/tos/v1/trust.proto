@@ -91,6 +91,7 @@ message ExecutionSignerAuthorization {
   NetworkReference authorization_ref = 2;
   bool revoked = 3;
   NetworkReference revocation_ref = 4;
+  int64 revoked_unix_millis = 5;
 }
 
 message AuthorizeExecutionSignerRequest {
@@ -121,6 +122,8 @@ message ResolveExecutionSignerAuthorizationRequest {
   string capability_version = 4;
   string execution_signer_id = 5;
   int64 at_unix_millis = 6;
+  ExecutionSignerAuthorizationInput expected_authorization = 7;
+  NetworkReference expected_authorization_ref = 8;
 }
 
 message ResolveExecutionSignerAuthorizationResponse {

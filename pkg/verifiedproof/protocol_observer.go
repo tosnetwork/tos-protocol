@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/gen/atos/tos/v1/atostosv1connect"
+	"github.com/tosnetwork/tos-protocol/pkg/disputecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/poscommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
@@ -71,8 +72,12 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 	defer cancel()
 	p := r.Package
 	switch r.Kind {
-	case "identity":
-		req := connect.NewRequest(&atostosv1.ResolvePrincipalBindingRequest{Context: observerContext(), PrincipalId: r.ObjectID})
+	case "principal-binding":
+		expectedAgent := p.RequesterAgentID
+		if r.ObjectID == p.ProviderID {
+			expectedAgent = p.ProviderAgentID
+		}
+		req := connect.NewRequest(&atostosv1.ResolvePrincipalBindingRequest{Context: observerContext(), PrincipalId: r.ObjectID, ExpectedAgentId: expectedAgent, ExpectedBindingRef: protoRef(r.Reference)})
 		o.decorate(req)
 		resp, e := o.identity.ResolvePrincipalBinding(ctx, req)
 		if e != nil {
@@ -82,8 +87,32 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 			return EvidenceObservation{}, nil
 		}
 		return observation(r, resp.Msg.BindingRef)
+	case "identity":
+		identity := p.RequesterIdentity
+		if r.ObjectID == p.ProviderAgentID {
+			identity = p.ProviderIdentity
+		}
+		expected := &atostosv1.AgentIdentity{AgentId: identity.AgentID, CanonicalUri: identity.CanonicalURI, Controllers: append([]string(nil), identity.Controllers...), Assurance: identity.Assurance}
+		req := connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{Context: observerContext(), AgentId: identity.AgentID, CanonicalUri: identity.CanonicalURI, ExpectedIdentity: expected, ExpectedIdentityRef: protoRef(identity.IdentityRef)})
+		o.decorate(req)
+		resp, e := o.identity.ResolveAgentIdentity(ctx, req)
+		if e != nil {
+			return EvidenceObservation{}, e
+		}
+		if !resp.Msg.Found || resp.Msg.Identity == nil {
+			return EvidenceObservation{}, nil
+		}
+		if resp.Msg.Identity.AgentId != identity.AgentID || resp.Msg.Identity.CanonicalUri != identity.CanonicalURI || resp.Msg.Identity.Assurance != identity.Assurance || len(resp.Msg.Identity.Controllers) != len(identity.Controllers) {
+			return EvidenceObservation{}, errors.New("live identity tuple mismatch")
+		}
+		for i := range identity.Controllers {
+			if resp.Msg.Identity.Controllers[i] != identity.Controllers[i] {
+				return EvidenceObservation{}, errors.New("live identity controller mismatch")
+			}
+		}
+		return observation(r, resp.Msg.Identity.IdentityRef)
 	case "capability-ownership":
-		req := connect.NewRequest(&atostosv1.VerifyCapabilityOwnershipRequest{Context: observerContext(), CapabilityId: p.Capability.CapabilityID, ProviderId: p.ProviderID, Version: p.Capability.CapabilityVersion, ExpectedManifestDigest: protoDigestText(p.Capability.ManifestDigest)})
+		req := connect.NewRequest(&atostosv1.VerifyCapabilityOwnershipRequest{Context: observerContext(), CapabilityId: p.Capability.CapabilityID, ProviderId: p.ProviderID, Version: p.Capability.CapabilityVersion, ExpectedManifestDigest: protoDigestText(p.Capability.ManifestDigest), ExpectedOwnershipRef: protoRef(p.Capability.OwnershipRef)})
 		o.decorate(req)
 		resp, e := o.capability.VerifyCapabilityOwnership(ctx, req)
 		if e != nil {
@@ -112,7 +141,10 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 			return EvidenceObservation{}, nil
 		}
 		return observation(r, resp.Msg.Quote.CommitmentRef)
-	case "task-escrow-reservation", "task-escrow", "provider_settlement", "requester_release", "dispute_resolution":
+	case "task-escrow-reservation", "task-escrow", "provider_settlement", "requester_release", "dispute_resolution", "dispute-resolution":
+		if len(p.RequesterIdentity.Controllers) != 1 || len(p.ProviderIdentity.Controllers) != 1 {
+			return EvidenceObservation{}, errors.New("canonical economic identity controllers are required")
+		}
 		t, e := escrowcommitment.Proto(p.Escrow.CanonicalCBOR)
 		if e != nil {
 			return EvidenceObservation{}, e
@@ -122,7 +154,7 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 		if p.SignerAuthorization != nil {
 			t.SignerAuthorizationRef = protoRef(p.SignerAuthorization.AuthorizationRef)
 		}
-		req := connect.NewRequest(&atostosv1.GetEscrowRequest{Context: observerContext(), EscrowId: p.Escrow.EscrowID, QuoteId: p.Quote.QuoteID, ExpectedTerms: t, ExpectedEscrowRef: protoRef(p.Escrow.ContractRef), ExpectedReservationDigest: p.Escrow.ReservationDigest})
+		req := connect.NewRequest(&atostosv1.GetEscrowRequest{Context: observerContext(), EscrowId: p.Escrow.EscrowID, QuoteId: p.Quote.QuoteID, ExpectedTerms: t, ExpectedEscrowRef: protoRef(p.Escrow.ContractRef), ExpectedReservationDigest: p.Escrow.ReservationDigest, ExpectedCreatorAddress: p.RequesterIdentity.Controllers[0], ExpectedAgentAddress: p.ProviderIdentity.Controllers[0]})
 		if p.Outcome.Kind == "requester_release" {
 			req.Msg.ExpectedReleaseDigest = p.Outcome.ReleaseDigest
 			req.Msg.ExpectedReleaseReasonCode = p.Outcome.ReasonCode
@@ -131,12 +163,29 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 			}
 		}
 		if p.Outcome.Kind == "dispute_resolution" {
+			resolution, resolutionErr := disputecommitment.ResolutionProto(p.Outcome.ResolutionCBOR)
+			if resolutionErr != nil {
+				return EvidenceObservation{}, resolutionErr
+			}
 			req.Msg.ExpectedDisputeDigest = p.Outcome.DisputeDigest
 			req.Msg.ExpectedDisputeRef = protoRef(p.Outcome.DisputeRef)
 			req.Msg.ExpectedDisputePayout = &atostosv1.NetworkAmount{Asset: p.Quote.SettlementAsset, AtomicAmount: p.Outcome.ChargedAtomic}
-			if r.Kind == "dispute_resolution" {
-				req.Msg.ExpectedTerminalRef = protoRef(p.Outcome.OutcomeRef)
+			req.Msg.ExpectedDisputeResolutionDigest = p.Outcome.ResolutionDigest
+			req.Msg.ExpectedDisputeOutcome = p.Outcome.DisputeOutcome
+			req.Msg.ExpectedDisputeResolution = resolution
+			req.Msg.ExpectedDisputeResolutionRef = protoRef(p.Outcome.ResolutionRef)
+			req.Msg.ExpectedTerminalRef = protoRef(p.Outcome.OutcomeRef)
+		}
+		if p.Outcome.Kind == "provider_settlement" && p.Receipt != nil {
+			receipt, receiptErr := receiptcommitment.Proto(p.Receipt.CanonicalCBOR)
+			if receiptErr != nil {
+				return EvidenceObservation{}, receiptErr
 			}
+			receipt.Signature = append([]byte(nil), p.Receipt.Signature...)
+			req.Msg.ExpectedReceipt = receipt
+			req.Msg.ExpectedReceiptRef = protoRef(p.Receipt.ReceiptRef)
+			req.Msg.ExpectedSettlementCharge = &atostosv1.NetworkAmount{Asset: p.Quote.SettlementAsset, AtomicAmount: p.Outcome.ChargedAtomic}
+			req.Msg.ExpectedTerminalRef = protoRef(p.Outcome.OutcomeRef)
 		}
 		o.decorate(req)
 		resp, e := o.settlement.GetEscrow(ctx, req)
@@ -148,6 +197,15 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 		}
 		if r.Kind == "task-escrow-reservation" || r.Kind == "task-escrow" {
 			return observation(r, resp.Msg.Escrow.EscrowRef)
+		}
+		if r.Kind == "requester_release" && (resp.Msg.Escrow.State != atostosv1.EscrowState_ESCROW_STATE_RELEASED || resp.Msg.Escrow.ReleaseDigest != p.Outcome.ReleaseDigest || resp.Msg.Escrow.ReleaseReasonCode != p.Outcome.ReasonCode) {
+			return EvidenceObservation{}, errors.New("canonical release tuple mismatch")
+		}
+		if r.Kind == "dispute_resolution" && (resp.Msg.Escrow.State != atostosv1.EscrowState_ESCROW_STATE_SETTLED || resp.Msg.Escrow.DisputeDigest != p.Outcome.DisputeDigest || resp.Msg.Escrow.DisputeResolutionDigest != p.Outcome.ResolutionDigest || resp.Msg.Escrow.DisputeOutcome != p.Outcome.DisputeOutcome) {
+			return EvidenceObservation{}, errors.New("canonical dispute resolution tuple mismatch")
+		}
+		if r.Kind == "dispute-resolution" {
+			return observation(r, resp.Msg.Escrow.DisputeResolutionRef)
 		}
 		return observation(r, resp.Msg.Escrow.TerminalRef)
 	case "verified-receipt":
@@ -193,7 +251,7 @@ func (o *ProtocolObserver) ResolveSigner(ctx context.Context, p Package) (Signer
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req := connect.NewRequest(&atostosv1.ResolveExecutionSignerAuthorizationRequest{Context: observerContext(), ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, AtUnixMillis: p.Receipt.CompletedUnixNanos / 1e6})
+	req := connect.NewRequest(&atostosv1.ResolveExecutionSignerAuthorizationRequest{Context: observerContext(), ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, AtUnixMillis: p.Receipt.CompletedUnixNanos / 1e6, ExpectedAuthorization: &atostosv1.ExecutionSignerAuthorizationInput{AuthorizationId: p.SignerAuthorization.AuthorizationID, ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, SignerPublicKey: append([]byte(nil), p.SignerAuthorization.SignerPublicKey...), SignatureAlgorithm: p.SignerAuthorization.SignatureAlgorithm, ValidFromUnixMillis: p.SignerAuthorization.ValidFromUnixNanos / 1e6, ValidUntilUnixMillis: p.SignerAuthorization.ValidUntilUnixNanos / 1e6}, ExpectedAuthorizationRef: protoRef(p.SignerAuthorization.AuthorizationRef)})
 	o.decorate(req)
 	resp, e := o.trust.ResolveExecutionSignerAuthorization(ctx, req)
 	if e != nil {
@@ -204,5 +262,5 @@ func (o *ProtocolObserver) ResolveSigner(ctx context.Context, p Package) (Signer
 		return SignerObservation{}, nil
 	}
 	v := a.Value
-	return SignerObservation{Found: true, Revoked: a.Revoked, Network: a.AuthorizationRef.Network, AuthorizationID: v.AuthorizationId, ProviderID: v.ProviderId, CapabilityID: v.CapabilityId, CapabilityVersion: v.CapabilityVersion, SignerID: v.ExecutionSignerId, Reference: a.AuthorizationRef.Reference, SignatureAlgorithm: v.SignatureAlgorithm, PublicKey: append([]byte(nil), v.SignerPublicKey...), ValidFromUnixNanos: v.ValidFromUnixMillis * 1e6, ValidUntilUnixNanos: v.ValidUntilUnixMillis * 1e6, FinalizedCheckpoint: a.AuthorizationRef.FinalizedCheckpoint}, nil
+	return SignerObservation{Found: true, Revoked: a.Revoked, RevokedUnixNanos: a.RevokedUnixMillis * 1e6, Network: a.AuthorizationRef.Network, AuthorizationID: v.AuthorizationId, ProviderID: v.ProviderId, CapabilityID: v.CapabilityId, CapabilityVersion: v.CapabilityVersion, SignerID: v.ExecutionSignerId, Reference: a.AuthorizationRef.Reference, SignatureAlgorithm: v.SignatureAlgorithm, PublicKey: append([]byte(nil), v.SignerPublicKey...), ValidFromUnixNanos: v.ValidFromUnixMillis * 1e6, ValidUntilUnixNanos: v.ValidUntilUnixMillis * 1e6, FinalizedCheckpoint: a.AuthorizationRef.FinalizedCheckpoint}, nil
 }

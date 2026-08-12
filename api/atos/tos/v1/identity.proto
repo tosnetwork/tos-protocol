@@ -27,6 +27,8 @@ message ResolveAgentIdentityRequest {
   RequestContext context = 1;
   string agent_id = 2;
   string canonical_uri = 3;
+  AgentIdentity expected_identity = 4;
+  NetworkReference expected_identity_ref = 5;
 }
 
 message ResolveAgentIdentityResponse {
@@ -37,6 +39,8 @@ message ResolveAgentIdentityResponse {
 message ResolvePrincipalBindingRequest {
   RequestContext context = 1;
   string principal_id = 2;
+  string expected_agent_id = 3;
+  NetworkReference expected_binding_ref = 4;
 }
 
 message ResolvePrincipalBindingResponse {

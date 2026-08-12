@@ -57,6 +57,33 @@ func TestCreatePrincipalBinding_RejectsUnresolvedAgentIdentity(t *testing.T) {
 	}
 }
 
+func TestResolveAgentIdentity_FreshReplicaUsesCanonicalExpectedTuple(t *testing.T) {
+	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	authority := new(verifiedTestAuthority)
+	first, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "first.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	identity := &atostosv1.AgentIdentity{AgentId: "agt_fresh", CanonicalUri: "tos://agent/agt_fresh", Controllers: []string{testCanonicalController(4)}, Assurance: "tos_attested"}
+	if err := first.SeedIdentity(identity); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := first.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{Context: bindingReqCtx("verifier", "read-first", now), AgentId: identity.AgentId}))
+	if err != nil || !stored.Msg.Found {
+		t.Fatalf("seeded identity unavailable: %v", err)
+	}
+	fresh, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "fresh.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	resolved, err := fresh.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{Context: bindingReqCtx("verifier", "read-fresh", now), AgentId: identity.AgentId, CanonicalUri: identity.CanonicalUri, ExpectedIdentity: identity, ExpectedIdentityRef: stored.Msg.Identity.IdentityRef}))
+	if err != nil || !resolved.Msg.Found || resolved.Msg.Identity.IdentityRef.FinalizedCheckpoint == 0 || resolved.Msg.Identity.Controllers[0] != identity.Controllers[0] {
+		t.Fatalf("fresh canonical identity recovery failed: response=%+v err=%v", resolved, err)
+	}
+}
+
 // TestCreatePrincipalBinding_RejectsSelfAssertedIdentity proves an identity
 // with no independent anchoring (self_asserted, or empty assurance) cannot
 // be bound -- a binding to an identity that can never satisfy

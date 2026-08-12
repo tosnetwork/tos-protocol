@@ -682,13 +682,14 @@ func (x *ExecutionSignerAuthorizationInput) GetValidUntilUnixMillis() int64 {
 }
 
 type ExecutionSignerAuthorization struct {
-	state            protoimpl.MessageState             `protogen:"open.v1"`
-	Value            *ExecutionSignerAuthorizationInput `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	AuthorizationRef *NetworkReference                  `protobuf:"bytes,2,opt,name=authorization_ref,json=authorizationRef,proto3" json:"authorization_ref,omitempty"`
-	Revoked          bool                               `protobuf:"varint,3,opt,name=revoked,proto3" json:"revoked,omitempty"`
-	RevocationRef    *NetworkReference                  `protobuf:"bytes,4,opt,name=revocation_ref,json=revocationRef,proto3" json:"revocation_ref,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state             protoimpl.MessageState             `protogen:"open.v1"`
+	Value             *ExecutionSignerAuthorizationInput `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	AuthorizationRef  *NetworkReference                  `protobuf:"bytes,2,opt,name=authorization_ref,json=authorizationRef,proto3" json:"authorization_ref,omitempty"`
+	Revoked           bool                               `protobuf:"varint,3,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	RevocationRef     *NetworkReference                  `protobuf:"bytes,4,opt,name=revocation_ref,json=revocationRef,proto3" json:"revocation_ref,omitempty"`
+	RevokedUnixMillis int64                              `protobuf:"varint,5,opt,name=revoked_unix_millis,json=revokedUnixMillis,proto3" json:"revoked_unix_millis,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ExecutionSignerAuthorization) Reset() {
@@ -747,6 +748,13 @@ func (x *ExecutionSignerAuthorization) GetRevocationRef() *NetworkReference {
 		return x.RevocationRef
 	}
 	return nil
+}
+
+func (x *ExecutionSignerAuthorization) GetRevokedUnixMillis() int64 {
+	if x != nil {
+		return x.RevokedUnixMillis
+	}
+	return 0
 }
 
 type AuthorizeExecutionSignerRequest struct {
@@ -966,15 +974,17 @@ func (x *RevokeExecutionSignerResponse) GetRevoked() bool {
 }
 
 type ResolveExecutionSignerAuthorizationRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Context           *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	ProviderId        string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	CapabilityId      string                 `protobuf:"bytes,3,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	CapabilityVersion string                 `protobuf:"bytes,4,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
-	ExecutionSignerId string                 `protobuf:"bytes,5,opt,name=execution_signer_id,json=executionSignerId,proto3" json:"execution_signer_id,omitempty"`
-	AtUnixMillis      int64                  `protobuf:"varint,6,opt,name=at_unix_millis,json=atUnixMillis,proto3" json:"at_unix_millis,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                    protoimpl.MessageState             `protogen:"open.v1"`
+	Context                  *RequestContext                    `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderId               string                             `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	CapabilityId             string                             `protobuf:"bytes,3,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	CapabilityVersion        string                             `protobuf:"bytes,4,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
+	ExecutionSignerId        string                             `protobuf:"bytes,5,opt,name=execution_signer_id,json=executionSignerId,proto3" json:"execution_signer_id,omitempty"`
+	AtUnixMillis             int64                              `protobuf:"varint,6,opt,name=at_unix_millis,json=atUnixMillis,proto3" json:"at_unix_millis,omitempty"`
+	ExpectedAuthorization    *ExecutionSignerAuthorizationInput `protobuf:"bytes,7,opt,name=expected_authorization,json=expectedAuthorization,proto3" json:"expected_authorization,omitempty"`
+	ExpectedAuthorizationRef *NetworkReference                  `protobuf:"bytes,8,opt,name=expected_authorization_ref,json=expectedAuthorizationRef,proto3" json:"expected_authorization_ref,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ResolveExecutionSignerAuthorizationRequest) Reset() {
@@ -1047,6 +1057,20 @@ func (x *ResolveExecutionSignerAuthorizationRequest) GetAtUnixMillis() int64 {
 		return x.AtUnixMillis
 	}
 	return 0
+}
+
+func (x *ResolveExecutionSignerAuthorizationRequest) GetExpectedAuthorization() *ExecutionSignerAuthorizationInput {
+	if x != nil {
+		return x.ExpectedAuthorization
+	}
+	return nil
+}
+
+func (x *ResolveExecutionSignerAuthorizationRequest) GetExpectedAuthorizationRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedAuthorizationRef
+	}
+	return nil
 }
 
 type ResolveExecutionSignerAuthorizationResponse struct {
@@ -1176,12 +1200,13 @@ const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\x11signer_public_key\x18\x06 \x01(\fR\x0fsignerPublicKey\x12/\n" +
 	"\x13signature_algorithm\x18\a \x01(\tR\x12signatureAlgorithm\x123\n" +
 	"\x16valid_from_unix_millis\x18\b \x01(\x03R\x13validFromUnixMillis\x125\n" +
-	"\x17valid_until_unix_millis\x18\t \x01(\x03R\x14validUntilUnixMillis\"\x90\x02\n" +
+	"\x17valid_until_unix_millis\x18\t \x01(\x03R\x14validUntilUnixMillis\"\xc0\x02\n" +
 	"\x1cExecutionSignerAuthorization\x12D\n" +
 	"\x05value\x18\x01 \x01(\v2..atos.tos.v1.ExecutionSignerAuthorizationInputR\x05value\x12J\n" +
 	"\x11authorization_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x10authorizationRef\x12\x18\n" +
 	"\arevoked\x18\x03 \x01(\bR\arevoked\x12D\n" +
-	"\x0erevocation_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rrevocationRef\"\xae\x01\n" +
+	"\x0erevocation_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rrevocationRef\x12.\n" +
+	"\x13revoked_unix_millis\x18\x05 \x01(\x03R\x11revokedUnixMillis\"\xae\x01\n" +
 	"\x1fAuthorizeExecutionSignerRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12T\n" +
 	"\rauthorization\x18\x02 \x01(\v2..atos.tos.v1.ExecutionSignerAuthorizationInputR\rauthorization\"\x8d\x01\n" +
@@ -1195,7 +1220,7 @@ const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"reasonCode\"\x8a\x01\n" +
 	"\x1dRevokeExecutionSignerResponse\x12O\n" +
 	"\rauthorization\x18\x01 \x01(\v2).atos.tos.v1.ExecutionSignerAuthorizationR\rauthorization\x12\x18\n" +
-	"\arevoked\x18\x02 \x01(\bR\arevoked\"\xae\x02\n" +
+	"\arevoked\x18\x02 \x01(\bR\arevoked\"\xf2\x03\n" +
 	"*ResolveExecutionSignerAuthorizationRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
@@ -1203,7 +1228,9 @@ const file_atos_tos_v1_trust_proto_rawDesc = "" +
 	"\rcapability_id\x18\x03 \x01(\tR\fcapabilityId\x12-\n" +
 	"\x12capability_version\x18\x04 \x01(\tR\x11capabilityVersion\x12.\n" +
 	"\x13execution_signer_id\x18\x05 \x01(\tR\x11executionSignerId\x12$\n" +
-	"\x0eat_unix_millis\x18\x06 \x01(\x03R\fatUnixMillis\"\xbf\x01\n" +
+	"\x0eat_unix_millis\x18\x06 \x01(\x03R\fatUnixMillis\x12e\n" +
+	"\x16expected_authorization\x18\a \x01(\v2..atos.tos.v1.ExecutionSignerAuthorizationInputR\x15expectedAuthorization\x12[\n" +
+	"\x1aexpected_authorization_ref\x18\b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x18expectedAuthorizationRef\"\xbf\x01\n" +
 	"+ResolveExecutionSignerAuthorizationResponse\x12\x1e\n" +
 	"\n" +
 	"authorized\x18\x01 \x01(\bR\n" +
@@ -1283,22 +1310,24 @@ var file_atos_tos_v1_trust_proto_depIdxs = []int32{
 	19, // 26: atos.tos.v1.RevokeExecutionSignerRequest.context:type_name -> atos.tos.v1.RequestContext
 	7,  // 27: atos.tos.v1.RevokeExecutionSignerResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
 	19, // 28: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.context:type_name -> atos.tos.v1.RequestContext
-	7,  // 29: atos.tos.v1.ResolveExecutionSignerAuthorizationResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
-	2,  // 30: atos.tos.v1.TrustService.CommitQuote:input_type -> atos.tos.v1.CommitQuoteRequest
-	4,  // 31: atos.tos.v1.TrustService.GetQuoteCommitment:input_type -> atos.tos.v1.GetQuoteCommitmentRequest
-	8,  // 32: atos.tos.v1.TrustService.AuthorizeExecutionSigner:input_type -> atos.tos.v1.AuthorizeExecutionSignerRequest
-	10, // 33: atos.tos.v1.TrustService.RevokeExecutionSigner:input_type -> atos.tos.v1.RevokeExecutionSignerRequest
-	12, // 34: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:input_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationRequest
-	3,  // 35: atos.tos.v1.TrustService.CommitQuote:output_type -> atos.tos.v1.CommitQuoteResponse
-	5,  // 36: atos.tos.v1.TrustService.GetQuoteCommitment:output_type -> atos.tos.v1.GetQuoteCommitmentResponse
-	9,  // 37: atos.tos.v1.TrustService.AuthorizeExecutionSigner:output_type -> atos.tos.v1.AuthorizeExecutionSignerResponse
-	11, // 38: atos.tos.v1.TrustService.RevokeExecutionSigner:output_type -> atos.tos.v1.RevokeExecutionSignerResponse
-	13, // 39: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:output_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationResponse
-	35, // [35:40] is the sub-list for method output_type
-	30, // [30:35] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	6,  // 29: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.expected_authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorizationInput
+	18, // 30: atos.tos.v1.ResolveExecutionSignerAuthorizationRequest.expected_authorization_ref:type_name -> atos.tos.v1.NetworkReference
+	7,  // 31: atos.tos.v1.ResolveExecutionSignerAuthorizationResponse.authorization:type_name -> atos.tos.v1.ExecutionSignerAuthorization
+	2,  // 32: atos.tos.v1.TrustService.CommitQuote:input_type -> atos.tos.v1.CommitQuoteRequest
+	4,  // 33: atos.tos.v1.TrustService.GetQuoteCommitment:input_type -> atos.tos.v1.GetQuoteCommitmentRequest
+	8,  // 34: atos.tos.v1.TrustService.AuthorizeExecutionSigner:input_type -> atos.tos.v1.AuthorizeExecutionSignerRequest
+	10, // 35: atos.tos.v1.TrustService.RevokeExecutionSigner:input_type -> atos.tos.v1.RevokeExecutionSignerRequest
+	12, // 36: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:input_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationRequest
+	3,  // 37: atos.tos.v1.TrustService.CommitQuote:output_type -> atos.tos.v1.CommitQuoteResponse
+	5,  // 38: atos.tos.v1.TrustService.GetQuoteCommitment:output_type -> atos.tos.v1.GetQuoteCommitmentResponse
+	9,  // 39: atos.tos.v1.TrustService.AuthorizeExecutionSigner:output_type -> atos.tos.v1.AuthorizeExecutionSignerResponse
+	11, // 40: atos.tos.v1.TrustService.RevokeExecutionSigner:output_type -> atos.tos.v1.RevokeExecutionSignerResponse
+	13, // 41: atos.tos.v1.TrustService.ResolveExecutionSignerAuthorization:output_type -> atos.tos.v1.ResolveExecutionSignerAuthorizationResponse
+	37, // [37:42] is the sub-list for method output_type
+	32, // [32:37] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_trust_proto_init() }

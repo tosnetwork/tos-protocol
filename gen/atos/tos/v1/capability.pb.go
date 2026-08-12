@@ -264,6 +264,7 @@ type VerifyCapabilityOwnershipRequest struct {
 	ProviderId             string                 `protobuf:"bytes,3,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
 	Version                string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	ExpectedManifestDigest *Digest                `protobuf:"bytes,5,opt,name=expected_manifest_digest,json=expectedManifestDigest,proto3" json:"expected_manifest_digest,omitempty"`
+	ExpectedOwnershipRef   *NetworkReference      `protobuf:"bytes,6,opt,name=expected_ownership_ref,json=expectedOwnershipRef,proto3" json:"expected_ownership_ref,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -329,6 +330,13 @@ func (x *VerifyCapabilityOwnershipRequest) GetVersion() string {
 func (x *VerifyCapabilityOwnershipRequest) GetExpectedManifestDigest() *Digest {
 	if x != nil {
 		return x.ExpectedManifestDigest
+	}
+	return nil
+}
+
+func (x *VerifyCapabilityOwnershipRequest) GetExpectedOwnershipRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedOwnershipRef
 	}
 	return nil
 }
@@ -572,14 +580,15 @@ const file_atos_tos_v1_capability_proto_rawDesc = "" +
 	"\n" +
 	"capability\x18\x01 \x01(\v2\x1f.atos.tos.v1.CapabilityIdentityR\n" +
 	"capability\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"\x88\x02\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\"\xdd\x02\n" +
 	" VerifyCapabilityOwnershipRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12#\n" +
 	"\rcapability_id\x18\x02 \x01(\tR\fcapabilityId\x12\x1f\n" +
 	"\vprovider_id\x18\x03 \x01(\tR\n" +
 	"providerId\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12M\n" +
-	"\x18expected_manifest_digest\x18\x05 \x01(\v2\x13.atos.tos.v1.DigestR\x16expectedManifestDigest\"\xe6\x01\n" +
+	"\x18expected_manifest_digest\x18\x05 \x01(\v2\x13.atos.tos.v1.DigestR\x16expectedManifestDigest\x12S\n" +
+	"\x16expected_ownership_ref\x18\x06 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x14expectedOwnershipRef\"\xe6\x01\n" +
 	"!VerifyCapabilityOwnershipResponse\x12\x1a\n" +
 	"\bverified\x18\x01 \x01(\bR\bverified\x12B\n" +
 	"\rownership_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\fownershipRef\x12@\n" +
@@ -640,24 +649,25 @@ var file_atos_tos_v1_capability_proto_depIdxs = []int32{
 	0,  // 5: atos.tos.v1.ResolveCapabilityResponse.capability:type_name -> atos.tos.v1.CapabilityIdentity
 	10, // 6: atos.tos.v1.VerifyCapabilityOwnershipRequest.context:type_name -> atos.tos.v1.RequestContext
 	7,  // 7: atos.tos.v1.VerifyCapabilityOwnershipRequest.expected_manifest_digest:type_name -> atos.tos.v1.Digest
-	8,  // 8: atos.tos.v1.VerifyCapabilityOwnershipResponse.ownership_ref:type_name -> atos.tos.v1.NetworkReference
-	8,  // 9: atos.tos.v1.VerifyCapabilityOwnershipResponse.manifest_ref:type_name -> atos.tos.v1.NetworkReference
-	10, // 10: atos.tos.v1.CommitCapabilityManifestRequest.context:type_name -> atos.tos.v1.RequestContext
-	7,  // 11: atos.tos.v1.CommitCapabilityManifestRequest.manifest_digest:type_name -> atos.tos.v1.Digest
-	9,  // 12: atos.tos.v1.CommitCapabilityManifestRequest.requested_trust_modes:type_name -> atos.tos.v1.TrustMode
-	0,  // 13: atos.tos.v1.CommitCapabilityManifestResponse.capability:type_name -> atos.tos.v1.CapabilityIdentity
-	8,  // 14: atos.tos.v1.CommitCapabilityManifestResponse.commitment_ref:type_name -> atos.tos.v1.NetworkReference
-	1,  // 15: atos.tos.v1.CapabilityService.ResolveCapability:input_type -> atos.tos.v1.ResolveCapabilityRequest
-	3,  // 16: atos.tos.v1.CapabilityService.VerifyCapabilityOwnership:input_type -> atos.tos.v1.VerifyCapabilityOwnershipRequest
-	5,  // 17: atos.tos.v1.CapabilityService.CommitCapabilityManifest:input_type -> atos.tos.v1.CommitCapabilityManifestRequest
-	2,  // 18: atos.tos.v1.CapabilityService.ResolveCapability:output_type -> atos.tos.v1.ResolveCapabilityResponse
-	4,  // 19: atos.tos.v1.CapabilityService.VerifyCapabilityOwnership:output_type -> atos.tos.v1.VerifyCapabilityOwnershipResponse
-	6,  // 20: atos.tos.v1.CapabilityService.CommitCapabilityManifest:output_type -> atos.tos.v1.CommitCapabilityManifestResponse
-	18, // [18:21] is the sub-list for method output_type
-	15, // [15:18] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	8,  // 8: atos.tos.v1.VerifyCapabilityOwnershipRequest.expected_ownership_ref:type_name -> atos.tos.v1.NetworkReference
+	8,  // 9: atos.tos.v1.VerifyCapabilityOwnershipResponse.ownership_ref:type_name -> atos.tos.v1.NetworkReference
+	8,  // 10: atos.tos.v1.VerifyCapabilityOwnershipResponse.manifest_ref:type_name -> atos.tos.v1.NetworkReference
+	10, // 11: atos.tos.v1.CommitCapabilityManifestRequest.context:type_name -> atos.tos.v1.RequestContext
+	7,  // 12: atos.tos.v1.CommitCapabilityManifestRequest.manifest_digest:type_name -> atos.tos.v1.Digest
+	9,  // 13: atos.tos.v1.CommitCapabilityManifestRequest.requested_trust_modes:type_name -> atos.tos.v1.TrustMode
+	0,  // 14: atos.tos.v1.CommitCapabilityManifestResponse.capability:type_name -> atos.tos.v1.CapabilityIdentity
+	8,  // 15: atos.tos.v1.CommitCapabilityManifestResponse.commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	1,  // 16: atos.tos.v1.CapabilityService.ResolveCapability:input_type -> atos.tos.v1.ResolveCapabilityRequest
+	3,  // 17: atos.tos.v1.CapabilityService.VerifyCapabilityOwnership:input_type -> atos.tos.v1.VerifyCapabilityOwnershipRequest
+	5,  // 18: atos.tos.v1.CapabilityService.CommitCapabilityManifest:input_type -> atos.tos.v1.CommitCapabilityManifestRequest
+	2,  // 19: atos.tos.v1.CapabilityService.ResolveCapability:output_type -> atos.tos.v1.ResolveCapabilityResponse
+	4,  // 20: atos.tos.v1.CapabilityService.VerifyCapabilityOwnership:output_type -> atos.tos.v1.VerifyCapabilityOwnershipResponse
+	6,  // 21: atos.tos.v1.CapabilityService.CommitCapabilityManifest:output_type -> atos.tos.v1.CommitCapabilityManifestResponse
+	19, // [19:22] is the sub-list for method output_type
+	16, // [16:19] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_capability_proto_init() }

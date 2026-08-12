@@ -447,6 +447,19 @@ func TestRevokeExecutionSigner_GoldenPathThenResolveRevoked(t *testing.T) {
 	if !revoked.Msg.Revoked || !revoked.Msg.Authorization.Revoked {
 		t.Fatalf("expected revoked=true, got %+v", revoked.Msg)
 	}
+	if revoked.Msg.Authorization.RevokedUnixMillis != now.UnixMilli() {
+		t.Fatalf("revoked_unix_millis=%d want=%d", revoked.Msg.Authorization.RevokedUnixMillis, now.UnixMilli())
+	}
+
+	historical, err := server.ResolveExecutionSignerAuthorization(context.Background(), connect.NewRequest(
+		&atostosv1.ResolveExecutionSignerAuthorizationRequest{
+			Context:    &atostosv1.RequestContext{RequestId: "resolve-before-revoke", CallerId: "caller-test", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli()},
+			ProviderId: "provider-revoke", CapabilityId: "cap-revoke", CapabilityVersion: "1.0.0", ExecutionSignerId: "signer-revoke", AtUnixMillis: now.Add(-time.Second).UnixMilli(),
+		},
+	))
+	if err != nil || !historical.Msg.Authorized {
+		t.Fatalf("post-execution revocation invalidated historical authorization: response=%+v err=%v", historical, err)
+	}
 
 	resolved, err := server.ResolveExecutionSignerAuthorization(context.Background(), connect.NewRequest(
 		&atostosv1.ResolveExecutionSignerAuthorizationRequest{
