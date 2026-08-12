@@ -1,6 +1,7 @@
 package taskescrowpublisher
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -96,6 +97,31 @@ func TestTosctlArgumentsPreserveAtomicEconomics(t *testing.T) {
 		if !strings.Contains(settle, required) {
 			t.Fatalf("settle args missing %q: %s", required, settle)
 		}
+	}
+}
+
+func TestTaskEscrowCLICapabilityContract(t *testing.T) {
+	valid := []byte(`{
+		"schema_version":"tosctl.task-escrow-cli.v1",
+		"action_encoding":"tos.task-escrow.action.v1",
+		"commands":["agent task build-state","agent task create","agent task send"],
+		"create_flags":["--name","--creator","--agent","--verifier","--budget-nanotos","--deadline","--review-period","--policy-hash","--permission-hash","--from","--amount-nanotos","--workchain","--yes","--format"],
+		"send_flags":["--operation","--address","--from","--query-id","--amount-nanotos","--yes","--result-hash","--evidence-hash","--dispute-hash","--payout-nanotos"],
+		"send_operations":["accept","reject","result","dispute","resolve","settle","cancel","timeout","claim"]
+	}`)
+	if err := validateTaskEscrowCLICapabilities(valid); err != nil {
+		t.Fatalf("valid capability contract rejected: %v", err)
+	}
+	for name, broken := range map[string][]byte{
+		"missing create":    bytes.Replace(valid, []byte(`,"agent task create"`), nil, 1),
+		"missing send flag": bytes.Replace(valid, []byte(`,"--payout-nanotos"`), nil, 1),
+		"wrong schema":      bytes.Replace(valid, []byte(taskEscrowCLISchemaVersion), []byte("legacy"), 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := validateTaskEscrowCLICapabilities(broken); err == nil {
+				t.Fatal("incompatible tosctl capability contract was accepted")
+			}
+		})
 	}
 }
 

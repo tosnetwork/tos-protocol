@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +30,8 @@ import (
 )
 
 const (
+	taskEscrowCLISchemaVersion    = "tosctl.task-escrow-cli.v1"
+	taskEscrowCLIActionEncoding   = "tos.task-escrow.action.v1"
 	DefaultOperationAmountNanoTOS = uint64(10_000_000)
 	DefaultPublishTimeout         = 90 * time.Second
 	DefaultRecoveryWait           = 30 * time.Second
@@ -36,6 +39,15 @@ const (
 	DefaultTransactionLookback    = 32
 	maxCommandOutputBytes         = 2 << 20
 )
+
+type taskEscrowCLICapabilities struct {
+	SchemaVersion  string   `json:"schema_version"`
+	ActionEncoding string   `json:"action_encoding"`
+	Commands       []string `json:"commands"`
+	CreateFlags    []string `json:"create_flags"`
+	SendFlags      []string `json:"send_flags"`
+	SendOperations []string `json:"send_operations"`
+}
 
 // TosctlBackendConfig identifies operator-owned wallet profiles. Wallets maps
 // canonical raw TOS addresses to their tosctl wallet names; it contains no key
@@ -269,7 +281,66 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if !foundExecutor {
 		return errors.New("executor wallet is unavailable")
 	}
+	capabilityOutput, err := b.run(ctx, "agent", "task", "capabilities", "--format", "json")
+	if err != nil {
+		return fmt.Errorf("query tosctl TaskEscrow capabilities: %w", err)
+	}
+	if err := validateTaskEscrowCLICapabilities(capabilityOutput); err != nil {
+		return err
+	}
+	// Exercise the deterministic, side-effect-free implementation as well as
+	// its declared schema. This catches binaries that advertise the contract
+	// but cannot parse or build the exact StateInit used by the publisher.
+	addresses := make([]string, 0, len(b.wallets))
+	for addressValue := range b.wallets {
+		addresses = append(addresses, addressValue)
+	}
+	sort.Strings(addresses)
+	probe := chain.TaskEscrowAction{
+		Kind: chain.TaskEscrowActionDeploy, Creator: addresses[0], Agent: addresses[0],
+		Verifier: addresses[0], BudgetNanoTOS: 1, FundingNanoTOS: 1,
+		DeadlineUnix: uint64(time.Now().UTC().Add(time.Hour).Truncate(time.Second).Unix()),
+		ReviewPeriod: 3600, PolicyHash: "sha256:" + strings.Repeat("11", 32),
+		PermissionHash: "sha256:" + strings.Repeat("22", 32),
+	}
+	stateOutput, err := b.run(ctx, b.buildStateArgs(probe)...)
+	if err != nil {
+		return fmt.Errorf("exercise tosctl TaskEscrow build-state: %w", err)
+	}
+	var state taskStateView
+	if err := jsonstrict.Decode(stateOutput, &state); err != nil ||
+		normalizeDigest(state.PolicyHash) != probe.PolicyHash ||
+		normalizeDigest(state.PermissionHash) != probe.PermissionHash ||
+		strings.TrimSpace(state.Address) == "" || strings.TrimSpace(state.CodeHash) == "" {
+		return errors.New("tosctl TaskEscrow build-state readiness probe is incompatible")
+	}
 	return nil
+}
+
+func validateTaskEscrowCLICapabilities(output []byte) error {
+	var got taskEscrowCLICapabilities
+	if err := jsonstrict.Decode(output, &got); err != nil {
+		return errors.New("tosctl TaskEscrow capabilities are not valid JSON")
+	}
+	if got.SchemaVersion != taskEscrowCLISchemaVersion || got.ActionEncoding != taskEscrowCLIActionEncoding ||
+		!sameStringSet(got.Commands, []string{"agent task build-state", "agent task create", "agent task send"}) ||
+		!sameStringSet(got.CreateFlags, []string{"--name", "--creator", "--agent", "--verifier", "--budget-nanotos", "--deadline", "--review-period", "--policy-hash", "--permission-hash", "--from", "--amount-nanotos", "--workchain", "--yes", "--format"}) ||
+		!sameStringSet(got.SendFlags, []string{"--operation", "--address", "--from", "--query-id", "--amount-nanotos", "--yes", "--result-hash", "--evidence-hash", "--dispute-hash", "--payout-nanotos"}) ||
+		!sameStringSet(got.SendOperations, []string{"accept", "reject", "result", "dispute", "resolve", "settle", "cancel", "timeout", "claim"}) {
+		return errors.New("tosctl TaskEscrow CLI capability contract mismatch")
+	}
+	return nil
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	l := append([]string(nil), left...)
+	r := append([]string(nil), right...)
+	sort.Strings(l)
+	sort.Strings(r)
+	return slices.Equal(l, r)
 }
 
 // taskStateView mirrors every field tosctl's `agent task build-state

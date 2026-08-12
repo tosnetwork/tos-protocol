@@ -41,7 +41,10 @@ func TestInitializeJournalChecksBackendBeforeCreatingState(t *testing.T) {
 			MaxBudgetNanoTOS:    1, MaxFundingNanoTOS: 1,
 		},
 	}
-	backend := &enrollmentBackend{readyErr: errors.New("incompatible tosctl")}
+	// Negative control: model an enrolled executable that supports wallet ls
+	// but has no versioned agent-task capability command. The permanent journal
+	// must not exist after this failure.
+	backend := &enrollmentBackend{readyErr: errors.New("query tosctl TaskEscrow capabilities: unknown subcommand capabilities")}
 	if err := initializeJournal(context.Background(), config, backend); err == nil {
 		t.Fatal("unready backend was enrolled")
 	}
