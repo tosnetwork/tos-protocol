@@ -151,7 +151,7 @@ func (s *Server) verifyReceiptTx(tx *bolt.Tx, receipt *atostosv1.ExecutionReceip
 	if err := validateDigest(receipt.UsageCommitment); err != nil {
 		return false, "USAGE_COMMITMENT_INVALID", nil, nil
 	}
-	digest, err := protoDigest("ATOS-TOS-VERIFIED-RECEIPT-V1", receipt)
+	digest, err := receiptcommitment.Digest(receipt)
 	if err != nil {
 		return false, "", nil, err
 	}

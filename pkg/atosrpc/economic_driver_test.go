@@ -24,6 +24,7 @@ type verifiedTestAuthority struct {
 	closed     bool
 	resolveErr error
 	refs       map[string]string
+	commits    int
 }
 
 func (*verifiedTestAuthority) Network() string { return "tos-test" }
@@ -40,6 +41,7 @@ func (a *verifiedTestAuthority) Commit(_ context.Context, kind, id, digest strin
 	key := kind + "\x00" + id + "\x00" + digest
 	reference := "tos:test:" + kind + ":" + id + ":" + digest
 	a.refs[key] = reference
+	a.commits++
 	return NetworkReference{Network: "tos-test", Reference: reference, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
 func (a *verifiedTestAuthority) Close() error { a.closed = true; return nil }
