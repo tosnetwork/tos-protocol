@@ -429,7 +429,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 			IdempotencyKey: "idem-settle-verified", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli(),
 		},
 		EscrowId: escrowID, QuoteId: quoteID, JobId: jobID, ReceiptId: receiptID,
-		RequestedCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "700"},
+		RequestedCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "0"},
 		ExpectedTerms:   terms, ExpectedEscrowRef: create.Msg.Escrow.EscrowRef,
 		ExpectedReservationDigest: create.Msg.Escrow.ReservationDigest,
 	}
@@ -482,9 +482,12 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	}
 	if economy.settleRequest.ContractAddress != contractAddress ||
 		economy.settleRequest.BudgetNanoTOS != 1000 ||
-		economy.settleRequest.PayoutNanoTOS != 700 ||
+		economy.settleRequest.PayoutNanoTOS != 0 ||
 		economy.settleRequest.ResultHash == "" || economy.settleRequest.EvidenceHash == "" {
 		t.Fatalf("Verified settlement binding was lost: %#v", economy.settleRequest)
+	}
+	if settled.Msg.Settlement.Charged.AtomicAmount != "0" || settled.Msg.Settlement.Refunded.AtomicAmount != "1000" {
+		t.Fatalf("zero-charge settlement did not preserve full refund: %#v", settled.Msg.Settlement)
 	}
 	replay, err := server.SettleJob(context.Background(), connect.NewRequest(proto.Clone(settleRequest).(*atostosv1.SettleJobRequest)))
 	if err != nil || replay.Msg.Settlement == nil || replay.Msg.Settlement.SettlementId != settled.Msg.Settlement.SettlementId {

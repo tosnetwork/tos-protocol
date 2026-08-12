@@ -338,8 +338,7 @@ func (d *TaskEscrowDriver) SettleProvider(
 	ctx context.Context,
 	request SettleProviderRequest,
 ) (Result, error) {
-	if request.BudgetNanoTOS == 0 || request.PayoutNanoTOS == 0 ||
-		request.PayoutNanoTOS > request.BudgetNanoTOS || !validDigest(request.ResultHash) ||
+	if request.BudgetNanoTOS == 0 || request.PayoutNanoTOS > request.BudgetNanoTOS || !validDigest(request.ResultHash) ||
 		!validDigest(request.EvidenceHash) {
 		return Result{}, errors.New("invalid task escrow settlement")
 	}

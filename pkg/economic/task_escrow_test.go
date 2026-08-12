@@ -280,6 +280,58 @@ func TestTaskEscrowDriverRejectsDifferentPayoutAfterSettlement(t *testing.T) {
 	}
 }
 
+func TestTaskEscrowDriverSettlesZeroProviderPayoutAndFullRefundIdempotently(t *testing.T) {
+	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	resultHash := "sha256:" + strings.Repeat("33", 32)
+	evidenceHash := "sha256:" + strings.Repeat("44", 32)
+	harness := newTaskEscrowHarness(now)
+	harness.state = chain.TaskEscrowState{
+		Network: testNetwork, ContractAddress: testContract,
+		Creator: testCreator, Agent: testAgent, HasAgent: true,
+		Verifier: testVerifier, HasVerifier: true,
+		BudgetNanoTOS: 1_000, BalanceNanoTOS: 1_050,
+		DeadlineUnix: uint64(now.Add(time.Hour).Unix()), Status: chain.TaskEscrowStatusResultSubmitted,
+		ResultHash: resultHash, EvidenceHash: evidenceHash,
+		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
+		PermissionHash: "sha256:" + strings.Repeat("22", 32),
+		ReviewPeriod:   3600, ReviewDeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		DisputeHash: zeroDigest(), CodeHash: testCodeHash,
+		ObservedMasterSeqno: 101, ObservedAt: now,
+	}
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{
+		Observer: harness, Publisher: harness, Network: testNetwork,
+		AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier,
+		FundingOverhead: 50, ReviewPeriod: time.Hour, Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+	request := SettleProviderRequest{
+		EscrowID: "esc-zero", ContractAddress: testContract, BudgetNanoTOS: 1_000,
+		ResultHash: resultHash, EvidenceHash: evidenceHash, PayoutNanoTOS: 0,
+	}
+	first, err := driver.SettleProvider(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.AgentPaidNanoTOS != 0 || first.CreatorPaidNanoTOS < 1_000 ||
+		first.State.Status != chain.TaskEscrowStatusSettled || first.State.BudgetNanoTOS != 0 ||
+		first.State.BalanceNanoTOS != 0 {
+		t.Fatalf("zero-charge settlement did not fully refund requester: %#v", first)
+	}
+	firstAction := harness.actions[len(harness.actions)-1]
+	second, err := driver.SettleProvider(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondAction := harness.actions[len(harness.actions)-1]
+	if firstAction.ActionID != secondAction.ActionID || first.TransitionReference != second.TransitionReference ||
+		second.AgentPaidNanoTOS != 0 || second.CreatorPaidNanoTOS < 1_000 {
+		t.Fatalf("zero-charge replay diverged: first=%#v second=%#v", first, second)
+	}
+}
+
 func TestTaskEscrowActionIdentityExcludesFreshnessButBindsPayout(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0).UTC()
 	harness := newTaskEscrowHarness(now)

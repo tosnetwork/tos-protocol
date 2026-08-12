@@ -50,7 +50,7 @@ func main() {
 	if err := files.DecodeJSON(os.Args[1], maxConfigBytes, &cfg); err != nil {
 		fatal(err)
 	}
-	if cfg.Version != "1" || cfg.BudgetNanoTOS == 0 || cfg.PayoutNanoTOS == 0 ||
+	if cfg.Version != "1" || cfg.BudgetNanoTOS == 0 ||
 		cfg.PayoutNanoTOS > cfg.BudgetNanoTOS || cfg.FundingOverhead == 0 {
 		fatal(errors.New("invalid localnet integration config"))
 	}
