@@ -301,6 +301,14 @@ func CanonicalAddress(value string) (string, error) {
 	return requireCanonicalAddress(value)
 }
 
+// NormalizeAddress accepts either a user-friendly or raw standard TOS address
+// and returns its raw canonical representation. It is intended for trusted
+// tool output; protocol inputs must continue to use CanonicalAddress so that
+// alternative textual encodings cannot enter signed or hashed structures.
+func NormalizeAddress(value string) (string, error) {
+	return normalizeAddress(strings.TrimSpace(value))
+}
+
 var (
 	_ chain.Adapter                   = (*Adapter)(nil)
 	_ authorization.ClientKeyResolver = (*Adapter)(nil)

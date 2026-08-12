@@ -12,6 +12,7 @@ import (
 
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/chainactionpublisher"
+	"github.com/xssnick/tonutils-go/address"
 )
 
 func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
@@ -19,6 +20,7 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	marker := filepath.Join(dir, "sent")
 	payee := "0:e586e0e4737c347d727d3c38092aa23776966c3d6b54af98ef3cf9c87d93c363"
 	payer := "-1:0000000000000000000000000000000000000000000000000000000000000000"
+	walletAddress := address.MustParseRawAddr(payer).String()
 	rpc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var call struct {
 			ID     uint64 `json:"id"`
@@ -44,7 +46,7 @@ func TestTosctlBackendRecoversLostSendByExactChainLookup(t *testing.T) {
 	}))
 	defer rpc.Close()
 	script := filepath.Join(dir, "tosctl")
-	content := "#!/bin/sh\ngrep -F '" + rpc.URL + "' <&3 >/dev/null || exit 42\nif [ \"$1 $2\" = \"wallet ls\" ]; then echo '[{\"name\":\"anchor\",\"address\":\"" + payer + "\",\"balance\":0,\"state\":\"active\",\"wallet_type\":\"V3R2\",\"seqno\":1}]'; exit 0; fi\ntouch '" + marker + "'\nexit 1\n"
+	content := "#!/bin/sh\ngrep -F '" + rpc.URL + "' <&3 >/dev/null || exit 42\nif [ \"$1 $2\" = \"wallet ls\" ]; then echo '[{\"name\":\"anchor\",\"address\":\"" + walletAddress + "\",\"balance\":0,\"state\":\"active\",\"wallet_type\":\"V3R2\",\"seqno\":1}]'; exit 0; fi\ntouch '" + marker + "'\nexit 1\n"
 	if err := os.WriteFile(script, []byte(content), 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -134,7 +134,10 @@ func (s *Server) CreateEscrow(
 			if partyErr != nil {
 				return partyErr
 			}
-			policyHash, policyErr := protoDigest("ATOS-TOS-TASK-ESCROW-POLICY-V1", value)
+			// The fixed dispute policy is the contract policy that the
+			// key-custody publisher can allowlist. The unique reservation tuple
+			// is already bound by permissionHash below.
+			policyHash, policyErr := digestString(verifiedTerms.DisputePolicyDigest)
 			if policyErr != nil {
 				return policyErr
 			}
@@ -246,7 +249,7 @@ func (s *Server) GetEscrow(
 	}
 	if req.Msg.ExpectedTerms != nil {
 		terms := req.Msg.ExpectedTerms
-		expectedQuote, _, _, validationErr := s.validateVerifiedEscrowTerms(ctx, terms)
+		_, _, _, validationErr := s.validateVerifiedEscrowTerms(ctx, terms)
 		if validationErr != nil {
 			return nil, validationErr
 		}
@@ -273,7 +276,7 @@ func (s *Server) GetEscrow(
 		if parseErr != nil || !reserve.IsUint64() {
 			return nil, invalid("INVALID_ARGUMENT", "invalid reserve")
 		}
-		policyHash, policyErr := protoDigest("ATOS-TOS-TASK-ESCROW-POLICY-V1", expectedQuote)
+		policyHash, policyErr := digestString(terms.DisputePolicyDigest)
 		if policyErr != nil {
 			return nil, policyErr
 		}

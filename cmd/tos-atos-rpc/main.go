@@ -33,18 +33,19 @@ import (
 
 func main() {
 	var (
-		listen          = flag.String("listen", envOr("TOS_ATOS_RPC_LISTEN", "127.0.0.1:8090"), "ATOS RPC listen address")
-		statePath       = flag.String("state", envOr("TOS_ATOS_RPC_STATE", "./data/atos-rpc.db"), "durable bbolt state path")
-		bearerToken     = flag.String("token", os.Getenv("TOS_ATOS_RPC_TOKEN"), "shared bearer token (or TOS_ATOS_RPC_TOKEN)")
-		workerSocket    = flag.String("worker-socket", os.Getenv("TOS_WORKER_SOCKET"), "private tos-ai Worker Unix socket")
-		routeFile       = flag.String("routes", os.Getenv("TOS_ATOS_RPC_ROUTES"), "JSON array of public capability to Worker routes")
-		tlsCert         = flag.String("tls-cert", os.Getenv("TOS_ATOS_RPC_TLS_CERT"), "TLS server certificate PEM")
-		tlsKey          = flag.String("tls-key", os.Getenv("TOS_ATOS_RPC_TLS_KEY"), "TLS server private key PEM")
-		clientCA        = flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA PEM; enables required mTLS")
-		authorityMode   = flag.String("authority", envOr("TOS_ATOS_RPC_AUTHORITY", "local"), "Authority backend: local or chain")
-		authorityConfig = flag.String("authority-config", os.Getenv("TOS_ATOS_RPC_AUTHORITY_CONFIG"), "strict JSON chain Authority configuration")
-		economicMode    = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
-		economicConfig  = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
+		listen           = flag.String("listen", envOr("TOS_ATOS_RPC_LISTEN", "127.0.0.1:8090"), "ATOS RPC listen address")
+		statePath        = flag.String("state", envOr("TOS_ATOS_RPC_STATE", "./data/atos-rpc.db"), "durable bbolt state path")
+		bearerToken      = flag.String("token", os.Getenv("TOS_ATOS_RPC_TOKEN"), "shared bearer token (or TOS_ATOS_RPC_TOKEN)")
+		workerSocket     = flag.String("worker-socket", os.Getenv("TOS_WORKER_SOCKET"), "private tos-ai Worker Unix socket")
+		thirdPartySocket = flag.String("third-party-worker-socket", os.Getenv("TOS_THIRD_PARTY_WORKER_SOCKET"), "private third-party execution Worker Unix socket")
+		routeFile        = flag.String("routes", os.Getenv("TOS_ATOS_RPC_ROUTES"), "JSON array of public capability to Worker routes")
+		tlsCert          = flag.String("tls-cert", os.Getenv("TOS_ATOS_RPC_TLS_CERT"), "TLS server certificate PEM")
+		tlsKey           = flag.String("tls-key", os.Getenv("TOS_ATOS_RPC_TLS_KEY"), "TLS server private key PEM")
+		clientCA         = flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA PEM; enables required mTLS")
+		authorityMode    = flag.String("authority", envOr("TOS_ATOS_RPC_AUTHORITY", "local"), "Authority backend: local or chain")
+		authorityConfig  = flag.String("authority-config", os.Getenv("TOS_ATOS_RPC_AUTHORITY_CONFIG"), "strict JSON chain Authority configuration")
+		economicMode     = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
+		economicConfig   = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
 		// identitySeedFile is the ONLY way this process establishes a new
 		// AgentIdentity -- Server.SeedIdentity is deliberately not exposed
 		// as a network RPC: creating a brand-new identity from nothing is
@@ -84,6 +85,15 @@ func main() {
 		}
 		worker = client
 	}
+	var thirdPartyWorker atosrpc.ThirdPartyWorker
+	if strings.TrimSpace(*thirdPartySocket) != "" {
+		client, err := localrpc.NewThirdPartyWorkerClient(localrpc.DefaultThirdPartyWorkerClientConfig(*thirdPartySocket))
+		if err != nil {
+			logger.Error("configure private third-party Worker client", "error", err)
+			os.Exit(2)
+		}
+		thirdPartyWorker = client
+	}
 	authority, err := buildAuthority(*authorityMode, *authorityConfig)
 	if err != nil {
 		logger.Error("configure ATOS RPC authority", "error", err)
@@ -99,7 +109,7 @@ func main() {
 		StatePath: *statePath, BearerToken: *bearerToken,
 		Authority: authority, EconomicDriver: economicDriver,
 		TrustDomain: *trustDomain,
-		Worker:      worker, Router: router,
+		Worker:      worker, Router: router, ThirdPartyWorker: thirdPartyWorker,
 	})
 	if err != nil {
 		logger.Error("open ATOS RPC server", "error", err)
@@ -134,7 +144,7 @@ func main() {
 		logger.Info("ATOS TOS RPC listening", "address", *listen, "network", authority.Network(),
 			"authority", strings.ToLower(strings.TrimSpace(*authorityMode)),
 			"economic_driver", strings.ToLower(strings.TrimSpace(*economicMode)),
-			"worker_configured", worker != nil, "tls", useTLS,
+			"worker_configured", worker != nil, "third_party_worker_configured", thirdPartyWorker != nil, "tls", useTLS,
 			"mtls", strings.TrimSpace(*clientCA) != "")
 		var serveErr error
 		if useTLS {

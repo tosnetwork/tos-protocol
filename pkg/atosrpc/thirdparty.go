@@ -173,6 +173,12 @@ func (s *Server) quoteThirdPartyExecution(
 		maxOutput = uint64(DefaultMaxMessageBytes)
 	}
 	expires := s.now().Add(defaultThirdPartyQuoteTTL)
+	if req.Msg.IntendedTrustMode == atostosv1.TrustMode_TRUST_MODE_VERIFIED {
+		// Verified TaskEscrow deadlines are integer seconds. The gateway
+		// already sends a second-aligned execution deadline; keep the
+		// provider quote expiry on the same frozen boundary.
+		expires = expires.Truncate(time.Second)
+	}
 	if deadline := time.UnixMilli(req.Msg.ExecutionDeadlineUnixMillis); deadline.Before(expires) {
 		expires = deadline
 	}

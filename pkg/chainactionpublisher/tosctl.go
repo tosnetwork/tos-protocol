@@ -156,7 +156,7 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 	}
 	found := false
 	for _, wallet := range wallets {
-		address, e := toschain.CanonicalAddress(wallet.Address)
+		address, e := toschain.NormalizeAddress(wallet.Address)
 		if e == nil && wallet.Name == b.walletName && address == b.payer {
 			found = true
 		}
