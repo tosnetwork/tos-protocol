@@ -251,17 +251,47 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	command := exec.CommandContext(ctx, "/proc/self/fd/4", args...)
 	command.ExtraFiles = []*os.File{b.configFile, executable}
 	command.Env = backendEnvironment(b.vaultURL)
-	var stdout, stderr bytes.Buffer
+	stdout := chainLimitedBuffer{limit: 2 << 20}
+	stderr := chainLimitedBuffer{limit: 2 << 20}
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		return nil, fmt.Errorf("tosctl failed: %s", strings.TrimSpace(stderr.String()))
+		if stdout.overflow || stderr.overflow {
+			return nil, errors.New("tosctl output too large")
+		}
+		return nil, fmt.Errorf("tosctl failed: %s", strings.TrimSpace(string(stderr.Bytes())))
 	}
-	if stdout.Len() > 2<<20 {
+	if stdout.overflow || stderr.overflow {
 		return nil, errors.New("tosctl output too large")
 	}
 	return stdout.Bytes(), nil
 }
+
+type chainLimitedBuffer struct {
+	buffer   bytes.Buffer
+	limit    int
+	overflow bool
+}
+
+func (b *chainLimitedBuffer) Write(data []byte) (int, error) {
+	if b.limit <= 0 {
+		return 0, errors.New("invalid output limit")
+	}
+	original := len(data)
+	remaining := b.limit - b.buffer.Len()
+	if remaining <= 0 {
+		b.overflow = true
+		return original, nil
+	}
+	if len(data) > remaining {
+		data = data[:remaining]
+		b.overflow = true
+	}
+	_, _ = b.buffer.Write(data)
+	return original, nil
+}
+
+func (b *chainLimitedBuffer) Bytes() []byte { return b.buffer.Bytes() }
 
 type chainExecutableIdentity struct {
 	device uint64

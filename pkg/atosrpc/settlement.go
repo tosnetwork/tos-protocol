@@ -474,7 +474,9 @@ func (s *Server) SettleJob(
 		if !found {
 			return notFound("NOT_FOUND", "escrow not found")
 		}
-		if escrow.QuoteId != req.Msg.QuoteId || escrow.State != atostosv1.EscrowState_ESCROW_STATE_RESERVED {
+		if escrow.QuoteId != req.Msg.QuoteId ||
+			(escrow.TrustMode == TrustModeVerified && escrow.JobId != req.Msg.JobId) ||
+			escrow.State != atostosv1.EscrowState_ESCROW_STATE_RESERVED {
 			return failedPrecondition("SETTLEMENT_FAILED", "escrow is not reservable for this settlement")
 		}
 		if escrow.Reserved == nil || escrow.Reserved.Asset != req.Msg.RequestedCharge.Asset {
@@ -542,10 +544,17 @@ func (s *Server) SettleJob(
 			if economicErr != nil {
 				return economicRPCError(economicErr, "settle TOS Task Escrow")
 			}
-			if result.TransitionReference == "" || result.AgentPaidNanoTOS != charge.Uint64() {
+			if result.TransitionReference == "" || result.AgentPaidNanoTOS != charge.Uint64() ||
+				result.CreatorPaidNanoTOS < refund.Uint64() || result.State.Network != s.economy.Network() ||
+				result.State.Status != chain.TaskEscrowStatusSettled || result.State.ObservedMasterSeqno == 0 ||
+				strings.TrimSpace(result.State.CodeHash) == "" || result.State.ContractAddress != contractAddress ||
+				result.State.BudgetNanoTOS != 0 || result.State.BalanceNanoTOS != 0 {
 				return failedPrecondition("SETTLEMENT_FAILED", "Task Escrow payout is not finalized")
 			}
-			ref = NetworkReference{Network: s.economy.Network(), Reference: result.TransitionReference}
+			ref = NetworkReference{
+				Network: s.economy.Network(), Reference: result.TransitionReference,
+				Finalized: true, FinalizedCheckpoint: result.State.ObservedMasterSeqno,
+			}
 		default:
 			return failedPrecondition("TRUST_MODE_UNAVAILABLE", "economic settlement mode is unavailable")
 		}

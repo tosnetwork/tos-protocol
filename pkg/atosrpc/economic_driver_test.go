@@ -202,10 +202,11 @@ func capabilityCommitRequest(now time.Time, capabilityID, providerID string) *at
 }
 
 type recordingEconomy struct {
-	reserveRequest economic.ReserveEscrowRequest
-	settleRequest  economic.SettleProviderRequest
-	contract       string
-	settlementRef  string
+	reserveRequest       economic.ReserveEscrowRequest
+	settleRequest        economic.SettleProviderRequest
+	contract             string
+	settlementRef        string
+	settlementCheckpoint uint64
 }
 
 func (e *recordingEconomy) Network() string { return "tos-test" }
@@ -247,7 +248,8 @@ func (e *recordingEconomy) SettleProvider(_ context.Context, request economic.Se
 		CreatorPaidNanoTOS: request.BudgetNanoTOS - request.PayoutNanoTOS,
 		State: chain.TaskEscrowState{
 			Network: "tos-test", ContractAddress: strings.TrimPrefix(e.contract, "tos:task-escrow:v1:"),
-			Status: chain.TaskEscrowStatusSettled,
+			Status:              chain.TaskEscrowStatusSettled,
+			ObservedMasterSeqno: e.settlementCheckpoint, CodeHash: "tvm-cell-sha256:" + strings.Repeat("aa", 32),
 		},
 	}, nil
 }
@@ -269,8 +271,9 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	now := time.Date(2026, 8, 8, 0, 0, 0, 0, time.UTC)
 	contractAddress := "0:" + strings.Repeat("44", 32)
 	economy := &recordingEconomy{
-		contract:      "tos:task-escrow:v1:" + contractAddress,
-		settlementRef: "tos:tx:v1:0:" + strings.Repeat("44", 32) + ":2:" + strings.Repeat("66", 32),
+		contract:             "tos:task-escrow:v1:" + contractAddress,
+		settlementRef:        "tos:tx:v1:0:" + strings.Repeat("44", 32) + ":2:" + strings.Repeat("66", 32),
+		settlementCheckpoint: 43,
 	}
 	server, err := Open(Config{
 		StatePath: filepath.Join(t.TempDir(), "atos-rpc.db"), BearerToken: "test-secret",
@@ -398,22 +401,28 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	settled, err := server.SettleJob(context.Background(), connect.NewRequest(
-		&atostosv1.SettleJobRequest{
-			Context: &atostosv1.RequestContext{
-				RequestId: "request-settle-verified", CallerId: "caller-test",
-				IdempotencyKey: "idem-settle-verified", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli(),
-			},
-			EscrowId: escrowID, QuoteId: quoteID, JobId: jobID, ReceiptId: receiptID,
-			RequestedCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "700"},
+	settleRequest := &atostosv1.SettleJobRequest{
+		Context: &atostosv1.RequestContext{
+			RequestId: "request-settle-verified", CallerId: "caller-test",
+			IdempotencyKey: "idem-settle-verified", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli(),
 		},
-	))
+		EscrowId: escrowID, QuoteId: quoteID, JobId: jobID, ReceiptId: receiptID,
+		RequestedCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "700"},
+	}
+	economy.settlementCheckpoint = 0
+	if _, err := server.SettleJob(context.Background(), connect.NewRequest(proto.Clone(settleRequest).(*atostosv1.SettleJobRequest))); err == nil {
+		t.Fatal("Verified settlement without a finalized checkpoint was accepted")
+	}
+	economy.settlementCheckpoint = 43
+	settled, err := server.SettleJob(context.Background(), connect.NewRequest(settleRequest))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !settled.Msg.Created || settled.Msg.Settlement == nil ||
 		settled.Msg.Settlement.SettlementRef == nil ||
-		settled.Msg.Settlement.SettlementRef.Reference != economy.settlementRef {
+		settled.Msg.Settlement.SettlementRef.Reference != economy.settlementRef ||
+		!settled.Msg.Settlement.SettlementRef.Finalized ||
+		settled.Msg.Settlement.SettlementRef.FinalizedCheckpoint != 43 {
 		t.Fatalf("unexpected Verified settlement response: %#v", settled.Msg)
 	}
 	if economy.settleRequest.ContractAddress != contractAddress ||
