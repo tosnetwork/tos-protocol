@@ -398,3 +398,25 @@ func TestTaskEscrowRejectedReplayIsBoundToAgentSender(t *testing.T) {
 		t.Fatalf("unexpected rejected replay: action=%#v sender=%q result=%#v", harness.last, harness.lastExpectation.ExpectedSender, result)
 	}
 }
+
+func TestNormativeReleaseQueryAndBodyVector(t *testing.T) {
+	driver := &TaskEscrowDriver{network: "tos-test", now: func() time.Time { return time.Unix(1_800_000_000, 0) }, actionLifetime: time.Minute}
+	action := chain.TaskEscrowAction{
+		Version: chain.TaskEscrowActionVersion, Network: "tos-test", Kind: chain.TaskEscrowActionCancel,
+		EscrowID: "esc_07dc7a9bb743b890a44312c5d6d85a8a", ContractAddress: "0:" + strings.Repeat("55", 32),
+		Creator: "0:" + strings.Repeat("11", 32), Agent: "0:" + strings.Repeat("22", 32),
+		Verifier: "0:" + strings.Repeat("33", 32), BudgetNanoTOS: 1_050_000_000,
+		DeadlineUnix: 1_800_000_300, ReviewPeriod: 3600,
+		PolicyHash:     "sha256:" + strings.Repeat("44", 32),
+		PermissionHash: "sha256:271b8392229e741f86cbd9366f4fd35c09ce22b4a6a92f96bb7cdc68932149b5",
+		ReleaseDigest:  "sha256:8a38d8920a287d1d2401285f814abb4c409a3bd866ab3a330e74df9ba1a16b1a",
+	}
+	if err := driver.finishAction(&action); err != nil {
+		t.Fatal(err)
+	}
+	if action.QueryID != 8076693888132313379 ||
+		action.ExpectedBodyHash != "tvm-cell-sha256:2a8ece876e9cfa1ef9bd9062b6c5ecbbee07bbea1ac8283fba8e5639522c80d8" ||
+		action.ActionID != "task-action-762de1e789d3f797f6bff0e6abff99d3cae158c924c7626297dd97eeefdfbc47" {
+		t.Fatalf("release query vector: query_id=%d body=%s action=%s", action.QueryID, action.ExpectedBodyHash, action.ActionID)
+	}
+}

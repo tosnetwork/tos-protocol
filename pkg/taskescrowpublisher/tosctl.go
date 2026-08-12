@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
@@ -62,6 +63,7 @@ type TosctlBackendConfig struct {
 type TosctlBackend struct {
 	network           string
 	binary            string
+	binaryIdentity    executableIdentity
 	configFile        *os.File
 	vaultURL          string
 	wallets           map[string]string
@@ -152,11 +154,12 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	binaryDigest, err := fileSHA256(binary)
+	binaryIdentity, err := captureExecutableIdentity(binary)
 	if err != nil {
 		configFile.Close()
 		return nil, err
 	}
+	binaryDigest := binaryIdentity.digest
 	configSum := sha256.Sum256(rawConfig)
 	vaultSum := sha256.Sum256([]byte(strings.TrimSpace(config.VaultURL)))
 	environmentSum, err := codec.Digest("tos.task-escrow.publisher-environment.v1", config.AdditionalEnvironment)
@@ -175,7 +178,7 @@ func NewTosctlBackend(config TosctlBackendConfig) (*TosctlBackend, error) {
 		return nil, err
 	}
 	return &TosctlBackend{
-		network: config.Network, binary: binary, configFile: configFile,
+		network: config.Network, binary: binary, binaryIdentity: binaryIdentity, configFile: configFile,
 		vaultURL: config.VaultURL, wallets: wallets, executorWallet: config.ExecutorWallet,
 		workchain: config.Workchain, operationValue: operationValue,
 		commandTimeout: commandTimeout, publishTimeout: publishTimeout,
@@ -456,6 +459,11 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 	if b.configFile == nil {
 		return nil, errors.New("tosctl backend is closed")
 	}
+	executable, err := openVerifiedExecutable(b.binary, b.binaryIdentity)
+	if err != nil {
+		return nil, err
+	}
+	defer executable.Close()
 	if _, err := b.configFile.Seek(0, 0); err != nil {
 		return nil, errors.New("seek pinned tosctl config")
 	}
@@ -473,8 +481,12 @@ func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error)
 		return nil, err
 	}
 	args = append(args, "-c", snapshotPath)
-	command := exec.CommandContext(commandContext, b.binary, args...)
-	command.ExtraFiles = []*os.File{b.configFile}
+	executableTarget := "/proc/self/fd/4"
+	if runtime.GOOS == "darwin" {
+		executableTarget = "/dev/fd/4"
+	}
+	command := exec.CommandContext(commandContext, executableTarget, args...)
+	command.ExtraFiles = []*os.File{b.configFile, executable}
 	command.Env = append([]string(nil), b.environment...)
 	var stdout, stderr limitedBuffer
 	stdout.limit, stderr.limit = maxCommandOutputBytes, maxCommandOutputBytes
@@ -660,7 +672,91 @@ func validateExecutable(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tosctl binary: %w", err)
 	}
+	if _, err := captureExecutableIdentity(path); err != nil {
+		return "", fmt.Errorf("tosctl binary: %w", err)
+	}
 	return path, nil
+}
+
+type executableIdentity struct {
+	device uint64
+	inode  uint64
+	size   int64
+	digest string
+}
+
+func captureExecutableIdentity(path string) (executableIdentity, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 || pathInfo.Mode().Perm()&0o111 == 0 {
+		return executableIdentity{}, errors.New("executable is not a regular executable file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return executableIdentity{}, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		return executableIdentity{}, errors.New("executable changed while its identity was captured")
+	}
+	return executableIdentityFromFile(file, info)
+}
+
+func executableIdentityFromFile(file *os.File, info os.FileInfo) (executableIdentity, error) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return executableIdentity{}, errors.New("executable identity is unavailable")
+	}
+	// The custody process must not execute a binary writable by itself, its
+	// group, or everyone. A root-owned 0755 binary remains valid for an
+	// unprivileged service account; an owner-writable service-owned binary does
+	// not.
+	if info.Mode().Perm()&0o022 != 0 || stat.Uid == uint32(os.Geteuid()) && info.Mode().Perm()&0o200 != 0 {
+		return executableIdentity{}, errors.New("executable is writable by the publisher security domain")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return executableIdentity{}, err
+	}
+	digest := "sha256:" + hex.EncodeToString(hash.Sum(nil))
+	return executableIdentity{device: uint64(stat.Dev), inode: stat.Ino, size: info.Size(), digest: digest}, nil
+}
+
+func openVerifiedExecutable(path string, expected executableIdentity) (*os.File, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || pathInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("enrolled tosctl executable path is unavailable")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		_ = file.Close()
+		return nil, errors.New("enrolled tosctl executable changed while opening")
+	}
+	actual, err := executableIdentityFromFile(file, info)
+	if err != nil || actual != expected {
+		_ = file.Close()
+		return nil, errors.New("enrolled tosctl executable identity changed")
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func verifyExecutableIdentity(path string, expected executableIdentity) error {
+	actual, err := captureExecutableIdentity(path)
+	if err != nil {
+		return fmt.Errorf("verify enrolled tosctl executable: %w", err)
+	}
+	if actual != expected {
+		return errors.New("enrolled tosctl executable identity changed")
+	}
+	return nil
 }
 
 func validateRegularPath(path string, executable bool) (string, error) {

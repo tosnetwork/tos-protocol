@@ -59,4 +59,32 @@ func TestNormativeVector(t *testing.T) {
 		digest != "sha256:271b8392229e741f86cbd9366f4fd35c09ce22b4a6a92f96bb7cdc68932149b5" || len(encoded) != 1384 {
 		t.Fatalf("normative vector changed: id=%s digest=%s bytes=%d", v.EscrowId, digest, len(encoded))
 	}
+	reservation := chain.TaskEscrowAction{
+		Version: chain.TaskEscrowActionVersion, Network: v.NetworkId,
+		Kind: chain.TaskEscrowActionDeploy, EscrowID: v.EscrowId,
+		Creator: "0:" + strings.Repeat("11", 32), Agent: "0:" + strings.Repeat("22", 32),
+		Verifier: "0:" + strings.Repeat("33", 32), BudgetNanoTOS: 1_050_000_000,
+		FundingNanoTOS: 1_060_000_000, DeadlineUnix: 1_800_000_300,
+		ReviewPeriod: 3600, PolicyHash: "sha256:" + strings.Repeat("44", 32),
+		PermissionHash: digest,
+	}
+	reservationActionID, err := chain.TaskEscrowActionID(reservation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseDigest, err := ReleaseDigest(digest, v.EscrowId, v.JobId, v.QuoteId, "CANCELED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseActionID, err := chain.TaskEscrowActionID(chain.TaskEscrowAction{
+		Kind: chain.TaskEscrowActionCancel, EscrowID: v.EscrowId, ReleaseDigest: releaseDigest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reservationActionID != "task-action-34d28e46c2cecfd5af6875aaeec9620edfc095f4dc81b57782cd37cffba16aee" ||
+		releaseDigest != "sha256:8a38d8920a287d1d2401285f814abb4c409a3bd866ab3a330e74df9ba1a16b1a" ||
+		releaseActionID != "task-action-762de1e789d3f797f6bff0e6abff99d3cae158c924c7626297dd97eeefdfbc47" {
+		t.Fatalf("action vector values: reservation=%s release_digest=%s release_action=%s", reservationActionID, releaseDigest, releaseActionID)
+	}
 }
