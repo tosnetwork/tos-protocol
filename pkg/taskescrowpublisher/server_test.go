@@ -255,6 +255,21 @@ func testAction(now time.Time) chain.TaskEscrowAction {
 	return a
 }
 
+func TestValidateActionRejectsZeroDisputeCommitment(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	action := testAction(now)
+	action.Kind = chain.TaskEscrowActionDispute
+	action.ContractAddress = "0:" + strings.Repeat("44", 32)
+	action.FundingNanoTOS = 0
+	action.QueryID = 7
+	action.DisputeHash = "sha256:" + strings.Repeat("0", 64)
+	action.ExpectedBodyHash = "tvm-cell-sha256:" + strings.Repeat("99", 32)
+	action.ActionID, _ = chain.TaskEscrowActionID(action)
+	if err := validateAction(action, action.Network, now, testPublisherPolicy()); err == nil {
+		t.Fatal("all-zero dispute commitment was accepted")
+	}
+}
+
 func testPublisherPolicy() PublisherPolicy {
 	return PublisherPolicy{AllowedCreators: []string{"0:" + strings.Repeat("11", 32)}, AllowedAgents: []string{"0:" + strings.Repeat("22", 32)}, AllowedVerifiers: []string{"0:" + strings.Repeat("33", 32)}, AllowedPolicyHashes: []string{"sha256:" + strings.Repeat("aa", 32)}, AllowedCodeHashes: []string{"sha256:" + strings.Repeat("cc", 32)}, MaxBudgetNanoTOS: 2_000_000_000, MaxFundingNanoTOS: 2_100_000_000}
 }

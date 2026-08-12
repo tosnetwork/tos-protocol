@@ -136,6 +136,14 @@ func TestTaskEscrowActionRequiresOriginalBudget(t *testing.T) {
 	}
 }
 
+func TestTaskEscrowActionRejectsZeroDisputeCommitment(t *testing.T) {
+	action := testTaskEscrowAction(chain.TaskEscrowActionDispute)
+	action.DisputeHash = "sha256:" + strings.Repeat("0", 64)
+	if err := validateTaskEscrowAction(action, action.Network); err == nil {
+		t.Fatal("all-zero dispute commitment was accepted")
+	}
+}
+
 func testTaskEscrowAction(kind chain.TaskEscrowActionKind) chain.TaskEscrowAction {
 	action := chain.TaskEscrowAction{
 		Version:  chain.TaskEscrowActionVersion,

@@ -348,6 +348,67 @@ func TestTaskEscrowDriverDoesNotReplaySettlementAfterDisputeResolution(t *testin
 	}
 }
 
+func TestTaskEscrowDriverTerminalSettlementAbsenceNeverPublishes(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	harness := newTaskEscrowHarness(now)
+	harness.state = chain.TaskEscrowState{
+		Network: testNetwork, ContractAddress: testContract,
+		Creator: testCreator, Agent: testAgent, HasAgent: true,
+		Verifier: testVerifier, HasVerifier: true,
+		Status: chain.TaskEscrowStatusSettled, BudgetNanoTOS: 0, BalanceNanoTOS: 0,
+		DeadlineUnix: uint64(now.Add(time.Hour).Unix()), ReviewPeriod: 3600,
+		ResultHash:     "sha256:" + strings.Repeat("33", 32),
+		EvidenceHash:   "sha256:" + strings.Repeat("44", 32),
+		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
+		PermissionHash: "sha256:" + strings.Repeat("22", 32),
+		DisputeHash:    zeroDigest(), CodeHash: testCodeHash,
+		ObservedMasterSeqno: 101, ObservedAt: now,
+	}
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{
+		Observer: harness, Publisher: harness, Network: testNetwork,
+		AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier,
+		FundingOverhead: 50, Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+
+	_, err = driver.SettleProvider(context.Background(), SettleProviderRequest{
+		EscrowID: "esc-terminal", ContractAddress: testContract,
+		BudgetNanoTOS: 1_000, ResultHash: harness.state.ResultHash,
+		EvidenceHash: harness.state.EvidenceHash, PayoutNanoTOS: 700,
+	})
+	if err == nil {
+		t.Fatal("terminal settlement without its original journal receipt was accepted")
+	}
+	if harness.publishCalls != 0 {
+		t.Fatalf("terminal settlement recovery published %d action(s)", harness.publishCalls)
+	}
+}
+
+func TestTaskEscrowDriverRejectsZeroDisputeCommitment(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	harness := newTaskEscrowHarness(now)
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{
+		Observer: harness, Publisher: harness, Network: testNetwork,
+		AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier,
+		FundingOverhead: 50, Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+	if _, err := driver.OpenDispute(context.Background(), OpenDisputeRequest{
+		EscrowID: "esc-zero", ContractAddress: testContract, DisputeHash: zeroDigest(),
+	}); err == nil {
+		t.Fatal("all-zero dispute commitment was accepted")
+	}
+	if harness.publishCalls != 0 {
+		t.Fatalf("invalid dispute published %d action(s)", harness.publishCalls)
+	}
+}
+
 func TestTaskEscrowDriverSettlesZeroProviderPayoutAndFullRefundIdempotently(t *testing.T) {
 	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
 	resultHash := "sha256:" + strings.Repeat("33", 32)

@@ -304,8 +304,11 @@ func validateTaskEscrowAction(action chain.TaskEscrowAction, network string) err
 			action.PayoutNanoTOS > action.BudgetNanoTOS {
 			return errors.New("invalid task escrow payout action")
 		}
+		if action.Kind == chain.TaskEscrowActionResolve && !validNonZeroTaskEscrowDigest(action.DisputeHash) {
+			return errors.New("invalid task escrow resolution dispute commitment")
+		}
 	case chain.TaskEscrowActionDispute:
-		if action.ContractAddress == "" || action.QueryID == 0 || action.DisputeHash == "" ||
+		if action.ContractAddress == "" || action.QueryID == 0 || !validNonZeroTaskEscrowDigest(action.DisputeHash) ||
 			action.ExpectedBodyHash == "" {
 			return errors.New("invalid task escrow dispute action")
 		}
@@ -313,6 +316,19 @@ func validateTaskEscrowAction(action chain.TaskEscrowAction, network string) err
 		return errors.New("unsupported task escrow action")
 	}
 	return nil
+}
+
+func validNonZeroTaskEscrowDigest(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+64 ||
+		value == "sha256:"+strings.Repeat("0", 64) {
+		return false
+	}
+	for _, char := range strings.TrimPrefix(value, "sha256:") {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return false
+		}
+	}
+	return true
 }
 
 func requireTaskEscrowJSON(value string) error {

@@ -483,7 +483,7 @@ func (d *TaskEscrowDriver) OpenDispute(
 	ctx context.Context,
 	request OpenDisputeRequest,
 ) (Result, error) {
-	if !validDigest(request.DisputeHash) {
+	if !validNonZeroDigest(request.DisputeHash) {
 		return Result{}, errors.New("invalid task escrow dispute commitment")
 	}
 	state, err := d.read(ctx, request.ContractAddress)
@@ -532,6 +532,9 @@ func (d *TaskEscrowDriver) ResolveDispute(
 	if request.BudgetNanoTOS == 0 || request.PayoutNanoTOS > request.BudgetNanoTOS {
 		return Result{}, errors.New("invalid task escrow dispute resolution")
 	}
+	if !validNonZeroDigest(state.DisputeHash) {
+		return Result{}, errors.New("task escrow has no valid dispute commitment")
+	}
 	if state.Status == chain.TaskEscrowStatusSettled {
 		return d.replayResolution(ctx, state, request)
 	}
@@ -579,7 +582,7 @@ func (d *TaskEscrowDriver) replaySettlement(
 		return Result{}, err
 	}
 	creatorMinimum := request.BudgetNanoTOS - request.PayoutNanoTOS
-	transition, err := d.publishAndObserve(ctx, action, chain.TaskEscrowTransitionReference{
+	transition, err := d.resolveAndObserve(ctx, action, chain.TaskEscrowTransitionReference{
 		ExpectedSender: state.Verifier, ExpectedKind: action.Kind,
 		ExpectedQueryID: action.QueryID, ExpectedBodyHash: action.ExpectedBodyHash,
 		ExpectedAgent: state.Agent, ExpectedAgentPayout: request.PayoutNanoTOS,
@@ -610,7 +613,7 @@ func (d *TaskEscrowDriver) replayResolution(
 		return Result{}, err
 	}
 	creatorMinimum := request.BudgetNanoTOS - request.PayoutNanoTOS
-	transition, err := d.publishAndObserve(ctx, action, chain.TaskEscrowTransitionReference{
+	transition, err := d.resolveAndObserve(ctx, action, chain.TaskEscrowTransitionReference{
 		ExpectedSender: state.Verifier, ExpectedKind: action.Kind,
 		ExpectedQueryID: action.QueryID, ExpectedBodyHash: action.ExpectedBodyHash,
 		ExpectedAgent: state.Agent, ExpectedAgentPayout: request.PayoutNanoTOS,
@@ -931,6 +934,32 @@ func (d *TaskEscrowDriver) publishAndObserve(
 	return d.observeReceipt(callContext, action, receipt, minimum, expectation)
 }
 
+// resolveAndObserve is used only after canonical chain state is already
+// terminal. Journal absence cannot authorize a second terminal mutation.
+func (d *TaskEscrowDriver) resolveAndObserve(
+	ctx context.Context,
+	action chain.TaskEscrowAction,
+	expectation chain.TaskEscrowTransitionReference,
+) (chain.TaskEscrowTransition, error) {
+	callContext, cancel, err := d.callContext(ctx)
+	if err != nil {
+		return chain.TaskEscrowTransition{}, err
+	}
+	defer cancel()
+	minimum, _, err := d.observer.CheckChainReady(callContext, d.now().UTC())
+	if err != nil {
+		return chain.TaskEscrowTransition{}, err
+	}
+	receipt, found, err := d.publisher.Resolve(callContext, action)
+	if err != nil {
+		return chain.TaskEscrowTransition{}, err
+	}
+	if !found {
+		return chain.TaskEscrowTransition{}, errors.New("terminal task escrow action receipt is unavailable")
+	}
+	return d.observeReceipt(callContext, action, receipt, minimum, expectation)
+}
+
 func (d *TaskEscrowDriver) observeReceipt(callContext context.Context, action chain.TaskEscrowAction, receipt chain.TaskEscrowActionReceipt, minimum uint64, expectation chain.TaskEscrowTransitionReference) (chain.TaskEscrowTransition, error) {
 	if receipt.Version != action.Version || receipt.ActionID != action.ActionID ||
 		receipt.Network != action.Network || receipt.Kind != action.Kind ||
@@ -1020,6 +1049,10 @@ func stateResult(state chain.TaskEscrowState) Result {
 func validDigest(value string) bool {
 	_, err := digestBytes(value)
 	return err == nil
+}
+
+func validNonZeroDigest(value string) bool {
+	return validDigest(value) && value != zeroDigest()
 }
 
 func digestBytes(value string) ([]byte, error) {

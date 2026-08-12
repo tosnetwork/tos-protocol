@@ -329,7 +329,7 @@ func validateAction(action chain.TaskEscrowAction, network string, now time.Time
 			return errors.New("invalid result action")
 		}
 	case chain.TaskEscrowActionDispute:
-		if action.ContractAddress == "" || action.QueryID == 0 || !validDigest(action.DisputeHash) ||
+		if action.ContractAddress == "" || action.QueryID == 0 || !validNonZeroDigest(action.DisputeHash) ||
 			!validCellHash(action.ExpectedBodyHash) {
 			return errors.New("invalid dispute action")
 		}
@@ -337,6 +337,9 @@ func validateAction(action chain.TaskEscrowAction, network string, now time.Time
 		if action.ContractAddress == "" || action.QueryID == 0 || action.PayoutNanoTOS > action.BudgetNanoTOS ||
 			!validCellHash(action.ExpectedBodyHash) {
 			return errors.New("invalid payout action")
+		}
+		if action.Kind == chain.TaskEscrowActionResolve && !validNonZeroDigest(action.DisputeHash) {
+			return errors.New("invalid resolution dispute commitment")
 		}
 	default:
 		return errors.New("unsupported task escrow action")
@@ -401,6 +404,10 @@ func validDigest(value string) bool {
 		}
 	}
 	return true
+}
+
+func validNonZeroDigest(value string) bool {
+	return validDigest(value) && value != "sha256:"+strings.Repeat("0", 64)
 }
 
 func validCellHash(value string) bool {
