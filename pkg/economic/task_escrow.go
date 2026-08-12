@@ -189,6 +189,10 @@ func (d *TaskEscrowDriver) ResolveEscrow(ctx context.Context, request ReserveEsc
 		if err := validateReservedState(transition.State, action); err != nil {
 			return Result{}, false, err
 		}
+	} else if transition.State.Status == chain.TaskEscrowStatusSettled {
+		if err := validateSettledReservationState(transition.State, action); err != nil {
+			return Result{}, false, err
+		}
 	} else if transition.State.Status != chain.TaskEscrowStatusCancelled && transition.State.Status != chain.TaskEscrowStatusExpired && transition.State.Status != chain.TaskEscrowStatusRejected {
 		return Result{}, false, errors.New("TaskEscrow is not in a recoverable reservation/release state")
 	}
@@ -952,6 +956,20 @@ func validateReservedState(state chain.TaskEscrowState, action chain.TaskEscrowA
 		state.EvidenceHash != zeroDigest() || state.DisputeHash != zeroDigest() ||
 		state.ReviewDeadlineUnix != 0 || state.AttestorPublicKey != "" {
 		return errors.New("deployed Task Escrow state does not match reservation")
+	}
+	return nil
+}
+
+func validateSettledReservationState(state chain.TaskEscrowState, action chain.TaskEscrowAction) error {
+	if state.Status != chain.TaskEscrowStatusSettled || state.Creator != action.Creator ||
+		!state.HasAgent || state.Agent != action.Agent || !state.HasVerifier ||
+		state.Verifier != action.Verifier || state.BudgetNanoTOS != 0 ||
+		state.BalanceNanoTOS != 0 || state.DeadlineUnix != action.DeadlineUnix ||
+		state.ReviewPeriod != action.ReviewPeriod || state.PolicyHash != action.PolicyHash ||
+		state.PermissionHash != action.PermissionHash || state.ResultHash == zeroDigest() ||
+		state.EvidenceHash == zeroDigest() || state.ReviewDeadlineUnix == 0 ||
+		state.AttestorPublicKey != "" {
+		return errors.New("settled Task Escrow state does not match reservation")
 	}
 	return nil
 }

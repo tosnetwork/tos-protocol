@@ -109,16 +109,18 @@ func (h *taskEscrowHarness) ObserveTaskEscrowTransition(
 	}
 	switch action.Kind {
 	case chain.TaskEscrowActionDeploy:
-		h.state = chain.TaskEscrowState{
-			Network: testNetwork, ContractAddress: testContract,
-			Creator: action.Creator, Agent: action.Agent, HasAgent: true,
-			Verifier: action.Verifier, HasVerifier: true,
-			BudgetNanoTOS: action.BudgetNanoTOS, BalanceNanoTOS: action.FundingNanoTOS,
-			DeadlineUnix: action.DeadlineUnix, Status: chain.TaskEscrowStatusOpen,
-			ResultHash: zeroDigest(), EvidenceHash: zeroDigest(),
-			PolicyHash: action.PolicyHash, PermissionHash: action.PermissionHash,
-			ReviewPeriod: action.ReviewPeriod, DisputeHash: zeroDigest(),
-			CodeHash: testCodeHash, ObservedMasterSeqno: 101, ObservedAt: h.now,
+		if h.state.ContractAddress == "" {
+			h.state = chain.TaskEscrowState{
+				Network: testNetwork, ContractAddress: testContract,
+				Creator: action.Creator, Agent: action.Agent, HasAgent: true,
+				Verifier: action.Verifier, HasVerifier: true,
+				BudgetNanoTOS: action.BudgetNanoTOS, BalanceNanoTOS: action.FundingNanoTOS,
+				DeadlineUnix: action.DeadlineUnix, Status: chain.TaskEscrowStatusOpen,
+				ResultHash: zeroDigest(), EvidenceHash: zeroDigest(),
+				PolicyHash: action.PolicyHash, PermissionHash: action.PermissionHash,
+				ReviewPeriod: action.ReviewPeriod, DisputeHash: zeroDigest(),
+				CodeHash: testCodeHash, ObservedMasterSeqno: 101, ObservedAt: h.now,
+			}
 		}
 	case chain.TaskEscrowActionAccept:
 		if h.state.Status != chain.TaskEscrowStatusOpen {
@@ -241,6 +243,29 @@ func TestTaskEscrowDriverVerifiedLifecycleAndSettlementReplay(t *testing.T) {
 	if firstSettleAction.ExpiresUnixMillis != secondSettleAction.ExpiresUnixMillis {
 		// The fixed test clock makes expiry equal; this assertion documents that
 		// expiry is not required to differ for an exact replay.
+	}
+	recovered, found, err := driver.ResolveEscrow(context.Background(), ReserveEscrowRequest{
+		EscrowID: "esc-test", Creator: testCreator, Agent: testAgent,
+		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
+		PermissionHash: "sha256:" + strings.Repeat("22", 32),
+	})
+	if err != nil {
+		t.Fatalf("resolve settled escrow through production driver: %v", err)
+	}
+	if !found || recovered.State.Status != chain.TaskEscrowStatusSettled ||
+		recovered.State.BudgetNanoTOS != 0 || recovered.State.BalanceNanoTOS != 0 ||
+		recovered.ContractReference != first.ContractReference {
+		t.Fatalf("unexpected settled escrow recovery: found=%v result=%#v", found, recovered)
+	}
+	harness.state.PermissionHash = "sha256:" + strings.Repeat("99", 32)
+	if _, _, err := driver.ResolveEscrow(context.Background(), ReserveEscrowRequest{
+		EscrowID: "esc-test", Creator: testCreator, Agent: testAgent,
+		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
+		PermissionHash: "sha256:" + strings.Repeat("22", 32),
+	}); err == nil {
+		t.Fatal("settled escrow with substituted reservation binding was recovered")
 	}
 	if !driver.Supports(TrustModeVerified) || driver.Supports(TrustModeNative) {
 		t.Fatal("task escrow driver advertised the wrong trust modes")
