@@ -260,6 +260,15 @@ func (a *chainAuthority) Commit(
 }
 
 func (a *chainAuthority) ResolveCommitment(ctx context.Context, kind, objectID, digest string, reference *NetworkReference) (*NetworkReference, error) {
+	observation, err := a.ResolveCommitmentObservation(ctx, kind, objectID, digest, reference)
+	if err != nil {
+		return nil, err
+	}
+	ref := observation.Reference
+	return &ref, nil
+}
+
+func (a *chainAuthority) ResolveCommitmentObservation(ctx context.Context, kind, objectID, digest string, reference *NetworkReference) (*CommitmentObservation, error) {
 	if a == nil || !chainCommitmentKindPattern.MatchString(kind) || objectID == "" || !chainDigestPattern.MatchString(digest) {
 		return nil, errors.New("invalid finalized TOS commitment reference")
 	}
@@ -313,7 +322,10 @@ func (a *chainAuthority) ResolveCommitment(ctx context.Context, kind, objectID, 
 	if err != nil || ready.ObservedMasterSeqno < state.ObservedMasterSeqno {
 		return nil, errors.New("TOS chain commitment finality observation is not current")
 	}
-	return &NetworkReference{Network: a.network, Reference: referenceValue, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno}, nil
+	return &CommitmentObservation{
+		Reference:          NetworkReference{Network: a.network, Reference: referenceValue, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno},
+		ObservedUnixMillis: state.ObservedAt.UTC().UnixMilli(),
+	}, nil
 }
 
 func (a *chainAuthority) anchorAction(

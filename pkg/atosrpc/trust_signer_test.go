@@ -479,6 +479,39 @@ func TestRevokeExecutionSigner_GoldenPathThenResolveRevoked(t *testing.T) {
 	}
 }
 
+func TestResolveExecutionSignerAuthorization_FreshReplicaRejectsRevocationEffectiveAtReceipt(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000).UTC()
+	authority := new(verifiedTestAuthority)
+	first, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "first.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	if _, err = first.CommitCapabilityManifest(context.Background(), connect.NewRequest(capabilityCommitRequest(now, "cap-empty-revoke", "provider-empty-revoke"))); err != nil {
+		t.Fatal(err)
+	}
+	request := authorizeRequest(now, "provider-empty-revoke", "cap-empty-revoke", "auth-empty-revoke", "signer-empty-revoke", testSignerPublicKey(t))
+	authorized, err := first.AuthorizeExecutionSigner(context.Background(), connect.NewRequest(request))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = first.RevokeExecutionSigner(context.Background(), connect.NewRequest(&atostosv1.RevokeExecutionSignerRequest{Context: &atostosv1.RequestContext{RequestId: "revoke-empty", CallerId: "operator", IdempotencyKey: "revoke-empty", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli()}, AuthorizationId: request.Authorization.AuthorizationId, ReasonCode: "ROTATED"})); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "fresh.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	resolved, err := fresh.ResolveExecutionSignerAuthorization(context.Background(), connect.NewRequest(&atostosv1.ResolveExecutionSignerAuthorizationRequest{Context: &atostosv1.RequestContext{RequestId: "resolve-empty-revoke", CallerId: "verifier", DeadlineUnixMillis: now.Add(time.Minute).UnixMilli()}, ProviderId: request.Authorization.ProviderId, CapabilityId: request.Authorization.CapabilityId, CapabilityVersion: request.Authorization.CapabilityVersion, ExecutionSignerId: request.Authorization.ExecutionSignerId, AtUnixMillis: now.UnixMilli(), ExpectedAuthorization: request.Authorization, ExpectedAuthorizationRef: authorized.Msg.Authorization.AuthorizationRef}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Msg.Authorized || resolved.Msg.ReasonCode != "REVOKED" {
+		t.Fatalf("fresh replica accepted signer revoked at Receipt time: %+v", resolved.Msg)
+	}
+}
+
 // TestRevokeExecutionSigner_ReplayOfAlreadyRevokedIsIdempotent proves the
 // early-return path in RevokeExecutionSigner (an authorization already
 // revoked short-circuits to revoked=true without attempting a second
@@ -608,6 +641,13 @@ func (a *lostResponseAuthority) Commit(ctx context.Context, kind, id, digest str
 		return NetworkReference{}, errors.New("simulated: the underlying Commit succeeded but the caller never received this response")
 	}
 	return NetworkReference{Network: ref.Network, Reference: ref.Reference}, nil
+}
+func (a *lostResponseAuthority) ResolveCommitmentObservation(ctx context.Context, kind, id, digest string, ref *NetworkReference) (*CommitmentObservation, error) {
+	resolver, ok := a.Authority.(CommitmentObservationResolver)
+	if !ok {
+		return nil, errors.New("observation unavailable")
+	}
+	return resolver.ResolveCommitmentObservation(ctx, kind, id, digest, ref)
 }
 
 // successfulRefsForKind returns the references the underlying Authority

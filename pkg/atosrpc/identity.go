@@ -3,11 +3,13 @@ package atosrpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/identitycommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/revocationcommitment"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -183,6 +185,10 @@ func (s *Server) ResolveAgentIdentity(
 		}
 		expected.IdentityRef = nil
 		expected.UpdatedUnixMillis = 0
+		// PublicAttributes are intentionally excluded from identity.v2. Never
+		// echo caller-supplied, unauthenticated metadata from an empty-replica
+		// recovery response.
+		expected.PublicAttributes = nil
 		digest, digestErr := identitycommitment.IdentityDigest(expected)
 		resolver, ok := s.authority.(CommitmentResolver)
 		if digestErr != nil || !ok {
@@ -284,6 +290,14 @@ func (s *Server) ResolvePrincipalBinding(
 		if resolveErr != nil || live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != req.Msg.ExpectedBindingRef.Network || live.Reference != req.Msg.ExpectedBindingRef.Reference {
 			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding finality unavailable")
 		}
+		revoked, revocationErr := resolvePrincipalBindingRevocation(ctx, s.authority, req.Msg.PrincipalId, req.Msg.ExpectedAgentId, digest)
+		if revocationErr != nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding current state unavailable")
+		}
+		if revoked {
+			response.Status = atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_REVOKED
+			return connect.NewResponse(response), nil
+		}
 		response.Identity = &atostosv1.AgentIdentity{AgentId: req.Msg.ExpectedAgentId}
 		response.Bound = true
 		response.Status = atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_ACTIVE
@@ -310,6 +324,14 @@ func (s *Server) ResolvePrincipalBinding(
 			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding finality is unavailable")
 		}
 		response.BindingRef = live
+		revoked, revocationErr := resolvePrincipalBindingRevocation(ctx, s.authority, req.Msg.PrincipalId, response.Identity.AgentId, commitmentDigest)
+		if revocationErr != nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "principal binding current state unavailable")
+		}
+		if revoked {
+			response.Bound = false
+			response.Status = atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_REVOKED
+		}
 	}
 	return connect.NewResponse(response), nil
 }
@@ -489,7 +511,14 @@ func (s *Server) RevokePrincipalBinding(
 			response.Revoked = false
 			return nil
 		}
-		digest, err := protoDigest("ATOS-TOS-PRINCIPAL-BINDING-REVOCATION-V1", withoutTransportContext(req.Msg))
+		bindingDigest := existing.CommitmentDigest
+		if bindingDigest == "" {
+			bindingDigest, err = identitycommitment.BindingDigest(req.Msg.PrincipalId, existing.AgentID)
+			if err != nil {
+				return err
+			}
+		}
+		digest, err := revocationcommitment.BindingDigest(req.Msg.PrincipalId, existing.AgentID, bindingDigest)
 		if err != nil {
 			return err
 		}
@@ -500,9 +529,17 @@ func (s *Server) RevokePrincipalBinding(
 		if err := tx.Bucket(bucketPrincipalBindings).Delete([]byte(req.Msg.PrincipalId)); err != nil {
 			return err
 		}
+		revokedAt := s.now().UnixMilli()
+		if s.authority.Supports(TrustModeVerified) {
+			observed, observeErr := resolveCommitmentObservation(ctx, s.authority, "principal-binding-revocation", req.Msg.PrincipalId, digest, &ref)
+			if observeErr != nil || observed.ObservedUnixMillis <= 0 {
+				return unavailable("NETWORK_UNAVAILABLE", "principal binding revocation finality time is unavailable")
+			}
+			revokedAt = observed.ObservedUnixMillis
+		}
 		revocation := principalBindingRevocation{
 			ReasonCode: req.Msg.ReasonCode, RefNetwork: ref.Network, RefReference: ref.Reference,
-			RevokedUnixMillis: s.now().UnixMilli(),
+			RevokedUnixMillis: revokedAt,
 		}
 		if err := s.store.putJSON(tx, bucketPrincipalRevocations, req.Msg.PrincipalId, revocation); err != nil {
 			return err
@@ -515,4 +552,19 @@ func (s *Server) RevokePrincipalBinding(
 		return nil, err
 	}
 	return connect.NewResponse(response), nil
+}
+
+func resolvePrincipalBindingRevocation(ctx context.Context, authority Authority, principalID, agentID, bindingDigest string) (bool, error) {
+	digest, err := revocationcommitment.BindingDigest(principalID, agentID, bindingDigest)
+	if err != nil {
+		return false, err
+	}
+	observed, err := resolveCommitmentObservation(ctx, authority, "principal-binding-revocation", principalID, digest, nil)
+	if errors.Is(err, ErrCommitmentNotFound) {
+		return false, nil
+	}
+	if err != nil || observed == nil || observed.ObservedUnixMillis <= 0 {
+		return false, errors.New("canonical binding revocation unavailable")
+	}
+	return true, nil
 }

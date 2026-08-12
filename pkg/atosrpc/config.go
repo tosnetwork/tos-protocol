@@ -73,6 +73,18 @@ type CommitmentResolver interface {
 	ResolveCommitment(context.Context, string, string, string, *NetworkReference) (*NetworkReference, error)
 }
 
+// CommitmentObservationResolver is the stronger read interface used for
+// time-sensitive current-state facts such as revocations. ObservedUnixMillis
+// is the canonical finalized block time, never a process-local timestamp.
+type CommitmentObservationResolver interface {
+	ResolveCommitmentObservation(context.Context, string, string, string, *NetworkReference) (*CommitmentObservation, error)
+}
+
+type CommitmentObservation struct {
+	Reference          NetworkReference
+	ObservedUnixMillis int64
+}
+
 var ErrCommitmentNotFound = errors.New("canonical commitment not found")
 
 // Worker is the narrow Edge Core -> private Worker dependency used by

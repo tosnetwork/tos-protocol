@@ -60,6 +60,13 @@ func (a *verifiedTestAuthority) ResolveCommitment(_ context.Context, kind, id, d
 	}
 	return &NetworkReference{Network: "tos-test", Reference: reference, Finalized: true, FinalizedCheckpoint: 42}, nil
 }
+func (a *verifiedTestAuthority) ResolveCommitmentObservation(ctx context.Context, kind, id, digest string, ref *NetworkReference) (*CommitmentObservation, error) {
+	live, err := a.ResolveCommitment(ctx, kind, id, digest, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &CommitmentObservation{Reference: *live, ObservedUnixMillis: 1_700_000_000_000}, nil
+}
 
 type verifiedTestEconomy struct{ closed bool }
 

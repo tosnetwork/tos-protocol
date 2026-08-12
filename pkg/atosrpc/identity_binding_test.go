@@ -78,9 +78,47 @@ func TestResolveAgentIdentity_FreshReplicaUsesCanonicalExpectedTuple(t *testing.
 		t.Fatal(err)
 	}
 	defer fresh.Close()
-	resolved, err := fresh.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{Context: bindingReqCtx("verifier", "read-fresh", now), AgentId: identity.AgentId, CanonicalUri: identity.CanonicalUri, ExpectedIdentity: identity, ExpectedIdentityRef: stored.Msg.Identity.IdentityRef}))
+	callerExpected := cloneMessage(identity)
+	callerExpected.PublicAttributes = map[string]string{"admin": "true"}
+	resolved, err := fresh.ResolveAgentIdentity(context.Background(), connect.NewRequest(&atostosv1.ResolveAgentIdentityRequest{Context: bindingReqCtx("verifier", "read-fresh", now), AgentId: identity.AgentId, CanonicalUri: identity.CanonicalUri, ExpectedIdentity: callerExpected, ExpectedIdentityRef: stored.Msg.Identity.IdentityRef}))
 	if err != nil || !resolved.Msg.Found || resolved.Msg.Identity.IdentityRef.FinalizedCheckpoint == 0 || resolved.Msg.Identity.Controllers[0] != identity.Controllers[0] {
 		t.Fatalf("fresh canonical identity recovery failed: response=%+v err=%v", resolved, err)
+	}
+	if len(resolved.Msg.Identity.PublicAttributes) != 0 {
+		t.Fatalf("empty replica echoed uncommitted public attributes: %v", resolved.Msg.Identity.PublicAttributes)
+	}
+}
+
+func TestResolvePrincipalBinding_FreshReplicaRejectsCanonicallyRevokedBinding(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000).UTC()
+	authority := new(verifiedTestAuthority)
+	first, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "first.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	identity := &atostosv1.AgentIdentity{AgentId: "agt_revoked_fresh", CanonicalUri: "tos://agent/agt_revoked_fresh", Controllers: []string{testCanonicalController(7)}, Assurance: "tos_attested"}
+	if err := first.SeedIdentity(identity); err != nil {
+		t.Fatal(err)
+	}
+	created, err := first.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{Context: bindingReqCtx("operator", "bind-revoked-fresh", now), PrincipalId: "prn_revoked_fresh", AgentId: identity.AgentId}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = first.RevokePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.RevokePrincipalBindingRequest{Context: bindingReqCtx("operator", "revoke-fresh", now), PrincipalId: "prn_revoked_fresh", ReasonCode: "ROTATED"})); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "fresh.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	resolved, err := fresh.ResolvePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.ResolvePrincipalBindingRequest{Context: bindingReqCtx("verifier", "resolve-revoked-fresh", now), PrincipalId: "prn_revoked_fresh", ExpectedAgentId: identity.AgentId, ExpectedBindingRef: created.Msg.BindingRef}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Msg.Bound || resolved.Msg.Status != atostosv1.PrincipalBindingStatus_PRINCIPAL_BINDING_STATUS_REVOKED {
+		t.Fatalf("fresh replica accepted historical revoked binding: %+v", resolved.Msg)
 	}
 }
 

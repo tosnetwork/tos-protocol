@@ -35,6 +35,16 @@ func NewProtocolObserver(baseURL, token string) (*ProtocolObserver, error) {
 		return nil, errors.New("protocol observer URL and token are required")
 	}
 	c := &http.Client{Timeout: 25 * time.Second}
+	return NewProtocolObserverWithHTTPClient(c, baseURL, token)
+}
+
+// NewProtocolObserverWithHTTPClient lets an embedding service reuse its
+// pinned TLS transport and connection policy while retaining the standalone
+// observer's read-only RPC behavior.
+func NewProtocolObserverWithHTTPClient(c *http.Client, baseURL, token string) (*ProtocolObserver, error) {
+	if c == nil || strings.TrimSpace(baseURL) == "" || strings.TrimSpace(token) == "" {
+		return nil, errors.New("protocol observer HTTP client, URL and token are required")
+	}
 	return &ProtocolObserver{token: token, identity: atostosv1connect.NewIdentityServiceClient(c, baseURL), capability: atostosv1connect.NewCapabilityServiceClient(c, baseURL), trust: atostosv1connect.NewTrustServiceClient(c, baseURL), settlement: atostosv1connect.NewSettlementServiceClient(c, baseURL), proof: atostosv1connect.NewProofServiceClient(c, baseURL)}, nil
 }
 func (o *ProtocolObserver) decorate(r connect.AnyRequest) {

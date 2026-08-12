@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	atostosv1 "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/revocationcommitment"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -457,7 +458,7 @@ func (s *Server) RevokeExecutionSigner(
 			response.Revoked = true
 			return nil
 		}
-		digest, err := protoDigest("ATOS-TOS-SIGNER-REVOCATION-V1", withoutTransportContext(req.Msg))
+		digest, err := revocationcommitment.SignerDigest(req.Msg.AuthorizationId)
 		if err != nil {
 			return err
 		}
@@ -465,9 +466,17 @@ func (s *Server) RevokeExecutionSigner(
 		if err != nil {
 			return unavailable("NETWORK_UNAVAILABLE", "signer revocation authority is unavailable")
 		}
+		revokedAt := s.now().UnixMilli()
+		if s.authority.Supports(TrustModeVerified) {
+			observed, observeErr := resolveCommitmentObservation(ctx, s.authority, "execution-signer-revocation", req.Msg.AuthorizationId, digest, &ref)
+			if observeErr != nil || observed.ObservedUnixMillis <= 0 {
+				return unavailable("NETWORK_UNAVAILABLE", "signer revocation finality time is unavailable")
+			}
+			revokedAt = observed.ObservedUnixMillis
+		}
 		authorization.Revoked = true
 		authorization.RevocationRef = &ref
-		authorization.RevokedUnixMillis = s.now().UnixMilli()
+		authorization.RevokedUnixMillis = revokedAt
 		if err := s.store.putProto(tx, bucketSignerAuths, key, authorization); err != nil {
 			return err
 		}
@@ -542,7 +551,15 @@ func (s *Server) ResolveExecutionSignerAuthorization(
 		if at < expected.ValidFromUnixMillis || at >= expected.ValidUntilUnixMillis {
 			return connect.NewResponse(response), nil
 		}
-		response.Authorization = &atostosv1.ExecutionSignerAuthorization{Value: cloneMessage(expected), AuthorizationRef: live}
+		revoked, revocationRef, revokedAt, revocationErr := resolveSignerRevocation(ctx, s.authority, expected.AuthorizationId)
+		if revocationErr != nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer revocation state unavailable")
+		}
+		response.Authorization = &atostosv1.ExecutionSignerAuthorization{Value: cloneMessage(expected), AuthorizationRef: live, Revoked: revoked, RevocationRef: revocationRef, RevokedUnixMillis: revokedAt}
+		if revoked && at >= revokedAt {
+			response.ReasonCode = "REVOKED"
+			return connect.NewResponse(response), nil
+		}
 		response.Authorized = true
 		response.ReasonCode = ""
 		return connect.NewResponse(response), nil
@@ -561,8 +578,47 @@ func (s *Server) ResolveExecutionSignerAuthorization(
 			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer finality unavailable")
 		}
 		response.Authorization.AuthorizationRef = live
+		revoked, revocationRef, revokedAt, revocationErr := resolveSignerRevocation(ctx, s.authority, response.Authorization.Value.AuthorizationId)
+		if revocationErr != nil {
+			return nil, unavailable("NETWORK_UNAVAILABLE", "execution signer revocation state unavailable")
+		}
+		response.Authorization.Revoked = revoked
+		response.Authorization.RevocationRef = revocationRef
+		response.Authorization.RevokedUnixMillis = revokedAt
+		at := req.Msg.AtUnixMillis
+		if at == 0 {
+			at = s.now().UnixMilli()
+		}
+		if revoked && at >= revokedAt {
+			response.Authorized = false
+			response.ReasonCode = "REVOKED"
+		}
 	}
 	return connect.NewResponse(response), nil
+}
+
+func resolveSignerRevocation(ctx context.Context, authority Authority, authorizationID string) (bool, *NetworkReference, int64, error) {
+	digest, err := revocationcommitment.SignerDigest(authorizationID)
+	if err != nil {
+		return false, nil, 0, err
+	}
+	observed, err := resolveCommitmentObservation(ctx, authority, "execution-signer-revocation", authorizationID, digest, nil)
+	if errors.Is(err, ErrCommitmentNotFound) {
+		return false, nil, 0, nil
+	}
+	if err != nil || observed == nil || observed.ObservedUnixMillis <= 0 {
+		return false, nil, 0, errors.New("canonical revocation unavailable")
+	}
+	ref := observed.Reference
+	return true, &ref, observed.ObservedUnixMillis, nil
+}
+
+func resolveCommitmentObservation(ctx context.Context, authority Authority, kind, objectID, digest string, ref *NetworkReference) (*CommitmentObservation, error) {
+	resolver, ok := authority.(CommitmentObservationResolver)
+	if !ok {
+		return nil, errors.New("commitment observation resolver unavailable")
+	}
+	return resolver.ResolveCommitmentObservation(ctx, kind, objectID, digest, ref)
 }
 
 func (s *Server) ensureLocalExecutionSignerTx(tx *bolt.Tx, providerID, capabilityID, version string) (*atostosv1.ExecutionSignerAuthorization, error) {

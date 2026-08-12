@@ -246,6 +246,13 @@ func (a *scriptedAuthority) Commit(ctx context.Context, kind, id, digest string)
 	}
 	return a.Authority.Commit(ctx, kind, id, digest)
 }
+func (a *scriptedAuthority) ResolveCommitmentObservation(ctx context.Context, kind, id, digest string, ref *NetworkReference) (*CommitmentObservation, error) {
+	resolver, ok := a.Authority.(CommitmentObservationResolver)
+	if !ok {
+		return nil, errors.New("observation unavailable")
+	}
+	return resolver.ResolveCommitmentObservation(ctx, kind, id, digest, ref)
+}
 
 // TestCreateEscrowRetryAfterUncertainAuthorityFailureConverges is the
 // end-to-end counterpart to TestCommitmentDigestIgnoresTransportContext: it
