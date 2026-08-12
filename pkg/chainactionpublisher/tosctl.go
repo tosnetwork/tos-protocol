@@ -367,13 +367,11 @@ func (b *TosctlBackend) Close() error {
 }
 
 func backendEnvironment(vaultURL string) []string {
-	environment := make([]string, 0, len(os.Environ())+1)
-	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "VAULT_URL=") {
-			environment = append(environment, value)
-		}
-	}
-	return append(environment, "VAULT_URL="+vaultURL)
+	// The publisher is a key-custody boundary. Inheriting the service process
+	// environment would allow loader, proxy, certificate, HOME, and PATH
+	// injection to change behavior after enrollment. tosctl receives only the
+	// value already committed by EnrollmentBinding.
+	return []string{"VAULT_URL=" + vaultURL}
 }
 
 func validBase64Hash(value string) bool {

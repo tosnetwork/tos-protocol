@@ -124,6 +124,20 @@ func TestMissingOrSubstitutedJournalFailsClosed(t *testing.T) {
 		t.Fatal("journal accepted substituted executable/config/backend enrollment")
 	}
 }
+
+func TestInitializeJournalInvalidBindingLeavesNoFileOrLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.db")
+	if err := chainactionpublisher.InitializeJournal(path, "enrolled", "tos-test", policy(), ""); err == nil {
+		t.Fatal("invalid backend binding was accepted")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("failed enrollment left journal behind: %v", err)
+	}
+	b := &backend{}
+	if err := chainactionpublisher.InitializeJournal(path, "enrolled", "tos-test", policy(), b.EnrollmentBinding()); err != nil {
+		t.Fatalf("retry after validation failure: %v", err)
+	}
+}
 func TestSpendingPolicyRejectsSubstitution(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0o700)

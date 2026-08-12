@@ -42,6 +42,10 @@ func InitializeJournal(path, identity, network string, policy SpendingPolicy, ba
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
+	binding, err := chainJournalBinding(network, policy, backendBinding)
+	if err != nil {
+		return err
+	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
 		return fmt.Errorf("create publisher journal: %w", err)
@@ -52,10 +56,6 @@ func InitializeJournal(path, identity, network string, policy SpendingPolicy, ba
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2_000_000_000})
 	if err != nil {
 		_ = os.Remove(path)
-		return err
-	}
-	binding, err := chainJournalBinding(network, policy, backendBinding)
-	if err != nil {
 		return err
 	}
 	err = db.Update(func(tx *bolt.Tx) error {

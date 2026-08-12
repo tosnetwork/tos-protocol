@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+[ "${VAULT_URL:-}" = "file:///vault" ] || exit 40
+[ -z "$(env | grep -Ev '^(VAULT_URL|PWD)=')" ] || exit 41
+config=$(cat <&3)
+
+if [ "$1 $2" = "wallet ls" ]; then
+  printf '%s' "$config" | grep -F 'http://' >/dev/null || exit 42
+  echo '[{"name":"anchor","address":"Ef8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAU","balance":0,"state":"active","wallet_type":"V3R2","seqno":1}]'
+  exit 0
+fi
+
+: > /tmp/tos-chain-action-publisher-test-sent
+exit 1

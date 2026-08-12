@@ -19,6 +19,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.x"
+      - name: Install root-owned Quote publisher fixture
+        run: |
+          sudo install -d -o root -g root -m 0755 /usr/local/libexec/tos-protocol-test
+          sudo install -o root -g root -m 0755 tests/fixtures/tosctl-chain-publisher /usr/local/libexec/tos-protocol-test/tosctl
       - run: make all
       - run: make test-race
       - run: make reproducible-builds
