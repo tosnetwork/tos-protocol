@@ -309,17 +309,12 @@ func (b *TosctlBackend) CheckReady(ctx context.Context, policy PublisherPolicy) 
 	}
 	var state taskStateView
 	validatedPolicy, policyErr := validatePublisherPolicy(policy)
-	if err := jsonstrict.Decode(stateOutput, &state); err != nil ||
-		normalizeDigest(state.PolicyHash) != probe.PolicyHash ||
-		normalizeDigest(state.PermissionHash) != probe.PermissionHash ||
-		strings.TrimSpace(state.Address) == "" {
+	if err := jsonstrict.Decode(stateOutput, &state); err != nil {
 		return errors.New("tosctl TaskEscrow build-state readiness probe is incompatible")
 	}
-	codeHash := normalizeCellDigest(state.CodeHash)
-	if !validCellHash(codeHash) {
-		return errors.New("tosctl TaskEscrow build-state returned an invalid code hash")
-	}
-	if policyErr != nil || !contains(validatedPolicy.AllowedCodeHashes, codeHash) {
+	if _, codeHash, err := validateTaskState(state, probe, b.workchain); err != nil {
+		return fmt.Errorf("tosctl TaskEscrow build-state readiness probe is incompatible: %w", err)
+	} else if policyErr != nil || !contains(validatedPolicy.AllowedCodeHashes, codeHash) {
 		return errors.New("tosctl TaskEscrow build-state code hash is not enrolled in publisher policy")
 	}
 	return nil
@@ -356,20 +351,48 @@ func sameStringSet(left, right []string) bool {
 // must stay in sync with tosctl's AgentTaskStateView even though Prepare
 // only reads Address, PermissionHash, and PolicyHash.
 type taskStateView struct {
-	Creator        string `json:"creator"`
-	AssignedAgent  any    `json:"assigned_agent"`
-	Verifier       any    `json:"verifier"`
-	PermissionID   any    `json:"permission_id"`
-	PermissionHash string `json:"permission_hash"`
-	Budget         string `json:"budget"`
-	Deadline       uint64 `json:"deadline"`
-	ReviewPeriod   uint32 `json:"review_period"`
-	Workchain      int32  `json:"workchain"`
-	Address        string `json:"address"`
-	PolicyHash     string `json:"policy_hash"`
-	StateInitBOC   string `json:"state_init_boc"`
-	CodeHash       string `json:"code_hash"`
-	DataHash       string `json:"data_hash"`
+	Creator        string  `json:"creator"`
+	AssignedAgent  *string `json:"assigned_agent"`
+	Verifier       *string `json:"verifier"`
+	PermissionID   *string `json:"permission_id"`
+	PermissionHash string  `json:"permission_hash"`
+	Budget         string  `json:"budget"`
+	BudgetNanoTOS  uint64  `json:"budget_nanotos"`
+	Deadline       uint64  `json:"deadline"`
+	ReviewPeriod   uint32  `json:"review_period"`
+	Workchain      int32   `json:"workchain"`
+	Address        string  `json:"address"`
+	PolicyHash     string  `json:"policy_hash"`
+	StateInitBOC   string  `json:"state_init_boc"`
+	CodeHash       string  `json:"code_hash"`
+	DataHash       string  `json:"data_hash"`
+}
+
+func validateTaskState(state taskStateView, action chain.TaskEscrowAction, workchain int32) (string, string, error) {
+	contractAddress, err := toschain.CanonicalAddress(state.Address)
+	if err != nil {
+		return "", "", errors.New("tosctl build-state returned a non-canonical contract address")
+	}
+	identityMatches := func(value string, expected string) bool {
+		canonical, canonicalErr := canonicalWalletAddress(value)
+		return canonicalErr == nil && canonical == expected
+	}
+	optionalIdentityMatches := func(value *string, expected string) bool {
+		return value != nil && identityMatches(*value, expected)
+	}
+	codeHash := normalizeCellDigest(state.CodeHash)
+	dataHash := normalizeCellDigest(state.DataHash)
+	if !identityMatches(state.Creator, action.Creator) ||
+		!optionalIdentityMatches(state.AssignedAgent, action.Agent) ||
+		!optionalIdentityMatches(state.Verifier, action.Verifier) || state.PermissionID != nil ||
+		state.BudgetNanoTOS != action.BudgetNanoTOS || state.Deadline != action.DeadlineUnix ||
+		state.ReviewPeriod != action.ReviewPeriod || state.Workchain != workchain ||
+		normalizeDigest(state.PermissionHash) != action.PermissionHash ||
+		normalizeDigest(state.PolicyHash) != action.PolicyHash ||
+		strings.TrimSpace(state.StateInitBOC) == "" || !validCellHash(codeHash) || !validCellHash(dataHash) {
+		return "", "", errors.New("tosctl build-state changed immutable escrow fields")
+	}
+	return contractAddress, codeHash, nil
 }
 
 func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowAction) (PreparedAction, error) {
@@ -390,12 +413,10 @@ func (b *TosctlBackend) Prepare(ctx context.Context, action chain.TaskEscrowActi
 		if err := jsonstrict.Decode(output, &state); err != nil {
 			return PreparedAction{}, errors.New("tosctl build-state returned invalid JSON")
 		}
-		contractAddress, err = toschain.CanonicalAddress(state.Address)
-		if err != nil || normalizeDigest(state.PermissionHash) != action.PermissionHash ||
-			normalizeDigest(state.PolicyHash) != action.PolicyHash {
-			return PreparedAction{}, errors.New("tosctl build-state changed immutable escrow fields")
+		contractAddress, codeHash, err = validateTaskState(state, action, b.workchain)
+		if err != nil {
+			return PreparedAction{}, err
 		}
-		codeHash = normalizeCellDigest(state.CodeHash)
 	} else {
 		var err error
 		contractAddress, err = toschain.CanonicalAddress(contractAddress)

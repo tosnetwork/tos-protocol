@@ -200,6 +200,7 @@ func TestTaskStateViewAcceptsTosctlOutputFields(t *testing.T) {
 		"permission_id": null,
 		"permission_hash": "` + strings.Repeat("aa", 32) + `",
 		"budget": "5",
+		"budget_nanotos": 5000000000,
 		"deadline": 1900000000,
 		"review_period": 3600,
 		"workchain": 0,
@@ -215,6 +216,32 @@ func TestTaskStateViewAcceptsTosctlOutputFields(t *testing.T) {
 	}
 	if state.Address != "0:"+strings.Repeat("33", 32) || state.PolicyHash != strings.Repeat("bb", 32) {
 		t.Fatalf("unexpected decode result: %+v", state)
+	}
+}
+
+func TestValidateTaskStateRejectsMalformedAddressAndSubstitution(t *testing.T) {
+	action := testAction(time.Unix(1_800_000_000, 0))
+	state := taskStateView{
+		Creator: action.Creator, AssignedAgent: &action.Agent, Verifier: &action.Verifier,
+		PermissionHash: strings.TrimPrefix(action.PermissionHash, "sha256:"),
+		Budget:         "1", BudgetNanoTOS: action.BudgetNanoTOS, Deadline: action.DeadlineUnix,
+		ReviewPeriod: action.ReviewPeriod, Workchain: 0,
+		Address:    "0:" + strings.Repeat("44", 32),
+		PolicyHash: strings.TrimPrefix(action.PolicyHash, "sha256:"), StateInitBOC: "base64==",
+		CodeHash: strings.Repeat("55", 32), DataHash: strings.Repeat("66", 32),
+	}
+	if _, _, err := validateTaskState(state, action, 0); err != nil {
+		t.Fatalf("valid TaskEscrow state rejected: %v", err)
+	}
+	malformed := state
+	malformed.Address = "not-a-contract-address"
+	if _, _, err := validateTaskState(malformed, action, 0); err == nil {
+		t.Fatal("malformed contract address passed readiness validation")
+	}
+	substituted := state
+	substituted.Deadline++
+	if _, _, err := validateTaskState(substituted, action, 0); err == nil {
+		t.Fatal("substituted immutable StateInit field passed readiness validation")
 	}
 }
 

@@ -53,6 +53,26 @@ func TestInitializeJournalRejectsProbeCodeHashOutsidePolicy(t *testing.T) {
 		t.Fatalf("code-hash mismatch created journal: %v", err)
 	}
 }
+
+func TestInitializeJournalRejectsMalformedProbeAddress(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "journal.db")
+	config := startupConfig{
+		Network: "tos-test", StatePath: statePath, JournalIdentity: "journal-test",
+		Policy: taskescrowpublisher.PublisherPolicy{
+			AllowedCreators: []string{"0:" + repeatHex("11")}, AllowedAgents: []string{"0:" + repeatHex("22")},
+			AllowedPolicyHashes: []string{"sha256:" + repeatHex("33")},
+			AllowedCodeHashes:   []string{"tvm-cell-sha256:" + repeatHex("44")},
+			MaxBudgetNanoTOS:    1, MaxFundingNanoTOS: 1,
+		},
+	}
+	backend := &enrollmentBackend{readyErr: errors.New("build-state returned a non-canonical contract address")}
+	if err := initializeJournal(context.Background(), config, backend); err == nil {
+		t.Fatal("publisher journal enrolled a malformed build-state address")
+	}
+	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("malformed build-state address created journal: %v", err)
+	}
+}
 func (*enrollmentBackend) Publish(context.Context, chain.TaskEscrowAction, taskescrowpublisher.PreparedAction, bool) (chain.TaskEscrowActionReceipt, error) {
 	return chain.TaskEscrowActionReceipt{}, errors.New("not used")
 }
