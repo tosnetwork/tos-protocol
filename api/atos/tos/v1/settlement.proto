@@ -5,6 +5,7 @@ package atos.tos.v1;
 option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
 
 import "atos/tos/v1/common.proto";
+import "atos/tos/v1/proof.proto";
 
 service SettlementService {
   rpc CreateEscrow(CreateEscrowRequest) returns (CreateEscrowResponse);
@@ -12,6 +13,9 @@ service SettlementService {
   rpc ReleaseEscrow(ReleaseEscrowRequest) returns (ReleaseEscrowResponse);
   rpc SettleJob(SettleJobRequest) returns (SettleJobResponse);
   rpc GetSettlement(GetSettlementRequest) returns (GetSettlementResponse);
+  rpc PrepareVerifiedResult(PrepareVerifiedResultRequest) returns (PrepareVerifiedResultResponse);
+  rpc OpenVerifiedDispute(OpenVerifiedDisputeRequest) returns (OpenVerifiedDisputeResponse);
+  rpc ResolveVerifiedDispute(ResolveVerifiedDisputeRequest) returns (ResolveVerifiedDisputeResponse);
 }
 
 enum EscrowState {
@@ -59,6 +63,14 @@ message Escrow {
   string release_action_id = 25;
   string release_reason_code = 26;
   NetworkReference terminal_ref = 27;
+  NetworkReference result_ref = 28;
+  int64 review_deadline_unix_millis = 29;
+  string dispute_digest = 30;
+  NetworkReference dispute_ref = 31;
+  string dispute_resolution_digest = 32;
+  string dispute_outcome = 33;
+  string result_digest = 34;
+  string result_evidence_digest = 35;
 }
 
 message VerifiedEscrowTerms {
@@ -126,6 +138,9 @@ message GetEscrowRequest {
   NetworkReference expected_terminal_ref = 7;
   string expected_release_digest = 8;
   string expected_release_reason_code = 9;
+  string expected_dispute_digest = 10;
+  NetworkReference expected_dispute_ref = 11;
+  NetworkAmount expected_dispute_payout = 12;
 }
 
 message GetEscrowResponse {
@@ -149,6 +164,96 @@ message ReleaseEscrowResponse {
   NetworkReference release_ref = 2;
   bool released = 3;
 }
+
+message PrepareVerifiedResultRequest {
+  RequestContext context = 1;
+  string escrow_id = 2;
+  string quote_id = 3;
+  string job_id = 4;
+  string receipt_id = 5;
+  VerifiedEscrowTerms expected_terms = 6;
+  NetworkReference expected_escrow_ref = 7;
+  string expected_reservation_digest = 8;
+  ExecutionReceiptEnvelope expected_receipt = 9;
+  NetworkReference expected_receipt_ref = 10;
+}
+message PrepareVerifiedResultResponse { Escrow escrow = 1; bool prepared = 2; }
+
+message VerifiedDisputeOpen {
+  string version = 1;
+  string network_id = 2;
+  string gateway_domain = 3;
+  string dispute_id = 4;
+  string escrow_id = 5;
+  string job_id = 6;
+  string quote_id = 7;
+  string receipt_id = 8;
+  string principal_id = 9;
+  string provider_id = 10;
+  string capability_id = 11;
+  string capability_version = 12;
+  string quote_commitment_digest = 13;
+  string reservation_digest = 14;
+  string receipt_digest = 15;
+  Digest dispute_policy_digest = 16;
+  string reason_code = 17;
+  repeated Digest evidence_digests = 18;
+  int64 opened_unix_millis = 19;
+}
+message OpenVerifiedDisputeRequest {
+  RequestContext context = 1;
+  VerifiedDisputeOpen dispute = 2;
+  VerifiedEscrowTerms expected_terms = 3;
+  NetworkReference expected_escrow_ref = 4;
+  string expected_reservation_digest = 5;
+  string expected_result_hash = 6;
+  string expected_evidence_hash = 7;
+  NetworkReference expected_result_ref = 8;
+  ExecutionReceiptEnvelope expected_receipt = 9;
+  NetworkReference expected_receipt_ref = 10;
+}
+message OpenVerifiedDisputeResponse {
+  Escrow escrow = 1;
+  string dispute_digest = 2;
+  NetworkReference dispute_ref = 3;
+  bool opened = 4;
+}
+
+message VerifiedDisputeResolution {
+  string version = 1;
+  string network_id = 2;
+  string gateway_domain = 3;
+  string dispute_id = 4;
+  string escrow_id = 5;
+  string job_id = 6;
+  string quote_id = 7;
+  string receipt_id = 8;
+  string dispute_digest = 9;
+  string outcome = 10;
+  string reviewer_principal_id = 11;
+  NetworkAmount reserved = 12;
+  NetworkAmount provider_payout = 13;
+  NetworkAmount requester_refund = 14;
+  int64 resolved_unix_millis = 15;
+}
+message ResolveVerifiedDisputeRequest {
+  RequestContext context = 1;
+  VerifiedDisputeResolution resolution = 2;
+  VerifiedEscrowTerms expected_terms = 3;
+  NetworkReference expected_escrow_ref = 4;
+  string expected_reservation_digest = 5;
+  NetworkReference expected_dispute_ref = 6;
+  ExecutionReceiptEnvelope expected_receipt = 7;
+  NetworkReference expected_receipt_ref = 8;
+}
+message ResolveVerifiedDisputeResponse {
+  Escrow escrow = 1;
+  Settlement settlement = 2;
+  string resolution_digest = 3;
+  NetworkReference resolution_ref = 4;
+  bool resolved = 5;
+}
+
 
 message Settlement {
   string settlement_id = 1;

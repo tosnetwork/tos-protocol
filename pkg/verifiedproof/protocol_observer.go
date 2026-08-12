@@ -130,6 +130,14 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 				req.Msg.ExpectedTerminalRef = protoRef(p.Outcome.OutcomeRef)
 			}
 		}
+		if p.Outcome.Kind == "dispute_resolution" {
+			req.Msg.ExpectedDisputeDigest = p.Outcome.DisputeDigest
+			req.Msg.ExpectedDisputeRef = protoRef(p.Outcome.DisputeRef)
+			req.Msg.ExpectedDisputePayout = &atostosv1.NetworkAmount{Asset: p.Quote.SettlementAsset, AtomicAmount: p.Outcome.ChargedAtomic}
+			if r.Kind == "dispute_resolution" {
+				req.Msg.ExpectedTerminalRef = protoRef(p.Outcome.OutcomeRef)
+			}
+		}
 		o.decorate(req)
 		resp, e := o.settlement.GetEscrow(ctx, req)
 		if e != nil {

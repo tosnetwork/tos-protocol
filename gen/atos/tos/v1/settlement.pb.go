@@ -135,36 +135,44 @@ func (SettlementState) EnumDescriptor() ([]byte, []int) {
 }
 
 type Escrow struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	EscrowId              string                 `protobuf:"bytes,1,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
-	QuoteId               string                 `protobuf:"bytes,2,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
-	PrincipalId           string                 `protobuf:"bytes,3,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
-	ProviderId            string                 `protobuf:"bytes,4,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	CapabilityId          string                 `protobuf:"bytes,5,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	TrustMode             TrustMode              `protobuf:"varint,6,opt,name=trust_mode,json=trustMode,proto3,enum=atos.tos.v1.TrustMode" json:"trust_mode,omitempty"`
-	ProofProfile          ProofProfile           `protobuf:"varint,7,opt,name=proof_profile,json=proofProfile,proto3,enum=atos.tos.v1.ProofProfile" json:"proof_profile,omitempty"`
-	Reserved              *NetworkAmount         `protobuf:"bytes,8,opt,name=reserved,proto3" json:"reserved,omitempty"`
-	State                 EscrowState            `protobuf:"varint,9,opt,name=state,proto3,enum=atos.tos.v1.EscrowState" json:"state,omitempty"`
-	CreatedUnixMillis     int64                  `protobuf:"varint,10,opt,name=created_unix_millis,json=createdUnixMillis,proto3" json:"created_unix_millis,omitempty"`
-	ExpiresUnixMillis     int64                  `protobuf:"varint,11,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
-	EscrowRef             *NetworkReference      `protobuf:"bytes,12,opt,name=escrow_ref,json=escrowRef,proto3" json:"escrow_ref,omitempty"`
-	FundingModel          string                 `protobuf:"bytes,13,opt,name=funding_model,json=fundingModel,proto3" json:"funding_model,omitempty"`
-	JobId                 string                 `protobuf:"bytes,14,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	CapabilityVersion     string                 `protobuf:"bytes,15,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
-	QuoteCommitmentDigest string                 `protobuf:"bytes,16,opt,name=quote_commitment_digest,json=quoteCommitmentDigest,proto3" json:"quote_commitment_digest,omitempty"`
-	QuoteCommitmentRef    *NetworkReference      `protobuf:"bytes,17,opt,name=quote_commitment_ref,json=quoteCommitmentRef,proto3" json:"quote_commitment_ref,omitempty"`
-	ReservationDigest     string                 `protobuf:"bytes,18,opt,name=reservation_digest,json=reservationDigest,proto3" json:"reservation_digest,omitempty"`
-	ReservationActionId   string                 `protobuf:"bytes,19,opt,name=reservation_action_id,json=reservationActionId,proto3" json:"reservation_action_id,omitempty"`
-	ContractCodeHash      string                 `protobuf:"bytes,20,opt,name=contract_code_hash,json=contractCodeHash,proto3" json:"contract_code_hash,omitempty"`
-	Finalized             bool                   `protobuf:"varint,21,opt,name=finalized,proto3" json:"finalized,omitempty"`
-	FinalizedCheckpoint   uint64                 `protobuf:"varint,22,opt,name=finalized_checkpoint,json=finalizedCheckpoint,proto3" json:"finalized_checkpoint,omitempty"`
-	ReleaseRef            *NetworkReference      `protobuf:"bytes,23,opt,name=release_ref,json=releaseRef,proto3" json:"release_ref,omitempty"`
-	ReleaseDigest         string                 `protobuf:"bytes,24,opt,name=release_digest,json=releaseDigest,proto3" json:"release_digest,omitempty"`
-	ReleaseActionId       string                 `protobuf:"bytes,25,opt,name=release_action_id,json=releaseActionId,proto3" json:"release_action_id,omitempty"`
-	ReleaseReasonCode     string                 `protobuf:"bytes,26,opt,name=release_reason_code,json=releaseReasonCode,proto3" json:"release_reason_code,omitempty"`
-	TerminalRef           *NetworkReference      `protobuf:"bytes,27,opt,name=terminal_ref,json=terminalRef,proto3" json:"terminal_ref,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	EscrowId                 string                 `protobuf:"bytes,1,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
+	QuoteId                  string                 `protobuf:"bytes,2,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	PrincipalId              string                 `protobuf:"bytes,3,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	ProviderId               string                 `protobuf:"bytes,4,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	CapabilityId             string                 `protobuf:"bytes,5,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	TrustMode                TrustMode              `protobuf:"varint,6,opt,name=trust_mode,json=trustMode,proto3,enum=atos.tos.v1.TrustMode" json:"trust_mode,omitempty"`
+	ProofProfile             ProofProfile           `protobuf:"varint,7,opt,name=proof_profile,json=proofProfile,proto3,enum=atos.tos.v1.ProofProfile" json:"proof_profile,omitempty"`
+	Reserved                 *NetworkAmount         `protobuf:"bytes,8,opt,name=reserved,proto3" json:"reserved,omitempty"`
+	State                    EscrowState            `protobuf:"varint,9,opt,name=state,proto3,enum=atos.tos.v1.EscrowState" json:"state,omitempty"`
+	CreatedUnixMillis        int64                  `protobuf:"varint,10,opt,name=created_unix_millis,json=createdUnixMillis,proto3" json:"created_unix_millis,omitempty"`
+	ExpiresUnixMillis        int64                  `protobuf:"varint,11,opt,name=expires_unix_millis,json=expiresUnixMillis,proto3" json:"expires_unix_millis,omitempty"`
+	EscrowRef                *NetworkReference      `protobuf:"bytes,12,opt,name=escrow_ref,json=escrowRef,proto3" json:"escrow_ref,omitempty"`
+	FundingModel             string                 `protobuf:"bytes,13,opt,name=funding_model,json=fundingModel,proto3" json:"funding_model,omitempty"`
+	JobId                    string                 `protobuf:"bytes,14,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	CapabilityVersion        string                 `protobuf:"bytes,15,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
+	QuoteCommitmentDigest    string                 `protobuf:"bytes,16,opt,name=quote_commitment_digest,json=quoteCommitmentDigest,proto3" json:"quote_commitment_digest,omitempty"`
+	QuoteCommitmentRef       *NetworkReference      `protobuf:"bytes,17,opt,name=quote_commitment_ref,json=quoteCommitmentRef,proto3" json:"quote_commitment_ref,omitempty"`
+	ReservationDigest        string                 `protobuf:"bytes,18,opt,name=reservation_digest,json=reservationDigest,proto3" json:"reservation_digest,omitempty"`
+	ReservationActionId      string                 `protobuf:"bytes,19,opt,name=reservation_action_id,json=reservationActionId,proto3" json:"reservation_action_id,omitempty"`
+	ContractCodeHash         string                 `protobuf:"bytes,20,opt,name=contract_code_hash,json=contractCodeHash,proto3" json:"contract_code_hash,omitempty"`
+	Finalized                bool                   `protobuf:"varint,21,opt,name=finalized,proto3" json:"finalized,omitempty"`
+	FinalizedCheckpoint      uint64                 `protobuf:"varint,22,opt,name=finalized_checkpoint,json=finalizedCheckpoint,proto3" json:"finalized_checkpoint,omitempty"`
+	ReleaseRef               *NetworkReference      `protobuf:"bytes,23,opt,name=release_ref,json=releaseRef,proto3" json:"release_ref,omitempty"`
+	ReleaseDigest            string                 `protobuf:"bytes,24,opt,name=release_digest,json=releaseDigest,proto3" json:"release_digest,omitempty"`
+	ReleaseActionId          string                 `protobuf:"bytes,25,opt,name=release_action_id,json=releaseActionId,proto3" json:"release_action_id,omitempty"`
+	ReleaseReasonCode        string                 `protobuf:"bytes,26,opt,name=release_reason_code,json=releaseReasonCode,proto3" json:"release_reason_code,omitempty"`
+	TerminalRef              *NetworkReference      `protobuf:"bytes,27,opt,name=terminal_ref,json=terminalRef,proto3" json:"terminal_ref,omitempty"`
+	ResultRef                *NetworkReference      `protobuf:"bytes,28,opt,name=result_ref,json=resultRef,proto3" json:"result_ref,omitempty"`
+	ReviewDeadlineUnixMillis int64                  `protobuf:"varint,29,opt,name=review_deadline_unix_millis,json=reviewDeadlineUnixMillis,proto3" json:"review_deadline_unix_millis,omitempty"`
+	DisputeDigest            string                 `protobuf:"bytes,30,opt,name=dispute_digest,json=disputeDigest,proto3" json:"dispute_digest,omitempty"`
+	DisputeRef               *NetworkReference      `protobuf:"bytes,31,opt,name=dispute_ref,json=disputeRef,proto3" json:"dispute_ref,omitempty"`
+	DisputeResolutionDigest  string                 `protobuf:"bytes,32,opt,name=dispute_resolution_digest,json=disputeResolutionDigest,proto3" json:"dispute_resolution_digest,omitempty"`
+	DisputeOutcome           string                 `protobuf:"bytes,33,opt,name=dispute_outcome,json=disputeOutcome,proto3" json:"dispute_outcome,omitempty"`
+	ResultDigest             string                 `protobuf:"bytes,34,opt,name=result_digest,json=resultDigest,proto3" json:"result_digest,omitempty"`
+	ResultEvidenceDigest     string                 `protobuf:"bytes,35,opt,name=result_evidence_digest,json=resultEvidenceDigest,proto3" json:"result_evidence_digest,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *Escrow) Reset() {
@@ -384,6 +392,62 @@ func (x *Escrow) GetTerminalRef() *NetworkReference {
 		return x.TerminalRef
 	}
 	return nil
+}
+
+func (x *Escrow) GetResultRef() *NetworkReference {
+	if x != nil {
+		return x.ResultRef
+	}
+	return nil
+}
+
+func (x *Escrow) GetReviewDeadlineUnixMillis() int64 {
+	if x != nil {
+		return x.ReviewDeadlineUnixMillis
+	}
+	return 0
+}
+
+func (x *Escrow) GetDisputeDigest() string {
+	if x != nil {
+		return x.DisputeDigest
+	}
+	return ""
+}
+
+func (x *Escrow) GetDisputeRef() *NetworkReference {
+	if x != nil {
+		return x.DisputeRef
+	}
+	return nil
+}
+
+func (x *Escrow) GetDisputeResolutionDigest() string {
+	if x != nil {
+		return x.DisputeResolutionDigest
+	}
+	return ""
+}
+
+func (x *Escrow) GetDisputeOutcome() string {
+	if x != nil {
+		return x.DisputeOutcome
+	}
+	return ""
+}
+
+func (x *Escrow) GetResultDigest() string {
+	if x != nil {
+		return x.ResultDigest
+	}
+	return ""
+}
+
+func (x *Escrow) GetResultEvidenceDigest() string {
+	if x != nil {
+		return x.ResultEvidenceDigest
+	}
+	return ""
 }
 
 type VerifiedEscrowTerms struct {
@@ -873,6 +937,9 @@ type GetEscrowRequest struct {
 	ExpectedTerminalRef       *NetworkReference      `protobuf:"bytes,7,opt,name=expected_terminal_ref,json=expectedTerminalRef,proto3" json:"expected_terminal_ref,omitempty"`
 	ExpectedReleaseDigest     string                 `protobuf:"bytes,8,opt,name=expected_release_digest,json=expectedReleaseDigest,proto3" json:"expected_release_digest,omitempty"`
 	ExpectedReleaseReasonCode string                 `protobuf:"bytes,9,opt,name=expected_release_reason_code,json=expectedReleaseReasonCode,proto3" json:"expected_release_reason_code,omitempty"`
+	ExpectedDisputeDigest     string                 `protobuf:"bytes,10,opt,name=expected_dispute_digest,json=expectedDisputeDigest,proto3" json:"expected_dispute_digest,omitempty"`
+	ExpectedDisputeRef        *NetworkReference      `protobuf:"bytes,11,opt,name=expected_dispute_ref,json=expectedDisputeRef,proto3" json:"expected_dispute_ref,omitempty"`
+	ExpectedDisputePayout     *NetworkAmount         `protobuf:"bytes,12,opt,name=expected_dispute_payout,json=expectedDisputePayout,proto3" json:"expected_dispute_payout,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -968,6 +1035,27 @@ func (x *GetEscrowRequest) GetExpectedReleaseReasonCode() string {
 		return x.ExpectedReleaseReasonCode
 	}
 	return ""
+}
+
+func (x *GetEscrowRequest) GetExpectedDisputeDigest() string {
+	if x != nil {
+		return x.ExpectedDisputeDigest
+	}
+	return ""
+}
+
+func (x *GetEscrowRequest) GetExpectedDisputeRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedDisputeRef
+	}
+	return nil
+}
+
+func (x *GetEscrowRequest) GetExpectedDisputePayout() *NetworkAmount {
+	if x != nil {
+		return x.ExpectedDisputePayout
+	}
+	return nil
 }
 
 type GetEscrowResponse struct {
@@ -1182,6 +1270,878 @@ func (x *ReleaseEscrowResponse) GetReleased() bool {
 	return false
 }
 
+type PrepareVerifiedResultRequest struct {
+	state                     protoimpl.MessageState    `protogen:"open.v1"`
+	Context                   *RequestContext           `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	EscrowId                  string                    `protobuf:"bytes,2,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
+	QuoteId                   string                    `protobuf:"bytes,3,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	JobId                     string                    `protobuf:"bytes,4,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	ReceiptId                 string                    `protobuf:"bytes,5,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	ExpectedTerms             *VerifiedEscrowTerms      `protobuf:"bytes,6,opt,name=expected_terms,json=expectedTerms,proto3" json:"expected_terms,omitempty"`
+	ExpectedEscrowRef         *NetworkReference         `protobuf:"bytes,7,opt,name=expected_escrow_ref,json=expectedEscrowRef,proto3" json:"expected_escrow_ref,omitempty"`
+	ExpectedReservationDigest string                    `protobuf:"bytes,8,opt,name=expected_reservation_digest,json=expectedReservationDigest,proto3" json:"expected_reservation_digest,omitempty"`
+	ExpectedReceipt           *ExecutionReceiptEnvelope `protobuf:"bytes,9,opt,name=expected_receipt,json=expectedReceipt,proto3" json:"expected_receipt,omitempty"`
+	ExpectedReceiptRef        *NetworkReference         `protobuf:"bytes,10,opt,name=expected_receipt_ref,json=expectedReceiptRef,proto3" json:"expected_receipt_ref,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *PrepareVerifiedResultRequest) Reset() {
+	*x = PrepareVerifiedResultRequest{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareVerifiedResultRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareVerifiedResultRequest) ProtoMessage() {}
+
+func (x *PrepareVerifiedResultRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareVerifiedResultRequest.ProtoReflect.Descriptor instead.
+func (*PrepareVerifiedResultRequest) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PrepareVerifiedResultRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *PrepareVerifiedResultRequest) GetEscrowId() string {
+	if x != nil {
+		return x.EscrowId
+	}
+	return ""
+}
+
+func (x *PrepareVerifiedResultRequest) GetQuoteId() string {
+	if x != nil {
+		return x.QuoteId
+	}
+	return ""
+}
+
+func (x *PrepareVerifiedResultRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *PrepareVerifiedResultRequest) GetReceiptId() string {
+	if x != nil {
+		return x.ReceiptId
+	}
+	return ""
+}
+
+func (x *PrepareVerifiedResultRequest) GetExpectedTerms() *VerifiedEscrowTerms {
+	if x != nil {
+		return x.ExpectedTerms
+	}
+	return nil
+}
+
+func (x *PrepareVerifiedResultRequest) GetExpectedEscrowRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedEscrowRef
+	}
+	return nil
+}
+
+func (x *PrepareVerifiedResultRequest) GetExpectedReservationDigest() string {
+	if x != nil {
+		return x.ExpectedReservationDigest
+	}
+	return ""
+}
+
+func (x *PrepareVerifiedResultRequest) GetExpectedReceipt() *ExecutionReceiptEnvelope {
+	if x != nil {
+		return x.ExpectedReceipt
+	}
+	return nil
+}
+
+func (x *PrepareVerifiedResultRequest) GetExpectedReceiptRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedReceiptRef
+	}
+	return nil
+}
+
+type PrepareVerifiedResultResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Escrow        *Escrow                `protobuf:"bytes,1,opt,name=escrow,proto3" json:"escrow,omitempty"`
+	Prepared      bool                   `protobuf:"varint,2,opt,name=prepared,proto3" json:"prepared,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareVerifiedResultResponse) Reset() {
+	*x = PrepareVerifiedResultResponse{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareVerifiedResultResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareVerifiedResultResponse) ProtoMessage() {}
+
+func (x *PrepareVerifiedResultResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareVerifiedResultResponse.ProtoReflect.Descriptor instead.
+func (*PrepareVerifiedResultResponse) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PrepareVerifiedResultResponse) GetEscrow() *Escrow {
+	if x != nil {
+		return x.Escrow
+	}
+	return nil
+}
+
+func (x *PrepareVerifiedResultResponse) GetPrepared() bool {
+	if x != nil {
+		return x.Prepared
+	}
+	return false
+}
+
+type VerifiedDisputeOpen struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Version               string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	NetworkId             string                 `protobuf:"bytes,2,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	GatewayDomain         string                 `protobuf:"bytes,3,opt,name=gateway_domain,json=gatewayDomain,proto3" json:"gateway_domain,omitempty"`
+	DisputeId             string                 `protobuf:"bytes,4,opt,name=dispute_id,json=disputeId,proto3" json:"dispute_id,omitempty"`
+	EscrowId              string                 `protobuf:"bytes,5,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
+	JobId                 string                 `protobuf:"bytes,6,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	QuoteId               string                 `protobuf:"bytes,7,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	ReceiptId             string                 `protobuf:"bytes,8,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	PrincipalId           string                 `protobuf:"bytes,9,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	ProviderId            string                 `protobuf:"bytes,10,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	CapabilityId          string                 `protobuf:"bytes,11,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	CapabilityVersion     string                 `protobuf:"bytes,12,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
+	QuoteCommitmentDigest string                 `protobuf:"bytes,13,opt,name=quote_commitment_digest,json=quoteCommitmentDigest,proto3" json:"quote_commitment_digest,omitempty"`
+	ReservationDigest     string                 `protobuf:"bytes,14,opt,name=reservation_digest,json=reservationDigest,proto3" json:"reservation_digest,omitempty"`
+	ReceiptDigest         string                 `protobuf:"bytes,15,opt,name=receipt_digest,json=receiptDigest,proto3" json:"receipt_digest,omitempty"`
+	DisputePolicyDigest   *Digest                `protobuf:"bytes,16,opt,name=dispute_policy_digest,json=disputePolicyDigest,proto3" json:"dispute_policy_digest,omitempty"`
+	ReasonCode            string                 `protobuf:"bytes,17,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	EvidenceDigests       []*Digest              `protobuf:"bytes,18,rep,name=evidence_digests,json=evidenceDigests,proto3" json:"evidence_digests,omitempty"`
+	OpenedUnixMillis      int64                  `protobuf:"varint,19,opt,name=opened_unix_millis,json=openedUnixMillis,proto3" json:"opened_unix_millis,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *VerifiedDisputeOpen) Reset() {
+	*x = VerifiedDisputeOpen{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifiedDisputeOpen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifiedDisputeOpen) ProtoMessage() {}
+
+func (x *VerifiedDisputeOpen) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifiedDisputeOpen.ProtoReflect.Descriptor instead.
+func (*VerifiedDisputeOpen) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *VerifiedDisputeOpen) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetNetworkId() string {
+	if x != nil {
+		return x.NetworkId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetGatewayDomain() string {
+	if x != nil {
+		return x.GatewayDomain
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetDisputeId() string {
+	if x != nil {
+		return x.DisputeId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetEscrowId() string {
+	if x != nil {
+		return x.EscrowId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetQuoteId() string {
+	if x != nil {
+		return x.QuoteId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetReceiptId() string {
+	if x != nil {
+		return x.ReceiptId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetPrincipalId() string {
+	if x != nil {
+		return x.PrincipalId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetCapabilityId() string {
+	if x != nil {
+		return x.CapabilityId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetCapabilityVersion() string {
+	if x != nil {
+		return x.CapabilityVersion
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetQuoteCommitmentDigest() string {
+	if x != nil {
+		return x.QuoteCommitmentDigest
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetReservationDigest() string {
+	if x != nil {
+		return x.ReservationDigest
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetReceiptDigest() string {
+	if x != nil {
+		return x.ReceiptDigest
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetDisputePolicyDigest() *Digest {
+	if x != nil {
+		return x.DisputePolicyDigest
+	}
+	return nil
+}
+
+func (x *VerifiedDisputeOpen) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeOpen) GetEvidenceDigests() []*Digest {
+	if x != nil {
+		return x.EvidenceDigests
+	}
+	return nil
+}
+
+func (x *VerifiedDisputeOpen) GetOpenedUnixMillis() int64 {
+	if x != nil {
+		return x.OpenedUnixMillis
+	}
+	return 0
+}
+
+type OpenVerifiedDisputeRequest struct {
+	state                     protoimpl.MessageState    `protogen:"open.v1"`
+	Context                   *RequestContext           `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Dispute                   *VerifiedDisputeOpen      `protobuf:"bytes,2,opt,name=dispute,proto3" json:"dispute,omitempty"`
+	ExpectedTerms             *VerifiedEscrowTerms      `protobuf:"bytes,3,opt,name=expected_terms,json=expectedTerms,proto3" json:"expected_terms,omitempty"`
+	ExpectedEscrowRef         *NetworkReference         `protobuf:"bytes,4,opt,name=expected_escrow_ref,json=expectedEscrowRef,proto3" json:"expected_escrow_ref,omitempty"`
+	ExpectedReservationDigest string                    `protobuf:"bytes,5,opt,name=expected_reservation_digest,json=expectedReservationDigest,proto3" json:"expected_reservation_digest,omitempty"`
+	ExpectedResultHash        string                    `protobuf:"bytes,6,opt,name=expected_result_hash,json=expectedResultHash,proto3" json:"expected_result_hash,omitempty"`
+	ExpectedEvidenceHash      string                    `protobuf:"bytes,7,opt,name=expected_evidence_hash,json=expectedEvidenceHash,proto3" json:"expected_evidence_hash,omitempty"`
+	ExpectedResultRef         *NetworkReference         `protobuf:"bytes,8,opt,name=expected_result_ref,json=expectedResultRef,proto3" json:"expected_result_ref,omitempty"`
+	ExpectedReceipt           *ExecutionReceiptEnvelope `protobuf:"bytes,9,opt,name=expected_receipt,json=expectedReceipt,proto3" json:"expected_receipt,omitempty"`
+	ExpectedReceiptRef        *NetworkReference         `protobuf:"bytes,10,opt,name=expected_receipt_ref,json=expectedReceiptRef,proto3" json:"expected_receipt_ref,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *OpenVerifiedDisputeRequest) Reset() {
+	*x = OpenVerifiedDisputeRequest{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenVerifiedDisputeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenVerifiedDisputeRequest) ProtoMessage() {}
+
+func (x *OpenVerifiedDisputeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenVerifiedDisputeRequest.ProtoReflect.Descriptor instead.
+func (*OpenVerifiedDisputeRequest) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *OpenVerifiedDisputeRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeRequest) GetDispute() *VerifiedDisputeOpen {
+	if x != nil {
+		return x.Dispute
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedTerms() *VerifiedEscrowTerms {
+	if x != nil {
+		return x.ExpectedTerms
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedEscrowRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedEscrowRef
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedReservationDigest() string {
+	if x != nil {
+		return x.ExpectedReservationDigest
+	}
+	return ""
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedResultHash() string {
+	if x != nil {
+		return x.ExpectedResultHash
+	}
+	return ""
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedEvidenceHash() string {
+	if x != nil {
+		return x.ExpectedEvidenceHash
+	}
+	return ""
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedResultRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedResultRef
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedReceipt() *ExecutionReceiptEnvelope {
+	if x != nil {
+		return x.ExpectedReceipt
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeRequest) GetExpectedReceiptRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedReceiptRef
+	}
+	return nil
+}
+
+type OpenVerifiedDisputeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Escrow        *Escrow                `protobuf:"bytes,1,opt,name=escrow,proto3" json:"escrow,omitempty"`
+	DisputeDigest string                 `protobuf:"bytes,2,opt,name=dispute_digest,json=disputeDigest,proto3" json:"dispute_digest,omitempty"`
+	DisputeRef    *NetworkReference      `protobuf:"bytes,3,opt,name=dispute_ref,json=disputeRef,proto3" json:"dispute_ref,omitempty"`
+	Opened        bool                   `protobuf:"varint,4,opt,name=opened,proto3" json:"opened,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenVerifiedDisputeResponse) Reset() {
+	*x = OpenVerifiedDisputeResponse{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenVerifiedDisputeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenVerifiedDisputeResponse) ProtoMessage() {}
+
+func (x *OpenVerifiedDisputeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenVerifiedDisputeResponse.ProtoReflect.Descriptor instead.
+func (*OpenVerifiedDisputeResponse) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *OpenVerifiedDisputeResponse) GetEscrow() *Escrow {
+	if x != nil {
+		return x.Escrow
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeResponse) GetDisputeDigest() string {
+	if x != nil {
+		return x.DisputeDigest
+	}
+	return ""
+}
+
+func (x *OpenVerifiedDisputeResponse) GetDisputeRef() *NetworkReference {
+	if x != nil {
+		return x.DisputeRef
+	}
+	return nil
+}
+
+func (x *OpenVerifiedDisputeResponse) GetOpened() bool {
+	if x != nil {
+		return x.Opened
+	}
+	return false
+}
+
+type VerifiedDisputeResolution struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Version             string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	NetworkId           string                 `protobuf:"bytes,2,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	GatewayDomain       string                 `protobuf:"bytes,3,opt,name=gateway_domain,json=gatewayDomain,proto3" json:"gateway_domain,omitempty"`
+	DisputeId           string                 `protobuf:"bytes,4,opt,name=dispute_id,json=disputeId,proto3" json:"dispute_id,omitempty"`
+	EscrowId            string                 `protobuf:"bytes,5,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
+	JobId               string                 `protobuf:"bytes,6,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	QuoteId             string                 `protobuf:"bytes,7,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	ReceiptId           string                 `protobuf:"bytes,8,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	DisputeDigest       string                 `protobuf:"bytes,9,opt,name=dispute_digest,json=disputeDigest,proto3" json:"dispute_digest,omitempty"`
+	Outcome             string                 `protobuf:"bytes,10,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	ReviewerPrincipalId string                 `protobuf:"bytes,11,opt,name=reviewer_principal_id,json=reviewerPrincipalId,proto3" json:"reviewer_principal_id,omitempty"`
+	Reserved            *NetworkAmount         `protobuf:"bytes,12,opt,name=reserved,proto3" json:"reserved,omitempty"`
+	ProviderPayout      *NetworkAmount         `protobuf:"bytes,13,opt,name=provider_payout,json=providerPayout,proto3" json:"provider_payout,omitempty"`
+	RequesterRefund     *NetworkAmount         `protobuf:"bytes,14,opt,name=requester_refund,json=requesterRefund,proto3" json:"requester_refund,omitempty"`
+	ResolvedUnixMillis  int64                  `protobuf:"varint,15,opt,name=resolved_unix_millis,json=resolvedUnixMillis,proto3" json:"resolved_unix_millis,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *VerifiedDisputeResolution) Reset() {
+	*x = VerifiedDisputeResolution{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifiedDisputeResolution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifiedDisputeResolution) ProtoMessage() {}
+
+func (x *VerifiedDisputeResolution) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifiedDisputeResolution.ProtoReflect.Descriptor instead.
+func (*VerifiedDisputeResolution) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *VerifiedDisputeResolution) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetNetworkId() string {
+	if x != nil {
+		return x.NetworkId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetGatewayDomain() string {
+	if x != nil {
+		return x.GatewayDomain
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetDisputeId() string {
+	if x != nil {
+		return x.DisputeId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetEscrowId() string {
+	if x != nil {
+		return x.EscrowId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetQuoteId() string {
+	if x != nil {
+		return x.QuoteId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetReceiptId() string {
+	if x != nil {
+		return x.ReceiptId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetDisputeDigest() string {
+	if x != nil {
+		return x.DisputeDigest
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetReviewerPrincipalId() string {
+	if x != nil {
+		return x.ReviewerPrincipalId
+	}
+	return ""
+}
+
+func (x *VerifiedDisputeResolution) GetReserved() *NetworkAmount {
+	if x != nil {
+		return x.Reserved
+	}
+	return nil
+}
+
+func (x *VerifiedDisputeResolution) GetProviderPayout() *NetworkAmount {
+	if x != nil {
+		return x.ProviderPayout
+	}
+	return nil
+}
+
+func (x *VerifiedDisputeResolution) GetRequesterRefund() *NetworkAmount {
+	if x != nil {
+		return x.RequesterRefund
+	}
+	return nil
+}
+
+func (x *VerifiedDisputeResolution) GetResolvedUnixMillis() int64 {
+	if x != nil {
+		return x.ResolvedUnixMillis
+	}
+	return 0
+}
+
+type ResolveVerifiedDisputeRequest struct {
+	state                     protoimpl.MessageState     `protogen:"open.v1"`
+	Context                   *RequestContext            `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Resolution                *VerifiedDisputeResolution `protobuf:"bytes,2,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	ExpectedTerms             *VerifiedEscrowTerms       `protobuf:"bytes,3,opt,name=expected_terms,json=expectedTerms,proto3" json:"expected_terms,omitempty"`
+	ExpectedEscrowRef         *NetworkReference          `protobuf:"bytes,4,opt,name=expected_escrow_ref,json=expectedEscrowRef,proto3" json:"expected_escrow_ref,omitempty"`
+	ExpectedReservationDigest string                     `protobuf:"bytes,5,opt,name=expected_reservation_digest,json=expectedReservationDigest,proto3" json:"expected_reservation_digest,omitempty"`
+	ExpectedDisputeRef        *NetworkReference          `protobuf:"bytes,6,opt,name=expected_dispute_ref,json=expectedDisputeRef,proto3" json:"expected_dispute_ref,omitempty"`
+	ExpectedReceipt           *ExecutionReceiptEnvelope  `protobuf:"bytes,7,opt,name=expected_receipt,json=expectedReceipt,proto3" json:"expected_receipt,omitempty"`
+	ExpectedReceiptRef        *NetworkReference          `protobuf:"bytes,8,opt,name=expected_receipt_ref,json=expectedReceiptRef,proto3" json:"expected_receipt_ref,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *ResolveVerifiedDisputeRequest) Reset() {
+	*x = ResolveVerifiedDisputeRequest{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveVerifiedDisputeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveVerifiedDisputeRequest) ProtoMessage() {}
+
+func (x *ResolveVerifiedDisputeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveVerifiedDisputeRequest.ProtoReflect.Descriptor instead.
+func (*ResolveVerifiedDisputeRequest) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetResolution() *VerifiedDisputeResolution {
+	if x != nil {
+		return x.Resolution
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetExpectedTerms() *VerifiedEscrowTerms {
+	if x != nil {
+		return x.ExpectedTerms
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetExpectedEscrowRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedEscrowRef
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetExpectedReservationDigest() string {
+	if x != nil {
+		return x.ExpectedReservationDigest
+	}
+	return ""
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetExpectedDisputeRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedDisputeRef
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetExpectedReceipt() *ExecutionReceiptEnvelope {
+	if x != nil {
+		return x.ExpectedReceipt
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeRequest) GetExpectedReceiptRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedReceiptRef
+	}
+	return nil
+}
+
+type ResolveVerifiedDisputeResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Escrow           *Escrow                `protobuf:"bytes,1,opt,name=escrow,proto3" json:"escrow,omitempty"`
+	Settlement       *Settlement            `protobuf:"bytes,2,opt,name=settlement,proto3" json:"settlement,omitempty"`
+	ResolutionDigest string                 `protobuf:"bytes,3,opt,name=resolution_digest,json=resolutionDigest,proto3" json:"resolution_digest,omitempty"`
+	ResolutionRef    *NetworkReference      `protobuf:"bytes,4,opt,name=resolution_ref,json=resolutionRef,proto3" json:"resolution_ref,omitempty"`
+	Resolved         bool                   `protobuf:"varint,5,opt,name=resolved,proto3" json:"resolved,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ResolveVerifiedDisputeResponse) Reset() {
+	*x = ResolveVerifiedDisputeResponse{}
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveVerifiedDisputeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveVerifiedDisputeResponse) ProtoMessage() {}
+
+func (x *ResolveVerifiedDisputeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveVerifiedDisputeResponse.ProtoReflect.Descriptor instead.
+func (*ResolveVerifiedDisputeResponse) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ResolveVerifiedDisputeResponse) GetEscrow() *Escrow {
+	if x != nil {
+		return x.Escrow
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeResponse) GetSettlement() *Settlement {
+	if x != nil {
+		return x.Settlement
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeResponse) GetResolutionDigest() string {
+	if x != nil {
+		return x.ResolutionDigest
+	}
+	return ""
+}
+
+func (x *ResolveVerifiedDisputeResponse) GetResolutionRef() *NetworkReference {
+	if x != nil {
+		return x.ResolutionRef
+	}
+	return nil
+}
+
+func (x *ResolveVerifiedDisputeResponse) GetResolved() bool {
+	if x != nil {
+		return x.Resolved
+	}
+	return false
+}
+
 type Settlement struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	SettlementId      string                 `protobuf:"bytes,1,opt,name=settlement_id,json=settlementId,proto3" json:"settlement_id,omitempty"`
@@ -1200,7 +2160,7 @@ type Settlement struct {
 
 func (x *Settlement) Reset() {
 	*x = Settlement{}
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[8]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1212,7 +2172,7 @@ func (x *Settlement) String() string {
 func (*Settlement) ProtoMessage() {}
 
 func (x *Settlement) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[8]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1225,7 +2185,7 @@ func (x *Settlement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Settlement.ProtoReflect.Descriptor instead.
 func (*Settlement) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{8}
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Settlement) GetSettlementId() string {
@@ -1315,7 +2275,7 @@ type SettleJobRequest struct {
 
 func (x *SettleJobRequest) Reset() {
 	*x = SettleJobRequest{}
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[9]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1327,7 +2287,7 @@ func (x *SettleJobRequest) String() string {
 func (*SettleJobRequest) ProtoMessage() {}
 
 func (x *SettleJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[9]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1340,7 +2300,7 @@ func (x *SettleJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettleJobRequest.ProtoReflect.Descriptor instead.
 func (*SettleJobRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{9}
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SettleJobRequest) GetContext() *RequestContext {
@@ -1417,7 +2377,7 @@ type SettleJobResponse struct {
 
 func (x *SettleJobResponse) Reset() {
 	*x = SettleJobResponse{}
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[10]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1429,7 +2389,7 @@ func (x *SettleJobResponse) String() string {
 func (*SettleJobResponse) ProtoMessage() {}
 
 func (x *SettleJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[10]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1442,7 +2402,7 @@ func (x *SettleJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettleJobResponse.ProtoReflect.Descriptor instead.
 func (*SettleJobResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{10}
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SettleJobResponse) GetSettlement() *Settlement {
@@ -1478,7 +2438,7 @@ type GetSettlementRequest struct {
 
 func (x *GetSettlementRequest) Reset() {
 	*x = GetSettlementRequest{}
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[11]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1490,7 +2450,7 @@ func (x *GetSettlementRequest) String() string {
 func (*GetSettlementRequest) ProtoMessage() {}
 
 func (x *GetSettlementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[11]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1503,7 +2463,7 @@ func (x *GetSettlementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettlementRequest.ProtoReflect.Descriptor instead.
 func (*GetSettlementRequest) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{11}
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetSettlementRequest) GetContext() *RequestContext {
@@ -1544,7 +2504,7 @@ type GetSettlementResponse struct {
 
 func (x *GetSettlementResponse) Reset() {
 	*x = GetSettlementResponse{}
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[12]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +2516,7 @@ func (x *GetSettlementResponse) String() string {
 func (*GetSettlementResponse) ProtoMessage() {}
 
 func (x *GetSettlementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_settlement_proto_msgTypes[12]
+	mi := &file_atos_tos_v1_settlement_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +2529,7 @@ func (x *GetSettlementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettlementResponse.ProtoReflect.Descriptor instead.
 func (*GetSettlementResponse) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{12}
+	return file_atos_tos_v1_settlement_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetSettlementResponse) GetSettlement() *Settlement {
@@ -1590,8 +2550,7 @@ var File_atos_tos_v1_settlement_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\n" +
-	"\x1catos/tos/v1/settlement.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\"\x81\n" +
-	"\n" +
+	"\x1catos/tos/v1/settlement.proto\x12\vatos.tos.v1\x1a\x18atos/tos/v1/common.proto\x1a\x17atos/tos/v1/proof.proto\"\xa5\r\n" +
 	"\x06Escrow\x12\x1b\n" +
 	"\tescrow_id\x18\x01 \x01(\tR\bescrowId\x12\x19\n" +
 	"\bquote_id\x18\x02 \x01(\tR\aquoteId\x12!\n" +
@@ -1624,7 +2583,17 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x0erelease_digest\x18\x18 \x01(\tR\rreleaseDigest\x12*\n" +
 	"\x11release_action_id\x18\x19 \x01(\tR\x0freleaseActionId\x12.\n" +
 	"\x13release_reason_code\x18\x1a \x01(\tR\x11releaseReasonCode\x12@\n" +
-	"\fterminal_ref\x18\x1b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\vterminalRef\"\x8b\r\n" +
+	"\fterminal_ref\x18\x1b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\vterminalRef\x12<\n" +
+	"\n" +
+	"result_ref\x18\x1c \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\tresultRef\x12=\n" +
+	"\x1breview_deadline_unix_millis\x18\x1d \x01(\x03R\x18reviewDeadlineUnixMillis\x12%\n" +
+	"\x0edispute_digest\x18\x1e \x01(\tR\rdisputeDigest\x12>\n" +
+	"\vdispute_ref\x18\x1f \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
+	"disputeRef\x12:\n" +
+	"\x19dispute_resolution_digest\x18  \x01(\tR\x17disputeResolutionDigest\x12'\n" +
+	"\x0fdispute_outcome\x18! \x01(\tR\x0edisputeOutcome\x12#\n" +
+	"\rresult_digest\x18\" \x01(\tR\fresultDigest\x124\n" +
+	"\x16result_evidence_digest\x18# \x01(\tR\x14resultEvidenceDigest\"\x8b\r\n" +
 	"\x13VerifiedEscrowTerms\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12*\n" +
 	"\x10canonicalization\x18\x02 \x01(\tR\x10canonicalization\x12\x1d\n" +
@@ -1680,7 +2649,7 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x0everified_terms\x18\v \x01(\v2 .atos.tos.v1.VerifiedEscrowTermsR\rverifiedTerms\"]\n" +
 	"\x14CreateEscrowResponse\x12+\n" +
 	"\x06escrow\x18\x01 \x01(\v2\x13.atos.tos.v1.EscrowR\x06escrow\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\xa5\x04\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\x82\x06\n" +
 	"\x10GetEscrowRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1b\n" +
 	"\tescrow_id\x18\x02 \x01(\tR\bescrowId\x12\x19\n" +
@@ -1690,7 +2659,11 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x1bexpected_reservation_digest\x18\x06 \x01(\tR\x19expectedReservationDigest\x12Q\n" +
 	"\x15expected_terminal_ref\x18\a \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x13expectedTerminalRef\x126\n" +
 	"\x17expected_release_digest\x18\b \x01(\tR\x15expectedReleaseDigest\x12?\n" +
-	"\x1cexpected_release_reason_code\x18\t \x01(\tR\x19expectedReleaseReasonCode\"V\n" +
+	"\x1cexpected_release_reason_code\x18\t \x01(\tR\x19expectedReleaseReasonCode\x126\n" +
+	"\x17expected_dispute_digest\x18\n" +
+	" \x01(\tR\x15expectedDisputeDigest\x12O\n" +
+	"\x14expected_dispute_ref\x18\v \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedDisputeRef\x12R\n" +
+	"\x17expected_dispute_payout\x18\f \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\x15expectedDisputePayout\"V\n" +
 	"\x11GetEscrowResponse\x12+\n" +
 	"\x06escrow\x18\x01 \x01(\v2\x13.atos.tos.v1.EscrowR\x06escrow\x12\x14\n" +
 	"\x05found\x18\x02 \x01(\bR\x05found\"\x95\x03\n" +
@@ -1708,7 +2681,106 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x06escrow\x18\x01 \x01(\v2\x13.atos.tos.v1.EscrowR\x06escrow\x12>\n" +
 	"\vrelease_ref\x18\x02 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
 	"releaseRef\x12\x1a\n" +
-	"\breleased\x18\x03 \x01(\bR\breleased\"\xb7\x03\n" +
+	"\breleased\x18\x03 \x01(\bR\breleased\"\xbe\x04\n" +
+	"\x1cPrepareVerifiedResultRequest\x125\n" +
+	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1b\n" +
+	"\tescrow_id\x18\x02 \x01(\tR\bescrowId\x12\x19\n" +
+	"\bquote_id\x18\x03 \x01(\tR\aquoteId\x12\x15\n" +
+	"\x06job_id\x18\x04 \x01(\tR\x05jobId\x12\x1d\n" +
+	"\n" +
+	"receipt_id\x18\x05 \x01(\tR\treceiptId\x12G\n" +
+	"\x0eexpected_terms\x18\x06 \x01(\v2 .atos.tos.v1.VerifiedEscrowTermsR\rexpectedTerms\x12M\n" +
+	"\x13expected_escrow_ref\x18\a \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x11expectedEscrowRef\x12>\n" +
+	"\x1bexpected_reservation_digest\x18\b \x01(\tR\x19expectedReservationDigest\x12P\n" +
+	"\x10expected_receipt\x18\t \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\x0fexpectedReceipt\x12O\n" +
+	"\x14expected_receipt_ref\x18\n" +
+	" \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"h\n" +
+	"\x1dPrepareVerifiedResultResponse\x12+\n" +
+	"\x06escrow\x18\x01 \x01(\v2\x13.atos.tos.v1.EscrowR\x06escrow\x12\x1a\n" +
+	"\bprepared\x18\x02 \x01(\bR\bprepared\"\x80\x06\n" +
+	"\x13VerifiedDisputeOpen\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"network_id\x18\x02 \x01(\tR\tnetworkId\x12%\n" +
+	"\x0egateway_domain\x18\x03 \x01(\tR\rgatewayDomain\x12\x1d\n" +
+	"\n" +
+	"dispute_id\x18\x04 \x01(\tR\tdisputeId\x12\x1b\n" +
+	"\tescrow_id\x18\x05 \x01(\tR\bescrowId\x12\x15\n" +
+	"\x06job_id\x18\x06 \x01(\tR\x05jobId\x12\x19\n" +
+	"\bquote_id\x18\a \x01(\tR\aquoteId\x12\x1d\n" +
+	"\n" +
+	"receipt_id\x18\b \x01(\tR\treceiptId\x12!\n" +
+	"\fprincipal_id\x18\t \x01(\tR\vprincipalId\x12\x1f\n" +
+	"\vprovider_id\x18\n" +
+	" \x01(\tR\n" +
+	"providerId\x12#\n" +
+	"\rcapability_id\x18\v \x01(\tR\fcapabilityId\x12-\n" +
+	"\x12capability_version\x18\f \x01(\tR\x11capabilityVersion\x126\n" +
+	"\x17quote_commitment_digest\x18\r \x01(\tR\x15quoteCommitmentDigest\x12-\n" +
+	"\x12reservation_digest\x18\x0e \x01(\tR\x11reservationDigest\x12%\n" +
+	"\x0ereceipt_digest\x18\x0f \x01(\tR\rreceiptDigest\x12G\n" +
+	"\x15dispute_policy_digest\x18\x10 \x01(\v2\x13.atos.tos.v1.DigestR\x13disputePolicyDigest\x12\x1f\n" +
+	"\vreason_code\x18\x11 \x01(\tR\n" +
+	"reasonCode\x12>\n" +
+	"\x10evidence_digests\x18\x12 \x03(\v2\x13.atos.tos.v1.DigestR\x0fevidenceDigests\x12,\n" +
+	"\x12opened_unix_millis\x18\x13 \x01(\x03R\x10openedUnixMillis\"\xc1\x05\n" +
+	"\x1aOpenVerifiedDisputeRequest\x125\n" +
+	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12:\n" +
+	"\adispute\x18\x02 \x01(\v2 .atos.tos.v1.VerifiedDisputeOpenR\adispute\x12G\n" +
+	"\x0eexpected_terms\x18\x03 \x01(\v2 .atos.tos.v1.VerifiedEscrowTermsR\rexpectedTerms\x12M\n" +
+	"\x13expected_escrow_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x11expectedEscrowRef\x12>\n" +
+	"\x1bexpected_reservation_digest\x18\x05 \x01(\tR\x19expectedReservationDigest\x120\n" +
+	"\x14expected_result_hash\x18\x06 \x01(\tR\x12expectedResultHash\x124\n" +
+	"\x16expected_evidence_hash\x18\a \x01(\tR\x14expectedEvidenceHash\x12M\n" +
+	"\x13expected_result_ref\x18\b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x11expectedResultRef\x12P\n" +
+	"\x10expected_receipt\x18\t \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\x0fexpectedReceipt\x12O\n" +
+	"\x14expected_receipt_ref\x18\n" +
+	" \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"\xc9\x01\n" +
+	"\x1bOpenVerifiedDisputeResponse\x12+\n" +
+	"\x06escrow\x18\x01 \x01(\v2\x13.atos.tos.v1.EscrowR\x06escrow\x12%\n" +
+	"\x0edispute_digest\x18\x02 \x01(\tR\rdisputeDigest\x12>\n" +
+	"\vdispute_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
+	"disputeRef\x12\x16\n" +
+	"\x06opened\x18\x04 \x01(\bR\x06opened\"\xf3\x04\n" +
+	"\x19VerifiedDisputeResolution\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"network_id\x18\x02 \x01(\tR\tnetworkId\x12%\n" +
+	"\x0egateway_domain\x18\x03 \x01(\tR\rgatewayDomain\x12\x1d\n" +
+	"\n" +
+	"dispute_id\x18\x04 \x01(\tR\tdisputeId\x12\x1b\n" +
+	"\tescrow_id\x18\x05 \x01(\tR\bescrowId\x12\x15\n" +
+	"\x06job_id\x18\x06 \x01(\tR\x05jobId\x12\x19\n" +
+	"\bquote_id\x18\a \x01(\tR\aquoteId\x12\x1d\n" +
+	"\n" +
+	"receipt_id\x18\b \x01(\tR\treceiptId\x12%\n" +
+	"\x0edispute_digest\x18\t \x01(\tR\rdisputeDigest\x12\x18\n" +
+	"\aoutcome\x18\n" +
+	" \x01(\tR\aoutcome\x122\n" +
+	"\x15reviewer_principal_id\x18\v \x01(\tR\x13reviewerPrincipalId\x126\n" +
+	"\breserved\x18\f \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\breserved\x12C\n" +
+	"\x0fprovider_payout\x18\r \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\x0eproviderPayout\x12E\n" +
+	"\x10requester_refund\x18\x0e \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\x0frequesterRefund\x120\n" +
+	"\x14resolved_unix_millis\x18\x0f \x01(\x03R\x12resolvedUnixMillis\"\xea\x04\n" +
+	"\x1dResolveVerifiedDisputeRequest\x125\n" +
+	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12F\n" +
+	"\n" +
+	"resolution\x18\x02 \x01(\v2&.atos.tos.v1.VerifiedDisputeResolutionR\n" +
+	"resolution\x12G\n" +
+	"\x0eexpected_terms\x18\x03 \x01(\v2 .atos.tos.v1.VerifiedEscrowTermsR\rexpectedTerms\x12M\n" +
+	"\x13expected_escrow_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x11expectedEscrowRef\x12>\n" +
+	"\x1bexpected_reservation_digest\x18\x05 \x01(\tR\x19expectedReservationDigest\x12O\n" +
+	"\x14expected_dispute_ref\x18\x06 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedDisputeRef\x12P\n" +
+	"\x10expected_receipt\x18\a \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\x0fexpectedReceipt\x12O\n" +
+	"\x14expected_receipt_ref\x18\b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"\x95\x02\n" +
+	"\x1eResolveVerifiedDisputeResponse\x12+\n" +
+	"\x06escrow\x18\x01 \x01(\v2\x13.atos.tos.v1.EscrowR\x06escrow\x127\n" +
+	"\n" +
+	"settlement\x18\x02 \x01(\v2\x17.atos.tos.v1.SettlementR\n" +
+	"settlement\x12+\n" +
+	"\x11resolution_digest\x18\x03 \x01(\tR\x10resolutionDigest\x12D\n" +
+	"\x0eresolution_ref\x18\x04 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rresolutionRef\x12\x1a\n" +
+	"\bresolved\x18\x05 \x01(\bR\bresolved\"\xb7\x03\n" +
 	"\n" +
 	"Settlement\x12#\n" +
 	"\rsettlement_id\x18\x01 \x01(\tR\fsettlementId\x12\x1b\n" +
@@ -1763,13 +2835,16 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x18SETTLEMENT_STATE_SETTLED\x10\x02\x12\x1d\n" +
 	"\x19SETTLEMENT_STATE_RELEASED\x10\x03\x12\x1d\n" +
 	"\x19SETTLEMENT_STATE_DISPUTED\x10\x04\x12\x1b\n" +
-	"\x17SETTLEMENT_STATE_FAILED\x10\x052\xb0\x03\n" +
+	"\x17SETTLEMENT_STATE_FAILED\x10\x052\xfd\x05\n" +
 	"\x11SettlementService\x12S\n" +
 	"\fCreateEscrow\x12 .atos.tos.v1.CreateEscrowRequest\x1a!.atos.tos.v1.CreateEscrowResponse\x12J\n" +
 	"\tGetEscrow\x12\x1d.atos.tos.v1.GetEscrowRequest\x1a\x1e.atos.tos.v1.GetEscrowResponse\x12V\n" +
 	"\rReleaseEscrow\x12!.atos.tos.v1.ReleaseEscrowRequest\x1a\".atos.tos.v1.ReleaseEscrowResponse\x12J\n" +
 	"\tSettleJob\x12\x1d.atos.tos.v1.SettleJobRequest\x1a\x1e.atos.tos.v1.SettleJobResponse\x12V\n" +
-	"\rGetSettlement\x12!.atos.tos.v1.GetSettlementRequest\x1a\".atos.tos.v1.GetSettlementResponseB>Z<github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1b\x06proto3"
+	"\rGetSettlement\x12!.atos.tos.v1.GetSettlementRequest\x1a\".atos.tos.v1.GetSettlementResponse\x12n\n" +
+	"\x15PrepareVerifiedResult\x12).atos.tos.v1.PrepareVerifiedResultRequest\x1a*.atos.tos.v1.PrepareVerifiedResultResponse\x12h\n" +
+	"\x13OpenVerifiedDispute\x12'.atos.tos.v1.OpenVerifiedDisputeRequest\x1a(.atos.tos.v1.OpenVerifiedDisputeResponse\x12q\n" +
+	"\x16ResolveVerifiedDispute\x12*.atos.tos.v1.ResolveVerifiedDisputeRequest\x1a+.atos.tos.v1.ResolveVerifiedDisputeResponseB>Z<github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1b\x06proto3"
 
 var (
 	file_atos_tos_v1_settlement_proto_rawDescOnce sync.Once
@@ -1784,93 +2859,142 @@ func file_atos_tos_v1_settlement_proto_rawDescGZIP() []byte {
 }
 
 var file_atos_tos_v1_settlement_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_atos_tos_v1_settlement_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_atos_tos_v1_settlement_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_atos_tos_v1_settlement_proto_goTypes = []any{
-	(EscrowState)(0),              // 0: atos.tos.v1.EscrowState
-	(SettlementState)(0),          // 1: atos.tos.v1.SettlementState
-	(*Escrow)(nil),                // 2: atos.tos.v1.Escrow
-	(*VerifiedEscrowTerms)(nil),   // 3: atos.tos.v1.VerifiedEscrowTerms
-	(*CreateEscrowRequest)(nil),   // 4: atos.tos.v1.CreateEscrowRequest
-	(*CreateEscrowResponse)(nil),  // 5: atos.tos.v1.CreateEscrowResponse
-	(*GetEscrowRequest)(nil),      // 6: atos.tos.v1.GetEscrowRequest
-	(*GetEscrowResponse)(nil),     // 7: atos.tos.v1.GetEscrowResponse
-	(*ReleaseEscrowRequest)(nil),  // 8: atos.tos.v1.ReleaseEscrowRequest
-	(*ReleaseEscrowResponse)(nil), // 9: atos.tos.v1.ReleaseEscrowResponse
-	(*Settlement)(nil),            // 10: atos.tos.v1.Settlement
-	(*SettleJobRequest)(nil),      // 11: atos.tos.v1.SettleJobRequest
-	(*SettleJobResponse)(nil),     // 12: atos.tos.v1.SettleJobResponse
-	(*GetSettlementRequest)(nil),  // 13: atos.tos.v1.GetSettlementRequest
-	(*GetSettlementResponse)(nil), // 14: atos.tos.v1.GetSettlementResponse
-	(TrustMode)(0),                // 15: atos.tos.v1.TrustMode
-	(ProofProfile)(0),             // 16: atos.tos.v1.ProofProfile
-	(*NetworkAmount)(nil),         // 17: atos.tos.v1.NetworkAmount
-	(*NetworkReference)(nil),      // 18: atos.tos.v1.NetworkReference
-	(*Digest)(nil),                // 19: atos.tos.v1.Digest
-	(*RequestContext)(nil),        // 20: atos.tos.v1.RequestContext
+	(EscrowState)(0),                       // 0: atos.tos.v1.EscrowState
+	(SettlementState)(0),                   // 1: atos.tos.v1.SettlementState
+	(*Escrow)(nil),                         // 2: atos.tos.v1.Escrow
+	(*VerifiedEscrowTerms)(nil),            // 3: atos.tos.v1.VerifiedEscrowTerms
+	(*CreateEscrowRequest)(nil),            // 4: atos.tos.v1.CreateEscrowRequest
+	(*CreateEscrowResponse)(nil),           // 5: atos.tos.v1.CreateEscrowResponse
+	(*GetEscrowRequest)(nil),               // 6: atos.tos.v1.GetEscrowRequest
+	(*GetEscrowResponse)(nil),              // 7: atos.tos.v1.GetEscrowResponse
+	(*ReleaseEscrowRequest)(nil),           // 8: atos.tos.v1.ReleaseEscrowRequest
+	(*ReleaseEscrowResponse)(nil),          // 9: atos.tos.v1.ReleaseEscrowResponse
+	(*PrepareVerifiedResultRequest)(nil),   // 10: atos.tos.v1.PrepareVerifiedResultRequest
+	(*PrepareVerifiedResultResponse)(nil),  // 11: atos.tos.v1.PrepareVerifiedResultResponse
+	(*VerifiedDisputeOpen)(nil),            // 12: atos.tos.v1.VerifiedDisputeOpen
+	(*OpenVerifiedDisputeRequest)(nil),     // 13: atos.tos.v1.OpenVerifiedDisputeRequest
+	(*OpenVerifiedDisputeResponse)(nil),    // 14: atos.tos.v1.OpenVerifiedDisputeResponse
+	(*VerifiedDisputeResolution)(nil),      // 15: atos.tos.v1.VerifiedDisputeResolution
+	(*ResolveVerifiedDisputeRequest)(nil),  // 16: atos.tos.v1.ResolveVerifiedDisputeRequest
+	(*ResolveVerifiedDisputeResponse)(nil), // 17: atos.tos.v1.ResolveVerifiedDisputeResponse
+	(*Settlement)(nil),                     // 18: atos.tos.v1.Settlement
+	(*SettleJobRequest)(nil),               // 19: atos.tos.v1.SettleJobRequest
+	(*SettleJobResponse)(nil),              // 20: atos.tos.v1.SettleJobResponse
+	(*GetSettlementRequest)(nil),           // 21: atos.tos.v1.GetSettlementRequest
+	(*GetSettlementResponse)(nil),          // 22: atos.tos.v1.GetSettlementResponse
+	(TrustMode)(0),                         // 23: atos.tos.v1.TrustMode
+	(ProofProfile)(0),                      // 24: atos.tos.v1.ProofProfile
+	(*NetworkAmount)(nil),                  // 25: atos.tos.v1.NetworkAmount
+	(*NetworkReference)(nil),               // 26: atos.tos.v1.NetworkReference
+	(*Digest)(nil),                         // 27: atos.tos.v1.Digest
+	(*RequestContext)(nil),                 // 28: atos.tos.v1.RequestContext
+	(*ExecutionReceiptEnvelope)(nil),       // 29: atos.tos.v1.ExecutionReceiptEnvelope
 }
 var file_atos_tos_v1_settlement_proto_depIdxs = []int32{
-	15, // 0: atos.tos.v1.Escrow.trust_mode:type_name -> atos.tos.v1.TrustMode
-	16, // 1: atos.tos.v1.Escrow.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	17, // 2: atos.tos.v1.Escrow.reserved:type_name -> atos.tos.v1.NetworkAmount
+	23, // 0: atos.tos.v1.Escrow.trust_mode:type_name -> atos.tos.v1.TrustMode
+	24, // 1: atos.tos.v1.Escrow.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	25, // 2: atos.tos.v1.Escrow.reserved:type_name -> atos.tos.v1.NetworkAmount
 	0,  // 3: atos.tos.v1.Escrow.state:type_name -> atos.tos.v1.EscrowState
-	18, // 4: atos.tos.v1.Escrow.escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 5: atos.tos.v1.Escrow.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 6: atos.tos.v1.Escrow.release_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 7: atos.tos.v1.Escrow.terminal_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 8: atos.tos.v1.VerifiedEscrowTerms.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
-	19, // 9: atos.tos.v1.VerifiedEscrowTerms.manifest_digest:type_name -> atos.tos.v1.Digest
-	18, // 10: atos.tos.v1.VerifiedEscrowTerms.ownership_ref:type_name -> atos.tos.v1.NetworkReference
-	15, // 11: atos.tos.v1.VerifiedEscrowTerms.trust_mode:type_name -> atos.tos.v1.TrustMode
-	16, // 12: atos.tos.v1.VerifiedEscrowTerms.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	17, // 13: atos.tos.v1.VerifiedEscrowTerms.reserve:type_name -> atos.tos.v1.NetworkAmount
-	19, // 14: atos.tos.v1.VerifiedEscrowTerms.dispute_policy_digest:type_name -> atos.tos.v1.Digest
-	18, // 15: atos.tos.v1.VerifiedEscrowTerms.signer_authorization_ref:type_name -> atos.tos.v1.NetworkReference
-	17, // 16: atos.tos.v1.VerifiedEscrowTerms.subtotal:type_name -> atos.tos.v1.NetworkAmount
-	17, // 17: atos.tos.v1.VerifiedEscrowTerms.fees:type_name -> atos.tos.v1.NetworkAmount
-	19, // 18: atos.tos.v1.VerifiedEscrowTerms.terms_digest:type_name -> atos.tos.v1.Digest
-	20, // 19: atos.tos.v1.CreateEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
-	15, // 20: atos.tos.v1.CreateEscrowRequest.trust_mode:type_name -> atos.tos.v1.TrustMode
-	16, // 21: atos.tos.v1.CreateEscrowRequest.proof_profile:type_name -> atos.tos.v1.ProofProfile
-	17, // 22: atos.tos.v1.CreateEscrowRequest.reserve:type_name -> atos.tos.v1.NetworkAmount
-	3,  // 23: atos.tos.v1.CreateEscrowRequest.verified_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	2,  // 24: atos.tos.v1.CreateEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 25: atos.tos.v1.GetEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
-	3,  // 26: atos.tos.v1.GetEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	18, // 27: atos.tos.v1.GetEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 28: atos.tos.v1.GetEscrowRequest.expected_terminal_ref:type_name -> atos.tos.v1.NetworkReference
-	2,  // 29: atos.tos.v1.GetEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 30: atos.tos.v1.ReleaseEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
-	3,  // 31: atos.tos.v1.ReleaseEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	18, // 32: atos.tos.v1.ReleaseEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	2,  // 33: atos.tos.v1.ReleaseEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
-	18, // 34: atos.tos.v1.ReleaseEscrowResponse.release_ref:type_name -> atos.tos.v1.NetworkReference
-	17, // 35: atos.tos.v1.Settlement.charged:type_name -> atos.tos.v1.NetworkAmount
-	17, // 36: atos.tos.v1.Settlement.refunded:type_name -> atos.tos.v1.NetworkAmount
-	1,  // 37: atos.tos.v1.Settlement.state:type_name -> atos.tos.v1.SettlementState
-	18, // 38: atos.tos.v1.Settlement.settlement_ref:type_name -> atos.tos.v1.NetworkReference
-	20, // 39: atos.tos.v1.SettleJobRequest.context:type_name -> atos.tos.v1.RequestContext
-	17, // 40: atos.tos.v1.SettleJobRequest.requested_charge:type_name -> atos.tos.v1.NetworkAmount
-	3,  // 41: atos.tos.v1.SettleJobRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
-	18, // 42: atos.tos.v1.SettleJobRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	10, // 43: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
-	2,  // 44: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
-	20, // 45: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
-	10, // 46: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
-	4,  // 47: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
-	6,  // 48: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
-	8,  // 49: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
-	11, // 50: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
-	13, // 51: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
-	5,  // 52: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
-	7,  // 53: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
-	9,  // 54: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
-	12, // 55: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
-	14, // 56: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
-	52, // [52:57] is the sub-list for method output_type
-	47, // [47:52] is the sub-list for method input_type
-	47, // [47:47] is the sub-list for extension type_name
-	47, // [47:47] is the sub-list for extension extendee
-	0,  // [0:47] is the sub-list for field type_name
+	26, // 4: atos.tos.v1.Escrow.escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 5: atos.tos.v1.Escrow.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 6: atos.tos.v1.Escrow.release_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 7: atos.tos.v1.Escrow.terminal_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 8: atos.tos.v1.Escrow.result_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 9: atos.tos.v1.Escrow.dispute_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 10: atos.tos.v1.VerifiedEscrowTerms.quote_commitment_ref:type_name -> atos.tos.v1.NetworkReference
+	27, // 11: atos.tos.v1.VerifiedEscrowTerms.manifest_digest:type_name -> atos.tos.v1.Digest
+	26, // 12: atos.tos.v1.VerifiedEscrowTerms.ownership_ref:type_name -> atos.tos.v1.NetworkReference
+	23, // 13: atos.tos.v1.VerifiedEscrowTerms.trust_mode:type_name -> atos.tos.v1.TrustMode
+	24, // 14: atos.tos.v1.VerifiedEscrowTerms.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	25, // 15: atos.tos.v1.VerifiedEscrowTerms.reserve:type_name -> atos.tos.v1.NetworkAmount
+	27, // 16: atos.tos.v1.VerifiedEscrowTerms.dispute_policy_digest:type_name -> atos.tos.v1.Digest
+	26, // 17: atos.tos.v1.VerifiedEscrowTerms.signer_authorization_ref:type_name -> atos.tos.v1.NetworkReference
+	25, // 18: atos.tos.v1.VerifiedEscrowTerms.subtotal:type_name -> atos.tos.v1.NetworkAmount
+	25, // 19: atos.tos.v1.VerifiedEscrowTerms.fees:type_name -> atos.tos.v1.NetworkAmount
+	27, // 20: atos.tos.v1.VerifiedEscrowTerms.terms_digest:type_name -> atos.tos.v1.Digest
+	28, // 21: atos.tos.v1.CreateEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
+	23, // 22: atos.tos.v1.CreateEscrowRequest.trust_mode:type_name -> atos.tos.v1.TrustMode
+	24, // 23: atos.tos.v1.CreateEscrowRequest.proof_profile:type_name -> atos.tos.v1.ProofProfile
+	25, // 24: atos.tos.v1.CreateEscrowRequest.reserve:type_name -> atos.tos.v1.NetworkAmount
+	3,  // 25: atos.tos.v1.CreateEscrowRequest.verified_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	2,  // 26: atos.tos.v1.CreateEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
+	28, // 27: atos.tos.v1.GetEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 28: atos.tos.v1.GetEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	26, // 29: atos.tos.v1.GetEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 30: atos.tos.v1.GetEscrowRequest.expected_terminal_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 31: atos.tos.v1.GetEscrowRequest.expected_dispute_ref:type_name -> atos.tos.v1.NetworkReference
+	25, // 32: atos.tos.v1.GetEscrowRequest.expected_dispute_payout:type_name -> atos.tos.v1.NetworkAmount
+	2,  // 33: atos.tos.v1.GetEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
+	28, // 34: atos.tos.v1.ReleaseEscrowRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 35: atos.tos.v1.ReleaseEscrowRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	26, // 36: atos.tos.v1.ReleaseEscrowRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 37: atos.tos.v1.ReleaseEscrowResponse.escrow:type_name -> atos.tos.v1.Escrow
+	26, // 38: atos.tos.v1.ReleaseEscrowResponse.release_ref:type_name -> atos.tos.v1.NetworkReference
+	28, // 39: atos.tos.v1.PrepareVerifiedResultRequest.context:type_name -> atos.tos.v1.RequestContext
+	3,  // 40: atos.tos.v1.PrepareVerifiedResultRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	26, // 41: atos.tos.v1.PrepareVerifiedResultRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	29, // 42: atos.tos.v1.PrepareVerifiedResultRequest.expected_receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
+	26, // 43: atos.tos.v1.PrepareVerifiedResultRequest.expected_receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 44: atos.tos.v1.PrepareVerifiedResultResponse.escrow:type_name -> atos.tos.v1.Escrow
+	27, // 45: atos.tos.v1.VerifiedDisputeOpen.dispute_policy_digest:type_name -> atos.tos.v1.Digest
+	27, // 46: atos.tos.v1.VerifiedDisputeOpen.evidence_digests:type_name -> atos.tos.v1.Digest
+	28, // 47: atos.tos.v1.OpenVerifiedDisputeRequest.context:type_name -> atos.tos.v1.RequestContext
+	12, // 48: atos.tos.v1.OpenVerifiedDisputeRequest.dispute:type_name -> atos.tos.v1.VerifiedDisputeOpen
+	3,  // 49: atos.tos.v1.OpenVerifiedDisputeRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	26, // 50: atos.tos.v1.OpenVerifiedDisputeRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 51: atos.tos.v1.OpenVerifiedDisputeRequest.expected_result_ref:type_name -> atos.tos.v1.NetworkReference
+	29, // 52: atos.tos.v1.OpenVerifiedDisputeRequest.expected_receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
+	26, // 53: atos.tos.v1.OpenVerifiedDisputeRequest.expected_receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 54: atos.tos.v1.OpenVerifiedDisputeResponse.escrow:type_name -> atos.tos.v1.Escrow
+	26, // 55: atos.tos.v1.OpenVerifiedDisputeResponse.dispute_ref:type_name -> atos.tos.v1.NetworkReference
+	25, // 56: atos.tos.v1.VerifiedDisputeResolution.reserved:type_name -> atos.tos.v1.NetworkAmount
+	25, // 57: atos.tos.v1.VerifiedDisputeResolution.provider_payout:type_name -> atos.tos.v1.NetworkAmount
+	25, // 58: atos.tos.v1.VerifiedDisputeResolution.requester_refund:type_name -> atos.tos.v1.NetworkAmount
+	28, // 59: atos.tos.v1.ResolveVerifiedDisputeRequest.context:type_name -> atos.tos.v1.RequestContext
+	15, // 60: atos.tos.v1.ResolveVerifiedDisputeRequest.resolution:type_name -> atos.tos.v1.VerifiedDisputeResolution
+	3,  // 61: atos.tos.v1.ResolveVerifiedDisputeRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	26, // 62: atos.tos.v1.ResolveVerifiedDisputeRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	26, // 63: atos.tos.v1.ResolveVerifiedDisputeRequest.expected_dispute_ref:type_name -> atos.tos.v1.NetworkReference
+	29, // 64: atos.tos.v1.ResolveVerifiedDisputeRequest.expected_receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
+	26, // 65: atos.tos.v1.ResolveVerifiedDisputeRequest.expected_receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	2,  // 66: atos.tos.v1.ResolveVerifiedDisputeResponse.escrow:type_name -> atos.tos.v1.Escrow
+	18, // 67: atos.tos.v1.ResolveVerifiedDisputeResponse.settlement:type_name -> atos.tos.v1.Settlement
+	26, // 68: atos.tos.v1.ResolveVerifiedDisputeResponse.resolution_ref:type_name -> atos.tos.v1.NetworkReference
+	25, // 69: atos.tos.v1.Settlement.charged:type_name -> atos.tos.v1.NetworkAmount
+	25, // 70: atos.tos.v1.Settlement.refunded:type_name -> atos.tos.v1.NetworkAmount
+	1,  // 71: atos.tos.v1.Settlement.state:type_name -> atos.tos.v1.SettlementState
+	26, // 72: atos.tos.v1.Settlement.settlement_ref:type_name -> atos.tos.v1.NetworkReference
+	28, // 73: atos.tos.v1.SettleJobRequest.context:type_name -> atos.tos.v1.RequestContext
+	25, // 74: atos.tos.v1.SettleJobRequest.requested_charge:type_name -> atos.tos.v1.NetworkAmount
+	3,  // 75: atos.tos.v1.SettleJobRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
+	26, // 76: atos.tos.v1.SettleJobRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
+	18, // 77: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
+	2,  // 78: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
+	28, // 79: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
+	18, // 80: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
+	4,  // 81: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
+	6,  // 82: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
+	8,  // 83: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
+	19, // 84: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
+	21, // 85: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
+	10, // 86: atos.tos.v1.SettlementService.PrepareVerifiedResult:input_type -> atos.tos.v1.PrepareVerifiedResultRequest
+	13, // 87: atos.tos.v1.SettlementService.OpenVerifiedDispute:input_type -> atos.tos.v1.OpenVerifiedDisputeRequest
+	16, // 88: atos.tos.v1.SettlementService.ResolveVerifiedDispute:input_type -> atos.tos.v1.ResolveVerifiedDisputeRequest
+	5,  // 89: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
+	7,  // 90: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
+	9,  // 91: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
+	20, // 92: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
+	22, // 93: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
+	11, // 94: atos.tos.v1.SettlementService.PrepareVerifiedResult:output_type -> atos.tos.v1.PrepareVerifiedResultResponse
+	14, // 95: atos.tos.v1.SettlementService.OpenVerifiedDispute:output_type -> atos.tos.v1.OpenVerifiedDisputeResponse
+	17, // 96: atos.tos.v1.SettlementService.ResolveVerifiedDispute:output_type -> atos.tos.v1.ResolveVerifiedDisputeResponse
+	89, // [89:97] is the sub-list for method output_type
+	81, // [81:89] is the sub-list for method input_type
+	81, // [81:81] is the sub-list for extension type_name
+	81, // [81:81] is the sub-list for extension extendee
+	0,  // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_settlement_proto_init() }
@@ -1879,13 +3003,14 @@ func file_atos_tos_v1_settlement_proto_init() {
 		return
 	}
 	file_atos_tos_v1_common_proto_init()
+	file_atos_tos_v1_proof_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_tos_v1_settlement_proto_rawDesc), len(file_atos_tos_v1_settlement_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   13,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

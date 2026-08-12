@@ -13,12 +13,12 @@ import (
 
 func TestResolveExecutionReceiptIsReadOnlyAndRequiresLiveFinality(t *testing.T) {
 	a := &verifiedTestAuthority{}
-	s, e := Open(Config{StatePath: filepath.Join(t.TempDir(), "state.db"), BearerToken: "x", Authority: a, Now: func() time.Time { return time.Now().UTC() }})
+	s, e := Open(Config{StatePath: filepath.Join(t.TempDir(), "state.db"), BearerToken: "x", Authority: a, EconomicDriver: &recordingEconomy{}, Now: func() time.Time { return time.Now().UTC() }})
 	if e != nil {
 		t.Fatal(e)
 	}
 	defer s.Close()
-	r := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: "r", QuoteId: "q", EscrowId: "e", JobId: "j", PrincipalId: "p", ProviderId: "v", CapabilityId: "c", CapabilityVersion: "1", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Result: atostosv1.ExecutionResult_EXECUTION_RESULT_SUCCESS, SignatureAlgorithm: "ed25519"}
+	r := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: "receipt_test", QuoteId: "quote_test", EscrowId: "escrow_test", JobId: "job_test", PrincipalId: "principal_test", ProviderId: "provider_test", CapabilityId: "capability_test", CapabilityVersion: "1", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Result: atostosv1.ExecutionResult_EXECUTION_RESULT_SUCCESS, SignatureAlgorithm: "ed25519"}
 	d, e := receiptcommitment.Digest(r)
 	if e != nil {
 		t.Fatal(e)

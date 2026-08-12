@@ -85,7 +85,7 @@ func TestNormativeVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const expectedDigest = "sha256:d128af906126e9868e3920a930800318a541cb8d8ccbf35cd78e7fb4508acff3"
+	const expectedDigest = "sha256:55aa2c79be23a6b0d4fd67821bd5e18e9854f7c209fd3b129c907a725e188028"
 	if d != expectedDigest {
 		t.Fatalf("digest=%s\ncbor=%x", d, b)
 	}
@@ -116,5 +116,15 @@ func TestRequesterReleaseOmitsExecutionEvidenceAndStillVerifies(t *testing.T) {
 	r := (Verifier{Observer: o, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), p)
 	if !r.Valid {
 		t.Fatalf("failures=%+v", r.Failures)
+	}
+}
+
+func TestDisputeOutcomeDoesNotRewriteSignedReceiptCharge(t *testing.T) {
+	p := fixture(t)
+	p.Outcome = Outcome{Kind: "dispute_resolution", OutcomeRef: ref("tos-test", "resolution", 18), ChargedAtomic: "0", RefundedAtomic: "1000", DisputeDigest: d(13), DisputeRef: ref("tos-test", "dispute", 17), ResolutionDigest: d(14), DisputeOutcome: "principal"}
+	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidFromUnixNanos: 0, ValidUntilUnixNanos: 100000000, FinalizedCheckpoint: 11}}
+	r := (Verifier{Observer: o, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), p)
+	if !r.Valid {
+		t.Fatalf("a dispute payout must not rewrite the signed Receipt charge: %+v", r.Failures)
 	}
 }

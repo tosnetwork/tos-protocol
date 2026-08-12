@@ -93,14 +93,16 @@ type Receipt struct {
 }
 
 type Outcome struct {
-	Kind           string    `json:"kind"`
-	OutcomeRef     Reference `json:"outcome_ref"`
-	ChargedAtomic  string    `json:"charged_atomic"`
-	RefundedAtomic string    `json:"refunded_atomic"`
-	ReleaseDigest  string    `json:"release_digest,omitempty"`
-	ReasonCode     string    `json:"reason_code,omitempty"`
-	DisputeDigest  string    `json:"dispute_digest,omitempty"`
-	DisputeOutcome string    `json:"dispute_outcome,omitempty"`
+	Kind             string    `json:"kind"`
+	OutcomeRef       Reference `json:"outcome_ref"`
+	ChargedAtomic    string    `json:"charged_atomic"`
+	RefundedAtomic   string    `json:"refunded_atomic"`
+	ReleaseDigest    string    `json:"release_digest,omitempty"`
+	ReasonCode       string    `json:"reason_code,omitempty"`
+	DisputeDigest    string    `json:"dispute_digest,omitempty"`
+	DisputeRef       Reference `json:"dispute_ref,omitempty"`
+	ResolutionDigest string    `json:"resolution_digest,omitempty"`
+	DisputeOutcome   string    `json:"dispute_outcome,omitempty"`
 }
 
 type ProofOfService struct {

@@ -183,7 +183,8 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 		}
 	}
 	if len(parsed) == len(amounts) {
-		if parsed["total_max"].Cmp(parsed["reserved"]) != 0 || (hasExecution && parsed["receipt.charge"].Cmp(parsed["outcome.charge"]) != 0) || new(big.Int).Add(parsed["outcome.charge"], parsed["outcome.refund"]).Cmp(parsed["reserved"]) != 0 {
+		receiptMustEqualOutcome := hasExecution && p.Outcome.Kind == "provider_settlement"
+		if parsed["total_max"].Cmp(parsed["reserved"]) != 0 || (receiptMustEqualOutcome && parsed["receipt.charge"].Cmp(parsed["outcome.charge"]) != 0) || new(big.Int).Add(parsed["outcome.charge"], parsed["outcome.refund"]).Cmp(parsed["reserved"]) != 0 {
 			add(CodeOutcome, "outcome", "monetary conservation failed")
 		}
 	}
@@ -210,8 +211,11 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 			add(CodeOutcome, "outcome", "invalid release tuple")
 		}
 	case "dispute_resolution":
-		if !validDigest(p.Outcome.DisputeDigest) || p.Outcome.DisputeOutcome == "" || p.Outcome.ReleaseDigest != "" {
+		if !validDigest(p.Outcome.DisputeDigest) || !validDigest(p.Outcome.ResolutionDigest) || p.Outcome.DisputeOutcome == "" || p.Outcome.ReleaseDigest != "" {
 			add(CodeOutcome, "outcome", "invalid dispute tuple")
+		}
+		if err := ValidateReference(p.NetworkID, p.Outcome.DisputeRef); err != nil {
+			add(CodeFinality, "outcome.dispute_ref", err.Error())
 		}
 	default:
 		add(CodeOutcome, "outcome.kind", "unsupported outcome")
@@ -297,15 +301,15 @@ func equalBytes(a, b []byte) bool {
 }
 func outcomeDigest(p Package) string {
 	type outcomeCommitment struct {
-		Kind, ReservationDigest, EscrowID, JobID, QuoteID string
-		ChargedAtomic, RefundedAtomic                     string
-		ReleaseDigest, ReasonCode                         string
-		DisputeDigest, DisputeOutcome                     string
+		Kind, ReservationDigest, EscrowID, JobID, QuoteID           string
+		ChargedAtomic, RefundedAtomic                               string
+		ReleaseDigest, ReasonCode                                   string
+		DisputeDigest, DisputeRef, ResolutionDigest, DisputeOutcome string
 	}
 	digest, err := codec.Digest("tos.atos.portable-proof-outcome.v1", outcomeCommitment{
 		p.Outcome.Kind, p.Escrow.ReservationDigest, p.Escrow.EscrowID, p.Escrow.JobID,
 		p.Quote.QuoteID, p.Outcome.ChargedAtomic, p.Outcome.RefundedAtomic,
-		p.Outcome.ReleaseDigest, p.Outcome.ReasonCode, p.Outcome.DisputeDigest, p.Outcome.DisputeOutcome,
+		p.Outcome.ReleaseDigest, p.Outcome.ReasonCode, p.Outcome.DisputeDigest, p.Outcome.DisputeRef.Reference, p.Outcome.ResolutionDigest, p.Outcome.DisputeOutcome,
 	})
 	if err != nil {
 		return ""

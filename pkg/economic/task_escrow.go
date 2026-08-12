@@ -195,7 +195,7 @@ func (d *TaskEscrowDriver) ResolveEscrow(ctx context.Context, request ReserveEsc
 		if err := validateReservedState(transition.State, action); err != nil {
 			return Result{}, false, err
 		}
-	} else if transition.State.Status == chain.TaskEscrowStatusAccepted || transition.State.Status == chain.TaskEscrowStatusResultSubmitted {
+	} else if transition.State.Status == chain.TaskEscrowStatusAccepted || transition.State.Status == chain.TaskEscrowStatusResultSubmitted || transition.State.Status == chain.TaskEscrowStatusDisputed {
 		if err := validateAdvancedReservationState(transition.State, action); err != nil {
 			return Result{}, false, err
 		}
@@ -305,8 +305,12 @@ func (d *TaskEscrowDriver) CommitResult(
 		return Result{}, err
 	}
 	switch state.Status {
-	case chain.TaskEscrowStatusResultSubmitted, chain.TaskEscrowStatusSettled,
-		chain.TaskEscrowStatusDisputed:
+	case chain.TaskEscrowStatusResultSubmitted, chain.TaskEscrowStatusDisputed:
+		if state.ResultHash != request.ResultHash || state.EvidenceHash != request.EvidenceHash {
+			return Result{}, errors.New("task escrow already contains a different result")
+		}
+		return d.ResolveResult(ctx, request)
+	case chain.TaskEscrowStatusSettled:
 		if state.ResultHash != request.ResultHash || state.EvidenceHash != request.EvidenceHash {
 			return Result{}, errors.New("task escrow already contains a different result")
 		}
@@ -334,6 +338,34 @@ func (d *TaskEscrowDriver) CommitResult(
 		transition.State.EvidenceHash != request.EvidenceHash ||
 		transition.State.ReviewDeadlineUnix == 0 {
 		return Result{}, errors.New("task escrow result transition mismatch")
+	}
+	return transitionResult(transition), nil
+}
+
+func (d *TaskEscrowDriver) ResolveResult(ctx context.Context, request CommitResultRequest) (Result, error) {
+	if !validDigest(request.ResultHash) || !validDigest(request.EvidenceHash) {
+		return Result{}, errors.New("invalid task escrow result recovery")
+	}
+	state, err := d.read(ctx, request.ContractAddress)
+	if err != nil {
+		return Result{}, err
+	}
+	if state.Status != chain.TaskEscrowStatusResultSubmitted && state.Status != chain.TaskEscrowStatusDisputed {
+		return Result{}, errors.New("task escrow has no recoverable committed result")
+	}
+	if state.ResultHash != request.ResultHash || state.EvidenceHash != request.EvidenceHash {
+		return Result{}, errors.New("task escrow result recovery mismatch")
+	}
+	action, err := d.operationAction(state, request.EscrowID, state.BudgetNanoTOS, chain.TaskEscrowActionResult, request.ResultHash, request.EvidenceHash, "", 0)
+	if err != nil {
+		return Result{}, err
+	}
+	transition, err := d.resolveAndObserve(ctx, action, chain.TaskEscrowTransitionReference{ExpectedSender: state.Agent, ExpectedKind: action.Kind, ExpectedQueryID: action.QueryID, ExpectedBodyHash: action.ExpectedBodyHash})
+	if err != nil {
+		return Result{}, err
+	}
+	if transition.State.ResultHash != request.ResultHash || transition.State.EvidenceHash != request.EvidenceHash || transition.State.ReviewDeadlineUnix == 0 {
+		return Result{}, errors.New("task escrow result recovery observation mismatch")
 	}
 	return transitionResult(transition), nil
 }
@@ -394,6 +426,9 @@ func (d *TaskEscrowDriver) SettleProvider(
 		state.BudgetNanoTOS != request.BudgetNanoTOS ||
 		request.PayoutNanoTOS > state.BudgetNanoTOS {
 		return Result{}, errors.New("task escrow is not ready for settlement")
+	}
+	if state.ReviewDeadlineUnix == 0 || uint64(d.now().Unix()) <= state.ReviewDeadlineUnix {
+		return Result{}, errors.New("task escrow review window is still open")
 	}
 	action, err := d.operationAction(
 		state, request.EscrowID, request.BudgetNanoTOS, chain.TaskEscrowActionSettle,
@@ -573,7 +608,7 @@ func (d *TaskEscrowDriver) OpenDispute(
 		if state.DisputeHash != request.DisputeHash {
 			return Result{}, errors.New("task escrow already contains a different dispute")
 		}
-		return stateResult(state), nil
+		return d.ResolveDisputeOpen(ctx, request)
 	}
 	if state.Status != chain.TaskEscrowStatusResultSubmitted || !state.HasVerifier ||
 		uint64(d.now().Unix()) > state.ReviewDeadlineUnix {
@@ -596,6 +631,31 @@ func (d *TaskEscrowDriver) OpenDispute(
 	if transition.State.Status != chain.TaskEscrowStatusDisputed ||
 		transition.State.DisputeHash != request.DisputeHash {
 		return Result{}, errors.New("task escrow dispute transition mismatch")
+	}
+	return transitionResult(transition), nil
+}
+
+func (d *TaskEscrowDriver) ResolveDisputeOpen(ctx context.Context, request OpenDisputeRequest) (Result, error) {
+	if !validNonZeroDigest(request.DisputeHash) {
+		return Result{}, errors.New("invalid task escrow dispute recovery")
+	}
+	state, err := d.read(ctx, request.ContractAddress)
+	if err != nil {
+		return Result{}, err
+	}
+	if state.Status != chain.TaskEscrowStatusDisputed || state.DisputeHash != request.DisputeHash {
+		return Result{}, errors.New("task escrow is not the expected disputed outcome")
+	}
+	action, err := d.operationAction(state, request.EscrowID, state.BudgetNanoTOS, chain.TaskEscrowActionDispute, "", "", request.DisputeHash, 0)
+	if err != nil {
+		return Result{}, err
+	}
+	transition, err := d.resolveAndObserve(ctx, action, chain.TaskEscrowTransitionReference{ExpectedSender: state.Creator, ExpectedKind: action.Kind, ExpectedQueryID: action.QueryID, ExpectedBodyHash: action.ExpectedBodyHash})
+	if err != nil {
+		return Result{}, err
+	}
+	if transition.State.Status != chain.TaskEscrowStatusDisputed || transition.State.DisputeHash != request.DisputeHash {
+		return Result{}, errors.New("task escrow dispute recovery mismatch")
 	}
 	return transitionResult(transition), nil
 }
@@ -646,6 +706,17 @@ func (d *TaskEscrowDriver) ResolveDispute(
 		return Result{}, errors.New("task escrow dispute resolution mismatch")
 	}
 	return transitionResult(transition), nil
+}
+
+func (d *TaskEscrowDriver) ResolveDisputeOutcome(ctx context.Context, request ResolveDisputeRequest) (Result, error) {
+	state, err := d.read(ctx, request.ContractAddress)
+	if err != nil {
+		return Result{}, err
+	}
+	if state.Status != chain.TaskEscrowStatusSettled || !validNonZeroDigest(state.DisputeHash) {
+		return Result{}, errors.New("task escrow is not a dispute-resolved outcome")
+	}
+	return d.replayResolution(ctx, state, request)
 }
 
 func (d *TaskEscrowDriver) replaySettlement(
@@ -1086,23 +1157,28 @@ func validateSettledReservationState(state chain.TaskEscrowState, action chain.T
 }
 
 func validateAdvancedReservationState(state chain.TaskEscrowState, action chain.TaskEscrowAction) error {
-	if (state.Status != chain.TaskEscrowStatusAccepted && state.Status != chain.TaskEscrowStatusResultSubmitted) ||
+	if (state.Status != chain.TaskEscrowStatusAccepted && state.Status != chain.TaskEscrowStatusResultSubmitted && state.Status != chain.TaskEscrowStatusDisputed) ||
 		state.Creator != action.Creator || !state.HasAgent || state.Agent != action.Agent ||
 		!state.HasVerifier || state.Verifier != action.Verifier ||
 		state.BudgetNanoTOS != action.BudgetNanoTOS || state.BalanceNanoTOS < action.BudgetNanoTOS ||
 		state.DeadlineUnix != action.DeadlineUnix || state.ReviewPeriod != action.ReviewPeriod ||
-		state.PolicyHash != action.PolicyHash || state.PermissionHash != action.PermissionHash ||
-		state.DisputeHash != zeroDigest() || state.AttestorPublicKey != "" {
+		state.PolicyHash != action.PolicyHash || state.PermissionHash != action.PermissionHash || state.AttestorPublicKey != "" {
 		return errors.New("advanced Task Escrow state does not match reservation")
 	}
 	if state.Status == chain.TaskEscrowStatusAccepted {
-		if state.ResultHash != zeroDigest() || state.EvidenceHash != zeroDigest() || state.ReviewDeadlineUnix != 0 {
+		if state.ResultHash != zeroDigest() || state.EvidenceHash != zeroDigest() || state.ReviewDeadlineUnix != 0 || state.DisputeHash != zeroDigest() {
 			return errors.New("accepted Task Escrow state has unexpected result evidence")
 		}
 		return nil
 	}
 	if !validNonZeroDigest(state.ResultHash) || !validNonZeroDigest(state.EvidenceHash) || state.ReviewDeadlineUnix == 0 {
 		return errors.New("submitted Task Escrow state is missing result evidence")
+	}
+	if state.Status == chain.TaskEscrowStatusResultSubmitted && state.DisputeHash != zeroDigest() {
+		return errors.New("submitted Task Escrow has unexpected dispute")
+	}
+	if state.Status == chain.TaskEscrowStatusDisputed && !validNonZeroDigest(state.DisputeHash) {
+		return errors.New("disputed Task Escrow is missing dispute commitment")
 	}
 	return nil
 }

@@ -118,3 +118,9 @@ type SettlementResolver interface {
 type ReleaseResolver interface {
 	ResolveRelease(context.Context, RefundPrincipalRequest) (Result, error)
 }
+
+type DisputeResolver interface {
+	ResolveResult(context.Context, CommitResultRequest) (Result, error)
+	ResolveDisputeOpen(context.Context, OpenDisputeRequest) (Result, error)
+	ResolveDisputeOutcome(context.Context, ResolveDisputeRequest) (Result, error)
+}

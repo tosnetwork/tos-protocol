@@ -41,3 +41,7 @@ func failedPrecondition(stableCode, message string) error {
 func unavailable(stableCode, message string) error {
 	return rpcError(connect.CodeUnavailable, stableCode, message)
 }
+
+func permissionDenied(stableCode, message string) error {
+	return rpcError(connect.CodePermissionDenied, stableCode, message)
+}

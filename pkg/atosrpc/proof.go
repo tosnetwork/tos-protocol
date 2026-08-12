@@ -189,15 +189,19 @@ func (s *Server) CommitExecutionReceipt(
 			return err
 		}
 		if found {
-			existingDigest, _ := protoDigest("ATOS-TOS-EXECUTION-RECEIPT-V1", existing.Receipt)
-			requestedDigest, _ := protoDigest("ATOS-TOS-EXECUTION-RECEIPT-V1", req.Msg.Receipt)
+			existingDigest, _ := receiptcommitment.Digest(existing.Receipt)
+			requestedDigest, _ := receiptcommitment.Digest(req.Msg.Receipt)
 			if existingDigest != requestedDigest {
 				return conflict("RECEIPT_MISMATCH", "receipt ID is already committed to different evidence")
 			}
 			response.Receipt = existing
 			return nil
 		}
-		digest, err := protoDigest("ATOS-TOS-EXECUTION-RECEIPT-V1", req.Msg.Receipt)
+		// The chain anchor, portable package and independent verifier must all
+		// commit the same frozen language-independent receipt encoding.  The
+		// legacy deterministic-protobuf helper is transport-specific and cannot
+		// be resolved from receiptcommitment.Digest after a restart.
+		digest, err := receiptcommitment.Digest(req.Msg.Receipt)
 		if err != nil {
 			return err
 		}
@@ -297,6 +301,10 @@ func (s *Server) ResolveExecutionReceipt(ctx context.Context, req *connect.Reque
 		return nil, unavailable("NETWORK_UNAVAILABLE", "authority does not support read-only receipt resolution")
 	}
 	known := req.Msg.ExpectedReceiptRef
+	// VerifyExecutionReceipt promotes the signed execution envelope to the
+	// finalized "verified-receipt" authority and returns that reference to
+	// ATOS. Resolution therefore follows the promoted authority tuple, not
+	// the earlier pending execution-receipt anchor.
 	live, err := resolver.ResolveCommitment(ctx, "verified-receipt", req.Msg.Receipt.ReceiptId, digestText, known)
 	if err != nil {
 		if errors.Is(err, ErrCommitmentNotFound) {

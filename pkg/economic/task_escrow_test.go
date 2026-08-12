@@ -223,6 +223,10 @@ func TestTaskEscrowDriverVerifiedLifecycleAndSettlementReplay(t *testing.T) {
 		BudgetNanoTOS: 1_000, ResultHash: resultHash,
 		EvidenceHash: evidenceHash, PayoutNanoTOS: 700,
 	}
+	if _, err := driver.SettleProvider(context.Background(), settlement); err == nil || !strings.Contains(err.Error(), "review window") {
+		t.Fatalf("settlement during review window must fail closed: %v", err)
+	}
+	now = now.Add(2 * time.Hour)
 	first, err := driver.SettleProvider(context.Background(), settlement)
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +255,7 @@ func TestTaskEscrowDriverVerifiedLifecycleAndSettlementReplay(t *testing.T) {
 	driver.now = func() time.Time { return now.Add(2 * time.Hour) }
 	recovered, found, err := driver.ResolveEscrow(context.Background(), ReserveEscrowRequest{
 		EscrowID: "esc-test", Creator: testCreator, Agent: testAgent,
-		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(-time.Hour).Unix()),
 		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
 		PermissionHash: "sha256:" + strings.Repeat("22", 32),
 	})
@@ -273,7 +277,7 @@ func TestTaskEscrowDriverVerifiedLifecycleAndSettlementReplay(t *testing.T) {
 	harness.state.PermissionHash = "sha256:" + strings.Repeat("99", 32)
 	if _, _, err := driver.ResolveEscrow(context.Background(), ReserveEscrowRequest{
 		EscrowID: "esc-test", Creator: testCreator, Agent: testAgent,
-		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		BudgetNanoTOS: 1_000, DeadlineUnix: uint64(now.Add(-time.Hour).Unix()),
 		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
 		PermissionHash: "sha256:" + strings.Repeat("22", 32),
 	}); err == nil {
@@ -500,6 +504,43 @@ func TestTaskEscrowDriverRejectsZeroDisputeCommitment(t *testing.T) {
 	}
 }
 
+func TestTaskEscrowDriverDisputeMutationAndReadOnlyRecovery(t *testing.T) {
+	now := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+	h := newTaskEscrowHarness(now)
+	h.state = chain.TaskEscrowState{Network: testNetwork, ContractAddress: testContract, Creator: testCreator, Agent: testAgent, HasAgent: true, Verifier: testVerifier, HasVerifier: true, BudgetNanoTOS: 1_000, BalanceNanoTOS: 1_050, DeadlineUnix: uint64(now.Add(time.Hour).Unix()), Status: chain.TaskEscrowStatusResultSubmitted, ResultHash: "sha256:" + strings.Repeat("31", 32), EvidenceHash: "sha256:" + strings.Repeat("32", 32), PolicyHash: "sha256:" + strings.Repeat("11", 32), PermissionHash: "sha256:" + strings.Repeat("22", 32), ReviewPeriod: 3600, ReviewDeadlineUnix: uint64(now.Add(time.Hour).Unix()), DisputeHash: zeroDigest(), CodeHash: testCodeHash, ObservedMasterSeqno: 100, ObservedAt: now}
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{Observer: h, Publisher: h, Network: testNetwork, AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier, FundingOverhead: 50, ReviewPeriod: time.Hour, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+	open := OpenDisputeRequest{EscrowID: "esc-dispute", ContractAddress: testContract, DisputeHash: "sha256:" + strings.Repeat("55", 32)}
+	first, err := driver.OpenDispute(context.Background(), open)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishedAfterOpen := h.publishCalls
+	replayed, err := driver.OpenDispute(context.Background(), open)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.publishCalls != publishedAfterOpen || replayed.TransitionReference != first.TransitionReference {
+		t.Fatalf("open recovery mutated again: publishes=%d/%d", publishedAfterOpen, h.publishCalls)
+	}
+	resolution := ResolveDisputeRequest{EscrowID: open.EscrowID, ContractAddress: testContract, BudgetNanoTOS: 1_000, PayoutNanoTOS: 400}
+	resolved, err := driver.ResolveDispute(context.Background(), resolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishedAfterResolve := h.publishCalls
+	recovered, err := driver.ResolveDisputeOutcome(context.Background(), resolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.publishCalls != publishedAfterResolve || recovered.TransitionReference != resolved.TransitionReference || recovered.AgentPaidNanoTOS != 400 || recovered.CreatorPaidNanoTOS < 600 {
+		t.Fatalf("resolution recovery was not read-only: %+v", recovered)
+	}
+}
+
 func TestTaskEscrowDriverSettlesZeroProviderPayoutAndFullRefundIdempotently(t *testing.T) {
 	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
 	resultHash := "sha256:" + strings.Repeat("33", 32)
@@ -527,6 +568,7 @@ func TestTaskEscrowDriverSettlesZeroProviderPayoutAndFullRefundIdempotently(t *t
 		t.Fatal(err)
 	}
 	defer driver.Close()
+	now = now.Add(2 * time.Hour)
 	request := SettleProviderRequest{
 		EscrowID: "esc-zero", ContractAddress: testContract, BudgetNanoTOS: 1_000,
 		ResultHash: resultHash, EvidenceHash: evidenceHash, PayoutNanoTOS: 0,

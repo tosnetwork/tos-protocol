@@ -48,6 +48,15 @@ const (
 	// SettlementServiceGetSettlementProcedure is the fully-qualified name of the SettlementService's
 	// GetSettlement RPC.
 	SettlementServiceGetSettlementProcedure = "/atos.tos.v1.SettlementService/GetSettlement"
+	// SettlementServicePrepareVerifiedResultProcedure is the fully-qualified name of the
+	// SettlementService's PrepareVerifiedResult RPC.
+	SettlementServicePrepareVerifiedResultProcedure = "/atos.tos.v1.SettlementService/PrepareVerifiedResult"
+	// SettlementServiceOpenVerifiedDisputeProcedure is the fully-qualified name of the
+	// SettlementService's OpenVerifiedDispute RPC.
+	SettlementServiceOpenVerifiedDisputeProcedure = "/atos.tos.v1.SettlementService/OpenVerifiedDispute"
+	// SettlementServiceResolveVerifiedDisputeProcedure is the fully-qualified name of the
+	// SettlementService's ResolveVerifiedDispute RPC.
+	SettlementServiceResolveVerifiedDisputeProcedure = "/atos.tos.v1.SettlementService/ResolveVerifiedDispute"
 )
 
 // SettlementServiceClient is a client for the atos.tos.v1.SettlementService service.
@@ -57,6 +66,9 @@ type SettlementServiceClient interface {
 	ReleaseEscrow(context.Context, *connect.Request[v1.ReleaseEscrowRequest]) (*connect.Response[v1.ReleaseEscrowResponse], error)
 	SettleJob(context.Context, *connect.Request[v1.SettleJobRequest]) (*connect.Response[v1.SettleJobResponse], error)
 	GetSettlement(context.Context, *connect.Request[v1.GetSettlementRequest]) (*connect.Response[v1.GetSettlementResponse], error)
+	PrepareVerifiedResult(context.Context, *connect.Request[v1.PrepareVerifiedResultRequest]) (*connect.Response[v1.PrepareVerifiedResultResponse], error)
+	OpenVerifiedDispute(context.Context, *connect.Request[v1.OpenVerifiedDisputeRequest]) (*connect.Response[v1.OpenVerifiedDisputeResponse], error)
+	ResolveVerifiedDispute(context.Context, *connect.Request[v1.ResolveVerifiedDisputeRequest]) (*connect.Response[v1.ResolveVerifiedDisputeResponse], error)
 }
 
 // NewSettlementServiceClient constructs a client for the atos.tos.v1.SettlementService service. By
@@ -100,16 +112,37 @@ func NewSettlementServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(settlementServiceMethods.ByName("GetSettlement")),
 			connect.WithClientOptions(opts...),
 		),
+		prepareVerifiedResult: connect.NewClient[v1.PrepareVerifiedResultRequest, v1.PrepareVerifiedResultResponse](
+			httpClient,
+			baseURL+SettlementServicePrepareVerifiedResultProcedure,
+			connect.WithSchema(settlementServiceMethods.ByName("PrepareVerifiedResult")),
+			connect.WithClientOptions(opts...),
+		),
+		openVerifiedDispute: connect.NewClient[v1.OpenVerifiedDisputeRequest, v1.OpenVerifiedDisputeResponse](
+			httpClient,
+			baseURL+SettlementServiceOpenVerifiedDisputeProcedure,
+			connect.WithSchema(settlementServiceMethods.ByName("OpenVerifiedDispute")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveVerifiedDispute: connect.NewClient[v1.ResolveVerifiedDisputeRequest, v1.ResolveVerifiedDisputeResponse](
+			httpClient,
+			baseURL+SettlementServiceResolveVerifiedDisputeProcedure,
+			connect.WithSchema(settlementServiceMethods.ByName("ResolveVerifiedDispute")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // settlementServiceClient implements SettlementServiceClient.
 type settlementServiceClient struct {
-	createEscrow  *connect.Client[v1.CreateEscrowRequest, v1.CreateEscrowResponse]
-	getEscrow     *connect.Client[v1.GetEscrowRequest, v1.GetEscrowResponse]
-	releaseEscrow *connect.Client[v1.ReleaseEscrowRequest, v1.ReleaseEscrowResponse]
-	settleJob     *connect.Client[v1.SettleJobRequest, v1.SettleJobResponse]
-	getSettlement *connect.Client[v1.GetSettlementRequest, v1.GetSettlementResponse]
+	createEscrow           *connect.Client[v1.CreateEscrowRequest, v1.CreateEscrowResponse]
+	getEscrow              *connect.Client[v1.GetEscrowRequest, v1.GetEscrowResponse]
+	releaseEscrow          *connect.Client[v1.ReleaseEscrowRequest, v1.ReleaseEscrowResponse]
+	settleJob              *connect.Client[v1.SettleJobRequest, v1.SettleJobResponse]
+	getSettlement          *connect.Client[v1.GetSettlementRequest, v1.GetSettlementResponse]
+	prepareVerifiedResult  *connect.Client[v1.PrepareVerifiedResultRequest, v1.PrepareVerifiedResultResponse]
+	openVerifiedDispute    *connect.Client[v1.OpenVerifiedDisputeRequest, v1.OpenVerifiedDisputeResponse]
+	resolveVerifiedDispute *connect.Client[v1.ResolveVerifiedDisputeRequest, v1.ResolveVerifiedDisputeResponse]
 }
 
 // CreateEscrow calls atos.tos.v1.SettlementService.CreateEscrow.
@@ -137,6 +170,21 @@ func (c *settlementServiceClient) GetSettlement(ctx context.Context, req *connec
 	return c.getSettlement.CallUnary(ctx, req)
 }
 
+// PrepareVerifiedResult calls atos.tos.v1.SettlementService.PrepareVerifiedResult.
+func (c *settlementServiceClient) PrepareVerifiedResult(ctx context.Context, req *connect.Request[v1.PrepareVerifiedResultRequest]) (*connect.Response[v1.PrepareVerifiedResultResponse], error) {
+	return c.prepareVerifiedResult.CallUnary(ctx, req)
+}
+
+// OpenVerifiedDispute calls atos.tos.v1.SettlementService.OpenVerifiedDispute.
+func (c *settlementServiceClient) OpenVerifiedDispute(ctx context.Context, req *connect.Request[v1.OpenVerifiedDisputeRequest]) (*connect.Response[v1.OpenVerifiedDisputeResponse], error) {
+	return c.openVerifiedDispute.CallUnary(ctx, req)
+}
+
+// ResolveVerifiedDispute calls atos.tos.v1.SettlementService.ResolveVerifiedDispute.
+func (c *settlementServiceClient) ResolveVerifiedDispute(ctx context.Context, req *connect.Request[v1.ResolveVerifiedDisputeRequest]) (*connect.Response[v1.ResolveVerifiedDisputeResponse], error) {
+	return c.resolveVerifiedDispute.CallUnary(ctx, req)
+}
+
 // SettlementServiceHandler is an implementation of the atos.tos.v1.SettlementService service.
 type SettlementServiceHandler interface {
 	CreateEscrow(context.Context, *connect.Request[v1.CreateEscrowRequest]) (*connect.Response[v1.CreateEscrowResponse], error)
@@ -144,6 +192,9 @@ type SettlementServiceHandler interface {
 	ReleaseEscrow(context.Context, *connect.Request[v1.ReleaseEscrowRequest]) (*connect.Response[v1.ReleaseEscrowResponse], error)
 	SettleJob(context.Context, *connect.Request[v1.SettleJobRequest]) (*connect.Response[v1.SettleJobResponse], error)
 	GetSettlement(context.Context, *connect.Request[v1.GetSettlementRequest]) (*connect.Response[v1.GetSettlementResponse], error)
+	PrepareVerifiedResult(context.Context, *connect.Request[v1.PrepareVerifiedResultRequest]) (*connect.Response[v1.PrepareVerifiedResultResponse], error)
+	OpenVerifiedDispute(context.Context, *connect.Request[v1.OpenVerifiedDisputeRequest]) (*connect.Response[v1.OpenVerifiedDisputeResponse], error)
+	ResolveVerifiedDispute(context.Context, *connect.Request[v1.ResolveVerifiedDisputeRequest]) (*connect.Response[v1.ResolveVerifiedDisputeResponse], error)
 }
 
 // NewSettlementServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -183,6 +234,24 @@ func NewSettlementServiceHandler(svc SettlementServiceHandler, opts ...connect.H
 		connect.WithSchema(settlementServiceMethods.ByName("GetSettlement")),
 		connect.WithHandlerOptions(opts...),
 	)
+	settlementServicePrepareVerifiedResultHandler := connect.NewUnaryHandler(
+		SettlementServicePrepareVerifiedResultProcedure,
+		svc.PrepareVerifiedResult,
+		connect.WithSchema(settlementServiceMethods.ByName("PrepareVerifiedResult")),
+		connect.WithHandlerOptions(opts...),
+	)
+	settlementServiceOpenVerifiedDisputeHandler := connect.NewUnaryHandler(
+		SettlementServiceOpenVerifiedDisputeProcedure,
+		svc.OpenVerifiedDispute,
+		connect.WithSchema(settlementServiceMethods.ByName("OpenVerifiedDispute")),
+		connect.WithHandlerOptions(opts...),
+	)
+	settlementServiceResolveVerifiedDisputeHandler := connect.NewUnaryHandler(
+		SettlementServiceResolveVerifiedDisputeProcedure,
+		svc.ResolveVerifiedDispute,
+		connect.WithSchema(settlementServiceMethods.ByName("ResolveVerifiedDispute")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/atos.tos.v1.SettlementService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SettlementServiceCreateEscrowProcedure:
@@ -195,6 +264,12 @@ func NewSettlementServiceHandler(svc SettlementServiceHandler, opts ...connect.H
 			settlementServiceSettleJobHandler.ServeHTTP(w, r)
 		case SettlementServiceGetSettlementProcedure:
 			settlementServiceGetSettlementHandler.ServeHTTP(w, r)
+		case SettlementServicePrepareVerifiedResultProcedure:
+			settlementServicePrepareVerifiedResultHandler.ServeHTTP(w, r)
+		case SettlementServiceOpenVerifiedDisputeProcedure:
+			settlementServiceOpenVerifiedDisputeHandler.ServeHTTP(w, r)
+		case SettlementServiceResolveVerifiedDisputeProcedure:
+			settlementServiceResolveVerifiedDisputeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -222,4 +297,16 @@ func (UnimplementedSettlementServiceHandler) SettleJob(context.Context, *connect
 
 func (UnimplementedSettlementServiceHandler) GetSettlement(context.Context, *connect.Request[v1.GetSettlementRequest]) (*connect.Response[v1.GetSettlementResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.SettlementService.GetSettlement is not implemented"))
+}
+
+func (UnimplementedSettlementServiceHandler) PrepareVerifiedResult(context.Context, *connect.Request[v1.PrepareVerifiedResultRequest]) (*connect.Response[v1.PrepareVerifiedResultResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.SettlementService.PrepareVerifiedResult is not implemented"))
+}
+
+func (UnimplementedSettlementServiceHandler) OpenVerifiedDispute(context.Context, *connect.Request[v1.OpenVerifiedDisputeRequest]) (*connect.Response[v1.OpenVerifiedDisputeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.SettlementService.OpenVerifiedDispute is not implemented"))
+}
+
+func (UnimplementedSettlementServiceHandler) ResolveVerifiedDispute(context.Context, *connect.Request[v1.ResolveVerifiedDisputeRequest]) (*connect.Response[v1.ResolveVerifiedDisputeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.tos.v1.SettlementService.ResolveVerifiedDispute is not implemented"))
 }
