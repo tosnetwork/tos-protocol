@@ -26,6 +26,7 @@ type taskEscrowHarness struct {
 	references      map[string]string
 	last            chain.TaskEscrowAction
 	lastExpectation chain.TaskEscrowTransitionReference
+	publishCalls    int
 	closed          bool
 }
 
@@ -49,6 +50,7 @@ func (h *taskEscrowHarness) Publish(
 	_ context.Context,
 	action chain.TaskEscrowAction,
 ) (chain.TaskEscrowActionReceipt, error) {
+	h.publishCalls++
 	if existing, ok := h.references[action.ActionID]; ok {
 		h.last = action
 		h.actions = append(h.actions, action)
@@ -302,6 +304,47 @@ func TestTaskEscrowDriverRejectsDifferentPayoutAfterSettlement(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("different payout after terminal settlement was accepted")
+	}
+}
+
+func TestTaskEscrowDriverDoesNotReplaySettlementAfterDisputeResolution(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	resultHash := "sha256:" + strings.Repeat("33", 32)
+	evidenceHash := "sha256:" + strings.Repeat("44", 32)
+	harness := newTaskEscrowHarness(now)
+	harness.state = chain.TaskEscrowState{
+		Network: testNetwork, ContractAddress: testContract,
+		Creator: testCreator, Agent: testAgent, HasAgent: true,
+		Verifier: testVerifier, HasVerifier: true,
+		Status: chain.TaskEscrowStatusSettled, BudgetNanoTOS: 0, BalanceNanoTOS: 0,
+		DeadlineUnix: uint64(now.Add(time.Hour).Unix()), ReviewPeriod: 3600,
+		ReviewDeadlineUnix: uint64(now.Add(time.Hour).Unix()),
+		ResultHash:         resultHash, EvidenceHash: evidenceHash,
+		PolicyHash:     "sha256:" + strings.Repeat("11", 32),
+		PermissionHash: "sha256:" + strings.Repeat("22", 32),
+		DisputeHash:    "sha256:" + strings.Repeat("55", 32),
+		CodeHash:       testCodeHash, ObservedMasterSeqno: 101, ObservedAt: now,
+	}
+	driver, err := NewTaskEscrowDriver(TaskEscrowConfig{
+		Observer: harness, Publisher: harness, Network: testNetwork,
+		AllowedCodeHashes: []string{testCodeHash}, Verifier: testVerifier,
+		FundingOverhead: 50, Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer driver.Close()
+
+	_, err = driver.SettleProvider(context.Background(), SettleProviderRequest{
+		EscrowID: "esc-disputed", ContractAddress: testContract,
+		BudgetNanoTOS: 1_000, ResultHash: resultHash,
+		EvidenceHash: evidenceHash, PayoutNanoTOS: 700,
+	})
+	if err == nil {
+		t.Fatal("dispute-resolved escrow entered ordinary settlement replay")
+	}
+	if harness.publishCalls != 0 {
+		t.Fatalf("ordinary settlement replay published %d action(s) after dispute resolution", harness.publishCalls)
 	}
 }
 

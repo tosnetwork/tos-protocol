@@ -371,6 +371,9 @@ func (d *TaskEscrowDriver) SettleProvider(
 		state = committed.State
 	}
 	if state.Status == chain.TaskEscrowStatusSettled {
+		if state.DisputeHash != zeroDigest() {
+			return Result{}, errors.New("dispute-resolved task escrow cannot enter settlement replay")
+		}
 		if state.ResultHash != request.ResultHash || state.EvidenceHash != request.EvidenceHash {
 			return Result{}, errors.New("settled task escrow result mismatch")
 		}
