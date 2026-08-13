@@ -18,6 +18,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/protobuf/proto"
 )
 
 func (s *Server) CreateEscrow(
@@ -894,8 +895,9 @@ func (s *Server) SettleJob(
 		return nil, invalid("INVALID_ARGUMENT", "requested charge is invalid or outside uint64")
 	}
 	var canonicalEscrow *atostosv1.Escrow
-	if req.Msg.ExpectedTerms != nil || req.Msg.ExpectedEscrowRef != nil || req.Msg.ExpectedReservationDigest != "" {
-		if req.Msg.ExpectedTerms == nil || req.Msg.ExpectedEscrowRef == nil || req.Msg.ExpectedReservationDigest == "" {
+	var canonicalReceipt *atostosv1.ExecutionReceiptEnvelope
+	if req.Msg.ExpectedTerms != nil || req.Msg.ExpectedEscrowRef != nil || req.Msg.ExpectedReservationDigest != "" || req.Msg.ExpectedReceipt != nil || req.Msg.ExpectedReceiptRef != nil {
+		if req.Msg.ExpectedTerms == nil || req.Msg.ExpectedEscrowRef == nil || req.Msg.ExpectedReservationDigest == "" || req.Msg.ExpectedReceipt == nil || req.Msg.ExpectedReceiptRef == nil {
 			return nil, invalid("INVALID_ARGUMENT", "complete expected Verified reservation binding is required")
 		}
 		resolved, resolveErr := s.GetEscrow(ctx, connect.NewRequest(&atostosv1.GetEscrowRequest{
@@ -912,6 +914,13 @@ func (s *Server) SettleJob(
 			return nil, failedPrecondition("ESCROW_MISMATCH", "canonical Verified TaskEscrow is not reservable or settled")
 		}
 		canonicalEscrow = resolved.Msg.Escrow
+		canonicalReceipt, resolveErr = s.resolveExpectedReceipt(ctx, req.Msg.Context, req.Msg.ExpectedReceipt, req.Msg.ExpectedReceiptRef)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if canonicalReceipt.ReceiptId != req.Msg.ReceiptId || canonicalReceipt.JobId != req.Msg.JobId || canonicalReceipt.QuoteId != req.Msg.QuoteId || canonicalReceipt.EscrowId != req.Msg.EscrowId {
+			return nil, failedPrecondition("RECEIPT_MISMATCH", "canonical execution receipt does not match settlement tuple")
+		}
 	}
 	response := new(atostosv1.SettleJobResponse)
 	s.mutationMu.Lock()
@@ -972,6 +981,16 @@ func (s *Server) SettleJob(
 		found, err = s.store.getProto(tx, bucketReceipts, req.Msg.ReceiptId, receipt)
 		if err != nil {
 			return err
+		}
+		if escrow.TrustMode == TrustModeVerified {
+			if canonicalReceipt == nil {
+				return failedPrecondition("RECEIPT_MISMATCH", "canonical execution receipt is required")
+			}
+			if found && receipt.Receipt != nil && !proto.Equal(receipt.Receipt, canonicalReceipt) {
+				return failedPrecondition("RECEIPT_MISMATCH", "local receipt projection does not match canonical execution receipt")
+			}
+			receipt = &atostosv1.CommittedExecutionReceipt{Receipt: cloneMessage(canonicalReceipt), ReceiptRef: cloneMessage(req.Msg.ExpectedReceiptRef), VerificationStatus: atostosv1.VerificationStatus_VERIFICATION_STATUS_VERIFIED}
+			found = true
 		}
 		if !found || receipt.Receipt == nil || receipt.VerificationStatus != atostosv1.VerificationStatus_VERIFICATION_STATUS_VERIFIED {
 			return failedPrecondition("SETTLEMENT_FAILED", "a verified execution receipt is required")

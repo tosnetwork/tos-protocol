@@ -288,6 +288,8 @@ message SettleJobRequest {
   VerifiedEscrowTerms expected_terms = 7;
   NetworkReference expected_escrow_ref = 8;
   string expected_reservation_digest = 9;
+  ExecutionReceiptEnvelope expected_receipt = 10;
+  NetworkReference expected_receipt_ref = 11;
 }
 
 message SettleJobResponse {
