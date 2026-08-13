@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/tosnetwork/tos-protocol/pkg/identity"
 )
 
 // ReadinessSnapshot is a current strict-majority view used by process
@@ -35,7 +33,7 @@ func (a *Adapter) Readiness(
 		return ReadinessSnapshot{}, err
 	}
 	now = now.UTC()
-	if observation.observedAt.After(now.Add(identity.MaxClockSkew)) ||
+	if observation.observedAt.After(now.Add(maxClockSkew)) ||
 		!observation.observedAt.Add(a.readinessAge).After(now) {
 		return ReadinessSnapshot{}, errors.New("TOS chain consensus is stale or from the future")
 	}

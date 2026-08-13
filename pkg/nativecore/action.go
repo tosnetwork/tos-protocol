@@ -1,6 +1,5 @@
 // Package nativecore implements the single-mode atos_native_v1 execution
-// envelope. It is intentionally independent of the legacy three-mode and
-// Action-Anchor packages.
+// envelope. It is independent of gateway-owned state and per-action contracts.
 package nativecore
 
 import (

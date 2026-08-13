@@ -1,302 +1,120 @@
+// Package atosrpc exposes the private Native-only Connect boundary.
 package atosrpc
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
 	"github.com/tosnetwork/tos-protocol/gen/atos/native/v1/atosnativev1connect"
-	"github.com/tosnetwork/tos-protocol/gen/atos/tos/v1/atostosv1connect"
-	"github.com/tosnetwork/tos-protocol/pkg/economic"
-	"github.com/tosnetwork/tos-protocol/pkg/nativeregistry"
 )
 
-const readinessProbeTimeout = 5 * time.Second
+type Relayer interface {
+	CheckReady(context.Context) error
+	Submit(context.Context, *nativev1.SignedNativeActionV1, uint64) (string, error)
+}
 
-// Server implements the ATOS trust/economic/proof/execution services,
-// including the purpose-specific Managed financial-integrity anchor boundary,
-// over one authenticated durable Edge boundary.
+type Resolver interface {
+	CheckReady(context.Context) error
+	ResolveState(context.Context, string, string) (*nativev1.NativeStateV1, bool, error)
+}
+
+type Config struct {
+	BearerToken      string
+	NativeV1Relayer  Relayer
+	NativeV1Resolver Resolver
+	MaxMessageBytes  int
+	CallTimeout      time.Duration
+	Now              func() time.Time
+}
+
 type Server struct {
-	config           Config
-	store            *store
-	authority        Authority
-	economy          economic.Driver
-	worker           Worker
-	router           Router
-	thirdPartyWorker ThirdPartyWorker
-	nativeRegistry   *nativeregistry.Service
-	nativeV1Relayer  interface {
-		CheckReady(context.Context) error
-		Submit(context.Context, *nativev1.SignedNativeActionV1, uint64) (string, error)
-	}
-	nativeV1Resolver interface {
-		CheckReady(context.Context) error
-		ResolveState(context.Context, string, string) (*nativev1.NativeStateV1, bool, error)
-	}
-	privateKey   ed25519.PrivateKey
-	publicKey    ed25519.PublicKey
-	signerID     string
-	now          func() time.Time
-	mutationMu   sync.Mutex
-	jobLocks     sync.Map // job_id -> *sync.Mutex
-	readinessMu  sync.Mutex
-	readinessAt  time.Time
-	readinessErr error
+	token            string
+	nativeV1Relayer  Relayer
+	nativeV1Resolver Resolver
+	maxMessageBytes  int
+	callTimeout      time.Duration
+	now              func() time.Time
 }
 
 func Open(config Config) (*Server, error) {
-	config, err := config.withDefaults()
-	if err != nil {
-		return nil, err
+	config.BearerToken = strings.TrimSpace(config.BearerToken)
+	if config.BearerToken == "" {
+		return nil, errors.New("ATOS RPC bearer token is required")
 	}
-	readyContext, cancel := context.WithTimeout(context.Background(), config.CallTimeout)
-	err = config.Authority.CheckReady(readyContext)
-	cancel()
-	if err != nil {
-		_ = config.Authority.Close()
-		if config.EconomicDriver != nil {
-			_ = config.EconomicDriver.Close()
-		}
-		return nil, fmt.Errorf("ATOS RPC authority is not ready: %w", err)
+	if config.NativeV1Relayer == nil || config.NativeV1Resolver == nil {
+		return nil, errors.New("atos_native_v1 relayer and resolver are required")
 	}
-	if config.EconomicDriver != nil {
-		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
-		err = config.EconomicDriver.CheckReady(readyContext)
-		cancel()
-		if err != nil {
-			_ = config.Authority.Close()
-			_ = config.EconomicDriver.Close()
-			return nil, fmt.Errorf("ATOS RPC economic driver is not ready: %w", err)
-		}
+	if config.MaxMessageBytes == 0 {
+		config.MaxMessageBytes = 16 << 20
 	}
-	if config.NativeRegistry != nil {
-		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
-		err = config.NativeRegistry.CheckReady(readyContext)
-		cancel()
-		if err != nil {
-			_ = config.Authority.Close()
-			if config.EconomicDriver != nil {
-				_ = config.EconomicDriver.Close()
-			}
-			return nil, fmt.Errorf("Native Registry is not ready: %w", err)
-		}
+	if config.MaxMessageBytes <= 0 || config.MaxMessageBytes > 64<<20 {
+		return nil, errors.New("invalid ATOS RPC message limit")
 	}
-	if (config.NativeV1Relayer == nil) != (config.NativeV1Resolver == nil) {
-		return nil, errors.New("atos_native_v1 relayer and resolver must be configured together")
+	if config.CallTimeout == 0 {
+		config.CallTimeout = 30 * time.Second
 	}
-	if config.NativeV1Resolver != nil {
-		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
-		err = config.NativeV1Resolver.CheckReady(readyContext)
-		cancel()
-		if err != nil {
-			return nil, fmt.Errorf("atos_native_v1 resolver is not ready: %w", err)
-		}
-		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
-		err = config.NativeV1Relayer.CheckReady(readyContext)
-		cancel()
-		if err != nil {
-			return nil, fmt.Errorf("atos_native_v1 relayer is not ready: %w", err)
-		}
+	if config.CallTimeout <= 0 || config.CallTimeout > 15*time.Minute {
+		return nil, errors.New("invalid ATOS RPC call timeout")
 	}
-	state, err := openStore(config.StatePath, config.MaxRecordBytes)
-	if err != nil {
-		_ = config.Authority.Close()
-		if config.EconomicDriver != nil {
-			_ = config.EconomicDriver.Close()
-		}
-		return nil, err
+	if config.Now == nil {
+		config.Now = time.Now
 	}
-	privateKey, err := state.signingKey()
-	if err != nil {
-		_ = state.Close()
-		_ = config.Authority.Close()
-		if config.EconomicDriver != nil {
-			_ = config.EconomicDriver.Close()
-		}
-		return nil, err
+	server := &Server{token: config.BearerToken, nativeV1Relayer: config.NativeV1Relayer, nativeV1Resolver: config.NativeV1Resolver,
+		maxMessageBytes: config.MaxMessageBytes, callTimeout: config.CallTimeout, now: config.Now}
+	ctx, cancel := context.WithTimeout(context.Background(), config.CallTimeout)
+	defer cancel()
+	if err := server.checkReady(ctx); err != nil {
+		return nil, fmtError("atos_native_v1 is not ready", err)
 	}
-	publicKey := append(ed25519.PublicKey(nil), privateKey.Public().(ed25519.PublicKey)...)
-	digest := sha256.Sum256(publicKey)
-	return &Server{
-		config: config, store: state, authority: config.Authority,
-		economy: config.EconomicDriver, worker: config.Worker, router: config.Router,
-		thirdPartyWorker: config.ThirdPartyWorker,
-		nativeRegistry:   config.NativeRegistry, nativeV1Relayer: config.NativeV1Relayer, nativeV1Resolver: config.NativeV1Resolver,
-		privateKey: privateKey, publicKey: publicKey,
-		signerID: "edge-signer-" + hex.EncodeToString(digest[:8]),
-		now:      config.Now,
-	}, nil
+	return server, nil
 }
 
-func (s *Server) Close() error {
-	if s == nil {
-		return nil
-	}
-	var storeErr, authorityErr, economyErr error
-	if s.store != nil {
-		storeErr = s.store.Close()
-	}
-	if s.authority != nil {
-		authorityErr = s.authority.Close()
-	}
-	if s.economy != nil {
-		economyErr = s.economy.Close()
-	}
-	return errors.Join(storeErr, authorityErr, economyErr)
-}
+func (s *Server) Close() error { return nil }
 
-func (s *Server) supportsMode(mode TrustMode) bool {
-	if s == nil || s.authority == nil || !s.authority.Supports(mode) {
-		return false
-	}
-	switch mode {
-	case TrustModeManaged:
-		return true
-	case TrustModeVerified:
-		return s.economy != nil && s.economy.Supports(economic.TrustModeVerified)
-	case TrustModeNative:
-		return s.economy != nil && s.economy.Supports(economic.TrustModeNative)
-	default:
-		return false
-	}
-}
-
-func (s *Server) ensureSupported(mode TrustMode) error {
-	if !s.supportsMode(mode) {
-		return failedPrecondition("TRUST_MODE_UNAVAILABLE", "requested trust mode is not active on this TOS authority and economic driver")
-	}
-	return nil
-}
-
-func (s *Server) jobLock(jobID string) *sync.Mutex {
-	value, _ := s.jobLocks.LoadOrStore(jobID, &sync.Mutex{})
-	return value.(*sync.Mutex)
-}
-
-// Handler mounts all six ConnectRPC services. Bearer authentication is
-// enforced before request bytes are decoded, and message sizes are bounded.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	handlerOptions := []connect.HandlerOption{
-		connect.WithReadMaxBytes(s.config.MaxMessageBytes),
-		connect.WithSendMaxBytes(s.config.MaxMessageBytes),
-	}
-	for _, registered := range []struct {
-		path    string
-		handler http.Handler
-	}{
-		pair(atostosv1connect.NewIdentityServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewCapabilityServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewTrustServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewSettlementServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewProofServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewExecutionGatewayServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewFinancialIntegrityServiceHandler(s, handlerOptions...)),
-		pair(atostosv1connect.NewNativeRegistryServiceHandler(s, handlerOptions...)),
-		pair(atosnativev1connect.NewNativeServiceHandler(s, handlerOptions...)),
-	} {
-		mux.Handle(registered.path, registered.handler)
-	}
-	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
-	readiness := func(w http.ResponseWriter, r *http.Request) {
-		// Client cancellation must not poison the shared readiness cache.
-		timeout := min(s.config.CallTimeout, readinessProbeTimeout)
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), timeout)
+	options := []connect.HandlerOption{connect.WithReadMaxBytes(s.maxMessageBytes), connect.WithSendMaxBytes(s.maxMessageBytes)}
+	path, handler := atosnativev1connect.NewNativeServiceHandler(s, options...)
+	mux.Handle(path, handler)
+	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { jsonStatus(w, http.StatusOK, `{"status":"ok"}`) })
+	ready := func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), s.callTimeout)
 		defer cancel()
 		if err := s.checkReady(ctx); err != nil {
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			jsonStatus(w, http.StatusServiceUnavailable, `{"status":"unavailable"}`)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
+		jsonStatus(w, http.StatusOK, `{"status":"ready"}`)
 	}
-	mux.HandleFunc("GET /readyz", readiness)
-	// /healthz remains the backwards-compatible readiness route used by ATOS.
-	mux.HandleFunc("GET /healthz", readiness)
+	mux.HandleFunc("GET /readyz", ready)
+	mux.HandleFunc("GET /healthz", ready)
 	return s.authenticate(mux)
 }
 
 func (s *Server) checkReady(ctx context.Context) error {
-	if s == nil {
-		return errors.New("server is not configured")
+	if s == nil || s.nativeV1Relayer == nil || s.nativeV1Resolver == nil {
+		return errors.New("Native service is not configured")
 	}
-	s.readinessMu.Lock()
-	defer s.readinessMu.Unlock()
-	now := time.Now()
-	if !s.readinessAt.IsZero() && now.Sub(s.readinessAt) < 2*time.Second {
-		return s.readinessErr
-	}
-	err := s.checkReadyUncached(ctx)
-	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-		s.readinessAt, s.readinessErr = now, err
-	}
-	return err
-}
-
-func (s *Server) checkReadyUncached(ctx context.Context) error {
-	if s.authority == nil {
-		return errors.New("authority is not configured")
-	}
-	if err := s.authority.CheckReady(ctx); err != nil {
+	if err := s.nativeV1Resolver.CheckReady(ctx); err != nil {
 		return err
 	}
-	if s.economy != nil {
-		if err := s.economy.CheckReady(ctx); err != nil {
-			return err
-		}
-	}
-	if s.worker != nil {
-		if err := s.worker.CheckReady(ctx); err != nil {
-			return err
-		}
-	}
-	if s.nativeRegistry != nil {
-		if err := s.nativeRegistry.CheckReady(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func pair(path string, handler http.Handler) struct {
-	path    string
-	handler http.Handler
-} {
-	return struct {
-		path    string
-		handler http.Handler
-	}{path: path, handler: handler}
+	return s.nativeV1Relayer.CheckReady(ctx)
 }
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
-	expected := []byte(s.config.BearerToken)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/livez" {
+		if r.URL.Path == "/livez" || r.URL.Path == "/readyz" || r.URL.Path == "/healthz" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		authorization := strings.TrimSpace(r.Header.Get("Authorization"))
-		provided := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
-		if len(provided) != len(expected) || subtle.ConstantTimeCompare([]byte(provided), expected) != 1 {
-			w.Header().Set("WWW-Authenticate", "Bearer")
+		value, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || subtle.ConstantTimeCompare([]byte(strings.TrimSpace(value)), []byte(s.token)) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -304,20 +122,11 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) boundedContext(ctx context.Context, requestedDeadlineMS int64) (context.Context, context.CancelFunc, error) {
-	if ctx == nil {
-		return nil, nil, errors.New("nil RPC context")
-	}
-	deadline := s.now().Add(s.config.CallTimeout)
-	if requestedDeadlineMS > 0 {
-		requested := time.UnixMilli(requestedDeadlineMS)
-		if requested.Before(deadline) {
-			deadline = requested
-		}
-	}
-	if !s.now().Before(deadline) {
-		return nil, nil, rpcError(connect.CodeDeadlineExceeded, "DEADLINE_EXCEEDED", "request deadline has elapsed")
-	}
-	bounded, cancel := context.WithDeadline(ctx, deadline)
-	return bounded, cancel, nil
+func jsonStatus(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(body))
 }
+
+func fmtError(message string, err error) error { return errors.New(message + ": " + err.Error()) }

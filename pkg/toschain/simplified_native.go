@@ -8,7 +8,6 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
-	"github.com/tosnetwork/tos-protocol/pkg/nativeprotocol"
 )
 
 // SimplifiedNativeResolver reads the deterministic object account directly.
@@ -16,7 +15,7 @@ import (
 type SimplifiedNativeResolver struct {
 	chain     *Adapter
 	locator   *nativecore.Locator
-	network   nativeprotocol.NetworkDomain
+	network   *nativev1.NetworkDomain
 	mu        sync.Mutex
 	highWater uint64
 }
@@ -25,9 +24,7 @@ func NewSimplifiedNativeResolver(chain *Adapter, locator *nativecore.Locator) (*
 	if chain == nil || locator == nil || locator.Network == nil || chain.network != locator.Network.NetworkId {
 		return nil, errors.New("invalid simplified Native resolver configuration")
 	}
-	return &SimplifiedNativeResolver{chain: chain, locator: locator, network: nativeprotocol.NetworkDomain{
-		NetworkID: locator.Network.NetworkId, GenesisRootHash: locator.Network.GenesisRootHash, GenesisFileHash: locator.Network.GenesisFileHash,
-	}}, nil
+	return &SimplifiedNativeResolver{chain: chain, locator: locator, network: locator.Network}, nil
 }
 
 func (r *SimplifiedNativeResolver) CheckReady(ctx context.Context) error {

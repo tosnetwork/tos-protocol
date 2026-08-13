@@ -28,18 +28,15 @@ import (
 // TosctlBackendConfig is the concrete TOS wallet backend. Exact nanoTOS and
 // non-interactive flags require the coordinated Phase 4B-1 tosctl build.
 type TosctlBackendConfig struct {
-	Network            string `json:"network"`
-	Binary             string `json:"binary"`
-	ConfigPath         string `json:"configPath"`
-	VaultURL           string `json:"vaultUrl"`
-	RPCURL             string `json:"rpcUrl"`
-	GenesisRootHash    string `json:"genesisRootHash"`
-	GenesisFileHash    string `json:"genesisFileHash"`
-	WalletName         string `json:"walletName"`
-	Payer              string `json:"payer"`
-	Lookback           int    `json:"lookback,omitempty"`
-	RecoveryWaitMillis uint64 `json:"recoveryWaitMillis,omitempty"`
-	PollMillis         uint64 `json:"pollMillis,omitempty"`
+	Network         string `json:"network"`
+	Binary          string `json:"binary"`
+	ConfigPath      string `json:"configPath"`
+	VaultURL        string `json:"vaultUrl"`
+	RPCURL          string `json:"rpcUrl"`
+	GenesisRootHash string `json:"genesisRootHash"`
+	GenesisFileHash string `json:"genesisFileHash"`
+	WalletName      string `json:"walletName"`
+	Payer           string `json:"payer"`
 }
 type TosctlBackend struct {
 	network, binary, vaultURL, walletName, payer string
@@ -47,10 +44,8 @@ type TosctlBackend struct {
 	configFile                                   *os.File
 	client                                       *chain.Client
 	genesisRootHash, genesisFileHash             string
-	lookback                                     int
-	recoveryWait, poll                           time.Duration
 	enrollmentBinding                            string
-	mu, configMu                                 sync.Mutex
+	configMu                                     sync.Mutex
 }
 
 const PreparedContractCellVersion = "tosctl.wallet-prepared-send.v1"
@@ -93,36 +88,14 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.Lookback == 0 {
-		c.Lookback = 64
-	}
-	if c.Lookback < 1 || c.Lookback > 100 {
-		return nil, errors.New("invalid tosctl recovery lookback")
-	}
-	recovery := time.Duration(c.RecoveryWaitMillis) * time.Millisecond
-	if recovery == 0 {
-		recovery = 30 * time.Second
-	}
-	if recovery > 2*time.Minute {
-		return nil, errors.New("invalid tosctl recovery wait")
-	}
-	poll := time.Duration(c.PollMillis) * time.Millisecond
-	if poll == 0 {
-		poll = time.Second
-	}
-	if poll < 100*time.Millisecond || poll > 5*time.Second {
-		return nil, errors.New("invalid tosctl recovery poll")
-	}
 	configFile, err := pinnedConfig(rawConfig)
 	if err != nil {
 		return nil, err
 	}
 	bindingBytes, _ := json.Marshal(struct {
-		Version, ActionVersion, Network, RPCURL, GenesisRootHash, GenesisFileHash, WalletName, Payer, ConfigDigest, BinaryDigest, VaultDigest string
-		Lookback                                                                                                                              int
-		RecoveryWaitMillis, PollMillis                                                                                                        int64
-	}{"1", chain.ChainActionVersion, c.Network, c.RPCURL, c.GenesisRootHash, c.GenesisFileHash, c.WalletName, payer, sha256Text(rawConfig), binaryIdentity.digest, sha256Text([]byte(strings.TrimSpace(c.VaultURL))), c.Lookback, recovery.Milliseconds(), poll.Milliseconds()})
-	return &TosctlBackend{network: c.Network, binary: c.Binary, binaryIdentity: binaryIdentity, configFile: configFile, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, lookback: c.Lookback, recoveryWait: recovery, poll: poll, enrollmentBinding: sha256Text(bindingBytes)}, nil
+		Version, Network, RPCURL, GenesisRootHash, GenesisFileHash, WalletName, Payer, ConfigDigest, BinaryDigest, VaultDigest string
+	}{"atos-native-sender-v1", c.Network, c.RPCURL, c.GenesisRootHash, c.GenesisFileHash, c.WalletName, payer, sha256Text(rawConfig), binaryIdentity.digest, sha256Text([]byte(strings.TrimSpace(c.VaultURL)))})
+	return &TosctlBackend{network: c.Network, binary: c.Binary, binaryIdentity: binaryIdentity, configFile: configFile, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, enrollmentBinding: sha256Text(bindingBytes)}, nil
 }
 
 func (b *TosctlBackend) EnrollmentBinding() string { return b.enrollmentBinding }
@@ -145,16 +118,20 @@ func (b *TosctlBackend) SendContractCell(ctx context.Context, destination string
 }
 
 func (b *TosctlBackend) PrepareContractCell(ctx context.Context, destination string, amountNanoTOS uint64, bodyBOCBase64, stateInitBOCBase64 string) (string, string, error) {
-	if b == nil || amountNanoTOS == 0 || bodyBOCBase64 == "" || stateInitBOCBase64 == "" {
+	if b == nil || amountNanoTOS == 0 || !validBOC(bodyBOCBase64) || (stateInitBOCBase64 != "" && !validBOC(stateInitBOCBase64)) {
 		return "", "", errors.New("invalid contract-cell send")
 	}
 	destination, err := toschain.CanonicalAddress(destination)
 	if err != nil {
 		return "", "", err
 	}
-	out, err := b.run(ctx, "wallet", "send", "--from", b.walletName, "--to", destination,
-		"--amount-nanotos", strconv.FormatUint(amountNanoTOS, 10), "--body-boc", bodyBOCBase64,
-		"--state-init-boc", stateInitBOCBase64, "--build-only")
+	args := []string{"wallet", "send", "--from", b.walletName, "--to", destination,
+		"--amount-nanotos", strconv.FormatUint(amountNanoTOS, 10), "--body-boc", bodyBOCBase64}
+	if stateInitBOCBase64 != "" {
+		args = append(args, "--state-init-boc", stateInitBOCBase64)
+	}
+	args = append(args, "--build-only")
+	out, err := b.run(ctx, args...)
 	if err != nil {
 		return "", "", err
 	}
@@ -172,6 +149,11 @@ func (b *TosctlBackend) PrepareContractCell(ctx context.Context, destination str
 		return "", "", errors.New("tosctl returned invalid prepared contract BOC")
 	}
 	return response.MessageBOCBase64, sha256Text(raw), nil
+}
+
+func validBOC(value string) bool {
+	raw, err := base64.StdEncoding.DecodeString(value)
+	return err == nil && len(raw) > 0 && len(raw) <= 256<<10 && base64.StdEncoding.EncodeToString(raw) == value
 }
 
 func (b *TosctlBackend) BroadcastPreparedContractCell(ctx context.Context, messageBOCBase64, messageDigest string) error {
@@ -210,9 +192,9 @@ type tosctlWallet struct {
 	Seqno      any    `json:"seqno"`
 }
 
-func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, error) {
+func (b *TosctlBackend) CheckReady(ctx context.Context) error {
 	if b == nil || b.client == nil {
-		return BackendCapabilities{}, errors.New("invalid tosctl backend")
+		return errors.New("invalid tosctl backend")
 	}
 	var master struct {
 		Type string `json:"@type"`
@@ -235,18 +217,18 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 		} `json:"init"`
 	}
 	if err := b.client.Call(ctx, "getMasterchainInfo", struct{}{}, &master); err != nil {
-		return BackendCapabilities{}, err
+		return err
 	}
 	if master.Init.RootHash != b.genesisRootHash || master.Init.FileHash != b.genesisFileHash {
-		return BackendCapabilities{}, errors.New("TOS genesis identity mismatch")
+		return errors.New("TOS genesis identity mismatch")
 	}
 	out, err := b.run(ctx, "wallet", "ls", "--format", "json")
 	if err != nil {
-		return BackendCapabilities{}, err
+		return err
 	}
 	var wallets []tosctlWallet
 	if json.Unmarshal(out, &wallets) != nil {
-		return BackendCapabilities{}, errors.New("invalid tosctl wallet list")
+		return errors.New("invalid tosctl wallet list")
 	}
 	found := false
 	for _, wallet := range wallets {
@@ -256,13 +238,13 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 		}
 	}
 	if !found {
-		return BackendCapabilities{}, errors.New("configured tosctl payer wallet is unavailable")
+		return errors.New("configured tosctl payer wallet is unavailable")
 	}
-	return BackendCapabilities{Version: ProtocolVersion, Network: b.network, RecoverByActionID: true, SearchBeforeBroadcast: true}, nil
+	return nil
 }
 
 func (b *TosctlBackend) CheckContractCellReady(ctx context.Context) error {
-	if _, err := b.CheckReady(ctx); err != nil {
+	if err := b.CheckReady(ctx); err != nil {
 		return err
 	}
 	help, err := b.run(ctx, "wallet", "send", "--help")
@@ -275,48 +257,6 @@ func (b *TosctlBackend) CheckContractCellReady(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-func (b *TosctlBackend) Publish(ctx context.Context, a chain.Action, recovering bool) (chain.ActionReceipt, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if ref, found, err := b.find(ctx, a); err != nil {
-		return chain.ActionReceipt{}, err
-	} else if found {
-		return receiptFor(a, ref), nil
-	}
-	if recovering {
-		return chain.ActionReceipt{}, errors.New("uncertain action is outside authoritative recovery visibility")
-	}
-	_, commandErr := b.run(ctx, "wallet", "send", "--from", b.walletName, "--to", a.Payee, "--amount-nanotos", strconv.FormatUint(a.AmountNanoTOS, 10), "--message", a.Comment, "--yes")
-	deadline := time.Now().Add(b.recoveryWait)
-	for {
-		ref, found, err := b.find(ctx, a)
-		if err == nil && found {
-			return receiptFor(a, ref), nil
-		}
-		if ctx.Err() != nil {
-			return chain.ActionReceipt{}, ctx.Err()
-		}
-		if !time.Now().Before(deadline) {
-			if commandErr != nil {
-				return chain.ActionReceipt{}, fmt.Errorf("tosctl publish failed and recovery found no transaction: %w", commandErr)
-			}
-			return chain.ActionReceipt{}, errors.New("published transaction was not discovered")
-		}
-		timer := time.NewTimer(b.poll)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return chain.ActionReceipt{}, ctx.Err()
-		case <-timer.C:
-		}
-	}
-}
-func (b *TosctlBackend) find(ctx context.Context, a chain.Action) (string, bool, error) {
-	return toschain.FindExactPayment(ctx, b.client, a.Payer, a.Payee, a.AmountNanoTOS, a.Comment, b.lookback)
-}
-func receiptFor(a chain.Action, ref string) chain.ActionReceipt {
-	return chain.ActionReceipt{Version: a.Version, ActionID: a.ActionID, Network: a.Network, Kind: a.Kind, CommitmentKind: a.CommitmentKind, ObjectID: a.ObjectID, Digest: a.Digest, Reference: ref, Payer: a.Payer, Payee: a.Payee, AmountNanoTOS: a.AmountNanoTOS, Comment: a.Comment}
 }
 func (b *TosctlBackend) run(ctx context.Context, args ...string) ([]byte, error) {
 	if b == nil {

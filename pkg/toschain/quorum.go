@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/tosnetwork/tos-protocol/pkg/identity"
 )
 
 type consensusObservation struct {
@@ -46,7 +44,7 @@ func (a *Adapter) consensus(ctx context.Context) (consensusObservation, []*rpcNo
 		}
 		if value.Type != "ext.blocks.consensusBlock" || value.ConsensusBlock == 0 ||
 			value.Timestamp <= 0 || value.LastBlockUtime <= 0 ||
-			value.LastBlockUtime > value.Timestamp+int64(identity.MaxClockSkew/time.Second) {
+			value.LastBlockUtime > value.Timestamp+int64(maxClockSkew/time.Second) {
 			return consensusVote{}, errors.New("invalid TOS consensus-block response")
 		}
 		// timestamp is when this particular process first observed the block
