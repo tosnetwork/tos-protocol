@@ -5,19 +5,19 @@
     "package_digest": "sha256:9969615a72294122ca60df073c1fd8320769e438d5a3081b4fbc28404bdd86e8"
   },
   "negative_mutations": [
-    "requester_agent_id",
-    "requester_identity.controller",
-    "provider_identity.canonical_uri",
-    "subtotal_atomic",
-    "execution_deadline_unix_nanos",
-    "underlying_service_quote_ref",
-    "receipt.started_unix_nanos",
-    "receipt.signature_algorithm",
-    "signer_authorization.signature_algorithm",
-    "requester_release.partial_refund",
-    "dispute_resolution.outcome",
-    "dispute_resolution.resolution_digest",
-    "finality_checkpoint_regression",
-    "network_id"
+    {"name":"requester_agent_id","operation":{"op":"replace","path":"/requester_agent_id","value":"attacker-agent"},"expected_code":"TUPLE_MISMATCH","expected_field":"requester_agent_id"},
+    {"name":"requester_identity.controller","operation":{"op":"replace","path":"/requester_identity/controllers/0","value":"0:3333333333333333333333333333333333333333333333333333333333333333"},"expected_code":"TUPLE_MISMATCH","expected_field":"requester_identity.controllers"},
+    {"name":"provider_identity.canonical_uri","operation":{"op":"replace","path":"/provider_identity/canonical_uri","value":"tos://agent/attacker"},"expected_code":"TUPLE_MISMATCH","expected_field":"provider_identity.canonical_uri"},
+    {"name":"subtotal_atomic","operation":{"op":"replace","path":"/quote/subtotal_atomic","value":"1"},"expected_code":"TUPLE_MISMATCH","expected_field":"quote.subtotal_atomic"},
+    {"name":"execution_deadline_unix_nanos","operation":{"op":"replace","path":"/quote/execution_deadline_unix_nanos","value":99000000},"expected_code":"TUPLE_MISMATCH","expected_field":"quote.execution_deadline_unix_nanos"},
+    {"name":"underlying_service_quote_ref","operation":{"op":"replace","path":"/quote/underlying_service_quote_ref","value":"attacker-quote"},"expected_code":"TUPLE_MISMATCH","expected_field":"quote.underlying_service_quote_ref"},
+    {"name":"receipt.started_unix_nanos","operation":{"op":"replace","path":"/receipt/started_unix_nanos","value":1},"expected_code":"TUPLE_MISMATCH","expected_field":"receipt.started_unix_nanos"},
+    {"name":"receipt.signature_algorithm","operation":{"op":"replace","path":"/receipt/signature_algorithm","value":"attacker"},"expected_code":"TUPLE_MISMATCH","expected_field":"receipt.signature_algorithm"},
+    {"name":"signer_authorization.signature_algorithm","operation":{"op":"replace","path":"/signer_authorization/signature_algorithm","value":"attacker"},"expected_code":"SIGNER_UNAUTHORIZED","expected_field":"signer_authorization.signature_algorithm"},
+    {"name":"requester_release.partial_refund","operation":{"op":"replace","path":"/outcome/charged_atomic","value":"500"},"expected_code":"OUTCOME_INVALID","expected_field":"outcome.charged_atomic"},
+    {"name":"dispute_resolution.outcome","operation":{"op":"replace","path":"/outcome/dispute_outcome","value":"attacker_outcome"},"expected_code":"OUTCOME_INVALID","expected_field":"outcome.dispute_outcome"},
+    {"name":"dispute_resolution.resolution_digest","operation":{"op":"replace","path":"/outcome/resolution_digest","value":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"expected_code":"DIGEST_MISMATCH","expected_field":"outcome.resolution_digest"},
+    {"name":"finality_checkpoint_regression","operation":{"op":"replace","path":"/quote/commitment_ref/finalized_checkpoint","value":1},"expected_code":"FINALITY_REGRESSION","expected_field":"quote.commitment_ref"},
+    {"name":"network_id","operation":{"op":"replace","path":"/network_id","value":"tos-other"},"expected_code":"NETWORK_MISMATCH","expected_field":"network_id"}
   ]
 }

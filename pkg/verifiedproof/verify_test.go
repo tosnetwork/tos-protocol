@@ -118,14 +118,23 @@ func TestNormativeVector(t *testing.T) {
 			CanonicalCBORBase64 string `json:"canonical_cbor_base64"`
 			PackageDigest       string `json:"package_digest"`
 		} `json:"positive"`
-		NegativeMutations []string `json:"negative_mutations"`
+		NegativeMutations []struct {
+			Name      string `json:"name"`
+			Operation struct {
+				Op    string `json:"op"`
+				Path  string `json:"path"`
+				Value any    `json:"value"`
+			} `json:"operation"`
+			ExpectedCode  Code   `json:"expected_code"`
+			ExpectedField string `json:"expected_field"`
+		} `json:"negative_mutations"`
 	}{}
 	path := filepath.Join("testdata", "tos_verified_v1.json")
 	if os.Getenv("UPDATE_VERIFIED_PROOF_VECTOR") == "1" {
 		vector.Version = Version
 		vector.Positive.CanonicalCBORBase64 = base64.StdEncoding.EncodeToString(b)
 		vector.Positive.PackageDigest = d
-		vector.NegativeMutations = []string{"requester_agent_id", "requester_identity.controller", "provider_identity.canonical_uri", "subtotal_atomic", "execution_deadline_unix_nanos", "underlying_service_quote_ref", "receipt.started_unix_nanos", "receipt.signature_algorithm", "signer_authorization.signature_algorithm", "requester_release.partial_refund", "dispute_resolution.outcome", "dispute_resolution.resolution_digest", "finality_checkpoint_regression", "network_id"}
+		t.Fatal("UPDATE_VERIFIED_PROOF_VECTOR must not discard executable negative mutation contracts")
 		encoded, marshalErr := json.MarshalIndent(vector, "", "  ")
 		if marshalErr != nil {
 			t.Fatal(marshalErr)
@@ -146,6 +155,11 @@ func TestNormativeVector(t *testing.T) {
 	}
 	if vector.Version != Version || vector.Positive.PackageDigest != d || vector.Positive.CanonicalCBORBase64 != base64.StdEncoding.EncodeToString(b) || len(vector.NegativeMutations) < 12 {
 		t.Fatalf("normative vector artifact differs from implementation")
+	}
+	for _, mutation := range vector.NegativeMutations {
+		if mutation.Name == "" || mutation.Operation.Op != "replace" || !strings.HasPrefix(mutation.Operation.Path, "/") || mutation.ExpectedCode == "" || mutation.ExpectedField == "" {
+			t.Fatalf("negative mutation is not executable: %+v", mutation)
+		}
 	}
 }
 func TestRejectsNetworkSignerOutcomeAndNonCanonicalCBOR(t *testing.T) {
