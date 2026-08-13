@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,7 +15,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/verifiedproof"
@@ -25,6 +29,7 @@ func main() {
 	network := flag.String("network", "", "required TOS network identity")
 	domain := flag.String("domain", "", "required gateway trust domain")
 	observerCommand := flag.String("observer-command", "", "absolute read-only quorum observer executable")
+	observerCommandSHA256 := flag.String("observer-command-sha256", "", "required sha256:<hex> digest pin for --observer-command")
 	protocolURL := flag.String("protocol-url", "", "read-only tos-protocol RPC URL")
 	protocolTokenFile := flag.String("protocol-token-file", "", "file containing the tos-protocol bearer token")
 	flag.Parse()
@@ -32,7 +37,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: tos-verified-proof [--json] --network ID --domain DOMAIN verify PACKAGE.cbor")
 		os.Exit(2)
 	}
-	data, err := os.ReadFile(flag.Arg(1))
+	data, err := readBoundedFile(flag.Arg(1), 1<<20)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -43,7 +48,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "--protocol-token-file is required with --protocol-url")
 			os.Exit(2)
 		}
-		tokenBytes, e := os.ReadFile(*protocolTokenFile)
+		tokenBytes, e := readBoundedFile(*protocolTokenFile, 64<<10)
 		if e != nil {
 			fmt.Fprintln(os.Stderr, e)
 			os.Exit(2)
@@ -58,7 +63,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, "--observer-command must be absolute")
 			os.Exit(2)
 		}
-		observer = commandObserver{path: *observerCommand}
+		if !validSHA256Pin(*observerCommandSHA256) {
+			fmt.Fprintln(os.Stderr, "--observer-command-sha256=sha256:<64 lowercase hex> is required with --observer-command")
+			os.Exit(2)
+		}
+		observer = commandObserver{path: *observerCommand, digest: *observerCommandSHA256}
 	}
 	result := (verifiedproof.Verifier{Network: *network, GatewayDomain: *domain, Observer: observer}).VerifyBytes(context.Background(), data)
 	if *jsonOutput {
@@ -78,7 +87,10 @@ func main() {
 	}
 }
 
-type commandObserver struct{ path string }
+type commandObserver struct {
+	path   string
+	digest string
+}
 
 func (o commandObserver) call(ctx context.Context, request any, response any) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -87,7 +99,19 @@ func (o commandObserver) call(ctx context.Context, request any, response any) er
 	if e != nil {
 		return e
 	}
-	cmd := exec.CommandContext(ctx, o.path)
+	executable, e := openVerifiedObserverCommand(o.path, o.digest)
+	if e != nil {
+		return e
+	}
+	defer executable.Close()
+	execPath := o.path
+	extraFiles := []*os.File(nil)
+	if runtime.GOOS == "linux" {
+		execPath = "/proc/self/fd/3"
+		extraFiles = []*os.File{executable}
+	}
+	cmd := exec.CommandContext(ctx, execPath)
+	cmd.ExtraFiles = extraFiles
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}
 	cmd.Stdin = bytes.NewReader(body)
 	var stdout, stderr bytes.Buffer
@@ -102,6 +126,91 @@ func (o commandObserver) call(ctx context.Context, request any, response any) er
 		return fmt.Errorf("decode observer response: %w", e)
 	}
 	return nil
+}
+
+func validSHA256Pin(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, c := range value[len("sha256:"):] {
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func openVerifiedObserverCommand(path, expectedDigest string) (*os.File, error) {
+	if !validSHA256Pin(expectedDigest) {
+		return nil, errors.New("valid observer command SHA-256 pin is required")
+	}
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 || pathInfo.Mode().Perm()&0o111 == 0 {
+		return nil, errors.New("observer command is not a regular executable file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		file.Close()
+		return nil, errors.New("observer command changed while it was opened")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || os.Geteuid() == 0 || info.Mode().Perm()&0o022 != 0 {
+		file.Close()
+		return nil, errors.New("observer command must be root-owned, non-group-writable, and used by an unprivileged verifier")
+	}
+	for directory := filepath.Dir(path); ; directory = filepath.Dir(directory) {
+		directoryInfo, directoryErr := os.Lstat(directory)
+		if directoryErr != nil {
+			file.Close()
+			return nil, errors.New("observer command path contains an untrusted directory")
+		}
+		directoryStat, statOK := directoryInfo.Sys().(*syscall.Stat_t)
+		if !directoryInfo.IsDir() || directoryInfo.Mode()&os.ModeSymlink != 0 || directoryInfo.Mode().Perm()&0o022 != 0 || !statOK || directoryStat.Uid != 0 {
+			file.Close()
+			return nil, errors.New("observer command path contains an untrusted directory")
+		}
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	hash := sha256.New()
+	if _, err = io.Copy(hash, file); err != nil {
+		file.Close()
+		return nil, err
+	}
+	actual := fmt.Sprintf("sha256:%x", hash.Sum(nil))
+	if actual != expectedDigest {
+		file.Close()
+		return nil, errors.New("observer command SHA-256 does not match the configured pin")
+	}
+	if _, err = file.Seek(0, 0); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func readBoundedFile(path string, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		return nil, errors.New("invalid file size limit")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("file exceeds %d-byte limit", limit)
+	}
+	return data, nil
 }
 func (o commandObserver) Observe(ctx context.Context, r verifiedproof.EvidenceRequest) (verifiedproof.EvidenceObservation, error) {
 	var out verifiedproof.EvidenceObservation
