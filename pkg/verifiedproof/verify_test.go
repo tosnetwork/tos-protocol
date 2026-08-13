@@ -14,11 +14,13 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/poscommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type testObserver struct{ signer SignerObservation }
@@ -29,6 +31,28 @@ func (o testObserver) Observe(_ context.Context, r EvidenceRequest) (EvidenceObs
 		observation.ObservedUnixNanos = 20_000_000
 	}
 	return observation, nil
+}
+
+func TestEqualUnixMillisNanosRejectsOverflowAndNonPositiveTimes(t *testing.T) {
+	for _, tc := range []struct {
+		millis int64
+		nanos  int64
+	}{
+		{0, 0},
+		{-1, -int64(time.Millisecond)},
+		{math.MaxInt64, -int64(time.Millisecond)},
+		{math.MaxInt64/int64(time.Millisecond) + 1, 0},
+	} {
+		if equalUnixMillisNanos(tc.millis, tc.nanos) {
+			t.Fatalf("accepted unsafe time conversion millis=%d nanos=%d", tc.millis, tc.nanos)
+		}
+	}
+	if !equalUnixMillisNanos(20, 20_000_000) {
+		t.Fatal("rejected exact positive millisecond conversion")
+	}
+	if nanos, ok := unixMillisToNanos(0, true); !ok || nanos != 0 {
+		t.Fatal("rejected epoch start where a validity lower bound permits it")
+	}
 }
 func (o testObserver) ResolveSigner(_ context.Context, _ Package, _ int64) (SignerObservation, error) {
 	return o.signer, nil

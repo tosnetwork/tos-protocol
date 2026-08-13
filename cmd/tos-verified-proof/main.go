@@ -269,12 +269,12 @@ func readSecretFile(path string, limit int64) ([]byte, error) {
 }
 func (o commandObserver) Observe(ctx context.Context, r verifiedproof.EvidenceRequest) (verifiedproof.EvidenceObservation, error) {
 	var out verifiedproof.EvidenceObservation
-	e := o.call(ctx, map[string]any{"version": "tos_verified_observer_v1", "operation": "observe", "request": r}, &out)
+	e := o.call(ctx, map[string]any{"version": "tos_verified_observer_v2", "operation": "observe", "request": r}, &out)
 	return out, e
 }
 func (o commandObserver) ResolveSigner(ctx context.Context, p verifiedproof.Package, effectiveReceiptUnixNanos int64) (verifiedproof.SignerObservation, error) {
 	var out verifiedproof.SignerObservation
-	e := o.call(ctx, map[string]any{"version": "tos_verified_observer_v1", "operation": "resolve_signer", "package": p, "effective_receipt_unix_nanos": effectiveReceiptUnixNanos}, &out)
+	e := o.call(ctx, map[string]any{"version": "tos_verified_observer_v2", "operation": "resolve_signer", "package": p, "effective_receipt_unix_nanos": effectiveReceiptUnixNanos}, &out)
 	return out, e
 }
 

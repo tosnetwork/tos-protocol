@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"math"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -260,10 +259,11 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 		if resp.Msg.ObservedUnixMillis <= 0 {
 			return EvidenceObservation{}, errors.New("canonical receipt transaction time is unavailable")
 		}
-		if resp.Msg.ObservedUnixMillis > math.MaxInt64/int64(time.Millisecond) {
+		observedUnixNanos, ok := unixMillisToNanos(resp.Msg.ObservedUnixMillis, false)
+		if !ok {
 			return EvidenceObservation{}, errors.New("canonical receipt transaction time overflows nanoseconds")
 		}
-		observed.ObservedUnixNanos = resp.Msg.ObservedUnixMillis * int64(time.Millisecond)
+		observed.ObservedUnixNanos = observedUnixNanos
 		return observed, nil
 	case "proof-of-service":
 		v, e := poscommitment.Proto(p.ProofOfService.CanonicalCBOR)
@@ -304,5 +304,11 @@ func (o *ProtocolObserver) ResolveSigner(ctx context.Context, p Package, effecti
 		return SignerObservation{}, nil
 	}
 	v := a.Value
-	return SignerObservation{Found: true, Revoked: a.Revoked, RevokedUnixNanos: a.RevokedUnixMillis * 1e6, Network: a.AuthorizationRef.Network, AuthorizationID: v.AuthorizationId, ProviderID: v.ProviderId, CapabilityID: v.CapabilityId, CapabilityVersion: v.CapabilityVersion, SignerID: v.ExecutionSignerId, Reference: a.AuthorizationRef.Reference, SignatureAlgorithm: v.SignatureAlgorithm, PublicKey: append([]byte(nil), v.SignerPublicKey...), ValidFromUnixNanos: v.ValidFromUnixMillis * 1e6, ValidUntilUnixNanos: v.ValidUntilUnixMillis * 1e6, FinalizedCheckpoint: a.AuthorizationRef.FinalizedCheckpoint}, nil
+	validFrom, validFromOK := unixMillisToNanos(v.ValidFromUnixMillis, true)
+	validUntil, validUntilOK := unixMillisToNanos(v.ValidUntilUnixMillis, false)
+	revokedAt, revokedAtOK := unixMillisToNanos(a.RevokedUnixMillis, !a.Revoked)
+	if !validFromOK || !validUntilOK || !revokedAtOK {
+		return SignerObservation{}, errors.New("canonical signer authorization time overflows nanoseconds")
+	}
+	return SignerObservation{Found: true, Revoked: a.Revoked, RevokedUnixNanos: revokedAt, Network: a.AuthorizationRef.Network, AuthorizationID: v.AuthorizationId, ProviderID: v.ProviderId, CapabilityID: v.CapabilityId, CapabilityVersion: v.CapabilityVersion, SignerID: v.ExecutionSignerId, Reference: a.AuthorizationRef.Reference, SignatureAlgorithm: v.SignatureAlgorithm, PublicKey: append([]byte(nil), v.SignerPublicKey...), ValidFromUnixNanos: validFrom, ValidUntilUnixNanos: validUntil, FinalizedCheckpoint: a.AuthorizationRef.FinalizedCheckpoint}, nil
 }
