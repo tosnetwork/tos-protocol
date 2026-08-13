@@ -32,6 +32,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: tos-phase4d-gate --manifest /absolute/manifest.json --protocol-token-file /absolute/token [--allow-loopback]")
 		os.Exit(2)
 	}
+	if err := productiongate.ValidateManifestTrust(*manifestPath, *allowLoopback); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	manifest, err := productiongate.Load(*manifestPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

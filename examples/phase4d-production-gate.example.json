@@ -1,20 +1,21 @@
 {
   "version": "tos_phase4d_production_gate_v1",
+  "deployment_id": "atos-mainnet-production-a",
   "network": "tos-mainnet",
   "gateway_domain": "atos.im",
   "protocol_observer_url": "https://protocol-verifier.example.com",
   "atos_replicas": [
-    {"id":"atos-a","operator":"gateway-a","url":"https://atos-a.example.com/readyz"},
-    {"id":"atos-b","operator":"gateway-b","url":"https://atos-b.example.com/readyz"}
+    {"id":"atos-a","operator":"gateway-a","url":"https://atos-a.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"},
+    {"id":"atos-b","operator":"gateway-b","url":"https://atos-b.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"}
   ],
   "protocol_replicas": [
-    {"id":"protocol-a","operator":"gateway-a","url":"https://protocol-a.example.com/readyz"},
-    {"id":"protocol-b","operator":"gateway-b","url":"https://protocol-b.example.com/readyz"}
+    {"id":"protocol-a","operator":"gateway-a","url":"https://protocol-a.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"},
+    {"id":"protocol-b","operator":"gateway-b","url":"https://protocol-b.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"}
   ],
   "chain_endpoints": [
-    {"id":"validator-a","operator":"validator-a","url":"https://validator-a.example.com/readyz"},
-    {"id":"validator-b","operator":"validator-b","url":"https://validator-b.example.com/readyz"},
-    {"id":"validator-c","operator":"validator-c","url":"https://validator-c.example.com/readyz"}
+    {"id":"validator-a","operator":"validator-a","url":"https://validator-a.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"},
+    {"id":"validator-b","operator":"validator-b","url":"https://validator-b.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"},
+    {"id":"validator-c","operator":"validator-c","url":"https://validator-c.example.com/readyz","response_sha256":"sha256:REPLACE_WITH_EXACT_READY_BODY_DIGEST"}
   ],
   "chain_quorum": 2,
   "agent_code_hashes": ["tvm-cell-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
@@ -29,7 +30,10 @@
     "url": "https://monitoring.example.com/phase4d/metrics",
     "required_metrics": [
       {"name":"atos_reconciler_healthy","minimum":1,"maximum":1},
-      {"name":"atos_proof_reconciliation_lag_seconds","maximum":30}
+      {"name":"atos_protocol_quorum_healthy","minimum":1,"maximum":1},
+      {"name":"atos_proof_reconciliation_lag_seconds","maximum":30},
+      {"name":"atos_verified_unresolved_operations","maximum":0},
+      {"name":"atos_settlement_failures","maximum":0}
     ]
   },
   "reconciliation": {"subject":"reconciliation","path":"/var/lib/atos/evidence/reconciliation.json","sha256":"sha256:2222222222222222222222222222222222222222222222222222222222222222","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"},

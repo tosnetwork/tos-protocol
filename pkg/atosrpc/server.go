@@ -18,6 +18,8 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 )
 
+const readinessProbeTimeout = 5 * time.Second
+
 // Server implements the ATOS trust/economic/proof/execution services,
 // including the purpose-specific Managed financial-integrity anchor boundary,
 // over one authenticated durable Edge boundary.
@@ -169,7 +171,8 @@ func (s *Server) Handler() http.Handler {
 	})
 	readiness := func(w http.ResponseWriter, r *http.Request) {
 		// Client cancellation must not poison the shared readiness cache.
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), s.config.CallTimeout)
+		timeout := min(s.config.CallTimeout, readinessProbeTimeout)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), timeout)
 		defer cancel()
 		if err := s.checkReady(ctx); err != nil {
 			w.Header().Set("Cache-Control", "no-store")

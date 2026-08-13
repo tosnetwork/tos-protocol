@@ -10,11 +10,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -23,20 +23,29 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 )
 
 const (
-	Version        = "tos_phase4d_production_gate_v1"
-	maxBodyBytes   = 1 << 20
-	maxConfigBytes = 1 << 20
-	maxEvidenceAge = int64((10 * 365 * 24 * time.Hour) / time.Second)
+	Version               = "tos_phase4d_production_gate_v1"
+	EvidenceVersion       = "tos_phase4d_evidence_v1"
+	maxBodyBytes          = 1 << 20
+	maxConfigBytes        = 1 << 20
+	maxCustodyEvidenceAge = int64((90 * 24 * time.Hour) / time.Second)
+	maxReconciliationAge  = int64((24 * time.Hour) / time.Second)
+	maxBackupAge          = int64((48 * time.Hour) / time.Second)
+	maxRestoreDrillAge    = int64((90 * 24 * time.Hour) / time.Second)
+	maxIncidentDrillAge   = int64((180 * 24 * time.Hour) / time.Second)
 )
 
 type Endpoint struct {
-	ID       string `json:"id"`
-	Operator string `json:"operator"`
-	URL      string `json:"url"`
+	ID             string `json:"id"`
+	Operator       string `json:"operator"`
+	URL            string `json:"url"`
+	ResponseSHA256 string `json:"response_sha256"`
 }
 
 type Custody struct {
@@ -76,6 +85,7 @@ type Proof struct {
 
 type Manifest struct {
 	Version             string     `json:"version"`
+	DeploymentID        string     `json:"deployment_id"`
 	Network             string     `json:"network"`
 	GatewayDomain       string     `json:"gateway_domain"`
 	ProtocolObserverURL string     `json:"protocol_observer_url"`
@@ -134,17 +144,47 @@ func Load(path string) (Manifest, error) {
 	if err != nil || !os.SameFile(info, openedInfo) || !openedInfo.Mode().IsRegular() || openedInfo.Mode().Perm()&0o022 != 0 {
 		return Manifest{}, errors.New("production gate manifest changed while opening")
 	}
-	limited := io.LimitReader(file, maxConfigBytes+1)
-	decoder := json.NewDecoder(limited)
-	decoder.DisallowUnknownFields()
+	data, err := io.ReadAll(io.LimitReader(file, maxConfigBytes+1))
+	if err != nil || len(data) > maxConfigBytes {
+		return Manifest{}, errors.New("production gate manifest is unavailable or oversized")
+	}
 	var manifest Manifest
-	if err := decoder.Decode(&manifest); err != nil {
+	if err := jsonstrict.Decode(data, &manifest); err != nil {
 		return Manifest{}, err
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return Manifest{}, errors.New("production gate manifest contains trailing data")
-	}
 	return manifest, nil
+}
+
+// ValidateManifestTrust requires a root-controlled path for a real production
+// run. Local acceptance may explicitly relax only this ownership requirement;
+// Load still enforces strict parsing, permissions and TOCTOU checks.
+func ValidateManifestTrust(path string, allowLocal bool) error {
+	if allowLocal {
+		return nil
+	}
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return errors.New("production manifest trust path must be absolute and clean")
+	}
+	for current := path; ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o022 != 0 {
+			return errors.New("production manifest path is not root-controlled")
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || stat.Uid != 0 {
+			return errors.New("production manifest path must be root-owned")
+		}
+		if current == path && !info.Mode().IsRegular() {
+			return errors.New("production manifest must be regular")
+		}
+		if current != path && !info.IsDir() {
+			return errors.New("production manifest parent must be a directory")
+		}
+		if current == string(filepath.Separator) {
+			break
+		}
+	}
+	return nil
 }
 
 func (a Auditor) Audit(ctx context.Context, manifest Manifest) Report {
@@ -171,19 +211,19 @@ func (a Auditor) Audit(ctx context.Context, manifest Manifest) Report {
 	}
 	for _, group := range [][]Endpoint{manifest.ATOSReplicas, manifest.ProtocolReplicas, manifest.ChainEndpoints} {
 		for _, endpoint := range group {
-			add("endpoint:"+endpoint.ID, probe(ctx, client, endpoint.URL, nil))
+			add("endpoint:"+endpoint.ID, probeEndpoint(ctx, client, endpoint))
 		}
 	}
 	for _, custody := range manifest.Custody {
 		add("custody-health:"+custody.Purpose, probeCustody(ctx, client, custody))
 		subject := fmt.Sprintf("custody:%s:%s:%s", custody.Purpose, custody.Backend, custody.KeyID)
-		add("custody-evidence:"+custody.Purpose, verifyEvidence(custody.Evidence, now, subject))
+		add("custody-evidence:"+custody.Purpose, verifyEvidence(custody.Evidence, now, subject, maxCustodyEvidenceAge, manifest))
 	}
 	add("monitoring", probe(ctx, client, manifest.Monitoring.URL, manifest.Monitoring.RequiredMetrics))
-	add("reconciliation", verifyEvidence(manifest.Reconciliation, now, "reconciliation"))
-	add("backup", verifyEvidence(manifest.Backup, now, "backup"))
-	add("restore-drill", verifyEvidence(manifest.RestoreDrill, now, "restore-drill"))
-	add("incident-drill", verifyEvidence(manifest.IncidentDrill, now, "incident-drill"))
+	add("reconciliation", verifyEvidence(manifest.Reconciliation, now, "reconciliation", maxReconciliationAge, manifest))
+	add("backup", verifyEvidence(manifest.Backup, now, "backup", maxBackupAge, manifest))
+	add("restore-drill", verifyEvidence(manifest.RestoreDrill, now, "restore-drill", maxRestoreDrillAge, manifest))
+	add("incident-drill", verifyEvidence(manifest.IncidentDrill, now, "incident-drill", maxIncidentDrillAge, manifest))
 	proof, err := readDigestFile(manifest.Proof.Path, manifest.Proof.SHA256)
 	add("proof-package-digest", err)
 	if err == nil {
@@ -198,11 +238,14 @@ func (a Auditor) Audit(ctx context.Context, manifest Manifest) Report {
 }
 
 func validateManifest(m Manifest, allowLoopback bool) error {
-	if m.Version != Version || strings.TrimSpace(m.Network) == "" || strings.TrimSpace(m.GatewayDomain) == "" {
-		return errors.New("version, network and gateway_domain are required")
+	if m.Version != Version || !validDeploymentID(m.DeploymentID) || !validTrustID(m.Network) || !validTrustID(m.GatewayDomain) {
+		return errors.New("version, deployment_id, network and gateway_domain are required")
 	}
 	if len(m.ATOSReplicas) < 2 || len(m.ProtocolReplicas) < 2 || len(m.ChainEndpoints) < 3 || m.ChainQuorum <= len(m.ChainEndpoints)/2 || m.ChainQuorum > len(m.ChainEndpoints) {
 		return errors.New("two ATOS/protocol replicas and strict-majority three-endpoint chain quorum are required")
+	}
+	if allowLoopback && !allManifestURLsLoopback(m) {
+		return errors.New("local acceptance relaxation requires every network boundary to be loopback")
 	}
 	if err := uniqueEndpoints("ATOS", m.ATOSReplicas, allowLoopback, false); err != nil {
 		return err
@@ -215,6 +258,18 @@ func validateManifest(m Manifest, allowLoopback bool) error {
 	}
 	if err := secureURL(m.ProtocolObserverURL, allowLoopback); err != nil {
 		return fmt.Errorf("protocol observer URL: %w", err)
+	}
+	observerOrigin, _ := endpointOrigin(m.ProtocolObserverURL)
+	observerMatchesReplica := false
+	for _, endpoint := range m.ProtocolReplicas {
+		origin, _ := endpointOrigin(endpoint.URL)
+		if origin == observerOrigin {
+			observerMatchesReplica = true
+			break
+		}
+	}
+	if !observerMatchesReplica {
+		return errors.New("protocol observer must use a declared protocol replica origin")
 	}
 	if len(m.AgentCodeHashes) == 0 || len(m.EscrowCodeHashes) == 0 {
 		return errors.New("reviewed Agent and TaskEscrow code-hash allowlists are required")
@@ -238,7 +293,7 @@ func validateManifest(m Manifest, allowLoopback bool) error {
 			return errors.New("duplicate or unsupported custody purpose")
 		}
 		seen[custody.Purpose] = true
-		if !slices.Contains([]string{"hsm", "kms", "vault"}, custody.Backend) || strings.TrimSpace(custody.KeyID) == "" {
+		if !slices.Contains([]string{"hsm", "kms", "vault"}, custody.Backend) || !validTrustID(custody.KeyID) {
 			return errors.New("production custody must identify an hsm, kms or vault key")
 		}
 		if err := secureURL(custody.HealthURL, allowLoopback); err != nil {
@@ -254,6 +309,7 @@ func validateManifest(m Manifest, allowLoopback bool) error {
 		return errors.New("monitoring metrics are required")
 	}
 	metricNames := make(map[string]struct{}, len(m.Monitoring.RequiredMetrics))
+	metricRequirements := make(map[string]MetricRequirement, len(m.Monitoring.RequiredMetrics))
 	for _, requirement := range m.Monitoring.RequiredMetrics {
 		if !validMetricName(requirement.Name) || (requirement.Minimum == nil && requirement.Maximum == nil) {
 			return errors.New("monitoring metric name and threshold are required")
@@ -262,6 +318,7 @@ func validateManifest(m Manifest, allowLoopback bool) error {
 			return errors.New("duplicate monitoring metric requirement")
 		}
 		metricNames[requirement.Name] = struct{}{}
+		metricRequirements[requirement.Name] = requirement
 		if requirement.Minimum != nil && (math.IsNaN(*requirement.Minimum) || math.IsInf(*requirement.Minimum, 0)) {
 			return errors.New("invalid monitoring minimum")
 		}
@@ -272,16 +329,31 @@ func validateManifest(m Manifest, allowLoopback bool) error {
 			return errors.New("monitoring metric threshold is inverted")
 		}
 	}
+	if !exactOne(metricRequirements["atos_reconciler_healthy"]) ||
+		!exactOne(metricRequirements["atos_protocol_quorum_healthy"]) ||
+		!maximumAtMost(metricRequirements["atos_proof_reconciliation_lag_seconds"], 30) ||
+		!maximumAtMost(metricRequirements["atos_verified_unresolved_operations"], 0) ||
+		!maximumAtMost(metricRequirements["atos_settlement_failures"], 0) {
+		return errors.New("required Phase 4D monitoring baselines are missing or too weak")
+	}
 	if err := secureURL(m.Monitoring.URL, allowLoopback); err != nil {
 		return err
 	}
 	return nil
 }
 
+func exactOne(requirement MetricRequirement) bool {
+	return requirement.Minimum != nil && requirement.Maximum != nil && *requirement.Minimum >= 1 && *requirement.Maximum <= 1
+}
+
+func maximumAtMost(requirement MetricRequirement, maximum float64) bool {
+	return requirement.Maximum != nil && *requirement.Maximum <= maximum
+}
+
 func uniqueEndpoints(kind string, endpoints []Endpoint, allowLoopback, distinctOperators bool) error {
-	ids, urls, operators := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	ids, urls, origins, operators := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, endpoint := range endpoints {
-		if endpoint.ID == "" || endpoint.Operator == "" || ids[endpoint.ID] || urls[endpoint.URL] {
+		if !validTrustID(endpoint.ID) || !validTrustID(endpoint.Operator) || !validSHA256(endpoint.ResponseSHA256) || ids[endpoint.ID] || urls[endpoint.URL] {
 			return fmt.Errorf("%s endpoints require unique ID, URL and operator", kind)
 		}
 		if distinctOperators && operators[endpoint.Operator] {
@@ -290,9 +362,116 @@ func uniqueEndpoints(kind string, endpoints []Endpoint, allowLoopback, distinctO
 		if err := secureURL(endpoint.URL, allowLoopback); err != nil {
 			return fmt.Errorf("%s endpoint %s: %w", kind, endpoint.ID, err)
 		}
+		origin, err := endpointOrigin(endpoint.URL)
+		if err != nil {
+			return fmt.Errorf("%s endpoint %s: %w", kind, endpoint.ID, err)
+		}
+		if !allowLoopback && origins[origin] {
+			return fmt.Errorf("%s endpoints require distinct network origins", kind)
+		}
 		ids[endpoint.ID], urls[endpoint.URL], operators[endpoint.Operator] = true, true, true
+		origins[origin] = true
 	}
 	return nil
+}
+
+func endpointOrigin(raw string) (string, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", errors.New("invalid endpoint origin")
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	host, err := normalizedHostname(parsed.Hostname())
+	if err != nil {
+		return "", err
+	}
+	port := parsed.Port()
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		port = ""
+	}
+	hostPort := host
+	if port != "" {
+		hostPort = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		hostPort = "[" + host + "]"
+	}
+	return scheme + "://" + hostPort, nil
+}
+
+func allManifestURLsLoopback(m Manifest) bool {
+	urls := []string{m.ProtocolObserverURL, m.Monitoring.URL}
+	for _, group := range [][]Endpoint{m.ATOSReplicas, m.ProtocolReplicas, m.ChainEndpoints} {
+		for _, endpoint := range group {
+			urls = append(urls, endpoint.URL)
+		}
+	}
+	for _, custody := range m.Custody {
+		urls = append(urls, custody.HealthURL)
+	}
+	for _, raw := range urls {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			return false
+		}
+		host, err := normalizedHostname(parsed.Hostname())
+		if err != nil {
+			return false
+		}
+		if host == "localhost" {
+			continue
+		}
+		ip, err := netip.ParseAddr(host)
+		if err != nil || !ip.IsLoopback() {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizedHostname(value string) (string, error) {
+	host := strings.TrimSuffix(strings.ToLower(value), ".")
+	if host == "" || strings.ContainsAny(host, "\x00\r\n\t ") {
+		return "", errors.New("invalid endpoint origin host")
+	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		return ip.String(), nil
+	}
+	for _, c := range host {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' {
+			continue
+		}
+		return "", errors.New("endpoint DNS host must use canonical ASCII form")
+	}
+	if strings.Contains(host, "..") || strings.HasPrefix(host, ".") || strings.HasPrefix(host, "-") || strings.HasSuffix(host, "-") {
+		return "", errors.New("invalid endpoint DNS host")
+	}
+	return host, nil
+}
+
+func validDeploymentID(value string) bool {
+	if len(value) < 3 || len(value) > 128 {
+		return false
+	}
+	for i, c := range value {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (i > 0 && c >= '0' && c <= '9') || (i > 0 && (c == '-' || c == '_' || c == '.')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validTrustID(value string) bool {
+	if len(value) < 1 || len(value) > 253 {
+		return false
+	}
+	for _, c := range value {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == ':' || c == '@' || c == '/' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func secureURL(raw string, allowLoopback bool) error {
@@ -306,8 +485,11 @@ func secureURL(raw string, allowLoopback bool) error {
 	if parsed.Scheme != "http" || !allowLoopback {
 		return errors.New("probe URL must use HTTPS")
 	}
-	host := parsed.Hostname()
-	if strings.EqualFold(host, "localhost") {
+	host, err := normalizedHostname(parsed.Hostname())
+	if err != nil {
+		return err
+	}
+	if host == "localhost" {
 		return nil
 	}
 	ip, err := netip.ParseAddr(host)
@@ -324,6 +506,26 @@ func validCodeHash(value string) bool {
 	}
 	_, err := hex.DecodeString(value[len(prefix):])
 	return err == nil && value == strings.ToLower(value)
+}
+
+func validSHA256(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != 71 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
+}
+
+func probeEndpoint(ctx context.Context, client *http.Client, endpoint Endpoint) error {
+	body, err := readProbe(ctx, client, endpoint.URL)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(body)
+	if "sha256:"+hex.EncodeToString(digest[:]) != endpoint.ResponseSHA256 {
+		return errors.New("endpoint readiness response digest mismatch")
+	}
+	return nil
 }
 
 func probe(ctx context.Context, client *http.Client, rawURL string, required []MetricRequirement) error {
@@ -382,15 +584,9 @@ func probeCustody(ctx context.Context, client *http.Client, expected Custody) er
 	if err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(body)))
-	decoder.DisallowUnknownFields()
 	var health custodyHealth
-	if err := decoder.Decode(&health); err != nil {
+	if err := jsonstrict.Decode(body, &health); err != nil {
 		return errors.New("invalid custody health response")
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return errors.New("custody health response contains trailing data")
 	}
 	if health.Version != "tos_phase4d_custody_health_v1" || !health.Healthy || health.Purpose != expected.Purpose || health.Backend != expected.Backend || health.KeyID != expected.KeyID {
 		return errors.New("custody health identity mismatch")
@@ -438,29 +634,47 @@ func metricValue(body []byte, required string) (float64, error) {
 	return result, nil
 }
 
-func verifyEvidence(e Evidence, now time.Time, expectedSubject string) error {
+type evidenceDocument struct {
+	Version       string `json:"version"`
+	Subject       string `json:"subject"`
+	DeploymentID  string `json:"deployment_id"`
+	Network       string `json:"network"`
+	GatewayDomain string `json:"gateway_domain"`
+	CompletedUnix int64  `json:"completed_unix"`
+	Result        string `json:"result"`
+}
+
+func verifyEvidence(e Evidence, now time.Time, expectedSubject string, maximumAllowedAge int64, manifest Manifest) error {
 	if e.Subject != expectedSubject || strings.TrimSpace(expectedSubject) == "" {
 		return errors.New("operator evidence subject mismatch")
 	}
-	if e.CompletedUnix <= 0 || e.MaximumAgeSeconds <= 0 || e.MaximumAgeSeconds > maxEvidenceAge {
+	if e.CompletedUnix <= 0 || e.MaximumAgeSeconds <= 0 || maximumAllowedAge <= 0 || e.MaximumAgeSeconds > maximumAllowedAge {
 		return errors.New("evidence time and bounded maximum age are required")
 	}
 	completed := time.Unix(e.CompletedUnix, 0).UTC()
 	if completed.After(now.Add(time.Minute)) || now.Sub(completed) > time.Duration(e.MaximumAgeSeconds)*time.Second {
 		return errors.New("operator evidence is stale or from the future")
 	}
-	if _, err := readDigestFile(e.Path, e.SHA256); err != nil {
+	data, err := readDigestFile(e.Path, e.SHA256)
+	if err != nil {
 		return err
 	}
+	var document evidenceDocument
+	if err := jsonstrict.Decode(data, &document); err != nil {
+		return errors.New("operator evidence document is invalid")
+	}
+	if document.Version != EvidenceVersion || document.Subject != e.Subject || document.DeploymentID != manifest.DeploymentID || document.Network != manifest.Network || document.GatewayDomain != manifest.GatewayDomain || document.CompletedUnix != e.CompletedUnix || document.Result != "passed" {
+		return errors.New("operator evidence document does not attest the required deployment result")
+	}
 	publicKey, err := base64.StdEncoding.Strict().DecodeString(e.PublicKeyBase64)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize || strings.TrimSpace(e.SignerID) == "" {
+	if err != nil || len(publicKey) != ed25519.PublicKeySize || !validTrustID(e.SignerID) {
 		return errors.New("evidence signer identity is invalid")
 	}
 	signature, err := base64.StdEncoding.Strict().DecodeString(e.SignatureBase64)
 	if err != nil || len(signature) != ed25519.SignatureSize {
 		return errors.New("evidence signature is invalid")
 	}
-	message := fmt.Sprintf("TOS-PHASE4D-EVIDENCE-V1\x00%s\x00%s\x00%d\x00%d\x00%s", e.Subject, e.SHA256, e.CompletedUnix, e.MaximumAgeSeconds, e.SignerID)
+	message := fmt.Sprintf("TOS-PHASE4D-EVIDENCE-V1\x00%s\x00%s\x00%s\x00%s\x00%s\x00%d\x00%d\x00%s", manifest.DeploymentID, manifest.Network, manifest.GatewayDomain, e.Subject, e.SHA256, e.CompletedUnix, e.MaximumAgeSeconds, e.SignerID)
 	if !ed25519.Verify(ed25519.PublicKey(publicKey), []byte(message), signature) {
 		return errors.New("evidence signature verification failed")
 	}

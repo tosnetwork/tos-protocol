@@ -12,6 +12,10 @@ the example deliberately cannot pass unchanged. Keep the manifest free of
 bearer tokens and private keys. Put the read-only verifier token in a separate
 owner-only file.
 
+For a production run the manifest file and every parent directory must be
+root-owned, non-symlink and non-group/world-writable. The loopback flag relaxes
+root ownership only for local acceptance and cannot enable remote plaintext.
+
 ```sh
 tos-phase4d-gate \
   --manifest /etc/tos/phase4d-production-gate.json \
@@ -28,7 +32,9 @@ client. A proof check uses only the read-only protocol observer.
 
 ## Evidence preparation
 
-The evidence producer computes the file SHA-256 and signs the exact message
+The evidence producer writes the strict evidence JSON (see
+`examples/phase4d-evidence.example.json`), computes its SHA-256
+and signs the exact deployment-bound message
 defined in the normative contract. Signing should use the separately governed
 audit/release key. Make the evidence files read-only before running the gate.
 The manifest is the trust root for the evidence public key and must be reviewed
