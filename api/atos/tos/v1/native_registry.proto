@@ -1,0 +1,217 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+// Phase 5A portable semantic schemas. Phase 5B owns chain mutation/resolution.
+message NativeNetworkDomainV1 {
+  string network_id = 1;
+  string genesis_root_hash = 2;
+  string genesis_file_hash = 3;
+}
+
+message NativeControllerKeyV1 {
+  string key_id = 1;
+  string algorithm = 2;
+  string public_key_base64url = 3;
+  uint32 weight = 4;
+  repeated string purposes = 5;
+}
+
+message NativeControllerPolicyV1 {
+  uint32 threshold = 1;
+  uint32 recovery_threshold = 2;
+  repeated NativeControllerKeyV1 controllers = 3;
+  repeated string recovery_key_ids = 4;
+  uint64 recovery_timelock_seconds = 5;
+}
+
+message NativeAgentBootstrapV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string object_nonce_base64url = 3;
+  string initial_controller_policy_digest = 4;
+}
+
+message NativeCapabilityBootstrapV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string owner_agent_id = 3;
+  string object_nonce_base64url = 4;
+}
+
+message NativeRegisterAgentPayloadV1 {
+  string object_nonce_base64url = 1;
+  string initial_policy_digest = 2;
+  string initial_policy_cbor_base64url = 3;
+}
+
+message NativeUpdatePolicyPayloadV1 {
+  string new_policy_digest = 1;
+  string new_policy_cbor_base64url = 2;
+}
+
+message NativeDelegationPayloadV1 {
+  string delegate_key_id = 1;
+  repeated string purposes = 2;
+  repeated string resources = 3;
+  uint64 valid_from_checkpoint = 4;
+  uint64 valid_until_checkpoint = 5;
+  uint64 max_staleness_checkpoints = 6;
+}
+
+message NativeInitiateRecoveryPayloadV1 {
+  string new_policy_digest = 1;
+  uint64 execute_after_unix_seconds = 2;
+  string new_policy_cbor_base64url = 3;
+}
+
+message NativeChainReferenceV1 {
+  sint32 workchain = 1;
+  string account = 2;
+  uint64 logical_time = 3;
+  string transaction_hash = 4;
+  string contract_code_hash = 5;
+  uint32 event_index = 6;
+}
+
+message NativeRecoverAgentPayloadV1 {
+  string new_policy_digest = 1;
+  string initiation_action_digest = 2;
+  NativeChainReferenceV1 initiation_reference = 3;
+  uint64 execute_after_unix_seconds = 4;
+}
+
+message NativeRevocationPayloadV1 {
+  string scope = 1;
+  string reason_code = 2;
+}
+
+message NativeManifestReferenceV1 {
+  string digest = 1;
+  string media_type = 2;
+  uint64 size_bytes = 3;
+  repeated string locations = 4;
+}
+
+message NativeEndpointReferenceV1 {
+  string transport = 1;
+  string endpoint_digest = 2;
+  string recipient_key_id = 3;
+}
+
+message NativeCapabilityVersionPayloadV1 {
+  string owner_agent_id = 1;
+  NativeManifestReferenceV1 manifest = 2;
+  repeated NativeEndpointReferenceV1 endpoints = 3;
+  repeated string quote_signer_key_ids = 4;
+  repeated string receipt_signer_key_ids = 5;
+  uint64 valid_from_checkpoint = 6;
+  uint64 valid_until_checkpoint = 7;
+}
+
+message NativeRegisterCapabilityPayloadV1 {
+  string object_nonce_base64url = 1;
+  NativeCapabilityVersionPayloadV1 version = 2;
+}
+
+message NativeTransferCapabilityPayloadV1 {
+  string current_owner_agent_id = 1;
+  string new_owner_agent_id = 2;
+  string new_owner_policy_digest = 3;
+  string new_owner_policy_cbor_base64url = 4;
+}
+
+message NativeRegistryActionV1 {
+  string version = 1;
+  string kind = 2;
+  NativeNetworkDomainV1 network = 3;
+  string agent_id = 4;
+  string capability_id = 5;
+  string capability_version = 6;
+  uint64 generation = 7;
+  uint64 sequence = 8;
+  string previous_state_digest = 9;
+  string policy_digest = 10;
+  string payload_digest = 11;
+  string payload_cbor_base64url = 12;
+  string nonce_base64url = 13;
+}
+
+message NativeRegistryEventV1 {
+  string version = 1;
+  string kind = 2;
+  NativeNetworkDomainV1 network = 3;
+  string action_digest = 4;
+  string agent_id = 5;
+  string capability_id = 6;
+  string capability_version = 7;
+  uint64 generation = 8;
+  uint64 sequence = 9;
+  string previous_state_digest = 10;
+  string state_digest = 11;
+}
+
+message NativeCapabilityVersionStateV1 {
+  string version = 1;
+  string payload_digest = 2;
+  bool revoked = 3;
+}
+
+message NativePendingRecoveryV1 {
+  string initiation_action_digest = 1;
+  string new_policy_digest = 2;
+  string new_policy_cbor_base64url = 3;
+  uint64 execute_after_unix_seconds = 4;
+}
+
+// Canonical logical registry state. Its deterministic CBOR digest is emitted
+// by NativeRegistryEventV1 and independently recomputed from finalized action
+// bytes by resolvers. Fields that do not apply to object_kind are present with
+// their zero value and are rejected if populated.
+message NativeRegistryStateV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string object_kind = 3;
+  string agent_id = 4;
+  string capability_id = 5;
+  uint64 generation = 6;
+  uint64 sequence = 7;
+  string predecessor_state_digest = 8;
+  string last_action_digest = 9;
+  string current_policy_digest = 10;
+  string current_policy_cbor_base64url = 11;
+  string owner_agent_id = 12;
+  string capability_bootstrap_owner_agent_id = 13;
+  string capability_nonce_base64url = 14;
+  repeated NativeCapabilityVersionStateV1 capability_versions = 15;
+  repeated string delegation_action_digests = 16;
+  NativePendingRecoveryV1 pending_recovery = 17;
+  bool tombstoned = 18;
+  string agent_nonce_base64url = 19;
+  string agent_bootstrap_policy_digest = 20;
+}
+
+message NativeEventObservationV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string event_digest = 3;
+  NativeChainReferenceV1 reference = 4;
+  uint64 finalized_checkpoint = 5;
+  string finalized_root_hash = 6;
+  string finalized_file_hash = 7;
+  uint64 block_unix_seconds = 8;
+  string inclusion_proof_digest = 9;
+}
+
+message NativeSemanticSignatureV1 {
+  string version = 1;
+  string algorithm = 2;
+  string key_id = 3;
+  string signature_base64url = 4;
+}
+
+message NativeAuthorizationSetV1 {
+  repeated NativeSemanticSignatureV1 signatures = 1;
+}
