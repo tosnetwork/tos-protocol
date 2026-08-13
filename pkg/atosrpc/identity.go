@@ -378,16 +378,29 @@ func (s *Server) CreatePrincipalBinding(
 			if existing.AgentID != req.Msg.AgentId {
 				return conflict("ALREADY_EXISTS", "principal is already bound to a different TOS Agent Identity; revoke the existing binding first")
 			}
+			if s.authority.Supports(TrustModeVerified) {
+				// Derive the immutable v2 tuple instead of trusting the cached
+				// commitment digest; stale or damaged local state cannot redirect
+				// the canonical tombstone lookup.
+				bindingDigest, digestErr := identitycommitment.BindingDigest(req.Msg.PrincipalId, req.Msg.AgentId)
+				if digestErr != nil {
+					return digestErr
+				}
+				revoked, resolveErr := resolvePrincipalBindingRevocation(ctx, s.authority, req.Msg.PrincipalId, req.Msg.AgentId, bindingDigest)
+				if resolveErr != nil {
+					return unavailable("NETWORK_UNAVAILABLE", "principal binding revocation state is unavailable")
+				}
+				if revoked {
+					return conflict("BINDING_TUPLE_REVOKED", "principal and agent binding tuple was previously revoked and cannot be reused")
+				}
+			}
 			// An idempotent replay of an ALREADY-anchored binding must not
 			// re-run verifiedTOSController against the identity's CURRENT
 			// state: a lost-response retry under a fresh idempotency_key is
-			// documented as a safe no-op regardless of what happened to the
-			// identity's assurance/network since the original successful
-			// bind -- the existing binding remains valid until explicitly
-			// revoked (see RevokePrincipalBinding's own doc comment), and
-			// ResolvePrincipalBinding would still report it ACTIVE. Gating
-			// a mere replay on current identity state would make this RPC
-			// disagree with ResolvePrincipalBinding about the same fact.
+			// documented as a safe no-op while the canonical binding remains
+			// active, regardless of later identity metadata changes. Canonical
+			// revocation is checked above so a stale local projection cannot
+			// disagree with ResolvePrincipalBinding about current state.
 			response.PrincipalId = req.Msg.PrincipalId
 			response.Identity = identity
 			response.BindingRef = &NetworkReference{Network: existing.RefNetwork, Reference: existing.RefReference}

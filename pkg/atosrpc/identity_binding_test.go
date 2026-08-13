@@ -161,6 +161,43 @@ func TestCreatePrincipalBinding_RejectsReuseOfCanonicallyRevokedTuple(t *testing
 	}
 }
 
+func TestCreatePrincipalBinding_StaleReplicaRejectsCanonicallyRevokedTuple(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000).UTC()
+	authority := new(verifiedTestAuthority)
+	first, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "first.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	stale, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "stale.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stale.Close()
+	identity := &atostosv1.AgentIdentity{AgentId: "agt_stale_rebind", CanonicalUri: "tos://agent/agt_stale_rebind", Controllers: []string{testCanonicalController(31)}, Assurance: "tos_attested"}
+	for _, server := range []*Server{first, stale} {
+		if err := server.SeedIdentity(identity); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create := func(server *Server, key string) error {
+		_, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{Context: bindingReqCtx("operator", key, now), PrincipalId: "prn_stale_rebind", AgentId: identity.AgentId}))
+		return err
+	}
+	if err := create(first, "create-first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(stale, "create-stale-projection"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.RevokePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.RevokePrincipalBindingRequest{Context: bindingReqCtx("operator", "revoke-first", now), PrincipalId: "prn_stale_rebind", ReasonCode: "ROTATED"})); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(stale, "create-after-revoke"); err == nil || connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("stale replica returned success for canonically revoked tuple: %v", err)
+	}
+}
+
 // TestCreatePrincipalBinding_RejectsSelfAssertedIdentity proves an identity
 // with no independent anchoring (self_asserted, or empty assurance) cannot
 // be bound -- a binding to an identity that can never satisfy
