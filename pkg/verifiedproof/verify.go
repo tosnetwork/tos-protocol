@@ -111,6 +111,10 @@ func (v Verifier) VerifyBytes(ctx context.Context, data []byte) Result {
 
 func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	r := Result{Version: p.Version, Network: p.NetworkID, QuoteID: p.Quote.QuoteID, JobID: p.Escrow.JobID, CapabilityID: p.Capability.CapabilityID, EscrowID: p.Escrow.EscrowID, Outcome: p.Outcome.Kind}
+	if strings.TrimSpace(v.Network) == "" || strings.TrimSpace(v.GatewayDomain) == "" {
+		r.Failures = []Failure{{CodeUnsupported, "verifier", "verifier network and gateway domain pins are required"}}
+		return r
+	}
 	hasExecution := p.Outcome.Kind != "requester_release"
 	if hasExecution && (p.SignerAuthorization == nil || p.Receipt == nil || p.ProofOfService == nil) {
 		r.Failures = []Failure{{CodeMalformed, "receipt", "execution evidence is required for this outcome"}}

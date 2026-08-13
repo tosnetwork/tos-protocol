@@ -99,6 +99,23 @@ func TestCanonicalRoundTripAndIndependentVerification(t *testing.T) {
 		t.Fatalf("failures=%+v", r.Failures)
 	}
 }
+
+func TestVerifierRejectsMissingNetworkOrDomainPin(t *testing.T) {
+	p := fixture(t)
+	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100000000}}
+	for name, verifier := range map[string]Verifier{
+		"network": {Observer: o, GatewayDomain: "atos.im"},
+		"domain":  {Observer: o, Network: "tos-test"},
+		"both":    {Observer: o},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := verifier.Verify(context.Background(), p)
+			if result.Valid || len(result.Failures) != 1 || result.Failures[0].Field != "verifier" {
+				t.Fatalf("unpinned verifier result=%+v", result)
+			}
+		})
+	}
+}
 func TestNormativeVector(t *testing.T) {
 	p := fixture(t)
 	b, err := Marshal(p)
@@ -242,7 +259,7 @@ func TestRejectsNetworkSignerOutcomeAndNonCanonicalCBOR(t *testing.T) {
 	o := testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100000000}}
 	p.NetworkID = "tos-other"
 	p.Outcome.RefundedAtomic = "301"
-	r := (Verifier{Observer: o, Network: "tos-test"}).Verify(context.Background(), p)
+	r := (Verifier{Observer: o, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), p)
 	if r.Valid || len(r.Failures) < 2 {
 		t.Fatalf("result=%+v", r)
 	}

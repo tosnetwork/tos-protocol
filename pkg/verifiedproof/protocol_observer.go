@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,8 +36,23 @@ func NewProtocolObserver(baseURL, token string) (*ProtocolObserver, error) {
 	if strings.TrimSpace(baseURL) == "" || strings.TrimSpace(token) == "" {
 		return nil, errors.New("protocol observer URL and token are required")
 	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.User != nil || parsed.Hostname() == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return nil, errors.New("protocol observer URL must be an absolute HTTP(S) URL without userinfo")
+	}
+	if parsed.Scheme == "http" && !isLoopbackObserverHost(parsed.Hostname()) {
+		return nil, errors.New("remote protocol observer URL must use HTTPS")
+	}
 	c := &http.Client{Timeout: 25 * time.Second}
 	return NewProtocolObserverWithHTTPClient(c, baseURL, token)
+}
+
+func isLoopbackObserverHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	address, err := netip.ParseAddr(host)
+	return err == nil && address.IsLoopback()
 }
 
 // NewProtocolObserverWithHTTPClient lets an embedding service reuse its

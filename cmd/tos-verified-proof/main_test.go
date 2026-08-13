@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -68,6 +69,33 @@ func TestReadBoundedFileRejectsOversizeWithoutReadingItAll(t *testing.T) {
 	}
 }
 
+func TestReadSecretFileRejectsLoosePermissionsAndSymlink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "token")
+	if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := readSecretFile(path, 64); err != nil || string(value) != "secret" {
+		t.Fatalf("secure token file rejected: value=%q err=%v", value, err)
+	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readSecretFile(path, 64); err == nil {
+		t.Fatal("group-readable token file was accepted")
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "token-link")
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readSecretFile(link, 64); err == nil {
+		t.Fatal("token symlink was accepted")
+	}
+}
+
 func TestValidSHA256Pin(t *testing.T) {
 	if !validSHA256Pin("sha256:" + strings.Repeat("a", 64)) {
 		t.Fatal("valid pin rejected")
@@ -76,5 +104,22 @@ func TestValidSHA256Pin(t *testing.T) {
 		if validSHA256Pin(invalid) {
 			t.Fatalf("invalid pin accepted: %q", invalid)
 		}
+	}
+}
+
+func TestDecodeObserverResponseRejectsUnknownAndTrailingData(t *testing.T) {
+	for name, input := range map[string]string{
+		"second value":  `{"found":true} {"found":false}`,
+		"trailing junk": `{"found":true} junk`,
+		"unknown field": `{"found":true,"attacker":true}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var response struct {
+				Found bool `json:"found"`
+			}
+			if err := decodeObserverResponse(bytes.NewBufferString(input), &response); err == nil {
+				t.Fatal("non-canonical observer response was accepted")
+			}
+		})
 	}
 }

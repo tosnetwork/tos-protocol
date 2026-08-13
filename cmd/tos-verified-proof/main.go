@@ -37,6 +37,22 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: tos-verified-proof [--json] --network ID --domain DOMAIN verify PACKAGE.cbor")
 		os.Exit(2)
 	}
+	if strings.TrimSpace(*network) == "" || strings.TrimSpace(*domain) == "" {
+		fmt.Fprintln(os.Stderr, "--network and --domain are required trust pins")
+		os.Exit(2)
+	}
+	if *protocolURL != "" && *observerCommand != "" {
+		fmt.Fprintln(os.Stderr, "choose exactly one live observer: --protocol-url or --observer-command")
+		os.Exit(2)
+	}
+	if *protocolURL == "" && *protocolTokenFile != "" {
+		fmt.Fprintln(os.Stderr, "--protocol-token-file requires --protocol-url")
+		os.Exit(2)
+	}
+	if *observerCommand == "" && *observerCommandSHA256 != "" {
+		fmt.Fprintln(os.Stderr, "--observer-command-sha256 requires --observer-command")
+		os.Exit(2)
+	}
 	data, err := readBoundedFile(flag.Arg(1), 1<<20)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -48,7 +64,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "--protocol-token-file is required with --protocol-url")
 			os.Exit(2)
 		}
-		tokenBytes, e := readBoundedFile(*protocolTokenFile, 64<<10)
+		tokenBytes, e := readSecretFile(*protocolTokenFile, 64<<10)
 		if e != nil {
 			fmt.Fprintln(os.Stderr, e)
 			os.Exit(2)
@@ -120,10 +136,21 @@ func (o commandObserver) call(ctx context.Context, request any, response any) er
 	if e = cmd.Run(); e != nil {
 		return fmt.Errorf("observer failed: %w: %s", e, stderr.String())
 	}
-	dec := json.NewDecoder(io.LimitReader(&stdout, 2<<20))
+	return decodeObserverResponse(io.LimitReader(&stdout, 2<<20), response)
+}
+
+func decodeObserverResponse(reader io.Reader, response any) error {
+	dec := json.NewDecoder(reader)
 	dec.DisallowUnknownFields()
-	if e = dec.Decode(response); e != nil {
-		return fmt.Errorf("decode observer response: %w", e)
+	if err := dec.Decode(response); err != nil {
+		return fmt.Errorf("decode observer response: %w", err)
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
+		return fmt.Errorf("decode observer response: trailing data: %w", err)
 	}
 	return nil
 }
@@ -203,7 +230,14 @@ func readBoundedFile(path string, limit int64) ([]byte, error) {
 		return nil, err
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	return readBounded(file, limit)
+}
+
+func readBounded(reader io.Reader, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		return nil, errors.New("invalid file size limit")
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +245,27 @@ func readBoundedFile(path string, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("file exceeds %d-byte limit", limit)
 	}
 	return data, nil
+}
+
+func readSecretFile(path string, limit int64) ([]byte, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 || pathInfo.Mode().Perm()&0o077 != 0 {
+		return nil, errors.New("secret file must be a regular, non-symlink file with no group or world permissions")
+	}
+	stat, ok := pathInfo.Sys().(*syscall.Stat_t)
+	if !ok || int(stat.Uid) != os.Geteuid() {
+		return nil, errors.New("secret file must be owned by the verifier service account")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(pathInfo, info) {
+		return nil, errors.New("secret file changed while it was opened")
+	}
+	return readBounded(file, limit)
 }
 func (o commandObserver) Observe(ctx context.Context, r verifiedproof.EvidenceRequest) (verifiedproof.EvidenceObservation, error) {
 	var out verifiedproof.EvidenceObservation
