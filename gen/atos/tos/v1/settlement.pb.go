@@ -2339,16 +2339,18 @@ func (x *Settlement) GetSettledUnixMillis() int64 {
 }
 
 type SettleJobRequest struct {
-	state                     protoimpl.MessageState `protogen:"open.v1"`
-	Context                   *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	EscrowId                  string                 `protobuf:"bytes,2,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
-	QuoteId                   string                 `protobuf:"bytes,3,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
-	JobId                     string                 `protobuf:"bytes,4,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	ReceiptId                 string                 `protobuf:"bytes,5,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
-	RequestedCharge           *NetworkAmount         `protobuf:"bytes,6,opt,name=requested_charge,json=requestedCharge,proto3" json:"requested_charge,omitempty"`
-	ExpectedTerms             *VerifiedEscrowTerms   `protobuf:"bytes,7,opt,name=expected_terms,json=expectedTerms,proto3" json:"expected_terms,omitempty"`
-	ExpectedEscrowRef         *NetworkReference      `protobuf:"bytes,8,opt,name=expected_escrow_ref,json=expectedEscrowRef,proto3" json:"expected_escrow_ref,omitempty"`
-	ExpectedReservationDigest string                 `protobuf:"bytes,9,opt,name=expected_reservation_digest,json=expectedReservationDigest,proto3" json:"expected_reservation_digest,omitempty"`
+	state                     protoimpl.MessageState    `protogen:"open.v1"`
+	Context                   *RequestContext           `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	EscrowId                  string                    `protobuf:"bytes,2,opt,name=escrow_id,json=escrowId,proto3" json:"escrow_id,omitempty"`
+	QuoteId                   string                    `protobuf:"bytes,3,opt,name=quote_id,json=quoteId,proto3" json:"quote_id,omitempty"`
+	JobId                     string                    `protobuf:"bytes,4,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	ReceiptId                 string                    `protobuf:"bytes,5,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	RequestedCharge           *NetworkAmount            `protobuf:"bytes,6,opt,name=requested_charge,json=requestedCharge,proto3" json:"requested_charge,omitempty"`
+	ExpectedTerms             *VerifiedEscrowTerms      `protobuf:"bytes,7,opt,name=expected_terms,json=expectedTerms,proto3" json:"expected_terms,omitempty"`
+	ExpectedEscrowRef         *NetworkReference         `protobuf:"bytes,8,opt,name=expected_escrow_ref,json=expectedEscrowRef,proto3" json:"expected_escrow_ref,omitempty"`
+	ExpectedReservationDigest string                    `protobuf:"bytes,9,opt,name=expected_reservation_digest,json=expectedReservationDigest,proto3" json:"expected_reservation_digest,omitempty"`
+	ExpectedReceipt           *ExecutionReceiptEnvelope `protobuf:"bytes,10,opt,name=expected_receipt,json=expectedReceipt,proto3" json:"expected_receipt,omitempty"`
+	ExpectedReceiptRef        *NetworkReference         `protobuf:"bytes,11,opt,name=expected_receipt_ref,json=expectedReceiptRef,proto3" json:"expected_receipt_ref,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -2444,6 +2446,20 @@ func (x *SettleJobRequest) GetExpectedReservationDigest() string {
 		return x.ExpectedReservationDigest
 	}
 	return ""
+}
+
+func (x *SettleJobRequest) GetExpectedReceipt() *ExecutionReceiptEnvelope {
+	if x != nil {
+		return x.ExpectedReceipt
+	}
+	return nil
+}
+
+func (x *SettleJobRequest) GetExpectedReceiptRef() *NetworkReference {
+	if x != nil {
+		return x.ExpectedReceiptRef
+	}
+	return nil
 }
 
 type SettleJobResponse struct {
@@ -2884,7 +2900,7 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x05state\x18\b \x01(\x0e2\x1c.atos.tos.v1.SettlementStateR\x05state\x12D\n" +
 	"\x0esettlement_ref\x18\t \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\rsettlementRef\x12.\n" +
 	"\x13settled_unix_millis\x18\n" +
-	" \x01(\x03R\x11settledUnixMillis\"\xd6\x03\n" +
+	" \x01(\x03R\x11settledUnixMillis\"\xf9\x04\n" +
 	"\x10SettleJobRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12\x1b\n" +
 	"\tescrow_id\x18\x02 \x01(\tR\bescrowId\x12\x19\n" +
@@ -2895,7 +2911,10 @@ const file_atos_tos_v1_settlement_proto_rawDesc = "" +
 	"\x10requested_charge\x18\x06 \x01(\v2\x1a.atos.tos.v1.NetworkAmountR\x0frequestedCharge\x12G\n" +
 	"\x0eexpected_terms\x18\a \x01(\v2 .atos.tos.v1.VerifiedEscrowTermsR\rexpectedTerms\x12M\n" +
 	"\x13expected_escrow_ref\x18\b \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x11expectedEscrowRef\x12>\n" +
-	"\x1bexpected_reservation_digest\x18\t \x01(\tR\x19expectedReservationDigest\"\x93\x01\n" +
+	"\x1bexpected_reservation_digest\x18\t \x01(\tR\x19expectedReservationDigest\x12P\n" +
+	"\x10expected_receipt\x18\n" +
+	" \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\x0fexpectedReceipt\x12O\n" +
+	"\x14expected_receipt_ref\x18\v \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"\x93\x01\n" +
 	"\x11SettleJobResponse\x127\n" +
 	"\n" +
 	"settlement\x18\x01 \x01(\v2\x17.atos.tos.v1.SettlementR\n" +
@@ -3066,31 +3085,33 @@ var file_atos_tos_v1_settlement_proto_depIdxs = []int32{
 	25, // 80: atos.tos.v1.SettleJobRequest.requested_charge:type_name -> atos.tos.v1.NetworkAmount
 	3,  // 81: atos.tos.v1.SettleJobRequest.expected_terms:type_name -> atos.tos.v1.VerifiedEscrowTerms
 	26, // 82: atos.tos.v1.SettleJobRequest.expected_escrow_ref:type_name -> atos.tos.v1.NetworkReference
-	18, // 83: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
-	2,  // 84: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
-	28, // 85: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
-	18, // 86: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
-	4,  // 87: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
-	6,  // 88: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
-	8,  // 89: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
-	19, // 90: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
-	21, // 91: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
-	10, // 92: atos.tos.v1.SettlementService.PrepareVerifiedResult:input_type -> atos.tos.v1.PrepareVerifiedResultRequest
-	13, // 93: atos.tos.v1.SettlementService.OpenVerifiedDispute:input_type -> atos.tos.v1.OpenVerifiedDisputeRequest
-	16, // 94: atos.tos.v1.SettlementService.ResolveVerifiedDispute:input_type -> atos.tos.v1.ResolveVerifiedDisputeRequest
-	5,  // 95: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
-	7,  // 96: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
-	9,  // 97: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
-	20, // 98: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
-	22, // 99: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
-	11, // 100: atos.tos.v1.SettlementService.PrepareVerifiedResult:output_type -> atos.tos.v1.PrepareVerifiedResultResponse
-	14, // 101: atos.tos.v1.SettlementService.OpenVerifiedDispute:output_type -> atos.tos.v1.OpenVerifiedDisputeResponse
-	17, // 102: atos.tos.v1.SettlementService.ResolveVerifiedDispute:output_type -> atos.tos.v1.ResolveVerifiedDisputeResponse
-	95, // [95:103] is the sub-list for method output_type
-	87, // [87:95] is the sub-list for method input_type
-	87, // [87:87] is the sub-list for extension type_name
-	87, // [87:87] is the sub-list for extension extendee
-	0,  // [0:87] is the sub-list for field type_name
+	29, // 83: atos.tos.v1.SettleJobRequest.expected_receipt:type_name -> atos.tos.v1.ExecutionReceiptEnvelope
+	26, // 84: atos.tos.v1.SettleJobRequest.expected_receipt_ref:type_name -> atos.tos.v1.NetworkReference
+	18, // 85: atos.tos.v1.SettleJobResponse.settlement:type_name -> atos.tos.v1.Settlement
+	2,  // 86: atos.tos.v1.SettleJobResponse.escrow:type_name -> atos.tos.v1.Escrow
+	28, // 87: atos.tos.v1.GetSettlementRequest.context:type_name -> atos.tos.v1.RequestContext
+	18, // 88: atos.tos.v1.GetSettlementResponse.settlement:type_name -> atos.tos.v1.Settlement
+	4,  // 89: atos.tos.v1.SettlementService.CreateEscrow:input_type -> atos.tos.v1.CreateEscrowRequest
+	6,  // 90: atos.tos.v1.SettlementService.GetEscrow:input_type -> atos.tos.v1.GetEscrowRequest
+	8,  // 91: atos.tos.v1.SettlementService.ReleaseEscrow:input_type -> atos.tos.v1.ReleaseEscrowRequest
+	19, // 92: atos.tos.v1.SettlementService.SettleJob:input_type -> atos.tos.v1.SettleJobRequest
+	21, // 93: atos.tos.v1.SettlementService.GetSettlement:input_type -> atos.tos.v1.GetSettlementRequest
+	10, // 94: atos.tos.v1.SettlementService.PrepareVerifiedResult:input_type -> atos.tos.v1.PrepareVerifiedResultRequest
+	13, // 95: atos.tos.v1.SettlementService.OpenVerifiedDispute:input_type -> atos.tos.v1.OpenVerifiedDisputeRequest
+	16, // 96: atos.tos.v1.SettlementService.ResolveVerifiedDispute:input_type -> atos.tos.v1.ResolveVerifiedDisputeRequest
+	5,  // 97: atos.tos.v1.SettlementService.CreateEscrow:output_type -> atos.tos.v1.CreateEscrowResponse
+	7,  // 98: atos.tos.v1.SettlementService.GetEscrow:output_type -> atos.tos.v1.GetEscrowResponse
+	9,  // 99: atos.tos.v1.SettlementService.ReleaseEscrow:output_type -> atos.tos.v1.ReleaseEscrowResponse
+	20, // 100: atos.tos.v1.SettlementService.SettleJob:output_type -> atos.tos.v1.SettleJobResponse
+	22, // 101: atos.tos.v1.SettlementService.GetSettlement:output_type -> atos.tos.v1.GetSettlementResponse
+	11, // 102: atos.tos.v1.SettlementService.PrepareVerifiedResult:output_type -> atos.tos.v1.PrepareVerifiedResultResponse
+	14, // 103: atos.tos.v1.SettlementService.OpenVerifiedDispute:output_type -> atos.tos.v1.OpenVerifiedDisputeResponse
+	17, // 104: atos.tos.v1.SettlementService.ResolveVerifiedDispute:output_type -> atos.tos.v1.ResolveVerifiedDisputeResponse
+	97, // [97:105] is the sub-list for method output_type
+	89, // [89:97] is the sub-list for method input_type
+	89, // [89:89] is the sub-list for extension type_name
+	89, // [89:89] is the sub-list for extension extendee
+	0,  // [0:89] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_settlement_proto_init() }

@@ -15,6 +15,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/escrowcommitment"
 	"github.com/tosnetwork/tos-protocol/pkg/quotecommitment"
+	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 )
@@ -446,6 +447,14 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		ProofProfile:     atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1,
 		OutputCommitment: digestMessage([]byte("verified-output")),
 	}
+	receiptDigest, err := receiptcommitment.Digest(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptRef, err := server.authority.Commit(context.Background(), "verified-receipt", receiptID, receiptDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := server.store.update(func(tx *bolt.Tx) error {
 		return server.store.putProto(tx, bucketReceipts, receiptID, &atostosv1.CommittedExecutionReceipt{
 			Receipt: receipt, VerificationStatus: atostosv1.VerificationStatus_VERIFICATION_STATUS_VERIFIED,
@@ -462,6 +471,7 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 		RequestedCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "0"},
 		ExpectedTerms:   terms, ExpectedEscrowRef: create.Msg.Escrow.EscrowRef,
 		ExpectedReservationDigest: create.Msg.Escrow.ReservationDigest,
+		ExpectedReceipt:           receipt, ExpectedReceiptRef: &receiptRef,
 	}
 	unbound := proto.Clone(settleRequest).(*atostosv1.SettleJobRequest)
 	unbound.ExpectedTerms = nil
@@ -472,6 +482,14 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	}
 	if economy.settleCalls != 0 {
 		t.Fatal("unbound settlement request reached irreversible mutation")
+	}
+	wrongReceipt := proto.Clone(settleRequest).(*atostosv1.SettleJobRequest)
+	wrongReceipt.ExpectedReceipt.OutputCommitment = digestMessage([]byte("attacker-output"))
+	if _, err := server.SettleJob(context.Background(), connect.NewRequest(wrongReceipt)); err == nil {
+		t.Fatal("Verified settlement accepted a Receipt that did not match its canonical commitment")
+	}
+	if economy.settleCalls != 0 {
+		t.Fatal("uncanonical Receipt reached irreversible settlement mutation")
 	}
 	if err := server.store.update(func(tx *bolt.Tx) error {
 		corrupt := proto.Clone(create.Msg.Escrow).(*atostosv1.Escrow)
@@ -488,6 +506,24 @@ func TestVerifiedEscrowAndSettlementUseContractEconomicDriver(t *testing.T) {
 	}
 	if err := server.store.update(func(tx *bolt.Tx) error {
 		return server.store.putProto(tx, bucketEscrows, escrowID, create.Msg.Escrow)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.store.update(func(tx *bolt.Tx) error {
+		corrupt := proto.Clone(receipt).(*atostosv1.ExecutionReceiptEnvelope)
+		corrupt.OutputCommitment = digestMessage([]byte("corrupt-local-output"))
+		return server.store.putProto(tx, bucketReceipts, receiptID, &atostosv1.CommittedExecutionReceipt{Receipt: corrupt, VerificationStatus: atostosv1.VerificationStatus_VERIFICATION_STATUS_VERIFIED})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.SettleJob(context.Background(), connect.NewRequest(proto.Clone(settleRequest).(*atostosv1.SettleJobRequest))); err == nil {
+		t.Fatal("settlement accepted a local Receipt that differed from canonical evidence")
+	}
+	if economy.settleCalls != 0 {
+		t.Fatal("canonical Receipt mismatch reached irreversible settlement mutation")
+	}
+	if err := server.store.update(func(tx *bolt.Tx) error {
+		return server.store.putProto(tx, bucketReceipts, receiptID, &atostosv1.CommittedExecutionReceipt{Receipt: receipt, VerificationStatus: atostosv1.VerificationStatus_VERIFICATION_STATUS_VERIFIED})
 	}); err != nil {
 		t.Fatal(err)
 	}
