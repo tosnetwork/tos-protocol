@@ -4,8 +4,7 @@ package atos.tos.v1;
 
 option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
 
-// Phase 5A portable schemas. These messages describe semantic values only;
-// Phase 5B owns mutation/resolution services.
+// Phase 5A portable semantic schemas. Phase 5B owns chain mutation/resolution.
 message NativeNetworkDomainV1 {
   string network_id = 1;
   string genesis_root_hash = 2;
@@ -22,9 +21,10 @@ message NativeControllerKeyV1 {
 
 message NativeControllerPolicyV1 {
   uint32 threshold = 1;
-  repeated NativeControllerKeyV1 controllers = 2;
-  repeated string recovery_key_ids = 3;
-  uint64 recovery_timelock_seconds = 4;
+  uint32 recovery_threshold = 2;
+  repeated NativeControllerKeyV1 controllers = 3;
+  repeated string recovery_key_ids = 4;
+  uint64 recovery_timelock_seconds = 5;
 }
 
 message NativeAgentBootstrapV1 {
@@ -41,6 +41,79 @@ message NativeCapabilityBootstrapV1 {
   string object_nonce_base64url = 4;
 }
 
+message NativeRegisterAgentPayloadV1 {
+  string object_nonce_base64url = 1;
+  string initial_policy_digest = 2;
+}
+
+message NativeUpdatePolicyPayloadV1 {
+  string new_policy_digest = 1;
+}
+
+message NativeDelegationPayloadV1 {
+  string delegate_key_id = 1;
+  repeated string purposes = 2;
+  repeated string resources = 3;
+  uint64 valid_from_checkpoint = 4;
+  uint64 valid_until_checkpoint = 5;
+  uint64 max_staleness_checkpoints = 6;
+}
+
+message NativeInitiateRecoveryPayloadV1 {
+  string new_policy_digest = 1;
+  uint64 execute_after_unix_seconds = 2;
+}
+
+message NativeChainReferenceV1 {
+  sint32 workchain = 1;
+  string account = 2;
+  uint64 logical_time = 3;
+  string transaction_hash = 4;
+  string contract_code_hash = 5;
+  uint32 event_index = 6;
+}
+
+message NativeRecoverAgentPayloadV1 {
+  string new_policy_digest = 1;
+  string initiation_action_digest = 2;
+  NativeChainReferenceV1 initiation_reference = 3;
+  uint64 execute_after_unix_seconds = 4;
+}
+
+message NativeRevocationPayloadV1 {
+  string scope = 1;
+  string reason_code = 2;
+}
+
+message NativeManifestReferenceV1 {
+  string digest = 1;
+  string media_type = 2;
+  uint64 size_bytes = 3;
+  repeated string locations = 4;
+}
+
+message NativeEndpointReferenceV1 {
+  string transport = 1;
+  string endpoint_digest = 2;
+  string recipient_key_id = 3;
+}
+
+message NativeCapabilityVersionPayloadV1 {
+  string owner_agent_id = 1;
+  NativeManifestReferenceV1 manifest = 2;
+  repeated NativeEndpointReferenceV1 endpoints = 3;
+  repeated string quote_signer_key_ids = 4;
+  repeated string receipt_signer_key_ids = 5;
+  uint64 valid_from_checkpoint = 6;
+  uint64 valid_until_checkpoint = 7;
+}
+
+message NativeTransferCapabilityPayloadV1 {
+  string current_owner_agent_id = 1;
+  string new_owner_agent_id = 2;
+  string new_owner_policy_digest = 3;
+}
+
 message NativeRegistryActionV1 {
   string version = 1;
   string kind = 2;
@@ -50,10 +123,11 @@ message NativeRegistryActionV1 {
   string capability_version = 6;
   uint64 generation = 7;
   uint64 sequence = 8;
-  string previous_event_digest = 9;
+  string previous_state_digest = 9;
   string policy_digest = 10;
   string payload_digest = 11;
-  string nonce_base64url = 12;
+  string payload_cbor_base64url = 12;
+  string nonce_base64url = 13;
 }
 
 message NativeRegistryEventV1 {
@@ -66,14 +140,29 @@ message NativeRegistryEventV1 {
   string capability_version = 7;
   uint64 generation = 8;
   uint64 sequence = 9;
-  string previous_event_digest = 10;
-  uint64 finalized_checkpoint = 11;
-  uint32 transaction_index = 12;
-  uint32 event_index = 13;
+  string previous_state_digest = 10;
+  string state_digest = 11;
+}
+
+message NativeEventObservationV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string event_digest = 3;
+  NativeChainReferenceV1 reference = 4;
+  uint64 finalized_checkpoint = 5;
+  string finalized_root_hash = 6;
+  string finalized_file_hash = 7;
+  uint64 block_unix_seconds = 8;
+  string inclusion_proof_digest = 9;
 }
 
 message NativeSemanticSignatureV1 {
-  string algorithm = 1;
-  string key_id = 2;
-  string signature_base64url = 3;
+  string version = 1;
+  string algorithm = 2;
+  string key_id = 3;
+  string signature_base64url = 4;
+}
+
+message NativeAuthorizationSetV1 {
+  repeated NativeSemanticSignatureV1 signatures = 1;
 }

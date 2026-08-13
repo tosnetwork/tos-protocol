@@ -21,8 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Phase 5A portable schemas. These messages describe semantic values only;
-// Phase 5B owns mutation/resolution services.
+// Phase 5A portable semantic schemas. Phase 5B owns chain mutation/resolution.
 type NativeNetworkDomainV1 struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	NetworkId       string                 `protobuf:"bytes,1,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
@@ -162,9 +161,10 @@ func (x *NativeControllerKeyV1) GetPurposes() []string {
 type NativeControllerPolicyV1 struct {
 	state                   protoimpl.MessageState   `protogen:"open.v1"`
 	Threshold               uint32                   `protobuf:"varint,1,opt,name=threshold,proto3" json:"threshold,omitempty"`
-	Controllers             []*NativeControllerKeyV1 `protobuf:"bytes,2,rep,name=controllers,proto3" json:"controllers,omitempty"`
-	RecoveryKeyIds          []string                 `protobuf:"bytes,3,rep,name=recovery_key_ids,json=recoveryKeyIds,proto3" json:"recovery_key_ids,omitempty"`
-	RecoveryTimelockSeconds uint64                   `protobuf:"varint,4,opt,name=recovery_timelock_seconds,json=recoveryTimelockSeconds,proto3" json:"recovery_timelock_seconds,omitempty"`
+	RecoveryThreshold       uint32                   `protobuf:"varint,2,opt,name=recovery_threshold,json=recoveryThreshold,proto3" json:"recovery_threshold,omitempty"`
+	Controllers             []*NativeControllerKeyV1 `protobuf:"bytes,3,rep,name=controllers,proto3" json:"controllers,omitempty"`
+	RecoveryKeyIds          []string                 `protobuf:"bytes,4,rep,name=recovery_key_ids,json=recoveryKeyIds,proto3" json:"recovery_key_ids,omitempty"`
+	RecoveryTimelockSeconds uint64                   `protobuf:"varint,5,opt,name=recovery_timelock_seconds,json=recoveryTimelockSeconds,proto3" json:"recovery_timelock_seconds,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -202,6 +202,13 @@ func (*NativeControllerPolicyV1) Descriptor() ([]byte, []int) {
 func (x *NativeControllerPolicyV1) GetThreshold() uint32 {
 	if x != nil {
 		return x.Threshold
+	}
+	return 0
+}
+
+func (x *NativeControllerPolicyV1) GetRecoveryThreshold() uint32 {
+	if x != nil {
+		return x.RecoveryThreshold
 	}
 	return 0
 }
@@ -363,27 +370,744 @@ func (x *NativeCapabilityBootstrapV1) GetObjectNonceBase64Url() string {
 	return ""
 }
 
+type NativeRegisterAgentPayloadV1 struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	ObjectNonceBase64Url string                 `protobuf:"bytes,1,opt,name=object_nonce_base64url,json=objectNonceBase64url,proto3" json:"object_nonce_base64url,omitempty"`
+	InitialPolicyDigest  string                 `protobuf:"bytes,2,opt,name=initial_policy_digest,json=initialPolicyDigest,proto3" json:"initial_policy_digest,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *NativeRegisterAgentPayloadV1) Reset() {
+	*x = NativeRegisterAgentPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeRegisterAgentPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeRegisterAgentPayloadV1) ProtoMessage() {}
+
+func (x *NativeRegisterAgentPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeRegisterAgentPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeRegisterAgentPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *NativeRegisterAgentPayloadV1) GetObjectNonceBase64Url() string {
+	if x != nil {
+		return x.ObjectNonceBase64Url
+	}
+	return ""
+}
+
+func (x *NativeRegisterAgentPayloadV1) GetInitialPolicyDigest() string {
+	if x != nil {
+		return x.InitialPolicyDigest
+	}
+	return ""
+}
+
+type NativeUpdatePolicyPayloadV1 struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	NewPolicyDigest string                 `protobuf:"bytes,1,opt,name=new_policy_digest,json=newPolicyDigest,proto3" json:"new_policy_digest,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *NativeUpdatePolicyPayloadV1) Reset() {
+	*x = NativeUpdatePolicyPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeUpdatePolicyPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeUpdatePolicyPayloadV1) ProtoMessage() {}
+
+func (x *NativeUpdatePolicyPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeUpdatePolicyPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeUpdatePolicyPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *NativeUpdatePolicyPayloadV1) GetNewPolicyDigest() string {
+	if x != nil {
+		return x.NewPolicyDigest
+	}
+	return ""
+}
+
+type NativeDelegationPayloadV1 struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	DelegateKeyId           string                 `protobuf:"bytes,1,opt,name=delegate_key_id,json=delegateKeyId,proto3" json:"delegate_key_id,omitempty"`
+	Purposes                []string               `protobuf:"bytes,2,rep,name=purposes,proto3" json:"purposes,omitempty"`
+	Resources               []string               `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
+	ValidFromCheckpoint     uint64                 `protobuf:"varint,4,opt,name=valid_from_checkpoint,json=validFromCheckpoint,proto3" json:"valid_from_checkpoint,omitempty"`
+	ValidUntilCheckpoint    uint64                 `protobuf:"varint,5,opt,name=valid_until_checkpoint,json=validUntilCheckpoint,proto3" json:"valid_until_checkpoint,omitempty"`
+	MaxStalenessCheckpoints uint64                 `protobuf:"varint,6,opt,name=max_staleness_checkpoints,json=maxStalenessCheckpoints,proto3" json:"max_staleness_checkpoints,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *NativeDelegationPayloadV1) Reset() {
+	*x = NativeDelegationPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeDelegationPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeDelegationPayloadV1) ProtoMessage() {}
+
+func (x *NativeDelegationPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeDelegationPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeDelegationPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *NativeDelegationPayloadV1) GetDelegateKeyId() string {
+	if x != nil {
+		return x.DelegateKeyId
+	}
+	return ""
+}
+
+func (x *NativeDelegationPayloadV1) GetPurposes() []string {
+	if x != nil {
+		return x.Purposes
+	}
+	return nil
+}
+
+func (x *NativeDelegationPayloadV1) GetResources() []string {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+func (x *NativeDelegationPayloadV1) GetValidFromCheckpoint() uint64 {
+	if x != nil {
+		return x.ValidFromCheckpoint
+	}
+	return 0
+}
+
+func (x *NativeDelegationPayloadV1) GetValidUntilCheckpoint() uint64 {
+	if x != nil {
+		return x.ValidUntilCheckpoint
+	}
+	return 0
+}
+
+func (x *NativeDelegationPayloadV1) GetMaxStalenessCheckpoints() uint64 {
+	if x != nil {
+		return x.MaxStalenessCheckpoints
+	}
+	return 0
+}
+
+type NativeInitiateRecoveryPayloadV1 struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	NewPolicyDigest         string                 `protobuf:"bytes,1,opt,name=new_policy_digest,json=newPolicyDigest,proto3" json:"new_policy_digest,omitempty"`
+	ExecuteAfterUnixSeconds uint64                 `protobuf:"varint,2,opt,name=execute_after_unix_seconds,json=executeAfterUnixSeconds,proto3" json:"execute_after_unix_seconds,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *NativeInitiateRecoveryPayloadV1) Reset() {
+	*x = NativeInitiateRecoveryPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeInitiateRecoveryPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeInitiateRecoveryPayloadV1) ProtoMessage() {}
+
+func (x *NativeInitiateRecoveryPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeInitiateRecoveryPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeInitiateRecoveryPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *NativeInitiateRecoveryPayloadV1) GetNewPolicyDigest() string {
+	if x != nil {
+		return x.NewPolicyDigest
+	}
+	return ""
+}
+
+func (x *NativeInitiateRecoveryPayloadV1) GetExecuteAfterUnixSeconds() uint64 {
+	if x != nil {
+		return x.ExecuteAfterUnixSeconds
+	}
+	return 0
+}
+
+type NativeChainReferenceV1 struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Workchain        int32                  `protobuf:"zigzag32,1,opt,name=workchain,proto3" json:"workchain,omitempty"`
+	Account          string                 `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
+	LogicalTime      uint64                 `protobuf:"varint,3,opt,name=logical_time,json=logicalTime,proto3" json:"logical_time,omitempty"`
+	TransactionHash  string                 `protobuf:"bytes,4,opt,name=transaction_hash,json=transactionHash,proto3" json:"transaction_hash,omitempty"`
+	ContractCodeHash string                 `protobuf:"bytes,5,opt,name=contract_code_hash,json=contractCodeHash,proto3" json:"contract_code_hash,omitempty"`
+	EventIndex       uint32                 `protobuf:"varint,6,opt,name=event_index,json=eventIndex,proto3" json:"event_index,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *NativeChainReferenceV1) Reset() {
+	*x = NativeChainReferenceV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeChainReferenceV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeChainReferenceV1) ProtoMessage() {}
+
+func (x *NativeChainReferenceV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeChainReferenceV1.ProtoReflect.Descriptor instead.
+func (*NativeChainReferenceV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *NativeChainReferenceV1) GetWorkchain() int32 {
+	if x != nil {
+		return x.Workchain
+	}
+	return 0
+}
+
+func (x *NativeChainReferenceV1) GetAccount() string {
+	if x != nil {
+		return x.Account
+	}
+	return ""
+}
+
+func (x *NativeChainReferenceV1) GetLogicalTime() uint64 {
+	if x != nil {
+		return x.LogicalTime
+	}
+	return 0
+}
+
+func (x *NativeChainReferenceV1) GetTransactionHash() string {
+	if x != nil {
+		return x.TransactionHash
+	}
+	return ""
+}
+
+func (x *NativeChainReferenceV1) GetContractCodeHash() string {
+	if x != nil {
+		return x.ContractCodeHash
+	}
+	return ""
+}
+
+func (x *NativeChainReferenceV1) GetEventIndex() uint32 {
+	if x != nil {
+		return x.EventIndex
+	}
+	return 0
+}
+
+type NativeRecoverAgentPayloadV1 struct {
+	state                   protoimpl.MessageState  `protogen:"open.v1"`
+	NewPolicyDigest         string                  `protobuf:"bytes,1,opt,name=new_policy_digest,json=newPolicyDigest,proto3" json:"new_policy_digest,omitempty"`
+	InitiationActionDigest  string                  `protobuf:"bytes,2,opt,name=initiation_action_digest,json=initiationActionDigest,proto3" json:"initiation_action_digest,omitempty"`
+	InitiationReference     *NativeChainReferenceV1 `protobuf:"bytes,3,opt,name=initiation_reference,json=initiationReference,proto3" json:"initiation_reference,omitempty"`
+	ExecuteAfterUnixSeconds uint64                  `protobuf:"varint,4,opt,name=execute_after_unix_seconds,json=executeAfterUnixSeconds,proto3" json:"execute_after_unix_seconds,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *NativeRecoverAgentPayloadV1) Reset() {
+	*x = NativeRecoverAgentPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeRecoverAgentPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeRecoverAgentPayloadV1) ProtoMessage() {}
+
+func (x *NativeRecoverAgentPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeRecoverAgentPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeRecoverAgentPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *NativeRecoverAgentPayloadV1) GetNewPolicyDigest() string {
+	if x != nil {
+		return x.NewPolicyDigest
+	}
+	return ""
+}
+
+func (x *NativeRecoverAgentPayloadV1) GetInitiationActionDigest() string {
+	if x != nil {
+		return x.InitiationActionDigest
+	}
+	return ""
+}
+
+func (x *NativeRecoverAgentPayloadV1) GetInitiationReference() *NativeChainReferenceV1 {
+	if x != nil {
+		return x.InitiationReference
+	}
+	return nil
+}
+
+func (x *NativeRecoverAgentPayloadV1) GetExecuteAfterUnixSeconds() uint64 {
+	if x != nil {
+		return x.ExecuteAfterUnixSeconds
+	}
+	return 0
+}
+
+type NativeRevocationPayloadV1 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         string                 `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	ReasonCode    string                 `protobuf:"bytes,2,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NativeRevocationPayloadV1) Reset() {
+	*x = NativeRevocationPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeRevocationPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeRevocationPayloadV1) ProtoMessage() {}
+
+func (x *NativeRevocationPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeRevocationPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeRevocationPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *NativeRevocationPayloadV1) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *NativeRevocationPayloadV1) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+type NativeManifestReferenceV1 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Digest        string                 `protobuf:"bytes,1,opt,name=digest,proto3" json:"digest,omitempty"`
+	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	SizeBytes     uint64                 `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Locations     []string               `protobuf:"bytes,4,rep,name=locations,proto3" json:"locations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NativeManifestReferenceV1) Reset() {
+	*x = NativeManifestReferenceV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeManifestReferenceV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeManifestReferenceV1) ProtoMessage() {}
+
+func (x *NativeManifestReferenceV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeManifestReferenceV1.ProtoReflect.Descriptor instead.
+func (*NativeManifestReferenceV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *NativeManifestReferenceV1) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *NativeManifestReferenceV1) GetMediaType() string {
+	if x != nil {
+		return x.MediaType
+	}
+	return ""
+}
+
+func (x *NativeManifestReferenceV1) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *NativeManifestReferenceV1) GetLocations() []string {
+	if x != nil {
+		return x.Locations
+	}
+	return nil
+}
+
+type NativeEndpointReferenceV1 struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Transport      string                 `protobuf:"bytes,1,opt,name=transport,proto3" json:"transport,omitempty"`
+	EndpointDigest string                 `protobuf:"bytes,2,opt,name=endpoint_digest,json=endpointDigest,proto3" json:"endpoint_digest,omitempty"`
+	RecipientKeyId string                 `protobuf:"bytes,3,opt,name=recipient_key_id,json=recipientKeyId,proto3" json:"recipient_key_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *NativeEndpointReferenceV1) Reset() {
+	*x = NativeEndpointReferenceV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeEndpointReferenceV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeEndpointReferenceV1) ProtoMessage() {}
+
+func (x *NativeEndpointReferenceV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeEndpointReferenceV1.ProtoReflect.Descriptor instead.
+func (*NativeEndpointReferenceV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *NativeEndpointReferenceV1) GetTransport() string {
+	if x != nil {
+		return x.Transport
+	}
+	return ""
+}
+
+func (x *NativeEndpointReferenceV1) GetEndpointDigest() string {
+	if x != nil {
+		return x.EndpointDigest
+	}
+	return ""
+}
+
+func (x *NativeEndpointReferenceV1) GetRecipientKeyId() string {
+	if x != nil {
+		return x.RecipientKeyId
+	}
+	return ""
+}
+
+type NativeCapabilityVersionPayloadV1 struct {
+	state                protoimpl.MessageState       `protogen:"open.v1"`
+	OwnerAgentId         string                       `protobuf:"bytes,1,opt,name=owner_agent_id,json=ownerAgentId,proto3" json:"owner_agent_id,omitempty"`
+	Manifest             *NativeManifestReferenceV1   `protobuf:"bytes,2,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	Endpoints            []*NativeEndpointReferenceV1 `protobuf:"bytes,3,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
+	QuoteSignerKeyIds    []string                     `protobuf:"bytes,4,rep,name=quote_signer_key_ids,json=quoteSignerKeyIds,proto3" json:"quote_signer_key_ids,omitempty"`
+	ReceiptSignerKeyIds  []string                     `protobuf:"bytes,5,rep,name=receipt_signer_key_ids,json=receiptSignerKeyIds,proto3" json:"receipt_signer_key_ids,omitempty"`
+	ValidFromCheckpoint  uint64                       `protobuf:"varint,6,opt,name=valid_from_checkpoint,json=validFromCheckpoint,proto3" json:"valid_from_checkpoint,omitempty"`
+	ValidUntilCheckpoint uint64                       `protobuf:"varint,7,opt,name=valid_until_checkpoint,json=validUntilCheckpoint,proto3" json:"valid_until_checkpoint,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *NativeCapabilityVersionPayloadV1) Reset() {
+	*x = NativeCapabilityVersionPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeCapabilityVersionPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeCapabilityVersionPayloadV1) ProtoMessage() {}
+
+func (x *NativeCapabilityVersionPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeCapabilityVersionPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeCapabilityVersionPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetOwnerAgentId() string {
+	if x != nil {
+		return x.OwnerAgentId
+	}
+	return ""
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetManifest() *NativeManifestReferenceV1 {
+	if x != nil {
+		return x.Manifest
+	}
+	return nil
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetEndpoints() []*NativeEndpointReferenceV1 {
+	if x != nil {
+		return x.Endpoints
+	}
+	return nil
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetQuoteSignerKeyIds() []string {
+	if x != nil {
+		return x.QuoteSignerKeyIds
+	}
+	return nil
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetReceiptSignerKeyIds() []string {
+	if x != nil {
+		return x.ReceiptSignerKeyIds
+	}
+	return nil
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetValidFromCheckpoint() uint64 {
+	if x != nil {
+		return x.ValidFromCheckpoint
+	}
+	return 0
+}
+
+func (x *NativeCapabilityVersionPayloadV1) GetValidUntilCheckpoint() uint64 {
+	if x != nil {
+		return x.ValidUntilCheckpoint
+	}
+	return 0
+}
+
+type NativeTransferCapabilityPayloadV1 struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	CurrentOwnerAgentId  string                 `protobuf:"bytes,1,opt,name=current_owner_agent_id,json=currentOwnerAgentId,proto3" json:"current_owner_agent_id,omitempty"`
+	NewOwnerAgentId      string                 `protobuf:"bytes,2,opt,name=new_owner_agent_id,json=newOwnerAgentId,proto3" json:"new_owner_agent_id,omitempty"`
+	NewOwnerPolicyDigest string                 `protobuf:"bytes,3,opt,name=new_owner_policy_digest,json=newOwnerPolicyDigest,proto3" json:"new_owner_policy_digest,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *NativeTransferCapabilityPayloadV1) Reset() {
+	*x = NativeTransferCapabilityPayloadV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeTransferCapabilityPayloadV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeTransferCapabilityPayloadV1) ProtoMessage() {}
+
+func (x *NativeTransferCapabilityPayloadV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeTransferCapabilityPayloadV1.ProtoReflect.Descriptor instead.
+func (*NativeTransferCapabilityPayloadV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *NativeTransferCapabilityPayloadV1) GetCurrentOwnerAgentId() string {
+	if x != nil {
+		return x.CurrentOwnerAgentId
+	}
+	return ""
+}
+
+func (x *NativeTransferCapabilityPayloadV1) GetNewOwnerAgentId() string {
+	if x != nil {
+		return x.NewOwnerAgentId
+	}
+	return ""
+}
+
+func (x *NativeTransferCapabilityPayloadV1) GetNewOwnerPolicyDigest() string {
+	if x != nil {
+		return x.NewOwnerPolicyDigest
+	}
+	return ""
+}
+
 type NativeRegistryActionV1 struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Version             string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Kind                string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Network             *NativeNetworkDomainV1 `protobuf:"bytes,3,opt,name=network,proto3" json:"network,omitempty"`
-	AgentId             string                 `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	CapabilityId        string                 `protobuf:"bytes,5,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	CapabilityVersion   string                 `protobuf:"bytes,6,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
-	Generation          uint64                 `protobuf:"varint,7,opt,name=generation,proto3" json:"generation,omitempty"`
-	Sequence            uint64                 `protobuf:"varint,8,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	PreviousEventDigest string                 `protobuf:"bytes,9,opt,name=previous_event_digest,json=previousEventDigest,proto3" json:"previous_event_digest,omitempty"`
-	PolicyDigest        string                 `protobuf:"bytes,10,opt,name=policy_digest,json=policyDigest,proto3" json:"policy_digest,omitempty"`
-	PayloadDigest       string                 `protobuf:"bytes,11,opt,name=payload_digest,json=payloadDigest,proto3" json:"payload_digest,omitempty"`
-	NonceBase64Url      string                 `protobuf:"bytes,12,opt,name=nonce_base64url,json=nonceBase64url,proto3" json:"nonce_base64url,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Version              string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Kind                 string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Network              *NativeNetworkDomainV1 `protobuf:"bytes,3,opt,name=network,proto3" json:"network,omitempty"`
+	AgentId              string                 `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	CapabilityId         string                 `protobuf:"bytes,5,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	CapabilityVersion    string                 `protobuf:"bytes,6,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
+	Generation           uint64                 `protobuf:"varint,7,opt,name=generation,proto3" json:"generation,omitempty"`
+	Sequence             uint64                 `protobuf:"varint,8,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	PreviousStateDigest  string                 `protobuf:"bytes,9,opt,name=previous_state_digest,json=previousStateDigest,proto3" json:"previous_state_digest,omitempty"`
+	PolicyDigest         string                 `protobuf:"bytes,10,opt,name=policy_digest,json=policyDigest,proto3" json:"policy_digest,omitempty"`
+	PayloadDigest        string                 `protobuf:"bytes,11,opt,name=payload_digest,json=payloadDigest,proto3" json:"payload_digest,omitempty"`
+	PayloadCborBase64Url string                 `protobuf:"bytes,12,opt,name=payload_cbor_base64url,json=payloadCborBase64url,proto3" json:"payload_cbor_base64url,omitempty"`
+	NonceBase64Url       string                 `protobuf:"bytes,13,opt,name=nonce_base64url,json=nonceBase64url,proto3" json:"nonce_base64url,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *NativeRegistryActionV1) Reset() {
 	*x = NativeRegistryActionV1{}
-	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[5]
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -395,7 +1119,7 @@ func (x *NativeRegistryActionV1) String() string {
 func (*NativeRegistryActionV1) ProtoMessage() {}
 
 func (x *NativeRegistryActionV1) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[5]
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -408,7 +1132,7 @@ func (x *NativeRegistryActionV1) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NativeRegistryActionV1.ProtoReflect.Descriptor instead.
 func (*NativeRegistryActionV1) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{5}
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *NativeRegistryActionV1) GetVersion() string {
@@ -467,9 +1191,9 @@ func (x *NativeRegistryActionV1) GetSequence() uint64 {
 	return 0
 }
 
-func (x *NativeRegistryActionV1) GetPreviousEventDigest() string {
+func (x *NativeRegistryActionV1) GetPreviousStateDigest() string {
 	if x != nil {
-		return x.PreviousEventDigest
+		return x.PreviousStateDigest
 	}
 	return ""
 }
@@ -484,6 +1208,13 @@ func (x *NativeRegistryActionV1) GetPolicyDigest() string {
 func (x *NativeRegistryActionV1) GetPayloadDigest() string {
 	if x != nil {
 		return x.PayloadDigest
+	}
+	return ""
+}
+
+func (x *NativeRegistryActionV1) GetPayloadCborBase64Url() string {
+	if x != nil {
+		return x.PayloadCborBase64Url
 	}
 	return ""
 }
@@ -506,17 +1237,15 @@ type NativeRegistryEventV1 struct {
 	CapabilityVersion   string                 `protobuf:"bytes,7,opt,name=capability_version,json=capabilityVersion,proto3" json:"capability_version,omitempty"`
 	Generation          uint64                 `protobuf:"varint,8,opt,name=generation,proto3" json:"generation,omitempty"`
 	Sequence            uint64                 `protobuf:"varint,9,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	PreviousEventDigest string                 `protobuf:"bytes,10,opt,name=previous_event_digest,json=previousEventDigest,proto3" json:"previous_event_digest,omitempty"`
-	FinalizedCheckpoint uint64                 `protobuf:"varint,11,opt,name=finalized_checkpoint,json=finalizedCheckpoint,proto3" json:"finalized_checkpoint,omitempty"`
-	TransactionIndex    uint32                 `protobuf:"varint,12,opt,name=transaction_index,json=transactionIndex,proto3" json:"transaction_index,omitempty"`
-	EventIndex          uint32                 `protobuf:"varint,13,opt,name=event_index,json=eventIndex,proto3" json:"event_index,omitempty"`
+	PreviousStateDigest string                 `protobuf:"bytes,10,opt,name=previous_state_digest,json=previousStateDigest,proto3" json:"previous_state_digest,omitempty"`
+	StateDigest         string                 `protobuf:"bytes,11,opt,name=state_digest,json=stateDigest,proto3" json:"state_digest,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *NativeRegistryEventV1) Reset() {
 	*x = NativeRegistryEventV1{}
-	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[6]
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +1257,7 @@ func (x *NativeRegistryEventV1) String() string {
 func (*NativeRegistryEventV1) ProtoMessage() {}
 
 func (x *NativeRegistryEventV1) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[6]
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +1270,7 @@ func (x *NativeRegistryEventV1) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NativeRegistryEventV1.ProtoReflect.Descriptor instead.
 func (*NativeRegistryEventV1) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{6}
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *NativeRegistryEventV1) GetVersion() string {
@@ -607,46 +1336,141 @@ func (x *NativeRegistryEventV1) GetSequence() uint64 {
 	return 0
 }
 
-func (x *NativeRegistryEventV1) GetPreviousEventDigest() string {
+func (x *NativeRegistryEventV1) GetPreviousStateDigest() string {
 	if x != nil {
-		return x.PreviousEventDigest
+		return x.PreviousStateDigest
 	}
 	return ""
 }
 
-func (x *NativeRegistryEventV1) GetFinalizedCheckpoint() uint64 {
+func (x *NativeRegistryEventV1) GetStateDigest() string {
+	if x != nil {
+		return x.StateDigest
+	}
+	return ""
+}
+
+type NativeEventObservationV1 struct {
+	state                protoimpl.MessageState  `protogen:"open.v1"`
+	Version              string                  `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Network              *NativeNetworkDomainV1  `protobuf:"bytes,2,opt,name=network,proto3" json:"network,omitempty"`
+	EventDigest          string                  `protobuf:"bytes,3,opt,name=event_digest,json=eventDigest,proto3" json:"event_digest,omitempty"`
+	Reference            *NativeChainReferenceV1 `protobuf:"bytes,4,opt,name=reference,proto3" json:"reference,omitempty"`
+	FinalizedCheckpoint  uint64                  `protobuf:"varint,5,opt,name=finalized_checkpoint,json=finalizedCheckpoint,proto3" json:"finalized_checkpoint,omitempty"`
+	FinalizedRootHash    string                  `protobuf:"bytes,6,opt,name=finalized_root_hash,json=finalizedRootHash,proto3" json:"finalized_root_hash,omitempty"`
+	FinalizedFileHash    string                  `protobuf:"bytes,7,opt,name=finalized_file_hash,json=finalizedFileHash,proto3" json:"finalized_file_hash,omitempty"`
+	BlockUnixSeconds     uint64                  `protobuf:"varint,8,opt,name=block_unix_seconds,json=blockUnixSeconds,proto3" json:"block_unix_seconds,omitempty"`
+	InclusionProofDigest string                  `protobuf:"bytes,9,opt,name=inclusion_proof_digest,json=inclusionProofDigest,proto3" json:"inclusion_proof_digest,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *NativeEventObservationV1) Reset() {
+	*x = NativeEventObservationV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeEventObservationV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeEventObservationV1) ProtoMessage() {}
+
+func (x *NativeEventObservationV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeEventObservationV1.ProtoReflect.Descriptor instead.
+func (*NativeEventObservationV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *NativeEventObservationV1) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *NativeEventObservationV1) GetNetwork() *NativeNetworkDomainV1 {
+	if x != nil {
+		return x.Network
+	}
+	return nil
+}
+
+func (x *NativeEventObservationV1) GetEventDigest() string {
+	if x != nil {
+		return x.EventDigest
+	}
+	return ""
+}
+
+func (x *NativeEventObservationV1) GetReference() *NativeChainReferenceV1 {
+	if x != nil {
+		return x.Reference
+	}
+	return nil
+}
+
+func (x *NativeEventObservationV1) GetFinalizedCheckpoint() uint64 {
 	if x != nil {
 		return x.FinalizedCheckpoint
 	}
 	return 0
 }
 
-func (x *NativeRegistryEventV1) GetTransactionIndex() uint32 {
+func (x *NativeEventObservationV1) GetFinalizedRootHash() string {
 	if x != nil {
-		return x.TransactionIndex
+		return x.FinalizedRootHash
+	}
+	return ""
+}
+
+func (x *NativeEventObservationV1) GetFinalizedFileHash() string {
+	if x != nil {
+		return x.FinalizedFileHash
+	}
+	return ""
+}
+
+func (x *NativeEventObservationV1) GetBlockUnixSeconds() uint64 {
+	if x != nil {
+		return x.BlockUnixSeconds
 	}
 	return 0
 }
 
-func (x *NativeRegistryEventV1) GetEventIndex() uint32 {
+func (x *NativeEventObservationV1) GetInclusionProofDigest() string {
 	if x != nil {
-		return x.EventIndex
+		return x.InclusionProofDigest
 	}
-	return 0
+	return ""
 }
 
 type NativeSemanticSignatureV1 struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
-	Algorithm          string                 `protobuf:"bytes,1,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
-	KeyId              string                 `protobuf:"bytes,2,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
-	SignatureBase64Url string                 `protobuf:"bytes,3,opt,name=signature_base64url,json=signatureBase64url,proto3" json:"signature_base64url,omitempty"`
+	Version            string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Algorithm          string                 `protobuf:"bytes,2,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	KeyId              string                 `protobuf:"bytes,3,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	SignatureBase64Url string                 `protobuf:"bytes,4,opt,name=signature_base64url,json=signatureBase64url,proto3" json:"signature_base64url,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NativeSemanticSignatureV1) Reset() {
 	*x = NativeSemanticSignatureV1{}
-	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[7]
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -658,7 +1482,7 @@ func (x *NativeSemanticSignatureV1) String() string {
 func (*NativeSemanticSignatureV1) ProtoMessage() {}
 
 func (x *NativeSemanticSignatureV1) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[7]
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -671,7 +1495,14 @@ func (x *NativeSemanticSignatureV1) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NativeSemanticSignatureV1.ProtoReflect.Descriptor instead.
 func (*NativeSemanticSignatureV1) Descriptor() ([]byte, []int) {
-	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{7}
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *NativeSemanticSignatureV1) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
 }
 
 func (x *NativeSemanticSignatureV1) GetAlgorithm() string {
@@ -695,6 +1526,50 @@ func (x *NativeSemanticSignatureV1) GetSignatureBase64Url() string {
 	return ""
 }
 
+type NativeAuthorizationSetV1 struct {
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	Signatures    []*NativeSemanticSignatureV1 `protobuf:"bytes,1,rep,name=signatures,proto3" json:"signatures,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NativeAuthorizationSetV1) Reset() {
+	*x = NativeAuthorizationSetV1{}
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeAuthorizationSetV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeAuthorizationSetV1) ProtoMessage() {}
+
+func (x *NativeAuthorizationSetV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_tos_v1_native_registry_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeAuthorizationSetV1.ProtoReflect.Descriptor instead.
+func (*NativeAuthorizationSetV1) Descriptor() ([]byte, []int) {
+	return file_atos_tos_v1_native_registry_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *NativeAuthorizationSetV1) GetSignatures() []*NativeSemanticSignatureV1 {
+	if x != nil {
+		return x.Signatures
+	}
+	return nil
+}
+
 var File_atos_tos_v1_native_registry_proto protoreflect.FileDescriptor
 
 const file_atos_tos_v1_native_registry_proto_rawDesc = "" +
@@ -710,12 +1585,13 @@ const file_atos_tos_v1_native_registry_proto_rawDesc = "" +
 	"\talgorithm\x18\x02 \x01(\tR\talgorithm\x120\n" +
 	"\x14public_key_base64url\x18\x03 \x01(\tR\x12publicKeyBase64url\x12\x16\n" +
 	"\x06weight\x18\x04 \x01(\rR\x06weight\x12\x1a\n" +
-	"\bpurposes\x18\x05 \x03(\tR\bpurposes\"\xe4\x01\n" +
+	"\bpurposes\x18\x05 \x03(\tR\bpurposes\"\x93\x02\n" +
 	"\x18NativeControllerPolicyV1\x12\x1c\n" +
-	"\tthreshold\x18\x01 \x01(\rR\tthreshold\x12D\n" +
-	"\vcontrollers\x18\x02 \x03(\v2\".atos.tos.v1.NativeControllerKeyV1R\vcontrollers\x12(\n" +
-	"\x10recovery_key_ids\x18\x03 \x03(\tR\x0erecoveryKeyIds\x12:\n" +
-	"\x19recovery_timelock_seconds\x18\x04 \x01(\x04R\x17recoveryTimelockSeconds\"\xef\x01\n" +
+	"\tthreshold\x18\x01 \x01(\rR\tthreshold\x12-\n" +
+	"\x12recovery_threshold\x18\x02 \x01(\rR\x11recoveryThreshold\x12D\n" +
+	"\vcontrollers\x18\x03 \x03(\v2\".atos.tos.v1.NativeControllerKeyV1R\vcontrollers\x12(\n" +
+	"\x10recovery_key_ids\x18\x04 \x03(\tR\x0erecoveryKeyIds\x12:\n" +
+	"\x19recovery_timelock_seconds\x18\x05 \x01(\x04R\x17recoveryTimelockSeconds\"\xef\x01\n" +
 	"\x16NativeAgentBootstrapV1\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12<\n" +
 	"\anetwork\x18\x02 \x01(\v2\".atos.tos.v1.NativeNetworkDomainV1R\anetwork\x124\n" +
@@ -725,7 +1601,62 @@ const file_atos_tos_v1_native_registry_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12<\n" +
 	"\anetwork\x18\x02 \x01(\v2\".atos.tos.v1.NativeNetworkDomainV1R\anetwork\x12$\n" +
 	"\x0eowner_agent_id\x18\x03 \x01(\tR\fownerAgentId\x124\n" +
-	"\x16object_nonce_base64url\x18\x04 \x01(\tR\x14objectNonceBase64url\"\xd8\x03\n" +
+	"\x16object_nonce_base64url\x18\x04 \x01(\tR\x14objectNonceBase64url\"\x88\x01\n" +
+	"\x1cNativeRegisterAgentPayloadV1\x124\n" +
+	"\x16object_nonce_base64url\x18\x01 \x01(\tR\x14objectNonceBase64url\x122\n" +
+	"\x15initial_policy_digest\x18\x02 \x01(\tR\x13initialPolicyDigest\"I\n" +
+	"\x1bNativeUpdatePolicyPayloadV1\x12*\n" +
+	"\x11new_policy_digest\x18\x01 \x01(\tR\x0fnewPolicyDigest\"\xa3\x02\n" +
+	"\x19NativeDelegationPayloadV1\x12&\n" +
+	"\x0fdelegate_key_id\x18\x01 \x01(\tR\rdelegateKeyId\x12\x1a\n" +
+	"\bpurposes\x18\x02 \x03(\tR\bpurposes\x12\x1c\n" +
+	"\tresources\x18\x03 \x03(\tR\tresources\x122\n" +
+	"\x15valid_from_checkpoint\x18\x04 \x01(\x04R\x13validFromCheckpoint\x124\n" +
+	"\x16valid_until_checkpoint\x18\x05 \x01(\x04R\x14validUntilCheckpoint\x12:\n" +
+	"\x19max_staleness_checkpoints\x18\x06 \x01(\x04R\x17maxStalenessCheckpoints\"\x8a\x01\n" +
+	"\x1fNativeInitiateRecoveryPayloadV1\x12*\n" +
+	"\x11new_policy_digest\x18\x01 \x01(\tR\x0fnewPolicyDigest\x12;\n" +
+	"\x1aexecute_after_unix_seconds\x18\x02 \x01(\x04R\x17executeAfterUnixSeconds\"\xed\x01\n" +
+	"\x16NativeChainReferenceV1\x12\x1c\n" +
+	"\tworkchain\x18\x01 \x01(\x11R\tworkchain\x12\x18\n" +
+	"\aaccount\x18\x02 \x01(\tR\aaccount\x12!\n" +
+	"\flogical_time\x18\x03 \x01(\x04R\vlogicalTime\x12)\n" +
+	"\x10transaction_hash\x18\x04 \x01(\tR\x0ftransactionHash\x12,\n" +
+	"\x12contract_code_hash\x18\x05 \x01(\tR\x10contractCodeHash\x12\x1f\n" +
+	"\vevent_index\x18\x06 \x01(\rR\n" +
+	"eventIndex\"\x98\x02\n" +
+	"\x1bNativeRecoverAgentPayloadV1\x12*\n" +
+	"\x11new_policy_digest\x18\x01 \x01(\tR\x0fnewPolicyDigest\x128\n" +
+	"\x18initiation_action_digest\x18\x02 \x01(\tR\x16initiationActionDigest\x12V\n" +
+	"\x14initiation_reference\x18\x03 \x01(\v2#.atos.tos.v1.NativeChainReferenceV1R\x13initiationReference\x12;\n" +
+	"\x1aexecute_after_unix_seconds\x18\x04 \x01(\x04R\x17executeAfterUnixSeconds\"R\n" +
+	"\x19NativeRevocationPayloadV1\x12\x14\n" +
+	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x1f\n" +
+	"\vreason_code\x18\x02 \x01(\tR\n" +
+	"reasonCode\"\x8f\x01\n" +
+	"\x19NativeManifestReferenceV1\x12\x16\n" +
+	"\x06digest\x18\x01 \x01(\tR\x06digest\x12\x1d\n" +
+	"\n" +
+	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\x12\x1c\n" +
+	"\tlocations\x18\x04 \x03(\tR\tlocations\"\x8c\x01\n" +
+	"\x19NativeEndpointReferenceV1\x12\x1c\n" +
+	"\ttransport\x18\x01 \x01(\tR\ttransport\x12'\n" +
+	"\x0fendpoint_digest\x18\x02 \x01(\tR\x0eendpointDigest\x12(\n" +
+	"\x10recipient_key_id\x18\x03 \x01(\tR\x0erecipientKeyId\"\xa2\x03\n" +
+	" NativeCapabilityVersionPayloadV1\x12$\n" +
+	"\x0eowner_agent_id\x18\x01 \x01(\tR\fownerAgentId\x12B\n" +
+	"\bmanifest\x18\x02 \x01(\v2&.atos.tos.v1.NativeManifestReferenceV1R\bmanifest\x12D\n" +
+	"\tendpoints\x18\x03 \x03(\v2&.atos.tos.v1.NativeEndpointReferenceV1R\tendpoints\x12/\n" +
+	"\x14quote_signer_key_ids\x18\x04 \x03(\tR\x11quoteSignerKeyIds\x123\n" +
+	"\x16receipt_signer_key_ids\x18\x05 \x03(\tR\x13receiptSignerKeyIds\x122\n" +
+	"\x15valid_from_checkpoint\x18\x06 \x01(\x04R\x13validFromCheckpoint\x124\n" +
+	"\x16valid_until_checkpoint\x18\a \x01(\x04R\x14validUntilCheckpoint\"\xbc\x01\n" +
+	"!NativeTransferCapabilityPayloadV1\x123\n" +
+	"\x16current_owner_agent_id\x18\x01 \x01(\tR\x13currentOwnerAgentId\x12+\n" +
+	"\x12new_owner_agent_id\x18\x02 \x01(\tR\x0fnewOwnerAgentId\x125\n" +
+	"\x17new_owner_policy_digest\x18\x03 \x01(\tR\x14newOwnerPolicyDigest\"\x8e\x04\n" +
 	"\x16NativeRegistryActionV1\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12<\n" +
@@ -737,11 +1668,12 @@ const file_atos_tos_v1_native_registry_proto_rawDesc = "" +
 	"generation\x18\a \x01(\x04R\n" +
 	"generation\x12\x1a\n" +
 	"\bsequence\x18\b \x01(\x04R\bsequence\x122\n" +
-	"\x15previous_event_digest\x18\t \x01(\tR\x13previousEventDigest\x12#\n" +
+	"\x15previous_state_digest\x18\t \x01(\tR\x13previousStateDigest\x12#\n" +
 	"\rpolicy_digest\x18\n" +
 	" \x01(\tR\fpolicyDigest\x12%\n" +
-	"\x0epayload_digest\x18\v \x01(\tR\rpayloadDigest\x12'\n" +
-	"\x0fnonce_base64url\x18\f \x01(\tR\x0enonceBase64url\"\x88\x04\n" +
+	"\x0epayload_digest\x18\v \x01(\tR\rpayloadDigest\x124\n" +
+	"\x16payload_cbor_base64url\x18\f \x01(\tR\x14payloadCborBase64url\x12'\n" +
+	"\x0fnonce_base64url\x18\r \x01(\tR\x0enonceBase64url\"\xaa\x03\n" +
 	"\x15NativeRegistryEventV1\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12<\n" +
@@ -754,16 +1686,28 @@ const file_atos_tos_v1_native_registry_proto_rawDesc = "" +
 	"generation\x18\b \x01(\x04R\n" +
 	"generation\x12\x1a\n" +
 	"\bsequence\x18\t \x01(\x04R\bsequence\x122\n" +
-	"\x15previous_event_digest\x18\n" +
-	" \x01(\tR\x13previousEventDigest\x121\n" +
-	"\x14finalized_checkpoint\x18\v \x01(\x04R\x13finalizedCheckpoint\x12+\n" +
-	"\x11transaction_index\x18\f \x01(\rR\x10transactionIndex\x12\x1f\n" +
-	"\vevent_index\x18\r \x01(\rR\n" +
-	"eventIndex\"\x81\x01\n" +
-	"\x19NativeSemanticSignatureV1\x12\x1c\n" +
-	"\talgorithm\x18\x01 \x01(\tR\talgorithm\x12\x15\n" +
-	"\x06key_id\x18\x02 \x01(\tR\x05keyId\x12/\n" +
-	"\x13signature_base64url\x18\x03 \x01(\tR\x12signatureBase64urlB>Z<github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1b\x06proto3"
+	"\x15previous_state_digest\x18\n" +
+	" \x01(\tR\x13previousStateDigest\x12!\n" +
+	"\fstate_digest\x18\v \x01(\tR\vstateDigest\"\xcf\x03\n" +
+	"\x18NativeEventObservationV1\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12<\n" +
+	"\anetwork\x18\x02 \x01(\v2\".atos.tos.v1.NativeNetworkDomainV1R\anetwork\x12!\n" +
+	"\fevent_digest\x18\x03 \x01(\tR\veventDigest\x12A\n" +
+	"\treference\x18\x04 \x01(\v2#.atos.tos.v1.NativeChainReferenceV1R\treference\x121\n" +
+	"\x14finalized_checkpoint\x18\x05 \x01(\x04R\x13finalizedCheckpoint\x12.\n" +
+	"\x13finalized_root_hash\x18\x06 \x01(\tR\x11finalizedRootHash\x12.\n" +
+	"\x13finalized_file_hash\x18\a \x01(\tR\x11finalizedFileHash\x12,\n" +
+	"\x12block_unix_seconds\x18\b \x01(\x04R\x10blockUnixSeconds\x124\n" +
+	"\x16inclusion_proof_digest\x18\t \x01(\tR\x14inclusionProofDigest\"\x9b\x01\n" +
+	"\x19NativeSemanticSignatureV1\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1c\n" +
+	"\talgorithm\x18\x02 \x01(\tR\talgorithm\x12\x15\n" +
+	"\x06key_id\x18\x03 \x01(\tR\x05keyId\x12/\n" +
+	"\x13signature_base64url\x18\x04 \x01(\tR\x12signatureBase64url\"b\n" +
+	"\x18NativeAuthorizationSetV1\x12F\n" +
+	"\n" +
+	"signatures\x18\x01 \x03(\v2&.atos.tos.v1.NativeSemanticSignatureV1R\n" +
+	"signaturesB>Z<github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1b\x06proto3"
 
 var (
 	file_atos_tos_v1_native_registry_proto_rawDescOnce sync.Once
@@ -777,28 +1721,47 @@ func file_atos_tos_v1_native_registry_proto_rawDescGZIP() []byte {
 	return file_atos_tos_v1_native_registry_proto_rawDescData
 }
 
-var file_atos_tos_v1_native_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_atos_tos_v1_native_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_atos_tos_v1_native_registry_proto_goTypes = []any{
-	(*NativeNetworkDomainV1)(nil),       // 0: atos.tos.v1.NativeNetworkDomainV1
-	(*NativeControllerKeyV1)(nil),       // 1: atos.tos.v1.NativeControllerKeyV1
-	(*NativeControllerPolicyV1)(nil),    // 2: atos.tos.v1.NativeControllerPolicyV1
-	(*NativeAgentBootstrapV1)(nil),      // 3: atos.tos.v1.NativeAgentBootstrapV1
-	(*NativeCapabilityBootstrapV1)(nil), // 4: atos.tos.v1.NativeCapabilityBootstrapV1
-	(*NativeRegistryActionV1)(nil),      // 5: atos.tos.v1.NativeRegistryActionV1
-	(*NativeRegistryEventV1)(nil),       // 6: atos.tos.v1.NativeRegistryEventV1
-	(*NativeSemanticSignatureV1)(nil),   // 7: atos.tos.v1.NativeSemanticSignatureV1
+	(*NativeNetworkDomainV1)(nil),             // 0: atos.tos.v1.NativeNetworkDomainV1
+	(*NativeControllerKeyV1)(nil),             // 1: atos.tos.v1.NativeControllerKeyV1
+	(*NativeControllerPolicyV1)(nil),          // 2: atos.tos.v1.NativeControllerPolicyV1
+	(*NativeAgentBootstrapV1)(nil),            // 3: atos.tos.v1.NativeAgentBootstrapV1
+	(*NativeCapabilityBootstrapV1)(nil),       // 4: atos.tos.v1.NativeCapabilityBootstrapV1
+	(*NativeRegisterAgentPayloadV1)(nil),      // 5: atos.tos.v1.NativeRegisterAgentPayloadV1
+	(*NativeUpdatePolicyPayloadV1)(nil),       // 6: atos.tos.v1.NativeUpdatePolicyPayloadV1
+	(*NativeDelegationPayloadV1)(nil),         // 7: atos.tos.v1.NativeDelegationPayloadV1
+	(*NativeInitiateRecoveryPayloadV1)(nil),   // 8: atos.tos.v1.NativeInitiateRecoveryPayloadV1
+	(*NativeChainReferenceV1)(nil),            // 9: atos.tos.v1.NativeChainReferenceV1
+	(*NativeRecoverAgentPayloadV1)(nil),       // 10: atos.tos.v1.NativeRecoverAgentPayloadV1
+	(*NativeRevocationPayloadV1)(nil),         // 11: atos.tos.v1.NativeRevocationPayloadV1
+	(*NativeManifestReferenceV1)(nil),         // 12: atos.tos.v1.NativeManifestReferenceV1
+	(*NativeEndpointReferenceV1)(nil),         // 13: atos.tos.v1.NativeEndpointReferenceV1
+	(*NativeCapabilityVersionPayloadV1)(nil),  // 14: atos.tos.v1.NativeCapabilityVersionPayloadV1
+	(*NativeTransferCapabilityPayloadV1)(nil), // 15: atos.tos.v1.NativeTransferCapabilityPayloadV1
+	(*NativeRegistryActionV1)(nil),            // 16: atos.tos.v1.NativeRegistryActionV1
+	(*NativeRegistryEventV1)(nil),             // 17: atos.tos.v1.NativeRegistryEventV1
+	(*NativeEventObservationV1)(nil),          // 18: atos.tos.v1.NativeEventObservationV1
+	(*NativeSemanticSignatureV1)(nil),         // 19: atos.tos.v1.NativeSemanticSignatureV1
+	(*NativeAuthorizationSetV1)(nil),          // 20: atos.tos.v1.NativeAuthorizationSetV1
 }
 var file_atos_tos_v1_native_registry_proto_depIdxs = []int32{
-	1, // 0: atos.tos.v1.NativeControllerPolicyV1.controllers:type_name -> atos.tos.v1.NativeControllerKeyV1
-	0, // 1: atos.tos.v1.NativeAgentBootstrapV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
-	0, // 2: atos.tos.v1.NativeCapabilityBootstrapV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
-	0, // 3: atos.tos.v1.NativeRegistryActionV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
-	0, // 4: atos.tos.v1.NativeRegistryEventV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	1,  // 0: atos.tos.v1.NativeControllerPolicyV1.controllers:type_name -> atos.tos.v1.NativeControllerKeyV1
+	0,  // 1: atos.tos.v1.NativeAgentBootstrapV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
+	0,  // 2: atos.tos.v1.NativeCapabilityBootstrapV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
+	9,  // 3: atos.tos.v1.NativeRecoverAgentPayloadV1.initiation_reference:type_name -> atos.tos.v1.NativeChainReferenceV1
+	12, // 4: atos.tos.v1.NativeCapabilityVersionPayloadV1.manifest:type_name -> atos.tos.v1.NativeManifestReferenceV1
+	13, // 5: atos.tos.v1.NativeCapabilityVersionPayloadV1.endpoints:type_name -> atos.tos.v1.NativeEndpointReferenceV1
+	0,  // 6: atos.tos.v1.NativeRegistryActionV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
+	0,  // 7: atos.tos.v1.NativeRegistryEventV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
+	0,  // 8: atos.tos.v1.NativeEventObservationV1.network:type_name -> atos.tos.v1.NativeNetworkDomainV1
+	9,  // 9: atos.tos.v1.NativeEventObservationV1.reference:type_name -> atos.tos.v1.NativeChainReferenceV1
+	19, // 10: atos.tos.v1.NativeAuthorizationSetV1.signatures:type_name -> atos.tos.v1.NativeSemanticSignatureV1
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_atos_tos_v1_native_registry_proto_init() }
@@ -812,7 +1775,7 @@ func file_atos_tos_v1_native_registry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_tos_v1_native_registry_proto_rawDesc), len(file_atos_tos_v1_native_registry_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
