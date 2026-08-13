@@ -264,8 +264,7 @@ func (a *chainAuthority) ResolveCommitment(ctx context.Context, kind, objectID, 
 	if err != nil {
 		return nil, err
 	}
-	ref := observation.Reference
-	return &ref, nil
+	return cloneMessage(observation.Reference), nil
 }
 
 func (a *chainAuthority) ResolveCommitmentObservation(ctx context.Context, kind, objectID, digest string, reference *NetworkReference) (*CommitmentObservation, error) {
@@ -323,7 +322,7 @@ func (a *chainAuthority) ResolveCommitmentObservation(ctx context.Context, kind,
 		return nil, errors.New("TOS chain commitment finality observation is not current")
 	}
 	return &CommitmentObservation{
-		Reference:          NetworkReference{Network: a.network, Reference: referenceValue, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno},
+		Reference:          &NetworkReference{Network: a.network, Reference: referenceValue, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno},
 		ObservedUnixMillis: state.ObservedAt.UTC().UnixMilli(),
 	}, nil
 }

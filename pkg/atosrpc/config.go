@@ -81,7 +81,7 @@ type CommitmentObservationResolver interface {
 }
 
 type CommitmentObservation struct {
-	Reference          NetworkReference
+	Reference          *NetworkReference
 	ObservedUnixMillis int64
 }
 

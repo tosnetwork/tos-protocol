@@ -69,7 +69,7 @@ func protoDigestText(s string) *atostosv1.Digest {
 }
 func observation(r EvidenceRequest, ref *atostosv1.NetworkReference) (EvidenceObservation, error) {
 	if ref == nil || !ref.Finalized || ref.FinalizedCheckpoint == 0 || ref.Network != r.Reference.Network || ref.Reference != r.Reference.Reference {
-		return EvidenceObservation{}, errors.New("live evidence reference mismatch")
+		return EvidenceObservation{}, errors.New("live evidence reference mismatch for " + r.Kind + "/" + r.ObjectID)
 	}
 	return EvidenceObservation{Found: true, Network: ref.Network, Kind: r.Kind, ObjectID: r.ObjectID, Digest: r.Digest, Reference: ref.Reference, Finalized: true, FinalizedCheckpoint: ref.FinalizedCheckpoint}, nil
 }

@@ -609,8 +609,7 @@ func resolveSignerRevocation(ctx context.Context, authority Authority, authoriza
 	if err != nil || observed == nil || observed.ObservedUnixMillis <= 0 {
 		return false, nil, 0, errors.New("canonical revocation unavailable")
 	}
-	ref := observed.Reference
-	return true, &ref, observed.ObservedUnixMillis, nil
+	return true, cloneMessage(observed.Reference), observed.ObservedUnixMillis, nil
 }
 
 func resolveCommitmentObservation(ctx context.Context, authority Authority, kind, objectID, digest string, ref *NetworkReference) (*CommitmentObservation, error) {

@@ -65,7 +65,7 @@ func (a *verifiedTestAuthority) ResolveCommitmentObservation(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	return &CommitmentObservation{Reference: *live, ObservedUnixMillis: 1_700_000_000_000}, nil
+	return &CommitmentObservation{Reference: live, ObservedUnixMillis: 1_700_000_000_000}, nil
 }
 
 type verifiedTestEconomy struct{ closed bool }
