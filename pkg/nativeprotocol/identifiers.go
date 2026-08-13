@@ -22,6 +22,7 @@ const (
 	ControllerPolicyDomain  = "tos.native.controller-policy.v1"
 	RegistryActionDomain    = "tos.native.registry-action.v1"
 	RegistryEventDomain     = "tos.native.registry-event.v1"
+	RegistryStateDomain     = "tos.native.registry-state.v1"
 	EventObservationDomain  = "tos.native.event-observation.v1"
 	SemanticSignatureDomain = "tos.native.semantic-signature.v1"
 	SignatureAlgorithm      = "ed25519"
@@ -115,6 +116,43 @@ func ControllerPolicyDigest(policy ControllerPolicy) (string, error) {
 		return "", err
 	}
 	return codec.Digest(ControllerPolicyDomain, policy)
+}
+
+// EncodeControllerPolicy returns the exact canonical bytes that registry
+// actions carry so a fresh resolver can rebuild authority without a gateway
+// policy table.
+func EncodeControllerPolicy(policy ControllerPolicy) (string, string, error) {
+	if err := ValidateControllerPolicy(policy); err != nil {
+		return "", "", err
+	}
+	raw, err := codec.Marshal(policy)
+	if err != nil {
+		return "", "", err
+	}
+	digest, err := codec.DigestCanonical(ControllerPolicyDomain, raw)
+	if err != nil {
+		return "", "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), digest, nil
+}
+
+func DecodeControllerPolicy(encoded, expectedDigest string) (ControllerPolicy, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || base64.RawURLEncoding.EncodeToString(raw) != encoded {
+		return ControllerPolicy{}, fail(CodeCanonicalEncoding, "controller_policy.cbor_base64url")
+	}
+	digest, err := codec.DigestCanonical(ControllerPolicyDomain, raw)
+	if err != nil || digest != expectedDigest {
+		return ControllerPolicy{}, fail(CodePolicyUnauthorized, "controller_policy.digest")
+	}
+	var policy ControllerPolicy
+	if err := codec.Unmarshal(raw, &policy); err != nil {
+		return ControllerPolicy{}, fail(CodeCanonicalEncoding, "controller_policy")
+	}
+	if err := ValidateControllerPolicy(policy); err != nil {
+		return ControllerPolicy{}, err
+	}
+	return policy, nil
 }
 func ValidateControllerPolicy(policy ControllerPolicy) error {
 	if policy.Threshold == 0 || policy.RecoveryThreshold == 0 || len(policy.Controllers) == 0 || len(policy.Controllers) > 64 {

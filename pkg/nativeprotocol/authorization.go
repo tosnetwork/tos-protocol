@@ -82,15 +82,50 @@ func RequiredPurpose(kind ActionKind) string {
 // VerifyAuthorization applies sorted-set, unique-key and weighted-threshold
 // rules. Controller policy validation already proves public-key uniqueness, so
 // one physical key can contribute weight at most once.
-func VerifyAuthorization(action RegistryAction, policy ControllerPolicy, signatures []Signature) error {
+func VerifyAuthorization(action RegistryAction, expectedPolicyDigest string, policy ControllerPolicy, signatures []Signature) error {
+	if action.Kind == ActionTransferCapability {
+		return fail(CodePurposeUnauthorized, "transfer.dual_authorization_required")
+	}
+	policyDigest, err := ControllerPolicyDigest(policy)
+	if err != nil {
+		return err
+	}
 	if action.Kind == ActionRegisterAgent {
+		if expectedPolicyDigest != "" {
+			return fail(CodePolicyUnauthorized, "current_controller_policy")
+		}
 		var payload RegisterAgentPayload
 		if err := DecodePayload(action, &payload); err != nil {
 			return err
 		}
-		digest, err := ControllerPolicyDigest(policy)
-		if err != nil || digest != action.PolicyDigest || digest != payload.InitialPolicyDigest {
+		if policyDigest != action.PolicyDigest || policyDigest != payload.InitialPolicyDigest {
 			return fail(CodePolicyUnauthorized, "initial_controller_policy")
+		}
+	} else if !validDigest(expectedPolicyDigest) || policyDigest != expectedPolicyDigest || policyDigest != action.PolicyDigest {
+		return fail(CodePolicyUnauthorized, "current_controller_policy")
+	}
+	if action.Kind == ActionRegisterCapability || action.Kind == ActionUpdateCapability {
+		var payload CapabilityVersionPayload
+		if action.Kind == ActionRegisterCapability {
+			var registration RegisterCapabilityPayload
+			if err := DecodePayload(action, &registration); err != nil {
+				return err
+			}
+			payload = registration.Version
+		} else if err := DecodePayload(action, &payload); err != nil {
+			return err
+		}
+		if err := validateCapabilitySignersForPolicy(payload, policy); err != nil {
+			return err
+		}
+	}
+	if action.Kind == ActionDelegateAgent {
+		var payload DelegationPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return err
+		}
+		if err := validateDelegationForPolicy(payload, policy); err != nil {
+			return err
 		}
 	}
 	return verifyAuthorizationForPurpose(action, policy, RequiredPurpose(action.Kind), signatures)
@@ -144,7 +179,7 @@ func verifyAuthorizationForPurpose(action RegistryAction, policy ControllerPolic
 
 // VerifyTransferAuthorization requires independent current-owner authority and
 // new-owner acceptance over the identical transfer action.
-func VerifyTransferAuthorization(action RegistryAction, currentPolicy, newOwnerPolicy ControllerPolicy, currentSignatures, newOwnerSignatures []Signature) error {
+func VerifyTransferAuthorization(action RegistryAction, expectedCurrentPolicyDigest string, currentPolicy ControllerPolicy, expectedNewOwnerPolicyDigest string, newOwnerPolicy ControllerPolicy, currentSignatures, newOwnerSignatures []Signature) error {
 	if action.Kind != ActionTransferCapability {
 		return fail(CodePurposeUnauthorized, "kind")
 	}
@@ -152,9 +187,17 @@ func VerifyTransferAuthorization(action RegistryAction, currentPolicy, newOwnerP
 	if err := DecodePayload(action, &payload); err != nil {
 		return err
 	}
+	currentPolicyDigest, err := ControllerPolicyDigest(currentPolicy)
+	if err != nil || !validDigest(expectedCurrentPolicyDigest) || currentPolicyDigest != expectedCurrentPolicyDigest || currentPolicyDigest != action.PolicyDigest {
+		return fail(CodePolicyUnauthorized, "current_controller_policy")
+	}
 	newPolicyDigest, err := ControllerPolicyDigest(newOwnerPolicy)
-	if err != nil || newPolicyDigest != payload.NewOwnerPolicyDigest {
+	if err != nil || !validDigest(expectedNewOwnerPolicyDigest) || newPolicyDigest != expectedNewOwnerPolicyDigest || newPolicyDigest != payload.NewOwnerPolicyDigest {
 		return fail(CodePolicyUnauthorized, "payload.new_owner_policy_digest")
+	}
+	encoded, _, err := EncodeControllerPolicy(newOwnerPolicy)
+	if err != nil || encoded != payload.NewOwnerPolicyCBORBase64 {
+		return fail(CodePolicyUnauthorized, "payload.new_owner_policy")
 	}
 	if payload.CurrentOwnerAgentID != action.AgentID {
 		return fail(CodeCrossDomainReplay, "payload.current_owner_agent_id")
@@ -165,52 +208,255 @@ func VerifyTransferAuthorization(action RegistryAction, currentPolicy, newOwnerP
 	return verifyAuthorizationForPurpose(action, newOwnerPolicy, "capability_control", newOwnerSignatures)
 }
 
-// ValidateTransition freezes generation/sequence and recovery-timelock rules.
-// observedUnixSeconds must come from a finalized TOS block observation.
-func ValidateTransition(previous *RegistryEvent, action RegistryAction, observedUnixSeconds uint64) error {
-	if err := action.Validate(); err != nil {
-		return err
+func validateCapabilitySignersForPolicy(payload CapabilityVersionPayload, policy ControllerPolicy) error {
+	keys := make(map[string]ControllerKey, len(policy.Controllers))
+	for _, key := range policy.Controllers {
+		keys[key.KeyID] = key
 	}
-	if previous == nil {
-		if (action.Kind != ActionRegisterAgent && action.Kind != ActionRegisterCapability) || action.Generation != 1 || action.Sequence != 1 || action.PreviousStateDigest != "" {
-			return fail(CodeSequenceConflict, "registry_action")
+	for _, keyID := range payload.QuoteSignerKeyIDs {
+		key, ok := keys[keyID]
+		if !ok || !contains(key.Purposes, "quote") {
+			return fail(CodePurposeUnauthorized, "payload.quote_signer_key_ids")
 		}
-		return nil
 	}
-	if err := previous.Validate(); err != nil {
-		return err
-	}
-	if previous.Network != action.Network || previous.AgentID != action.AgentID || previous.CapabilityID != action.CapabilityID {
-		return fail(CodeCrossDomainReplay, "previous_state")
-	}
-	if action.Kind == ActionRecoverAgent {
-		var payload RecoverAgentPayload
-		if err := DecodePayload(action, &payload); err != nil {
-			return err
+	for _, keyID := range payload.ReceiptSignerKeyIDs {
+		key, ok := keys[keyID]
+		if !ok || !contains(key.Purposes, "receipt") {
+			return fail(CodePurposeUnauthorized, "payload.receipt_signer_key_ids")
 		}
-		if action.Generation != previous.Generation+1 || action.Sequence != 1 || action.PreviousStateDigest != previous.StateDigest {
-			return fail(CodeSequenceConflict, "recovery_generation")
-		}
-		if observedUnixSeconds == 0 || observedUnixSeconds < payload.ExecuteAfterUnixSeconds {
-			return fail(CodeTimelockPending, "recovery.execute_after_unix_seconds")
-		}
-		return nil
-	}
-	if action.Generation != previous.Generation || action.Sequence != previous.Sequence+1 || action.PreviousStateDigest != previous.StateDigest {
-		return fail(CodeSequenceConflict, "registry_action.sequence")
 	}
 	return nil
 }
 
-// ValidateRecoveryTransition binds execution to the finalized initiation event
-// and the old policy's timelock. Wall-clock time is never accepted here.
-func ValidateRecoveryTransition(previous RegistryEvent, action RegistryAction, initiation RegistryAction, initiationEvent RegistryEvent, observation EventObservation, oldPolicy ControllerPolicy, executionBlockUnixSeconds uint64) error {
-	if initiation.Kind != ActionInitiateRecovery || initiation.AgentID != action.AgentID || initiation.Network != action.Network {
+func validateDelegationForPolicy(payload DelegationPayload, policy ControllerPolicy) error {
+	for _, key := range policy.Controllers {
+		if key.KeyID != payload.DelegateKeyID {
+			continue
+		}
+		for _, purpose := range payload.Purposes {
+			if !contains(key.Purposes, purpose) || purpose == "agent_control" || purpose == "capability_control" || purpose == "delegation" || purpose == "recovery" {
+				return fail(CodePurposeUnauthorized, "payload.delegation.purposes")
+			}
+		}
+		return nil
+	}
+	return fail(CodePurposeUnauthorized, "payload.delegation.delegate_key_id")
+}
+
+// DeriveNextState validates the complete logical transition and returns the
+// only state digest that the corresponding event may emit. For non-Agent
+// bootstrap and all Capability actions, expectedAuthorityPolicyDigest must be
+// independently resolved from the controlling Agent's canonical state.
+func DeriveNextState(previous *RegistryState, action RegistryAction, expectedAuthorityPolicyDigest string, observedUnixSeconds uint64) (RegistryState, error) {
+	if err := action.Validate(); err != nil {
+		return RegistryState{}, err
+	}
+	actionDigest, err := ActionDigest(action)
+	if err != nil {
+		return RegistryState{}, err
+	}
+	if previous == nil {
+		if action.Generation != 1 || action.Sequence != 1 || action.PreviousStateDigest != "" {
+			return RegistryState{}, fail(CodeSequenceConflict, "registry_action")
+		}
+		switch action.Kind {
+		case ActionRegisterAgent:
+			if expectedAuthorityPolicyDigest != "" {
+				return RegistryState{}, fail(CodePolicyUnauthorized, "current_controller_policy")
+			}
+			var payload RegisterAgentPayload
+			if err := DecodePayload(action, &payload); err != nil {
+				return RegistryState{}, err
+			}
+			state := RegistryState{Version: Version, Network: action.Network, ObjectKind: "agent", AgentID: action.AgentID, Generation: 1, Sequence: 1, LastActionDigest: actionDigest, CurrentPolicyDigest: payload.InitialPolicyDigest, CurrentPolicyCBORBase64: payload.InitialPolicyCBORBase64, DelegationActionDigests: []string{}, CapabilityVersions: []CapabilityVersionState{}, AgentNonceBase64: payload.ObjectNonceBase64, AgentBootstrapPolicyDigest: payload.InitialPolicyDigest}
+			if err := state.Validate(); err != nil {
+				return RegistryState{}, err
+			}
+			return state, nil
+		case ActionRegisterCapability:
+			if !validDigest(expectedAuthorityPolicyDigest) || action.PolicyDigest != expectedAuthorityPolicyDigest {
+				return RegistryState{}, fail(CodePolicyUnauthorized, "current_controller_policy")
+			}
+			var payload RegisterCapabilityPayload
+			if err := DecodePayload(action, &payload); err != nil {
+				return RegistryState{}, err
+			}
+			state := RegistryState{Version: Version, Network: action.Network, ObjectKind: "capability", CapabilityID: action.CapabilityID, Generation: 1, Sequence: 1, LastActionDigest: actionDigest, OwnerAgentID: payload.Version.OwnerAgentID, CapabilityBootstrapOwnerAgentID: payload.Version.OwnerAgentID, CapabilityNonceBase64: payload.ObjectNonceBase64, CapabilityVersions: []CapabilityVersionState{{Version: action.CapabilityVersion, PayloadDigest: action.PayloadDigest}}, DelegationActionDigests: []string{}}
+			if err := state.Validate(); err != nil {
+				return RegistryState{}, err
+			}
+			return state, nil
+		default:
+			return RegistryState{}, fail(CodeSequenceConflict, "registry_action.bootstrap")
+		}
+	}
+	if err := previous.Validate(); err != nil {
+		return RegistryState{}, err
+	}
+	if previous.Tombstoned {
+		return RegistryState{}, fail(CodePermanentlyRevoked, "registry_state.tombstone")
+	}
+	previousDigest, err := StateDigest(*previous)
+	if err != nil {
+		return RegistryState{}, err
+	}
+	if previous.Network != action.Network || action.PreviousStateDigest != previousDigest {
+		return RegistryState{}, fail(CodePredecessorMismatch, "previous_state_digest")
+	}
+	if previous.ObjectKind == "agent" {
+		if isCapabilityKind(action.Kind) || action.AgentID != previous.AgentID || action.PolicyDigest != previous.CurrentPolicyDigest || expectedAuthorityPolicyDigest != previous.CurrentPolicyDigest {
+			return RegistryState{}, fail(CodePolicyUnauthorized, "current_controller_policy")
+		}
+	} else if !isCapabilityKind(action.Kind) || action.CapabilityID != previous.CapabilityID || action.AgentID != previous.OwnerAgentID || !validDigest(expectedAuthorityPolicyDigest) || action.PolicyDigest != expectedAuthorityPolicyDigest {
+		return RegistryState{}, fail(CodePolicyUnauthorized, "current_owner_policy")
+	}
+	if action.Kind == ActionRecoverAgent || action.Kind == ActionTransferCapability {
+		if action.Generation != previous.Generation+1 || action.Sequence != 1 {
+			return RegistryState{}, fail(CodeSequenceConflict, "registry_action.generation")
+		}
+	} else if action.Generation != previous.Generation || action.Sequence != previous.Sequence+1 {
+		return RegistryState{}, fail(CodeSequenceConflict, "registry_action.sequence")
+	}
+
+	state := cloneState(*previous)
+	state.Generation = action.Generation
+	state.Sequence = action.Sequence
+	state.PredecessorStateDigest = previousDigest
+	state.LastActionDigest = actionDigest
+	if action.Kind != ActionInitiateRecovery && action.Kind != ActionRecoverAgent {
+		state.PendingRecovery = PendingRecovery{}
+	}
+	switch action.Kind {
+	case ActionUpdateAgentPolicy:
+		var payload UpdatePolicyPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		state.CurrentPolicyDigest = payload.NewPolicyDigest
+		state.CurrentPolicyCBORBase64 = payload.NewPolicyCBORBase64
+	case ActionDelegateAgent:
+		state.DelegationActionDigests = insertSortedDigest(state.DelegationActionDigests, actionDigest)
+	case ActionInitiateRecovery:
+		var payload InitiateRecoveryPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		state.PendingRecovery = PendingRecovery{InitiationActionDigest: actionDigest, NewPolicyDigest: payload.NewPolicyDigest, NewPolicyCBORBase64: payload.NewPolicyCBORBase64, ExecuteAfterUnixSeconds: payload.ExecuteAfterUnixSeconds}
+	case ActionRecoverAgent:
+		var payload RecoverAgentPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		pending := previous.PendingRecovery
+		if pendingRecoveryIsZero(pending) || pending.InitiationActionDigest != payload.InitiationActionDigest || pending.NewPolicyDigest != payload.NewPolicyDigest || pending.ExecuteAfterUnixSeconds != payload.ExecuteAfterUnixSeconds {
+			return RegistryState{}, fail(CodeCrossDomainReplay, "recovery.pending_state")
+		}
+		if observedUnixSeconds == 0 || observedUnixSeconds < pending.ExecuteAfterUnixSeconds {
+			return RegistryState{}, fail(CodeTimelockPending, "recovery.execute_after_unix_seconds")
+		}
+		state.CurrentPolicyDigest = pending.NewPolicyDigest
+		state.CurrentPolicyCBORBase64 = pending.NewPolicyCBORBase64
+		state.PendingRecovery = PendingRecovery{}
+		state.DelegationActionDigests = []string{}
+	case ActionRevokeAgent:
+		var payload RevocationPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		if payload.Scope != "agent" {
+			return RegistryState{}, fail(CodeCanonicalEncoding, "payload.revocation.scope")
+		}
+		state.Tombstoned = true
+		state.PendingRecovery = PendingRecovery{}
+		state.DelegationActionDigests = []string{}
+	case ActionUpdateCapability:
+		var payload CapabilityVersionPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		if payload.OwnerAgentID != previous.OwnerAgentID || hasCapabilityVersion(state.CapabilityVersions, action.CapabilityVersion) {
+			return RegistryState{}, fail(CodeSequenceConflict, "capability_version")
+		}
+		state.CapabilityVersions = insertCapabilityVersion(state.CapabilityVersions, CapabilityVersionState{Version: action.CapabilityVersion, PayloadDigest: action.PayloadDigest})
+	case ActionTransferCapability:
+		var payload TransferCapabilityPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		if payload.CurrentOwnerAgentID != previous.OwnerAgentID {
+			return RegistryState{}, fail(CodeCrossDomainReplay, "payload.current_owner_agent_id")
+		}
+		state.OwnerAgentID = payload.NewOwnerAgentID
+	case ActionRevokeCapability:
+		var payload RevocationPayload
+		if err := DecodePayload(action, &payload); err != nil {
+			return RegistryState{}, err
+		}
+		switch payload.Scope {
+		case "lineage":
+			if action.CapabilityVersion != "" {
+				return RegistryState{}, fail(CodeCanonicalEncoding, "payload.revocation.scope")
+			}
+			state.Tombstoned = true
+		case "version":
+			if action.CapabilityVersion == "" || !markCapabilityVersionRevoked(state.CapabilityVersions, action.CapabilityVersion) {
+				return RegistryState{}, fail(CodeSequenceConflict, "capability_version")
+			}
+		default:
+			return RegistryState{}, fail(CodeCanonicalEncoding, "payload.revocation.scope")
+		}
+	default:
+		return RegistryState{}, fail(CodeSequenceConflict, "registry_action.kind")
+	}
+	if err := state.Validate(); err != nil {
+		return RegistryState{}, err
+	}
+	return state, nil
+}
+
+func ValidateTransition(previous *RegistryState, action RegistryAction, expectedAuthorityPolicyDigest string, observedUnixSeconds uint64) error {
+	_, err := DeriveNextState(previous, action, expectedAuthorityPolicyDigest, observedUnixSeconds)
+	return err
+}
+
+// ValidateEventTransition derives state rather than accepting caller-supplied
+// state, then requires the finalized event to commit exactly that result.
+func ValidateEventTransition(previous *RegistryState, action RegistryAction, expectedAuthorityPolicyDigest string, observedUnixSeconds uint64, event RegistryEvent) (RegistryState, error) {
+	state, err := DeriveNextState(previous, action, expectedAuthorityPolicyDigest, observedUnixSeconds)
+	if err != nil {
+		return RegistryState{}, err
+	}
+	if err := validateEventForActionAndState(action, state, event); err != nil {
+		return RegistryState{}, err
+	}
+	return state, nil
+}
+
+// ValidateRecoveryTransition binds recovery to the immediately preceding
+// finalized initiation state. Policy bytes and timelock come from that state,
+// never from caller-selected authority.
+func ValidateRecoveryTransition(preInitiation RegistryState, previous RegistryState, action RegistryAction, initiation RegistryAction, initiationEvent RegistryEvent, observation EventObservation, executionBlockUnixSeconds uint64) error {
+	if preInitiation.ObjectKind != "agent" || previous.ObjectKind != "agent" || initiation.Kind != ActionInitiateRecovery || initiation.AgentID != action.AgentID || initiation.Network != action.Network || observation.Network != action.Network {
 		return fail(CodeCrossDomainReplay, "recovery.initiation")
+	}
+	derivedInitiation, err := ValidateEventTransition(&preInitiation, initiation, preInitiation.CurrentPolicyDigest, 0, initiationEvent)
+	if err != nil {
+		return err
+	}
+	derivedDigest, err := StateDigest(derivedInitiation)
+	if err != nil {
+		return err
+	}
+	previousDigest, err := StateDigest(previous)
+	if err != nil || derivedDigest != previousDigest {
+		return fail(CodeCrossDomainReplay, "recovery.immediate_predecessor")
 	}
 	initDigest, err := ActionDigest(initiation)
 	if err != nil {
 		return err
+	}
+	if previous.LastActionDigest != initDigest || previous.PendingRecovery.InitiationActionDigest != initDigest {
+		return fail(CodeCrossDomainReplay, "recovery.immediate_predecessor")
 	}
 	var recoverPayload RecoverAgentPayload
 	var initiatePayload InitiateRecoveryPayload
@@ -223,21 +469,62 @@ func ValidateRecoveryTransition(previous RegistryEvent, action RegistryAction, i
 	if err := observation.Validate(); err != nil {
 		return err
 	}
-	if err := ValidateEventForAction(initiation, initiationEvent); err != nil {
-		return err
-	}
 	initEventDigest, err := EventDigest(initiationEvent)
 	if err != nil || observation.EventDigest != initEventDigest {
 		return fail(CodeCrossDomainReplay, "recovery.initiation_observation")
 	}
-	if recoverPayload.InitiationActionDigest != initDigest || recoverPayload.InitiationReference != observation.Reference || recoverPayload.NewPolicyDigest != initiatePayload.NewPolicyDigest {
+	if recoverPayload.InitiationActionDigest != initDigest || recoverPayload.InitiationReference != observation.Reference || recoverPayload.NewPolicyDigest != initiatePayload.NewPolicyDigest || previous.PendingRecovery.NewPolicyDigest != initiatePayload.NewPolicyDigest {
 		return fail(CodeCrossDomainReplay, "recovery.initiation_tuple")
 	}
+	oldPolicy, err := DecodeControllerPolicy(previous.CurrentPolicyCBORBase64, previous.CurrentPolicyDigest)
+	if err != nil {
+		return err
+	}
 	executeAfter := observation.BlockUnixSeconds + oldPolicy.RecoveryTimelock
-	if executeAfter < observation.BlockUnixSeconds || recoverPayload.ExecuteAfterUnixSeconds != executeAfter || initiatePayload.ExecuteAfterUnixSeconds != executeAfter {
+	if executeAfter < observation.BlockUnixSeconds || recoverPayload.ExecuteAfterUnixSeconds != executeAfter || initiatePayload.ExecuteAfterUnixSeconds != executeAfter || previous.PendingRecovery.ExecuteAfterUnixSeconds != executeAfter {
 		return fail(CodeTimelockPending, "recovery.execute_after_unix_seconds")
 	}
-	return ValidateTransition(&previous, action, executionBlockUnixSeconds)
+	_, err = DeriveNextState(&previous, action, previous.CurrentPolicyDigest, executionBlockUnixSeconds)
+	return err
+}
+
+func cloneState(value RegistryState) RegistryState {
+	value.CapabilityVersions = append([]CapabilityVersionState(nil), value.CapabilityVersions...)
+	value.DelegationActionDigests = append([]string(nil), value.DelegationActionDigests...)
+	return value
+}
+
+func insertSortedDigest(values []string, digest string) []string {
+	index := sort.SearchStrings(values, digest)
+	if index < len(values) && values[index] == digest {
+		return values
+	}
+	values = append(values, "")
+	copy(values[index+1:], values[index:])
+	values[index] = digest
+	return values
+}
+
+func hasCapabilityVersion(values []CapabilityVersionState, version string) bool {
+	index := sort.Search(len(values), func(i int) bool { return values[i].Version >= version })
+	return index < len(values) && values[index].Version == version
+}
+
+func insertCapabilityVersion(values []CapabilityVersionState, value CapabilityVersionState) []CapabilityVersionState {
+	index := sort.Search(len(values), func(i int) bool { return values[i].Version >= value.Version })
+	values = append(values, CapabilityVersionState{})
+	copy(values[index+1:], values[index:])
+	values[index] = value
+	return values
+}
+
+func markCapabilityVersionRevoked(values []CapabilityVersionState, version string) bool {
+	index := sort.Search(len(values), func(i int) bool { return values[i].Version >= version })
+	if index == len(values) || values[index].Version != version || values[index].Revoked {
+		return false
+	}
+	values[index].Revoked = true
+	return true
 }
 
 // ValidateDelegationAt uses finalized checkpoints only and enforces the frozen

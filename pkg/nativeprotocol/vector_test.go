@@ -37,7 +37,12 @@ func TestExecutableNegativeVectors(t *testing.T) {
 	}
 	f := fixture(t)
 	actionDigest, _ := ActionDigest(f.action)
-	event := RegistryEvent{Version: Version, Kind: f.action.Kind, Network: f.network, ActionDigest: actionDigest, AgentID: f.agentID, CapabilityID: f.capabilityID, CapabilityVersion: "1.2.3", Generation: 1, Sequence: 1, StateDigest: "sha256:" + strings.Repeat("55", 32)}
+	state, err := DeriveNextState(nil, f.action, f.policyDigest, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDigest, _ := StateDigest(state)
+	event := RegistryEvent{Version: Version, Kind: f.action.Kind, Network: f.network, ActionDigest: actionDigest, AgentID: f.agentID, CapabilityID: f.capabilityID, CapabilityVersion: "1.2.3", Generation: 1, Sequence: 1, StateDigest: stateDigest}
 	observation := EventObservation{Version: Version, Network: f.network, EventDigest: mustEventDigest(t, event), Reference: ChainReference{Workchain: 0, Account: "0:" + strings.Repeat("66", 32), LogicalTime: 42, TransactionHash: "sha256:" + strings.Repeat("77", 32), ContractCodeHash: "tvm-cell-sha256:" + strings.Repeat("88", 32), EventIndex: 1}, FinalizedCheckpoint: 100, FinalizedRootHash: "sha256:" + strings.Repeat("99", 32), FinalizedFileHash: "sha256:" + strings.Repeat("aa", 32), BlockUnixSeconds: 1800000000, InclusionProofDigest: "sha256:" + strings.Repeat("bb", 32)}
 	signature, _ := SignAction(f.privateKey, "controller-1", f.action)
 	seen := map[string]bool{}
@@ -70,7 +75,7 @@ func TestExecutableNegativeVectors(t *testing.T) {
 			operation := vector.Operation
 			operation.Value = signature
 			applyVectorMutation(t, &wrapper, map[string]any{"signatures": []Signature{signature}}, operation)
-			got = VerifyAuthorization(f.action, f.policy, wrapper.Signatures)
+			got = VerifyAuthorization(f.action, f.policyDigest, f.policy, wrapper.Signatures)
 		case "agent_event_capability_version":
 			base := event
 			base.Kind = ActionRegisterAgent
@@ -130,6 +135,40 @@ func TestExecutableNegativeVectors(t *testing.T) {
 			applyVectorMutation(t, &wrapper, map[string]any{"network": f.network}, vector.Operation)
 			changed := wrapper.Network
 			got = changed.Validate()
+		case "current_policy_substitution":
+			var wrapper struct {
+				ExpectedPolicyDigest string `json:"expected_policy_digest"`
+			}
+			applyVectorMutation(t, &wrapper, map[string]any{"expected_policy_digest": f.policyDigest}, vector.Operation)
+			got = VerifyAuthorization(f.action, wrapper.ExpectedPolicyDigest, f.policy, []Signature{signature})
+		case "capability_id_substitution":
+			var wrapper struct {
+				Action RegistryAction `json:"action"`
+			}
+			applyVectorMutation(t, &wrapper, map[string]any{"action": f.action}, vector.Operation)
+			_, got = ActionDigest(wrapper.Action)
+		case "state_digest_substitution":
+			var wrapper struct {
+				Event RegistryEvent `json:"event"`
+			}
+			applyVectorMutation(t, &wrapper, map[string]any{"event": event}, vector.Operation)
+			_, got = ValidateEventTransition(nil, f.action, f.policyDigest, 0, wrapper.Event)
+		case "workchain_account_mismatch":
+			var wrapper struct {
+				Reference ChainReference `json:"reference"`
+			}
+			applyVectorMutation(t, &wrapper, map[string]any{"reference": observation.Reference}, vector.Operation)
+			got = wrapper.Reference.Validate()
+		case "unicode_manifest_location", "overlapping_quote_receipt_signer":
+			var payload RegisterCapabilityPayload
+			if err := DecodePayload(f.action, &payload); err != nil {
+				t.Fatal(err)
+			}
+			var wrapper struct {
+				Payload RegisterCapabilityPayload `json:"payload"`
+			}
+			applyVectorMutation(t, &wrapper, map[string]any{"payload": payload}, vector.Operation)
+			_, _, got = EncodePayload(ActionRegisterCapability, wrapper.Payload)
 		default:
 			t.Fatalf("normative mutation %q has no executor", vector.Name)
 		}
