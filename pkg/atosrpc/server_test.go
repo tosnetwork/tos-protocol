@@ -2,6 +2,7 @@ package atosrpc
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,12 +10,31 @@ import (
 
 	"connectrpc.com/connect"
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
 )
 
 type nativeStub struct {
 	readyErr  error
 	submitted int
 	resolved  int
+}
+
+func TestNativeProtocolErrorsCarryStableTypedDetail(t *testing.T) {
+	cause := &nativecore.ProtocolError{Code: nativecore.ErrBadSequence, Message: "test diagnostic"}
+	err := nativeConnectError(connect.CodeFailedPrecondition, cause)
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) || len(connectErr.Details()) != 1 {
+		t.Fatalf("error = %v", err)
+	}
+	value, detailErr := connectErr.Details()[0].Value()
+	if detailErr != nil {
+		t.Fatal(detailErr)
+	}
+	detail, ok := value.(*nativev1.NativeErrorV1)
+	if !ok || detail.Code != nativev1.NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_SEQUENCE ||
+		detail.Identifier != "NATIVE_BAD_SEQUENCE" {
+		t.Fatalf("detail = %#v", value)
+	}
 }
 
 func (s *nativeStub) CheckReady(context.Context) error { return s.readyErr }

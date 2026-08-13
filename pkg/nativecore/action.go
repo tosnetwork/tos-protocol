@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -59,43 +58,49 @@ type BuiltAction struct {
 
 func BuildAction(action *nativev1.NativeActionV1) (BuiltAction, error) {
 	if action == nil || action.Protocol != Protocol || action.Network == nil {
-		return BuiltAction{}, errors.New("invalid Native action header")
+		return BuiltAction{}, nativeError(ErrBadMessage, "invalid Native action header")
 	}
 	if len(action.Nonce) != 32 || bytes.Equal(action.Nonce, make([]byte, 32)) {
-		return BuiltAction{}, errors.New("Native action nonce must be 32 nonzero bytes")
+		return BuiltAction{}, nativeError(ErrBadAction, "Native action nonce must be 32 nonzero bytes")
 	}
 	targetID, targetKind, err := objectID(action.TargetObjectId)
 	if err != nil {
-		return BuiltAction{}, err
+		return BuiltAction{}, wrapNativeError(ErrBadAction, "invalid target object ID", err)
 	}
 	codeHash, err := digestBytes(action.TargetContractCodeHash, "tvm-cell-sha256:", false)
 	if err != nil {
-		return BuiltAction{}, fmt.Errorf("target code hash: %w", err)
+		return BuiltAction{}, wrapNativeError(ErrWrongContract, "invalid target code hash", err)
 	}
 	previous, err := optionalDigest(action.PredecessorTvmStateHash)
 	if err != nil {
-		return BuiltAction{}, fmt.Errorf("predecessor state hash: %w", err)
+		return BuiltAction{}, wrapNativeError(ErrBadPredecessor, "invalid predecessor state hash", err)
 	}
 	genesisRoot, err := digestBytes(action.Network.GenesisRootHash, "sha256:", false)
 	if err != nil {
-		return BuiltAction{}, fmt.Errorf("genesis root: %w", err)
+		return BuiltAction{}, wrapNativeError(ErrWrongNetwork, "invalid genesis root", err)
 	}
 	genesisFile, err := digestBytes(action.Network.GenesisFileHash, "sha256:", false)
 	if err != nil {
-		return BuiltAction{}, fmt.Errorf("genesis file: %w", err)
+		return BuiltAction{}, wrapNativeError(ErrWrongNetwork, "invalid genesis file", err)
 	}
 	if !validProtocolText(action.Network.NetworkId, 64) {
-		return BuiltAction{}, errors.New("missing Native network ID")
+		return BuiltAction{}, nativeError(ErrWrongNetwork, "invalid Native network ID")
+	}
+	if action.Generation == 0 || action.Sequence == 0 {
+		return BuiltAction{}, nativeError(ErrBadSequence, "Native generation and sequence must be positive")
 	}
 	kind, payload, err := buildPayload(action, targetKind)
 	if err != nil {
-		return BuiltAction{}, err
+		return BuiltAction{}, wrapNativeError(ErrBadAction, "invalid Native action payload", err)
 	}
 	if err := validateRegistrationIdentity(action); err != nil {
-		return BuiltAction{}, err
+		return BuiltAction{}, wrapNativeError(ErrBadTransition, "invalid registration identity", err)
+	}
+	if (kind == KindRegisterAgent || kind == KindRegisterCapability) && (action.Generation != 1 || action.Sequence != 1) {
+		return BuiltAction{}, nativeError(ErrBadSequence, "Native registration must start at generation 1 sequence 1")
 	}
 	if (action.Sequence == 1) != bytes.Equal(previous, make([]byte, 32)) {
-		return BuiltAction{}, errors.New("Native predecessor/sequence mismatch")
+		return BuiltAction{}, nativeError(ErrBadPredecessor, "Native predecessor/sequence mismatch")
 	}
 	domainHash := sha256.Sum256([]byte(action.Network.NetworkId))
 	domain := cell.BeginCell().MustStoreSlice(genesisRoot, 256).MustStoreSlice(genesisFile, 256).
@@ -113,7 +118,7 @@ func BuildAction(action *nativev1.NativeActionV1) (BuiltAction, error) {
 func SignAction(privateKey ed25519.PrivateKey, keyID string, built BuiltAction) (*nativev1.SignatureV1, error) {
 	if len(privateKey) != ed25519.PrivateKeySize || built.Cell == nil || !validKeyID(keyID) ||
 		!bytes.Equal(privateKey.Public().(ed25519.PublicKey), keyIDHash(keyID)) {
-		return nil, errors.New("invalid Native signing input")
+		return nil, nativeError(ErrBadSignature, "invalid Native signing input")
 	}
 	return &nativev1.SignatureV1{KeyId: keyID, Ed25519Signature: ed25519.Sign(privateKey, built.Hash)}, nil
 }
@@ -121,10 +126,10 @@ func SignAction(privateKey ed25519.PrivateKey, keyID string, built BuiltAction) 
 func VerifySignatures(policy *nativev1.ControllerPolicyV1, signatures []*nativev1.SignatureV1, requiredPurpose uint32, recovery bool, actionHash []byte) error {
 	controllers, err := validatePolicy(policy)
 	if err != nil {
-		return err
+		return wrapNativeError(ErrBadPolicy, "invalid Native signature policy", err)
 	}
 	if len(signatures) == 0 || len(signatures) > MaxSignatures || len(actionHash) != 32 {
-		return errors.New("invalid Native signature set")
+		return nativeError(ErrBadSignature, "invalid Native signature set")
 	}
 	threshold := uint64(policy.Threshold)
 	if recovery {
@@ -135,20 +140,20 @@ func VerifySignatures(policy *nativev1.ControllerPolicyV1, signatures []*nativev
 	for _, signature := range signatures {
 		keyHash := keyIDHash(signature.GetKeyId())
 		if signature == nil || !validKeyID(signature.KeyId) || len(signature.Ed25519Signature) != ed25519.SignatureSize || previous != nil && bytes.Compare(keyHash, previous) <= 0 {
-			return errors.New("Native signatures must be complete and strictly sorted")
+			return nativeError(ErrDuplicateSignature, "Native signatures must be complete and strictly sorted")
 		}
 		controller, ok := controllers[signature.KeyId]
 		if !ok || controller.PurposeMask&requiredPurpose == 0 || recovery && !controller.Recovery {
-			return errors.New("Native signature is not authorized for the action")
+			return nativeError(ErrBadSignature, "Native signature is not authorized for the action")
 		}
 		if !ed25519.Verify(ed25519.PublicKey(controller.Ed25519PublicKey), actionHash, signature.Ed25519Signature) {
-			return errors.New("invalid Native Ed25519 signature")
+			return nativeError(ErrBadSignature, "invalid Native Ed25519 signature")
 		}
 		total += uint64(controller.Weight)
 		previous = keyHash
 	}
 	if total < threshold {
-		return errors.New("Native signature threshold not met")
+		return nativeError(ErrThreshold, "Native signature threshold not met")
 	}
 	return nil
 }
@@ -156,10 +161,10 @@ func VerifySignatures(policy *nativev1.ControllerPolicyV1, signatures []*nativev
 func VerifyPolicyPossession(policy *nativev1.ControllerPolicyV1, signatures []*nativev1.SignatureV1, actionHash []byte) error {
 	controllers, err := validatePolicy(policy)
 	if err != nil {
-		return err
+		return wrapNativeError(ErrBadPolicy, "invalid Native installation policy", err)
 	}
 	if len(signatures) != len(controllers) || len(actionHash) != 32 {
-		return errors.New("Native policy installation requires every controller signature")
+		return nativeError(ErrBadSignature, "Native policy installation requires every controller signature")
 	}
 	ordered := append([]*nativev1.SignatureV1(nil), signatures...)
 	sort.Slice(ordered, func(i, j int) bool {
@@ -167,12 +172,12 @@ func VerifyPolicyPossession(policy *nativev1.ControllerPolicyV1, signatures []*n
 	})
 	for i, signature := range ordered {
 		if signature == nil || len(signature.Ed25519Signature) != ed25519.SignatureSize {
-			return errors.New("invalid Native policy possession signature")
+			return nativeError(ErrBadSignature, "invalid Native policy possession signature")
 		}
 		controller, ok := controllers[signature.KeyId]
 		if !ok || i > 0 && equalBytes(keyIDHash(ordered[i-1].KeyId), keyIDHash(signature.KeyId)) ||
 			!ed25519.Verify(controller.Ed25519PublicKey, actionHash, signature.Ed25519Signature) {
-			return errors.New("invalid Native policy possession proof")
+			return nativeError(ErrBadSignature, "invalid Native policy possession proof")
 		}
 	}
 	return nil
@@ -180,16 +185,16 @@ func VerifyPolicyPossession(policy *nativev1.ControllerPolicyV1, signatures []*n
 
 func SignatureCell(signatures []*nativev1.SignatureV1) (*cell.Cell, error) {
 	if len(signatures) == 0 || len(signatures) > MaxSignatures {
-		return nil, errors.New("invalid Native signature count")
+		return nil, nativeError(ErrThreshold, "invalid Native signature count")
 	}
 	var next *cell.Cell
 	for i := len(signatures) - 1; i >= 0; i-- {
 		signature := signatures[i]
 		if signature == nil || !validKeyID(signature.KeyId) || len(signature.Ed25519Signature) != ed25519.SignatureSize {
-			return nil, errors.New("invalid Native signature")
+			return nil, nativeError(ErrBadSignature, "invalid Native signature")
 		}
 		if i > 0 && bytes.Compare(keyIDHash(signatures[i-1].GetKeyId()), keyIDHash(signature.KeyId)) >= 0 {
-			return nil, errors.New("Native signatures are not strictly sorted")
+			return nil, nativeError(ErrDuplicateSignature, "Native signatures are not strictly sorted")
 		}
 		keyHash := keyIDHash(signature.KeyId)
 		builder := cell.BeginCell().MustStoreSlice(keyHash, 256).MustStoreSlice(signature.Ed25519Signature, 512)
@@ -233,7 +238,7 @@ func messageBody(opcode uint64, action BuiltAction, authority, counterparty []*n
 func PolicyCell(policy *nativev1.ControllerPolicyV1) (*cell.Cell, error) {
 	controllers, err := validatePolicy(policy)
 	if err != nil {
-		return nil, err
+		return nil, wrapNativeError(ErrBadPolicy, "invalid Native controller policy", err)
 	}
 	ordered := make([]string, 0, len(controllers))
 	for keyID := range controllers {
@@ -264,7 +269,8 @@ func buildPayload(action *nativev1.NativeActionV1, targetKind uint8) (Kind, *cel
 	switch payload := action.Payload.(type) {
 	case *nativev1.NativeActionV1_RegisterAgent:
 		kind = KindRegisterAgent
-		if targetKind != 1 || payload.RegisterAgent == nil || len(payload.RegisterAgent.ObjectNonce) != 32 {
+		if targetKind != 1 || payload.RegisterAgent == nil || len(payload.RegisterAgent.ObjectNonce) != 32 ||
+			bytes.Equal(payload.RegisterAgent.ObjectNonce, make([]byte, 32)) {
 			return 0, nil, errors.New("invalid register-agent action")
 		}
 		policy, err := PolicyCell(payload.RegisterAgent.InitialPolicy)
@@ -320,7 +326,7 @@ func buildPayload(action *nativev1.NativeActionV1, targetKind uint8) (Kind, *cel
 	case *nativev1.NativeActionV1_RegisterCapability:
 		kind = KindRegisterCapability
 		p := payload.RegisterCapability
-		if targetKind != 2 || p == nil || len(p.ObjectNonce) != 32 || p.InitialVersion == nil {
+		if targetKind != 2 || p == nil || len(p.ObjectNonce) != 32 || bytes.Equal(p.ObjectNonce, make([]byte, 32)) || p.InitialVersion == nil {
 			return 0, nil, errors.New("invalid Capability registration")
 		}
 		owner, ownerKind, err := objectID(p.OwnerAgentId)
@@ -479,7 +485,7 @@ func objectID(value string) ([]byte, uint8, error) {
 	for prefix, kind := range map[string]uint8{"agent_": 1, "cap_": 2} {
 		if strings.HasPrefix(value, prefix) && len(value) == len(prefix)+64 {
 			raw, err := hex.DecodeString(value[len(prefix):])
-			if err == nil && value == prefix+hex.EncodeToString(raw) {
+			if err == nil && value == prefix+hex.EncodeToString(raw) && !bytes.Equal(raw, make([]byte, 32)) {
 				return raw, kind, nil
 			}
 		}

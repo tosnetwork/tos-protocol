@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
 	"github.com/xssnick/tonutils-go/tlb"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
@@ -65,7 +66,7 @@ type nativeAccountVote struct {
 
 func readNativeAccountAt(ctx context.Context, node *rpcNode, address string, seqno uint64, network *nativev1.NetworkDomain, allowedCodeHash string) (nativeAccountVote, error) {
 	if network == nil {
-		return nativeAccountVote{}, errors.New("Native network is missing")
+		return nativeAccountVote{}, nativecore.NewProtocolError(nativecore.ErrWrongNetwork, "Native network is missing", nil)
 	}
 	var master struct {
 		Type          string  `json:"@type"`
@@ -81,11 +82,11 @@ func readNativeAccountAt(ctx context.Context, node *rpcNode, address string, seq
 	}
 	genesisRoot, err := decodeBase64Hash(master.Init.RootHash)
 	if err != nil || "sha256:"+hex.EncodeToString(genesisRoot) != network.GenesisRootHash {
-		return nativeAccountVote{}, errors.New("Native endpoint genesis root mismatch")
+		return nativeAccountVote{}, nativecore.NewProtocolError(nativecore.ErrWrongNetwork, "Native endpoint genesis root mismatch", err)
 	}
 	genesisFile, err := decodeBase64Hash(master.Init.FileHash)
 	if err != nil || "sha256:"+hex.EncodeToString(genesisFile) != network.GenesisFileHash {
-		return nativeAccountVote{}, errors.New("Native endpoint genesis file mismatch")
+		return nativeAccountVote{}, nativecore.NewProtocolError(nativecore.ErrWrongNetwork, "Native endpoint genesis file mismatch", err)
 	}
 	var info accountInformation
 	if err := node.client.Call(ctx, "getAddressInformation", struct {
@@ -114,7 +115,7 @@ func readNativeAccountAt(ctx context.Context, node *rpcNode, address string, seq
 	}
 	code, err := decodeCellBOC(info.Code)
 	if err != nil || "tvm-cell-sha256:"+hex.EncodeToString(code.Hash()) != allowedCodeHash {
-		return nativeAccountVote{}, errors.New("Native account code hash mismatch")
+		return nativeAccountVote{}, nativecore.NewProtocolError(nativecore.ErrWrongContract, "Native account code hash mismatch", err)
 	}
 	vote.Found, vote.Code, vote.Data = true, info.Code, info.Data
 	vote.LT, vote.TransactionHash = info.LastTransactionID.LT, info.LastTransactionID.Hash

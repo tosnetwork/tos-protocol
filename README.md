@@ -33,6 +33,34 @@ go test ./...
 go build ./cmd/tos-atos-rpc
 ```
 
+Frozen registry vectors are checked twice: `pkg/nativecore` is the production
+encoder, while `internal/referencecodec` is an independent conformance encoder
+that does not import generated Native messages or `nativecore`. Reproduce its
+results with:
+
+```bash
+go run ./cmd/native-vector-reference
+```
+
+## Review and sign an action
+
+`atos-native-wallet` signs the canonical TVM action hash using an owner-private
+Ed25519 seed file. It prints the complete action semantics and, by default,
+requires the operator to type the exact hash before signing:
+
+```bash
+go run ./cmd/atos-native-wallet \
+  --action /absolute/path/action.json \
+  --authority-key /absolute/private/controller.json \
+  --output /absolute/private/signed-action.json
+```
+
+The key file is mode `0600` and contains
+`{"schema":"atos.native.wallet-key.v1","private_seed_hex":"<64 lowercase hex>"}`.
+Use `--counterparty-key` for Capability transfer acceptance or new-policy proof
+of possession. The tool produces a signed action only; finality is confirmed
+separately through `ResolveNativeState`.
+
 ## Run the private Native service
 
 ```bash

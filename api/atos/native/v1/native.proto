@@ -5,6 +5,24 @@ package atos.native.v1;
 option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/native/v1;atosnativev1";
 
 message RequestContext { string request_id = 1; string trace_id = 2; string idempotency_key = 3; string caller_id = 4; int64 deadline_unix_millis = 5; }
+enum NativeErrorCodeV1 {
+  NATIVE_ERROR_CODE_V1_UNSPECIFIED = 0;
+  NATIVE_ERROR_CODE_V1_BAD_MESSAGE = 2200;
+  NATIVE_ERROR_CODE_V1_WRONG_NETWORK = 2201;
+  NATIVE_ERROR_CODE_V1_WRONG_CONTRACT = 2202;
+  NATIVE_ERROR_CODE_V1_BAD_ACTION = 2203;
+  NATIVE_ERROR_CODE_V1_BAD_PREDECESSOR = 2204;
+  NATIVE_ERROR_CODE_V1_BAD_SEQUENCE = 2205;
+  NATIVE_ERROR_CODE_V1_TOMBSTONED = 2206;
+  NATIVE_ERROR_CODE_V1_BAD_POLICY = 2207;
+  NATIVE_ERROR_CODE_V1_BAD_SIGNATURE = 2208;
+  NATIVE_ERROR_CODE_V1_THRESHOLD = 2209;
+  NATIVE_ERROR_CODE_V1_BAD_TRANSITION = 2210;
+  NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION = 2211;
+  NATIVE_ERROR_CODE_V1_TIMELOCK = 2212;
+  NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE = 2213;
+}
+message NativeErrorV1 { NativeErrorCodeV1 code = 1; string identifier = 2; }
 message NetworkDomain { string network_id = 1; string genesis_root_hash = 2; string genesis_file_hash = 3; }
 message ChainReference { int32 workchain = 1; string account = 2; uint64 logical_time = 3; string transaction_hash = 4; string contract_code_hash = 5; uint64 finalized_checkpoint = 6; }
 // key_id is exactly ed25519:<lowercase 32-byte-public-key-hex>.

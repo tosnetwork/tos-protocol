@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -25,9 +26,24 @@ func (s *Server) SubmitNativeAction(ctx context.Context, req *connect.Request[na
 	}
 	hash, err := s.nativeV1Relayer.Submit(ctx, req.Msg.Submission, 0)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, nativeConnectError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewResponse(&nativev1.SubmitNativeActionResponse{ActionHash: hash, RelayAccepted: true}), nil
+}
+
+func nativeConnectError(connectCode connect.Code, cause error) error {
+	result := connect.NewError(connectCode, cause)
+	code, ok := nativecore.ErrorCodeOf(cause)
+	if !ok {
+		return result
+	}
+	detail, err := connect.NewErrorDetail(&nativev1.NativeErrorV1{
+		Code: nativev1.NativeErrorCodeV1(code), Identifier: code.String(),
+	})
+	if err == nil {
+		result.AddDetail(detail)
+	}
+	return result
 }
 
 func (s *Server) ResolveNativeState(ctx context.Context, req *connect.Request[nativev1.ResolveNativeStateRequest]) (*connect.Response[nativev1.ResolveNativeStateResponse], error) {
@@ -45,7 +61,7 @@ func (s *Server) ResolveNativeState(ctx context.Context, req *connect.Request[na
 	}
 	state, found, err := s.nativeV1Resolver.ResolveState(ctx, req.Msg.ObjectId, req.Msg.ExpectedTvmStateHash)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, nativeConnectError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewResponse(&nativev1.ResolveNativeStateResponse{Found: found, State: state}), nil
 }

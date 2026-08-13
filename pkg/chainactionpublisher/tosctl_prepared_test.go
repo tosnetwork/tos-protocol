@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
+	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
 func TestBroadcastPreparedContractCellValidatesTOSStatus(t *testing.T) {
@@ -46,5 +49,44 @@ func TestBroadcastPreparedContractCellValidatesTOSStatus(t *testing.T) {
 				t.Fatalf("accepted=%v want=%v err=%v", err == nil, test.ok, err)
 			}
 		})
+	}
+}
+
+func TestPreparedContractCellRequiresExactSemanticConfirmation(t *testing.T) {
+	body := cell.BeginCell().MustStoreUInt(0x4e560001, 32).EndCell()
+	stateInit := cell.BeginCell().MustStoreUInt(0x11, 8).EndCell()
+	message := cell.BeginCell().MustStoreUInt(0x22, 8).EndCell()
+	bodyHash := "tvm-cell-sha256:" + fmt.Sprintf("%x", body.Hash())
+	stateInitHash := "tvm-cell-sha256:" + fmt.Sprintf("%x", stateInit.Hash())
+	value := preparedContractCell{Version: PreparedContractCellVersion,
+		MessageBOCBase64: base64.StdEncoding.EncodeToString(message.ToBOC()), Wallet: "relay",
+		Payer: "0:" + strings.Repeat("11", 32), Destination: "0:" + strings.Repeat("22", 32),
+		AmountNanoTOS: 200_000_000, BodyHash: bodyHash, StateInitHash: stateInitHash}
+	encode := func(t *testing.T, item preparedContractCell) []byte {
+		t.Helper()
+		raw, err := json.Marshal(item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	if _, _, err := validatePreparedContractCell(encode(t, value), value.Wallet, value.Payer,
+		value.Destination, value.AmountNanoTOS, bodyHash, stateInitHash); err != nil {
+		t.Fatal(err)
+	}
+	mutations := []func(*preparedContractCell){
+		func(v *preparedContractCell) { v.Destination = "0:" + strings.Repeat("33", 32) },
+		func(v *preparedContractCell) { v.AmountNanoTOS++ },
+		func(v *preparedContractCell) { v.BodyHash = "tvm-cell-sha256:" + strings.Repeat("44", 32) },
+		func(v *preparedContractCell) { v.StateInitHash = "" },
+		func(v *preparedContractCell) { v.Wallet = "other" },
+	}
+	for i, mutate := range mutations {
+		changed := value
+		mutate(&changed)
+		if _, _, err := validatePreparedContractCell(encode(t, changed), value.Wallet, value.Payer,
+			value.Destination, value.AmountNanoTOS, bodyHash, stateInitHash); err == nil {
+			t.Fatalf("semantic mutation %d was accepted", i)
+		}
 	}
 }

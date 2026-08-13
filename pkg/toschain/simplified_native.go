@@ -41,7 +41,7 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 	}
 	identity, err := r.locator.Locate(objectID)
 	if err != nil {
-		return nil, false, err
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadAction, "invalid Native object resolution target", err)
 	}
 	observation, nodes, err := r.chain.consensus(ctx)
 	if err != nil {
@@ -50,7 +50,7 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 	r.mu.Lock()
 	if observation.seqno == 0 || observation.seqno < r.highWater {
 		r.mu.Unlock()
-		return nil, false, errors.New("simplified Native finalized checkpoint regressed")
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadSequence, "simplified Native finalized checkpoint regressed", nil)
 	}
 	r.highWater = observation.seqno
 	r.mu.Unlock()
@@ -65,14 +65,14 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 	}
 	data, err := decodeCellBOC(vote.Data)
 	if err != nil {
-		return nil, false, err
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid Native account data BOC", err)
 	}
 	state, found, err := r.locator.DecodeData(data, objectID)
 	if err != nil || !found {
-		return state, found, err
+		return state, found, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid Native typed state", err)
 	}
 	if expectedStateHash != "" && state.TvmStateHash != expectedStateHash {
-		return nil, false, errors.New("simplified Native state hash mismatch")
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadPredecessor, "simplified Native state hash mismatch", nil)
 	}
 	lt, txHash, err := transactionTuple(vote)
 	if err != nil {

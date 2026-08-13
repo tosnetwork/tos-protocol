@@ -23,6 +23,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
 // TosctlBackendConfig is the concrete TOS wallet backend. Exact nanoTOS and
@@ -49,6 +50,17 @@ type TosctlBackend struct {
 }
 
 const PreparedContractCellVersion = "tosctl.wallet-prepared-send.v1"
+
+type preparedContractCell struct {
+	Version          string `json:"version"`
+	MessageBOCBase64 string `json:"message_boc_base64"`
+	Wallet           string `json:"wallet"`
+	Payer            string `json:"payer"`
+	Destination      string `json:"destination"`
+	AmountNanoTOS    uint64 `json:"amount_nanotos"`
+	BodyHash         string `json:"body_hash"`
+	StateInitHash    string `json:"state_init_hash"`
+}
 
 func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if runtime.GOOS != "linux" {
@@ -125,6 +137,17 @@ func (b *TosctlBackend) PrepareContractCell(ctx context.Context, destination str
 	if err != nil {
 		return "", "", err
 	}
+	bodyHash, err := cellHash(bodyBOCBase64)
+	if err != nil {
+		return "", "", errors.New("invalid contract body BOC")
+	}
+	stateInitHash := ""
+	if stateInitBOCBase64 != "" {
+		stateInitHash, err = cellHash(stateInitBOCBase64)
+		if err != nil {
+			return "", "", errors.New("invalid contract StateInit BOC")
+		}
+	}
 	args := []string{"wallet", "send", "--from", b.walletName, "--to", destination,
 		"--amount-nanotos", strconv.FormatUint(amountNanoTOS, 10), "--body-boc", bodyBOCBase64}
 	if stateInitBOCBase64 != "" {
@@ -135,13 +158,14 @@ func (b *TosctlBackend) PrepareContractCell(ctx context.Context, destination str
 	if err != nil {
 		return "", "", err
 	}
-	var response struct {
-		Version          string `json:"version"`
-		MessageBOCBase64 string `json:"message_boc_base64"`
-		Wallet           string `json:"wallet"`
-		Payer            string `json:"payer"`
-	}
-	if jsonstrict.Decode(out, &response) != nil || response.Version != PreparedContractCellVersion || response.Wallet != b.walletName || response.Payer != b.payer {
+	return validatePreparedContractCell(out, b.walletName, b.payer, destination, amountNanoTOS, bodyHash, stateInitHash)
+}
+
+func validatePreparedContractCell(out []byte, wallet, payer, destination string, amountNanoTOS uint64, bodyHash, stateInitHash string) (string, string, error) {
+	var response preparedContractCell
+	if jsonstrict.Decode(out, &response) != nil || response.Version != PreparedContractCellVersion ||
+		response.Wallet != wallet || response.Payer != payer || response.Destination != destination ||
+		response.AmountNanoTOS != amountNanoTOS || response.BodyHash != bodyHash || response.StateInitHash != stateInitHash {
 		return "", "", errors.New("tosctl returned invalid prepared contract message")
 	}
 	raw, err := base64.StdEncoding.DecodeString(response.MessageBOCBase64)
@@ -149,6 +173,18 @@ func (b *TosctlBackend) PrepareContractCell(ctx context.Context, destination str
 		return "", "", errors.New("tosctl returned invalid prepared contract BOC")
 	}
 	return response.MessageBOCBase64, sha256Text(raw), nil
+}
+
+func cellHash(value string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return "", err
+	}
+	root, err := cell.FromBOC(raw)
+	if err != nil || root == nil {
+		return "", errors.New("invalid Cell BOC")
+	}
+	return "tvm-cell-sha256:" + hex.EncodeToString(root.Hash()), nil
 }
 
 func validBOC(value string) bool {
