@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package atos.native.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/native/v1;atosnativev1";
+
+message RequestContext { string request_id = 1; string trace_id = 2; string idempotency_key = 3; string caller_id = 4; int64 deadline_unix_millis = 5; }
+message NetworkDomain { string network_id = 1; string genesis_root_hash = 2; string genesis_file_hash = 3; }
+message ChainReference { int32 workchain = 1; string account = 2; uint64 logical_time = 3; string transaction_hash = 4; string contract_code_hash = 5; uint64 finalized_checkpoint = 6; }
+// key_id is exactly ed25519:<lowercase 32-byte-public-key-hex>.
+message ControllerV1 { string key_id = 1; bytes ed25519_public_key = 2; uint32 weight = 3; uint32 purpose_mask = 4; bool recovery = 5; }
+message ControllerPolicyV1 { uint32 threshold = 1; uint32 recovery_threshold = 2; uint64 recovery_timelock_seconds = 3; repeated ControllerV1 controllers = 4; }
+message SignatureV1 { string key_id = 1; bytes ed25519_signature = 2; }
+message CapabilityVersionV1 { string version = 1; string manifest_digest = 2; bool revoked = 3; }
+message RegisterAgentV1 { bytes object_nonce = 1; ControllerPolicyV1 initial_policy = 2; }
+message UpdateAgentPolicyV1 { ControllerPolicyV1 new_policy = 1; }
+message DelegateAgentV1 { string delegation_digest = 1; }
+message InitiateRecoveryV1 { uint64 execute_after_unix_seconds = 1; ControllerPolicyV1 new_policy = 2; }
+message CompleteRecoveryV1 { string initiation_action_hash = 1; }
+message RevokeAgentV1 {}
+message RegisterCapabilityV1 { bytes object_nonce = 1; string owner_agent_id = 2; reserved 3; CapabilityVersionV1 initial_version = 4; }
+message AddCapabilityVersionV1 { CapabilityVersionV1 version = 1; string owner_agent_id = 2; }
+message TransferCapabilityV1 { string current_owner_agent_id = 1; string new_owner_agent_id = 2; reserved 3; }
+message RevokeCapabilityV1 { string version = 1; string owner_agent_id = 2; }
+message NativeActionV1 {
+  reserved 30;
+  string protocol = 1; NetworkDomain network = 2; string target_object_id = 3; string target_contract_code_hash = 4;
+  uint64 generation = 5; uint64 sequence = 6; string predecessor_tvm_state_hash = 7; bytes nonce = 8;
+  oneof payload {
+    RegisterAgentV1 register_agent = 20; UpdateAgentPolicyV1 update_agent_policy = 21; DelegateAgentV1 delegate_agent = 22;
+    InitiateRecoveryV1 initiate_recovery = 23; CompleteRecoveryV1 complete_recovery = 24; RevokeAgentV1 revoke_agent = 25;
+    RegisterCapabilityV1 register_capability = 26; AddCapabilityVersionV1 add_capability_version = 27;
+    TransferCapabilityV1 transfer_capability = 28; RevokeCapabilityV1 revoke_capability = 29;
+  }
+}
+message SignedNativeActionV1 { NativeActionV1 action = 1; repeated SignatureV1 authority_signatures = 2; repeated SignatureV1 counterparty_signatures = 3; reserved 4, 5; }
+message AgentStateV1 { string agent_id = 1; uint64 generation = 2; uint64 sequence = 3; string last_action_hash = 4; ControllerPolicyV1 policy = 5; repeated string delegation_digests = 6; uint64 recovery_execute_after_unix_seconds = 7; string recovery_initiation_action_hash = 8; ControllerPolicyV1 recovery_policy = 9; bool tombstoned = 10; }
+message CapabilityStateV1 { string capability_id = 1; uint64 generation = 2; uint64 sequence = 3; string last_action_hash = 4; string owner_agent_id = 5; reserved 6; repeated CapabilityVersionV1 versions = 7; bool tombstoned = 8; }
+message NativeStateV1 { NetworkDomain network = 1; string tvm_state_hash = 2; ChainReference reference = 3; oneof state { AgentStateV1 agent = 10; CapabilityStateV1 capability = 11; } }
+message SubmitNativeActionRequest { RequestContext context = 1; SignedNativeActionV1 submission = 2; }
+message SubmitNativeActionResponse { string action_hash = 1; NativeStateV1 state = 2; reserved 3; bool relay_accepted = 4; }
+message ResolveNativeStateRequest { RequestContext context = 1; string object_id = 2; string expected_tvm_state_hash = 3; }
+message ResolveNativeStateResponse { bool found = 1; NativeStateV1 state = 2; }
+message MoneyV1 { string asset = 1; string atomic_amount = 2; }
+message QuoteProposalV1 { string proposal_id = 1; string capability_id = 2; string capability_version = 3; string provider_agent_id = 4; string manifest_digest = 5; string transport_binding_digest = 6; MoneyV1 maximum_price = 7; string escrow_terms_digest = 8; string dispute_policy_digest = 9; uint64 expires_at_unix_seconds = 10; }
+message AcceptedQuoteV1 { string protocol = 1; string quote_commitment = 2; QuoteProposalV1 proposal = 3; string execution_signer_authorization = 4; ChainReference reference = 5; NetworkDomain network = 6; }
+service NativeService { rpc SubmitNativeAction(SubmitNativeActionRequest) returns (SubmitNativeActionResponse); rpc ResolveNativeState(ResolveNativeStateRequest) returns (ResolveNativeStateResponse); }

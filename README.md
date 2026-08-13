@@ -322,7 +322,32 @@ interrupted by a crash. None of these internal boundaries enable a public
 action unless the complete opt-in HTTP dependency set is installed; partial
 configuration prevents server construction.
 
-The ATOS-facing RPC Authority is explicitly selectable. Its chain-backed
+## ATOS Native v1
+
+`atos_native_v1` is the clean Native-only registry boundary. Finalized TOS
+account state is its only authority: relayers submit signed TVM actions but do
+not decide their meaning, and resolvers decode the typed Agent or Capability
+state directly from a quorum of chain endpoints. Portable CBOR is a derived
+off-chain projection and is never accepted as a transition or consensus input.
+The protocol has no trust-mode field, no per-action Action Anchor contract, and
+no gateway-owned registry state.
+
+Enable the direct relayer and resolver with `-native-v1-config` or
+`TOS_ATOS_RPC_NATIVE_V1_CONFIG`. The value is an absolute, owner-only JSON file
+containing `protocol` (`atos_native_v1`), the network ID and genesis digests,
+quorum endpoints, registry workchain, compiled contract BOC and code hash,
+bounded relay funding, and the existing private `tosctl` sender configuration.
+The current reviewed contract code hash is
+`tvm-cell-sha256:c4af55e476c296c8a1dc7985e82db42218475b9e3864b7c733351bab526ab23d`.
+The generated Connect API is under `gen/atos/native/v1`, while canonical action,
+state, locator, projection, quote-commitment, and relay rules are in
+`pkg/nativecore`.
+
+The older ATOS v0.2 authority, Task Escrow, Native Registry, and execution APIs
+below remain isolated legacy integrations. They are not part of
+`atos_native_v1` and must not be used as consensus inputs for it.
+
+The legacy ATOS-facing RPC Authority is explicitly selectable. Its chain-backed
 implementation keeps transaction keys in a private Unix-socket publisher,
 then independently verifies the exact transaction, purpose comment, quorum,
 and finality through `pkg/toschain`. The separate Task Escrow Economic Driver

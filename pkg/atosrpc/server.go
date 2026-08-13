@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	"github.com/tosnetwork/tos-protocol/gen/atos/native/v1/atosnativev1connect"
 	"github.com/tosnetwork/tos-protocol/gen/atos/tos/v1/atostosv1connect"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/nativeregistry"
@@ -33,15 +35,23 @@ type Server struct {
 	router           Router
 	thirdPartyWorker ThirdPartyWorker
 	nativeRegistry   *nativeregistry.Service
-	privateKey       ed25519.PrivateKey
-	publicKey        ed25519.PublicKey
-	signerID         string
-	now              func() time.Time
-	mutationMu       sync.Mutex
-	jobLocks         sync.Map // job_id -> *sync.Mutex
-	readinessMu      sync.Mutex
-	readinessAt      time.Time
-	readinessErr     error
+	nativeV1Relayer  interface {
+		CheckReady(context.Context) error
+		Submit(context.Context, *nativev1.SignedNativeActionV1, uint64) (string, error)
+	}
+	nativeV1Resolver interface {
+		CheckReady(context.Context) error
+		ResolveState(context.Context, string, string) (*nativev1.NativeStateV1, bool, error)
+	}
+	privateKey   ed25519.PrivateKey
+	publicKey    ed25519.PublicKey
+	signerID     string
+	now          func() time.Time
+	mutationMu   sync.Mutex
+	jobLocks     sync.Map // job_id -> *sync.Mutex
+	readinessMu  sync.Mutex
+	readinessAt  time.Time
+	readinessErr error
 }
 
 func Open(config Config) (*Server, error) {
@@ -81,6 +91,23 @@ func Open(config Config) (*Server, error) {
 			return nil, fmt.Errorf("Native Registry is not ready: %w", err)
 		}
 	}
+	if (config.NativeV1Relayer == nil) != (config.NativeV1Resolver == nil) {
+		return nil, errors.New("atos_native_v1 relayer and resolver must be configured together")
+	}
+	if config.NativeV1Resolver != nil {
+		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
+		err = config.NativeV1Resolver.CheckReady(readyContext)
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("atos_native_v1 resolver is not ready: %w", err)
+		}
+		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
+		err = config.NativeV1Relayer.CheckReady(readyContext)
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("atos_native_v1 relayer is not ready: %w", err)
+		}
+	}
 	state, err := openStore(config.StatePath, config.MaxRecordBytes)
 	if err != nil {
 		_ = config.Authority.Close()
@@ -104,8 +131,8 @@ func Open(config Config) (*Server, error) {
 		config: config, store: state, authority: config.Authority,
 		economy: config.EconomicDriver, worker: config.Worker, router: config.Router,
 		thirdPartyWorker: config.ThirdPartyWorker,
-		nativeRegistry:   config.NativeRegistry,
-		privateKey:       privateKey, publicKey: publicKey,
+		nativeRegistry:   config.NativeRegistry, nativeV1Relayer: config.NativeV1Relayer, nativeV1Resolver: config.NativeV1Resolver,
+		privateKey: privateKey, publicKey: publicKey,
 		signerID: "edge-signer-" + hex.EncodeToString(digest[:8]),
 		now:      config.Now,
 	}, nil
@@ -176,6 +203,7 @@ func (s *Server) Handler() http.Handler {
 		pair(atostosv1connect.NewExecutionGatewayServiceHandler(s, handlerOptions...)),
 		pair(atostosv1connect.NewFinancialIntegrityServiceHandler(s, handlerOptions...)),
 		pair(atostosv1connect.NewNativeRegistryServiceHandler(s, handlerOptions...)),
+		pair(atosnativev1connect.NewNativeServiceHandler(s, handlerOptions...)),
 	} {
 		mux.Handle(registered.path, registered.handler)
 	}

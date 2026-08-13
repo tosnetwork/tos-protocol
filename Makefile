@@ -36,6 +36,11 @@ generate:
 		atos/tos/v1/proof.proto \
 		atos/tos/v1/execution.proto \
 		atos/tos/v1/financial_integrity.proto
+	protoc \
+		--proto_path=api \
+		--go_out=. --go_opt=module=github.com/tosnetwork/tos-protocol \
+		--connect-go_out=. --connect-go_opt=module=github.com/tosnetwork/tos-protocol \
+		atos/native/v1/native.proto
 
 reproducible-builds:
 	./scripts/verify-reproducible-builds.sh

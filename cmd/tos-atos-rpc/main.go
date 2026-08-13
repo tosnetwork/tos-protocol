@@ -50,6 +50,7 @@ func main() {
 		economicMode         = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
 		economicConfig       = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
 		nativeRegistryConfig = flag.String("native-registry-config", os.Getenv("TOS_ATOS_RPC_NATIVE_REGISTRY_CONFIG"), "strict JSON Native Registry relay/resolver configuration")
+		nativeV1Config       = flag.String("native-v1-config", os.Getenv("TOS_ATOS_RPC_NATIVE_V1_CONFIG"), "strict JSON atos_native_v1 direct relay/resolver configuration")
 		// identitySeedFile is the ONLY way this process establishes a new
 		// AgentIdentity -- Server.SeedIdentity is deliberately not exposed
 		// as a network RPC: creating a brand-new identity from nothing is
@@ -118,9 +119,22 @@ func main() {
 		logger.Error("configure Native Registry", "error", err)
 		os.Exit(2)
 	}
+	nativeV1Relayer, nativeV1Resolver, nativeV1Close, err := buildNativeV1(*nativeV1Config)
+	if err != nil {
+		_ = authority.Close()
+		if economicDriver != nil {
+			_ = economicDriver.Close()
+		}
+		logger.Error("configure atos_native_v1", "error", err)
+		os.Exit(2)
+	}
+	if nativeV1Close != nil {
+		defer nativeV1Close()
+	}
 	server, err := atosrpc.Open(atosrpc.Config{
 		StatePath: *statePath, BearerToken: *bearerToken,
 		Authority: authority, EconomicDriver: economicDriver, NativeRegistry: nativeRegistry,
+		NativeV1Relayer: nativeV1Relayer, NativeV1Resolver: nativeV1Resolver,
 		TrustDomain: *trustDomain,
 		Worker:      worker, Router: router, ThirdPartyWorker: thirdPartyWorker,
 	})

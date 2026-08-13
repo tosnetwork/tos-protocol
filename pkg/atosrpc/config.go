@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
@@ -213,12 +214,20 @@ type Config struct {
 	Router           Router
 	ThirdPartyWorker ThirdPartyWorker
 	NativeRegistry   *nativeregistry.Service
-	MaxMessageBytes  int
-	MaxRecordBytes   int
-	CallTimeout      time.Duration
-	Retention        time.Duration
-	Now              func() time.Time
-	TrustDomain      string
+	NativeV1Relayer  interface {
+		CheckReady(context.Context) error
+		Submit(context.Context, *nativev1.SignedNativeActionV1, uint64) (string, error)
+	}
+	NativeV1Resolver interface {
+		CheckReady(context.Context) error
+		ResolveState(context.Context, string, string) (*nativev1.NativeStateV1, bool, error)
+	}
+	MaxMessageBytes int
+	MaxRecordBytes  int
+	CallTimeout     time.Duration
+	Retention       time.Duration
+	Now             func() time.Time
+	TrustDomain     string
 }
 
 func (c Config) withDefaults() (Config, error) {
