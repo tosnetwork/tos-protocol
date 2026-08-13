@@ -28,6 +28,7 @@ generate:
 		--go_out=. --go_opt=module=github.com/tosnetwork/tos-protocol \
 		--connect-go_out=. --connect-go_opt=module=github.com/tosnetwork/tos-protocol \
 		atos/tos/v1/common.proto \
+		atos/tos/v1/native_registry.proto \
 		atos/tos/v1/identity.proto \
 		atos/tos/v1/capability.proto \
 		atos/tos/v1/trust.proto \

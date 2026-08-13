@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package atos.tos.v1;
+
+option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/tos/v1;atostosv1";
+
+// Phase 5A portable schemas. These messages describe semantic values only;
+// Phase 5B owns mutation/resolution services.
+message NativeNetworkDomainV1 {
+  string network_id = 1;
+  string genesis_root_hash = 2;
+  string genesis_file_hash = 3;
+}
+
+message NativeControllerKeyV1 {
+  string key_id = 1;
+  string algorithm = 2;
+  string public_key_base64url = 3;
+  uint32 weight = 4;
+  repeated string purposes = 5;
+}
+
+message NativeControllerPolicyV1 {
+  uint32 threshold = 1;
+  repeated NativeControllerKeyV1 controllers = 2;
+  repeated string recovery_key_ids = 3;
+  uint64 recovery_timelock_seconds = 4;
+}
+
+message NativeAgentBootstrapV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string object_nonce_base64url = 3;
+  string initial_controller_policy_digest = 4;
+}
+
+message NativeCapabilityBootstrapV1 {
+  string version = 1;
+  NativeNetworkDomainV1 network = 2;
+  string owner_agent_id = 3;
+  string object_nonce_base64url = 4;
+}
+
+message NativeRegistryActionV1 {
+  string version = 1;
+  string kind = 2;
+  NativeNetworkDomainV1 network = 3;
+  string agent_id = 4;
+  string capability_id = 5;
+  string capability_version = 6;
+  uint64 generation = 7;
+  uint64 sequence = 8;
+  string previous_event_digest = 9;
+  string policy_digest = 10;
+  string payload_digest = 11;
+  string nonce_base64url = 12;
+}
+
+message NativeRegistryEventV1 {
+  string version = 1;
+  string kind = 2;
+  NativeNetworkDomainV1 network = 3;
+  string action_digest = 4;
+  string agent_id = 5;
+  string capability_id = 6;
+  string capability_version = 7;
+  uint64 generation = 8;
+  uint64 sequence = 9;
+  string previous_event_digest = 10;
+  uint64 finalized_checkpoint = 11;
+  uint32 transaction_index = 12;
+  uint32 event_index = 13;
+}
+
+message NativeSemanticSignatureV1 {
+  string algorithm = 1;
+  string key_id = 2;
+  string signature_base64url = 3;
+}

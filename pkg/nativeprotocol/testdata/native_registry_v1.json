@@ -1,0 +1,11 @@
+{
+  "version": "tos_native_registry_vectors_v1",
+  "positive": {
+    "agent_id": "agent_1a45894ebff26b0ab94b5fa2c9d86152963da87e8d84f751bec19b5cebeb75da",
+    "capability_id": "cap_7df2806b0666f81f4c4dfa4d03e7c431845c1e101c793a2db8b0eba58c91fda1",
+    "controller_policy_digest": "sha256:652986b9ba4701c2804fadef2a0ee157d70f81ca337c1ef279cc2804a7d977b5",
+    "registry_action_digest": "sha256:96039a44357f059de13cb9f547b8377d4fe75ee32cdd4c51c18c3320115f3eac",
+    "registry_event_digest": "sha256:0ca9ed14a8f7f90bc8f62e35b867480251996ccd7fcd5b57fde2f888214caf7a",
+    "signature_base64url": "_4WC4R4BeUH0BRksKOYxq5LELLF3oAhkhlGeOUwbJjiO43eKd31rzRc6oSz15_EJlIMRKJ5AQedKp7azurgGCQ"
+  }
+}
