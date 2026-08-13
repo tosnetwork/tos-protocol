@@ -76,4 +76,8 @@ type PaymentState struct {
 	Comment             string
 	ObservedMasterSeqno uint64
 	ObservedAt          time.Time
+	// TransactionAt is the immutable timestamp carried by the exact finalized
+	// transaction. ObservedAt is instead the time of the latest quorum
+	// high-water observation and may advance on every replay.
+	TransactionAt time.Time
 }

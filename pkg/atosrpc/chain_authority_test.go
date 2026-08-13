@@ -56,6 +56,7 @@ func (r *testChainAuthorityRuntime) ObservePayment(
 			AmountNanoTOS: reference.AmountNanoTOS, Comment: reference.Comment,
 			ObservedMasterSeqno: reference.MinimumMasterSeqno + 1,
 			ObservedAt:          time.Unix(1_800_000_001, 0).UTC(),
+			TransactionAt:       time.Unix(1_800_000_000, 0).UTC(),
 		}
 	}
 	if state.ObservedMasterSeqno > r.readiness.ObservedMasterSeqno {
@@ -216,7 +217,7 @@ func TestChainAuthorityRejectsFinalityBindingMismatch(t *testing.T) {
 			Network: "tos-test", AuthorizationID: "wrong",
 			Confirmed: true, Finalized: true, Payer: testChainPayer,
 			Payee: testChainPayee, AmountNanoTOS: 1,
-			ObservedMasterSeqno: 701, ObservedAt: now,
+			ObservedMasterSeqno: 701, ObservedAt: now, TransactionAt: now.Add(-time.Second),
 		},
 	}
 	authority, err := newTestChainAuthority(runtime, new(testChainActionPublisher), func() time.Time { return now })

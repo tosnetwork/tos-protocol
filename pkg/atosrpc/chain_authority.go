@@ -314,7 +314,7 @@ func (a *chainAuthority) ResolveCommitmentObservation(ctx context.Context, kind,
 		state.Reference != referenceValue || state.AuthorizationID != action.ActionID || state.QuoteID != action.ActionID ||
 		state.RequestID != action.ActionID || state.Payer != action.Payer || state.Payee != action.Payee ||
 		state.AmountNanoTOS != action.AmountNanoTOS || state.Comment != action.Comment ||
-		state.ObservedMasterSeqno < minimumCheckpoint || state.ObservedAt.IsZero() {
+		state.ObservedMasterSeqno < minimumCheckpoint || state.ObservedAt.IsZero() || state.TransactionAt.IsZero() {
 		return nil, errors.New("TOS chain commitment is no longer finalized with the expected binding")
 	}
 	ready, err := a.runtime.CheckServiceReady(callContext, a.serviceReference, a.now().UTC())
@@ -323,7 +323,7 @@ func (a *chainAuthority) ResolveCommitmentObservation(ctx context.Context, kind,
 	}
 	return &CommitmentObservation{
 		Reference:          &NetworkReference{Network: a.network, Reference: referenceValue, Finalized: true, FinalizedCheckpoint: state.ObservedMasterSeqno},
-		ObservedUnixMillis: state.ObservedAt.UTC().UnixMilli(),
+		ObservedUnixMillis: state.TransactionAt.UTC().UnixMilli(),
 	}, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/xssnick/tonutils-go/address"
@@ -38,11 +39,12 @@ type rawTransaction struct {
 }
 
 type paymentQuorumState struct {
-	Found         bool   `json:"found"`
-	Payer         string `json:"payer,omitempty"`
-	Payee         string `json:"payee,omitempty"`
-	AmountNanoTOS uint64 `json:"amount_nano_tos,omitempty"`
-	Comment       string `json:"comment,omitempty"`
+	Found           bool   `json:"found"`
+	Payer           string `json:"payer,omitempty"`
+	Payee           string `json:"payee,omitempty"`
+	AmountNanoTOS   uint64 `json:"amount_nano_tos,omitempty"`
+	Comment         string `json:"comment,omitempty"`
+	TransactionUnix uint32 `json:"transaction_unix,omitempty"`
 }
 
 // FormatTransactionReference returns the canonical settlement identifier
@@ -164,6 +166,10 @@ func (a *Adapter) ObservePayment(
 		result.Payee = state.Payee
 		result.AmountNanoTOS = state.AmountNanoTOS
 		result.Comment = state.Comment
+		if state.TransactionUnix == 0 {
+			return chain.PaymentState{}, errors.New("TOS payment transaction timestamp is missing")
+		}
+		result.TransactionAt = time.Unix(int64(state.TransactionUnix), 0).UTC()
 	} else {
 		// Echoing the authenticated expectations keeps the negative result
 		// stateless. No claim about an observed transfer is made: Confirmed is
@@ -208,7 +214,7 @@ func readPayment(
 	}
 	return paymentQuorumState{
 		Found: true, Payer: payer, Payee: payee, AmountNanoTOS: amount,
-		Comment: comment,
+		Comment: comment, TransactionUnix: transactions[0].Utime,
 	}, nil
 }
 
