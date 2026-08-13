@@ -14,6 +14,7 @@ import (
 	edgev1 "github.com/tosnetwork/tos-protocol/gen/tos/edge/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/nativeregistry"
 )
 
 const (
@@ -211,6 +212,7 @@ type Config struct {
 	Worker           Worker
 	Router           Router
 	ThirdPartyWorker ThirdPartyWorker
+	NativeRegistry   *nativeregistry.Service
 	MaxMessageBytes  int
 	MaxRecordBytes   int
 	CallTimeout      time.Duration

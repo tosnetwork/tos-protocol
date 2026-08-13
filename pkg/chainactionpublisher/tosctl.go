@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 )
@@ -51,6 +52,8 @@ type TosctlBackend struct {
 	enrollmentBinding                            string
 	mu, configMu                                 sync.Mutex
 }
+
+const PreparedContractCellVersion = "tosctl.wallet-prepared-send.v1"
 
 func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	if runtime.GOOS != "linux" {
@@ -123,6 +126,75 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 }
 
 func (b *TosctlBackend) EnrollmentBinding() string { return b.enrollmentBinding }
+func (b *TosctlBackend) PayerIdentity() string {
+	if b == nil {
+		return ""
+	}
+	return b.payer
+}
+
+// SendContractCell exposes the already hardened wallet boundary for
+// production contract publishers. Callers supply exact canonical BOCs; the
+// executable/config/wallet/network identity remains pinned by this backend.
+func (b *TosctlBackend) SendContractCell(ctx context.Context, destination string, amountNanoTOS uint64, bodyBOCBase64, stateInitBOCBase64 string) error {
+	messageBOC, digest, err := b.PrepareContractCell(ctx, destination, amountNanoTOS, bodyBOCBase64, stateInitBOCBase64)
+	if err != nil {
+		return err
+	}
+	return b.BroadcastPreparedContractCell(ctx, messageBOC, digest)
+}
+
+func (b *TosctlBackend) PrepareContractCell(ctx context.Context, destination string, amountNanoTOS uint64, bodyBOCBase64, stateInitBOCBase64 string) (string, string, error) {
+	if b == nil || amountNanoTOS == 0 || bodyBOCBase64 == "" || stateInitBOCBase64 == "" {
+		return "", "", errors.New("invalid contract-cell send")
+	}
+	destination, err := toschain.CanonicalAddress(destination)
+	if err != nil {
+		return "", "", err
+	}
+	out, err := b.run(ctx, "wallet", "send", "--from", b.walletName, "--to", destination,
+		"--amount-nanotos", strconv.FormatUint(amountNanoTOS, 10), "--body-boc", bodyBOCBase64,
+		"--state-init-boc", stateInitBOCBase64, "--build-only")
+	if err != nil {
+		return "", "", err
+	}
+	var response struct {
+		Version          string `json:"version"`
+		MessageBOCBase64 string `json:"message_boc_base64"`
+		Wallet           string `json:"wallet"`
+		Payer            string `json:"payer"`
+	}
+	if jsonstrict.Decode(out, &response) != nil || response.Version != PreparedContractCellVersion || response.Wallet != b.walletName || response.Payer != b.payer {
+		return "", "", errors.New("tosctl returned invalid prepared contract message")
+	}
+	raw, err := base64.StdEncoding.DecodeString(response.MessageBOCBase64)
+	if err != nil || len(raw) == 0 || len(raw) > 256<<10 || base64.StdEncoding.EncodeToString(raw) != response.MessageBOCBase64 {
+		return "", "", errors.New("tosctl returned invalid prepared contract BOC")
+	}
+	return response.MessageBOCBase64, sha256Text(raw), nil
+}
+
+func (b *TosctlBackend) BroadcastPreparedContractCell(ctx context.Context, messageBOCBase64, messageDigest string) error {
+	if b == nil {
+		return errors.New("invalid prepared contract message")
+	}
+	raw, err := base64.StdEncoding.DecodeString(messageBOCBase64)
+	if err != nil || len(raw) == 0 || len(raw) > 256<<10 || base64.StdEncoding.EncodeToString(raw) != messageBOCBase64 || sha256Text(raw) != messageDigest {
+		return errors.New("prepared contract message digest mismatch")
+	}
+	var response struct {
+		Status int `json:"status"`
+	}
+	if err := b.client.Call(ctx, "sendBoc", struct {
+		BOC string `json:"boc"`
+	}{messageBOCBase64}, &response); err != nil {
+		return err
+	}
+	if response.Status != 1 {
+		return errors.New("TOS rejected prepared contract message")
+	}
+	return nil
+}
 
 func sha256Text(value []byte) string {
 	digest := sha256.Sum256(value)
@@ -187,6 +259,22 @@ func (b *TosctlBackend) CheckReady(ctx context.Context) (BackendCapabilities, er
 		return BackendCapabilities{}, errors.New("configured tosctl payer wallet is unavailable")
 	}
 	return BackendCapabilities{Version: ProtocolVersion, Network: b.network, RecoverByActionID: true, SearchBeforeBroadcast: true}, nil
+}
+
+func (b *TosctlBackend) CheckContractCellReady(ctx context.Context) error {
+	if _, err := b.CheckReady(ctx); err != nil {
+		return err
+	}
+	help, err := b.run(ctx, "wallet", "send", "--help")
+	if err != nil {
+		return errors.New("tosctl contract-cell send capability is unavailable")
+	}
+	for _, required := range []string{"--amount-nanotos", "--body-boc", "--state-init-boc", "--build-only", "--config-fd", "--config-format"} {
+		if !bytes.Contains(help, []byte(required)) {
+			return errors.New("tosctl contract-cell send capability mismatch")
+		}
+	}
+	return nil
 }
 func (b *TosctlBackend) Publish(ctx context.Context, a chain.Action, recovering bool) (chain.ActionReceipt, error) {
 	b.mu.Lock()

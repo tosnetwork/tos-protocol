@@ -17,6 +17,7 @@ import (
 
 	"github.com/tosnetwork/tos-protocol/pkg/authorization"
 	"github.com/tosnetwork/tos-protocol/pkg/chain"
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 	"github.com/tosnetwork/tos-protocol/pkg/identity"
 	"github.com/xssnick/tonutils-go/address"
 )
@@ -63,11 +64,12 @@ type rpcNode struct {
 // no transaction, account, or key cache, so adversarial references cannot
 // cause process RSS to grow without bound.
 type Adapter struct {
-	network        string
-	nodes          []*rpcNode
-	quorum         int
-	clientKeyLease time.Duration
-	readinessAge   time.Duration
+	network          string
+	nodes            []*rpcNode
+	quorum           int
+	clientKeyLease   time.Duration
+	readinessAge     time.Duration
+	authorityBinding string
 }
 
 func New(config Config) (*Adapter, error) {
@@ -133,10 +135,29 @@ func New(config Config) (*Adapter, error) {
 		}
 		nodes = append(nodes, &rpcNode{client: client})
 	}
+	binding, err := codec.Digest("tos.chain-authority-binding.v1", struct {
+		Network          string   `cbor:"1,keyasint"`
+		Endpoints        []string `cbor:"2,keyasint"`
+		Quorum           uint64   `cbor:"3,keyasint"`
+		QueryTimeoutNS   int64    `cbor:"4,keyasint"`
+		MaxResponseBytes int64    `cbor:"5,keyasint"`
+	}{config.Network, append([]string(nil), config.Endpoints...), uint64(config.Quorum), int64(config.QueryTimeout), config.MaxResponseBytes})
+	if err != nil {
+		return nil, fmt.Errorf("derive TOS authority binding: %w", err)
+	}
 	return &Adapter{
 		network: config.Network, nodes: nodes, quorum: config.Quorum,
 		clientKeyLease: config.ClientKeyLease, readinessAge: config.ReadinessMaxAge,
+		authorityBinding: binding,
 	}, nil
+}
+
+// EnrollmentBinding pins the complete effective quorum authority configuration.
+func (a *Adapter) EnrollmentBinding() string {
+	if a == nil {
+		return ""
+	}
+	return a.authorityBinding
 }
 
 func loopbackHost(host string) bool {

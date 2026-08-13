@@ -16,6 +16,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/tosnetwork/tos-protocol/gen/atos/tos/v1/atostosv1connect"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
+	"github.com/tosnetwork/tos-protocol/pkg/nativeregistry"
 )
 
 const readinessProbeTimeout = 5 * time.Second
@@ -31,6 +32,7 @@ type Server struct {
 	worker           Worker
 	router           Router
 	thirdPartyWorker ThirdPartyWorker
+	nativeRegistry   *nativeregistry.Service
 	privateKey       ed25519.PrivateKey
 	publicKey        ed25519.PublicKey
 	signerID         string
@@ -67,6 +69,18 @@ func Open(config Config) (*Server, error) {
 			return nil, fmt.Errorf("ATOS RPC economic driver is not ready: %w", err)
 		}
 	}
+	if config.NativeRegistry != nil {
+		readyContext, cancel = context.WithTimeout(context.Background(), config.CallTimeout)
+		err = config.NativeRegistry.CheckReady(readyContext)
+		cancel()
+		if err != nil {
+			_ = config.Authority.Close()
+			if config.EconomicDriver != nil {
+				_ = config.EconomicDriver.Close()
+			}
+			return nil, fmt.Errorf("Native Registry is not ready: %w", err)
+		}
+	}
 	state, err := openStore(config.StatePath, config.MaxRecordBytes)
 	if err != nil {
 		_ = config.Authority.Close()
@@ -90,6 +104,7 @@ func Open(config Config) (*Server, error) {
 		config: config, store: state, authority: config.Authority,
 		economy: config.EconomicDriver, worker: config.Worker, router: config.Router,
 		thirdPartyWorker: config.ThirdPartyWorker,
+		nativeRegistry:   config.NativeRegistry,
 		privateKey:       privateKey, publicKey: publicKey,
 		signerID: "edge-signer-" + hex.EncodeToString(digest[:8]),
 		now:      config.Now,
@@ -160,6 +175,7 @@ func (s *Server) Handler() http.Handler {
 		pair(atostosv1connect.NewProofServiceHandler(s, handlerOptions...)),
 		pair(atostosv1connect.NewExecutionGatewayServiceHandler(s, handlerOptions...)),
 		pair(atostosv1connect.NewFinancialIntegrityServiceHandler(s, handlerOptions...)),
+		pair(atostosv1connect.NewNativeRegistryServiceHandler(s, handlerOptions...)),
 	} {
 		mux.Handle(registered.path, registered.handler)
 	}
@@ -221,6 +237,11 @@ func (s *Server) checkReadyUncached(ctx context.Context) error {
 	}
 	if s.worker != nil {
 		if err := s.worker.CheckReady(ctx); err != nil {
+			return err
+		}
+	}
+	if s.nativeRegistry != nil {
+		if err := s.nativeRegistry.CheckReady(ctx); err != nil {
 			return err
 		}
 	}

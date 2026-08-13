@@ -134,6 +134,39 @@ func TestNormativeVectors(t *testing.T) {
 	}
 }
 
+func TestConsensusExecutionLimitsRejectUnrepresentableActions(t *testing.T) {
+	f := fixture(t)
+	var registration RegisterCapabilityPayload
+	if err := DecodePayload(f.action, &registration); err != nil {
+		t.Fatal(err)
+	}
+	registration.Version.Manifest.Locations = make([]string, MaxManifestLocations+1)
+	for i := range registration.Version.Manifest.Locations {
+		registration.Version.Manifest.Locations[i] = string(rune('a' + i))
+	}
+	if _, _, err := EncodePayload(ActionRegisterCapability, registration); ErrorCodeOf(err) != CodeCanonicalEncoding {
+		t.Fatalf("locations above consensus limit: %v", err)
+	}
+
+	oversize := RevocationPayload{Scope: "agent", ReasonCode: "operator_request"}
+	payloadCBOR, payloadDigest, err := EncodePayload(ActionRevokeAgent, oversize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := RegistryAction{
+		Version: Version, Kind: ActionRevokeAgent, Network: f.network, AgentID: f.agentID,
+		Generation: 1, Sequence: 2, PreviousStateDigest: "sha256:" + strings.Repeat("55", 32),
+		PolicyDigest: f.policyDigest, PayloadDigest: payloadDigest,
+		PayloadCBORBase64: payloadCBOR, NonceBase64: base64.RawURLEncoding.EncodeToString(makeNonzeroFrom(0x33, 32)),
+	}
+	// The action fields themselves are bounded; attempting to smuggle an
+	// over-limit payload is rejected during canonical payload decoding.
+	action.PayloadCBORBase64 = base64.RawURLEncoding.EncodeToString(make([]byte, MaxCanonicalPayloadBytes+1))
+	if _, err := CanonicalAction(action); ErrorCodeOf(err) != CodeCanonicalEncoding {
+		t.Fatalf("oversize payload accepted: %v", err)
+	}
+}
+
 func TestSignatureBindsVersionAlgorithmAndKeyID(t *testing.T) {
 	f := fixture(t)
 	signature, _ := SignAction(f.privateKey, "controller-1", f.action)
@@ -414,12 +447,58 @@ func TestRecoveryGenerationAndCanonicalTime(t *testing.T) {
 	_ = initiation
 }
 
+func TestRecoveryWeightCountsOnlyDesignatedRecoveryKeys(t *testing.T) {
+	f := fixture(t)
+	_, _, _, _, _, recovery := recoveryFixture(t, f)
+	policy := f.policy
+	policy.Controllers = append([]ControllerKey(nil), policy.Controllers...)
+	policy.Controllers[1].Purposes = []string{"quote", "recovery"}
+	if err := ValidateControllerPolicy(policy); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateAuthorizationKeyIDs(recovery, policy, "recovery", []string{"quote-1"}); ErrorCodeOf(err) != CodePurposeUnauthorized {
+		t.Fatalf("non-designated recovery key contributed threshold weight: %v", err)
+	}
+}
+
 func TestRecoveryBindsFinalizedInitiationAndOldPolicyTimelock(t *testing.T) {
 	f := fixture(t)
 	bootstrap, initiation, previous, initiationEvent, observation, recovery := recoveryFixture(t, f)
 	executeAfter := observation.BlockUnixSeconds + f.policy.RecoveryTimelock
 	if err := ValidateRecoveryTransition(bootstrap, previous, recovery, initiation, initiationEvent, observation, executeAfter); err != nil {
 		t.Fatal(err)
+	}
+	// Offline signers may conservatively choose a later not-before time; the
+	// canonical inclusion time is unknowable before the action is signed.
+	laterBootstrap, laterInitiation, laterPrevious, laterEvent, laterObservation, laterRecovery := recoveryFixture(t, f)
+	laterExecuteAfter := laterObservation.BlockUnixSeconds + f.policy.RecoveryTimelock + 30
+	var laterInitiatePayload InitiateRecoveryPayload
+	if err := DecodePayload(laterInitiation, &laterInitiatePayload); err != nil {
+		t.Fatal(err)
+	}
+	laterInitiatePayload.ExecuteAfterUnixSeconds = laterExecuteAfter
+	laterInitiation.PayloadCBORBase64, laterInitiation.PayloadDigest, _ = EncodePayload(ActionInitiateRecovery, laterInitiatePayload)
+	laterPrevious, _ = DeriveNextState(&laterBootstrap, laterInitiation, f.policyDigest, 0)
+	laterActionDigest, _ := ActionDigest(laterInitiation)
+	laterStateDigest, _ := StateDigest(laterPrevious)
+	laterEvent.ActionDigest, laterEvent.StateDigest = laterActionDigest, laterStateDigest
+	laterEvent.Sequence, laterEvent.PreviousStateDigest = laterInitiation.Sequence, laterInitiation.PreviousStateDigest
+	laterEventDigest, _ := EventDigest(laterEvent)
+	laterObservation.EventDigest = laterEventDigest
+	var laterRecoverPayload RecoverAgentPayload
+	if err := DecodePayload(laterRecovery, &laterRecoverPayload); err != nil {
+		t.Fatal(err)
+	}
+	laterRecoverPayload.ExecuteAfterUnixSeconds = laterExecuteAfter
+	laterRecoverPayload.InitiationActionDigest = laterActionDigest
+	laterRecovery.PreviousStateDigest = laterStateDigest
+	laterRecovery.PayloadCBORBase64, laterRecovery.PayloadDigest, _ = EncodePayload(ActionRecoverAgent, laterRecoverPayload)
+	if err := ValidateRecoveryTransition(laterBootstrap, laterPrevious, laterRecovery, laterInitiation, laterEvent, laterObservation, laterExecuteAfter); err != nil {
+		t.Fatalf("later safe not-before rejected: %v", err)
+	}
+	laterObservation.BlockUnixSeconds = laterExecuteAfter - f.policy.RecoveryTimelock + 1
+	if err := ValidateRecoveryTransition(laterBootstrap, laterPrevious, laterRecovery, laterInitiation, laterEvent, laterObservation, laterExecuteAfter); ErrorCodeOf(err) != CodeTimelockPending {
+		t.Fatalf("too-short inclusion-relative timelock accepted: %v", err)
 	}
 	changed := observation
 	changed.Reference.LogicalTime++
@@ -503,6 +582,30 @@ func TestIdentifierAndURIAliasesFail(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistryStateCanonicalizesEmptyCollections(t *testing.T) {
+	f := fixture(t)
+	bootstrap, _, _, _, _, _ := recoveryFixture(t, f)
+	withNil := bootstrap
+	withNil.CapabilityVersions = nil
+	withNil.DelegationActionDigests = nil
+	withEmpty := bootstrap
+	withEmpty.CapabilityVersions = []CapabilityVersionState{}
+	withEmpty.DelegationActionDigests = []string{}
+	nilDigest, err := StateDigest(withNil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyDigest, err := StateDigest(withEmpty)
+	if err != nil || nilDigest != emptyDigest {
+		t.Fatalf("nil/empty collection alias changed state identity: nil=%s empty=%s err=%v", nilDigest, emptyDigest, err)
+	}
+	canonical, err := CanonicalState(withNil)
+	if err != nil || canonical.CapabilityVersions == nil || canonical.DelegationActionDigests == nil {
+		t.Fatalf("state was not normalized to canonical arrays: %+v err=%v", canonical, err)
+	}
+}
+
 func makeNonzero(size int) []byte {
 	return makeNonzeroFrom(1, size)
 }

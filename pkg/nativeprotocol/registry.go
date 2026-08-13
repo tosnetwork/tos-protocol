@@ -197,6 +197,9 @@ func EncodePayload(kind ActionKind, value interface{}) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	if len(raw) > MaxCanonicalPayloadBytes {
+		return "", "", fail(CodeCanonicalEncoding, "payload.size")
+	}
 	digest, err := codec.DigestCanonical(payloadDomain(kind), raw)
 	if err != nil {
 		return "", "", err
@@ -205,7 +208,7 @@ func EncodePayload(kind ActionKind, value interface{}) (string, string, error) {
 }
 func DecodePayload(action RegistryAction, output interface{}) error {
 	raw, err := base64.RawURLEncoding.DecodeString(action.PayloadCBORBase64)
-	if err != nil || base64.RawURLEncoding.EncodeToString(raw) != action.PayloadCBORBase64 {
+	if err != nil || len(raw) > MaxCanonicalPayloadBytes || base64.RawURLEncoding.EncodeToString(raw) != action.PayloadCBORBase64 {
 		return fail(CodeCanonicalEncoding, "payload_cbor_base64url")
 	}
 	digest, err := codec.DigestCanonical(payloadDomain(action.Kind), raw)
@@ -219,10 +222,11 @@ func DecodePayload(action RegistryAction, output interface{}) error {
 }
 
 func ActionDigest(value RegistryAction) (string, error) {
-	if err := value.Validate(); err != nil {
+	raw, err := CanonicalAction(value)
+	if err != nil {
 		return "", err
 	}
-	return codec.Digest(RegistryActionDomain, value)
+	return codec.DigestCanonical(RegistryActionDomain, raw)
 }
 func EventDigest(value RegistryEvent) (string, error) {
 	if err := value.Validate(); err != nil {
@@ -237,16 +241,40 @@ func ObservationDigest(value EventObservation) (string, error) {
 	return codec.Digest(EventObservationDomain, value)
 }
 func StateDigest(value RegistryState) (string, error) {
-	if err := value.Validate(); err != nil {
+	value, err := CanonicalState(value)
+	if err != nil {
 		return "", err
 	}
 	return codec.Digest(RegistryStateDomain, value)
+}
+
+// CanonicalState removes the language-specific nil/empty distinction from
+// repeated fields. The frozen wire contract represents both collections as
+// CBOR arrays, including when they contain zero entries.
+func CanonicalState(value RegistryState) (RegistryState, error) {
+	if value.CapabilityVersions == nil {
+		value.CapabilityVersions = []CapabilityVersionState{}
+	}
+	if value.DelegationActionDigests == nil {
+		value.DelegationActionDigests = []string{}
+	}
+	if err := value.Validate(); err != nil {
+		return RegistryState{}, err
+	}
+	return value, nil
 }
 func CanonicalAction(value RegistryAction) ([]byte, error) {
 	if err := value.Validate(); err != nil {
 		return nil, err
 	}
-	return codec.Marshal(value)
+	raw, err := codec.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > MaxCanonicalActionBytes {
+		return nil, fail(CodeCanonicalEncoding, "registry_action.size")
+	}
+	return raw, nil
 }
 
 func (a RegistryAction) Validate() error {
@@ -428,14 +456,14 @@ func (s RegistryState) Validate() error {
 		if _, err := DecodeControllerPolicy(s.CurrentPolicyCBORBase64, s.CurrentPolicyDigest); err != nil {
 			return err
 		}
-		if !strictSortedDigests(s.DelegationActionDigests) {
+		if len(s.DelegationActionDigests) > MaxDelegationsPerGeneration || !strictSortedDigests(s.DelegationActionDigests) {
 			return fail(CodeCanonicalEncoding, "registry_state.delegations")
 		}
 		if err := validatePendingRecovery(s.PendingRecovery); err != nil {
 			return err
 		}
 	case "capability":
-		if s.AgentID != "" || s.AgentNonceBase64 != "" || s.AgentBootstrapPolicyDigest != "" || !validID(s.CapabilityID, "cap") || !validID(s.OwnerAgentID, "agent") || !validID(s.CapabilityBootstrapOwnerAgentID, "agent") || !validNonce(s.CapabilityNonceBase64) || s.CurrentPolicyDigest != "" || s.CurrentPolicyCBORBase64 != "" || len(s.DelegationActionDigests) != 0 || !pendingRecoveryIsZero(s.PendingRecovery) || len(s.CapabilityVersions) == 0 || len(s.CapabilityVersions) > 4096 {
+		if s.AgentID != "" || s.AgentNonceBase64 != "" || s.AgentBootstrapPolicyDigest != "" || !validID(s.CapabilityID, "cap") || !validID(s.OwnerAgentID, "agent") || !validID(s.CapabilityBootstrapOwnerAgentID, "agent") || !validNonce(s.CapabilityNonceBase64) || s.CurrentPolicyDigest != "" || s.CurrentPolicyCBORBase64 != "" || len(s.DelegationActionDigests) != 0 || !pendingRecoveryIsZero(s.PendingRecovery) || len(s.CapabilityVersions) == 0 || len(s.CapabilityVersions) > MaxCapabilityVersionsPerLineage {
 			return fail(CodeCanonicalEncoding, "registry_state.capability")
 		}
 		capabilityID, err := CapabilityID(CapabilityBootstrap{Version: Version, Network: s.Network, OwnerAgentID: s.CapabilityBootstrapOwnerAgentID, ObjectNonceBase64: s.CapabilityNonceBase64})
@@ -533,6 +561,12 @@ func validateEventForActionAndState(a RegistryAction, state RegistryState, e Reg
 	return nil
 }
 
+// ValidateEventForActionAndState verifies a finalized event against the exact
+// canonical action and independently reconstructed complete state.
+func ValidateEventForActionAndState(action RegistryAction, state RegistryState, event RegistryEvent) error {
+	return validateEventForActionAndState(action, state, event)
+}
+
 func validatePayload(kind ActionKind, value interface{}) error {
 	switch kind {
 	case ActionRegisterAgent:
@@ -547,7 +581,7 @@ func validatePayload(kind ActionKind, value interface{}) error {
 		}
 	case ActionDelegateAgent:
 		p, ok := asDelegation(value)
-		if !ok || !keyIDPattern.MatchString(p.DelegateKeyID) || !sortedUniquePurposes(p.Purposes) || !sortedUniqueASCII(p.Resources) || p.ValidFromCheckpoint == 0 || p.ValidUntilCheckpoint <= p.ValidFromCheckpoint || p.MaxStalenessCheckpoints == 0 {
+		if !ok || !keyIDPattern.MatchString(p.DelegateKeyID) || len(p.Purposes) > MaxDelegationPurposes || !sortedUniquePurposes(p.Purposes) || len(p.Resources) > MaxDelegationResources || !sortedUniqueASCII(p.Resources) || p.ValidFromCheckpoint == 0 || p.ValidUntilCheckpoint <= p.ValidFromCheckpoint || p.MaxStalenessCheckpoints == 0 {
 			return fail(CodeCanonicalEncoding, "payload.delegation")
 		}
 	case ActionInitiateRecovery:
@@ -587,7 +621,7 @@ func validatePayload(kind ActionKind, value interface{}) error {
 }
 
 func validateCapabilityPayload(p CapabilityVersionPayload) error {
-	if !validID(p.OwnerAgentID, "agent") || !validDigest(p.Manifest.Digest) || p.Manifest.MediaType != "application/vnd.atos.native-capability+json" || p.Manifest.SizeBytes == 0 || p.Manifest.SizeBytes > 1<<20 || !sortedUniqueASCII(p.Manifest.Locations) || len(p.Endpoints) == 0 || p.ValidFromCheckpoint == 0 || p.ValidUntilCheckpoint <= p.ValidFromCheckpoint || !sortedUniqueASCII(p.QuoteSignerKeyIDs) || !sortedUniqueASCII(p.ReceiptSignerKeyIDs) {
+	if !validID(p.OwnerAgentID, "agent") || !validDigest(p.Manifest.Digest) || p.Manifest.MediaType != "application/vnd.atos.native-capability+json" || p.Manifest.SizeBytes == 0 || p.Manifest.SizeBytes > 1<<20 || len(p.Manifest.Locations) > MaxManifestLocations || !sortedUniqueASCII(p.Manifest.Locations) || len(p.Endpoints) == 0 || len(p.Endpoints) > MaxCapabilityEndpoints || p.ValidFromCheckpoint == 0 || p.ValidUntilCheckpoint <= p.ValidFromCheckpoint || len(p.QuoteSignerKeyIDs) > MaxQuoteSignerKeyIDs || !sortedUniqueASCII(p.QuoteSignerKeyIDs) || len(p.ReceiptSignerKeyIDs) > MaxReceiptSignerKeyIDs || !sortedUniqueASCII(p.ReceiptSignerKeyIDs) {
 		return errors.New("invalid")
 	}
 	for _, id := range p.QuoteSignerKeyIDs {

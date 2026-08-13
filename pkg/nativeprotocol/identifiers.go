@@ -129,6 +129,9 @@ func EncodeControllerPolicy(policy ControllerPolicy) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	if len(raw) > MaxControllerPolicyBytes {
+		return "", "", fail(CodeCanonicalEncoding, "controller_policy.size")
+	}
 	digest, err := codec.DigestCanonical(ControllerPolicyDomain, raw)
 	if err != nil {
 		return "", "", err
@@ -138,7 +141,7 @@ func EncodeControllerPolicy(policy ControllerPolicy) (string, string, error) {
 
 func DecodeControllerPolicy(encoded, expectedDigest string) (ControllerPolicy, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || base64.RawURLEncoding.EncodeToString(raw) != encoded {
+	if err != nil || len(raw) > MaxControllerPolicyBytes || base64.RawURLEncoding.EncodeToString(raw) != encoded {
 		return ControllerPolicy{}, fail(CodeCanonicalEncoding, "controller_policy.cbor_base64url")
 	}
 	digest, err := codec.DigestCanonical(ControllerPolicyDomain, raw)
@@ -163,7 +166,7 @@ func ValidateControllerPolicy(policy ControllerPolicy) error {
 	keys := map[string]ControllerKey{}
 	publicKeys := map[string]struct{}{}
 	for _, key := range policy.Controllers {
-		if !keyIDPattern.MatchString(key.KeyID) || key.KeyID <= last || key.Algorithm != SignatureAlgorithm || key.Weight == 0 || !validPublicKey(key.PublicKeyBase64) || !sortedUniquePurposes(key.Purposes) {
+		if !keyIDPattern.MatchString(key.KeyID) || key.KeyID <= last || key.Algorithm != SignatureAlgorithm || key.Weight == 0 || !validPublicKey(key.PublicKeyBase64) || len(key.Purposes) > MaxPurposesPerController || !sortedUniquePurposes(key.Purposes) {
 			return fail(CodeCanonicalEncoding, "controller_policy.controllers")
 		}
 		if _, duplicate := publicKeys[key.PublicKeyBase64]; duplicate {

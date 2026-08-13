@@ -2,11 +2,15 @@ package nativeprotocol
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/tosnetwork/tos-protocol/pkg/codec"
 )
 
 type negativeVector struct {
@@ -21,7 +25,76 @@ type vectorOperation struct {
 	Value    any
 }
 type vectorDocument struct {
-	Negative []negativeVector `json:"negative"`
+	Negative          []negativeVector           `json:"negative"`
+	TransitionVectors []registryTransitionVector `json:"transition_vectors"`
+}
+
+type registryTransitionVector struct {
+	Name                          string         `json:"name"`
+	ExpectedAuthorityPolicyDigest string         `json:"expected_authority_policy_digest"`
+	PayloadCBORBase64URL          string         `json:"payload_cbor_base64url"`
+	PayloadDigest                 string         `json:"payload_digest"`
+	Action                        RegistryAction `json:"action"`
+	ActionCBORBase64              string         `json:"action_cbor_base64"`
+	ActionDigest                  string         `json:"action_digest"`
+	PreviousStateDigest           string         `json:"previous_state_digest"`
+	State                         RegistryState  `json:"state"`
+	StateCBORBase64               string         `json:"state_cbor_base64"`
+	StateDigest                   string         `json:"state_digest"`
+	ObservedUnixSeconds           uint64         `json:"observed_unix_seconds"`
+}
+
+func TestNormativeTransitionVectors(t *testing.T) {
+	raw, err := os.ReadFile("testdata/native_registry_v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document vectorDocument
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	states := make(map[string]RegistryState)
+	kinds := make(map[ActionKind]bool)
+	for _, vector := range document.TransitionVectors {
+		if vector.PayloadCBORBase64URL != vector.Action.PayloadCBORBase64 || vector.PayloadDigest != vector.Action.PayloadDigest {
+			t.Fatalf("%s payload tuple differs from action", vector.Name)
+		}
+		actionBytes, err := codec.Marshal(vector.Action)
+		if err != nil || base64.StdEncoding.EncodeToString(actionBytes) != vector.ActionCBORBase64 {
+			t.Fatalf("%s action canonical bytes: %v", vector.Name, err)
+		}
+		actionDigest, err := ActionDigest(vector.Action)
+		if err != nil || actionDigest != vector.ActionDigest {
+			t.Fatalf("%s action digest: %v", vector.Name, err)
+		}
+		stateBytes, err := codec.Marshal(vector.State)
+		if err != nil || base64.StdEncoding.EncodeToString(stateBytes) != vector.StateCBORBase64 {
+			t.Fatalf("%s state canonical bytes: %v", vector.Name, err)
+		}
+		stateDigest, err := StateDigest(vector.State)
+		if err != nil || stateDigest != vector.StateDigest {
+			t.Fatalf("%s state digest: %v", vector.Name, err)
+		}
+		var previous *RegistryState
+		if vector.PreviousStateDigest != "" {
+			value, ok := states[vector.PreviousStateDigest]
+			if !ok {
+				t.Fatalf("%s missing predecessor vector %s", vector.Name, vector.PreviousStateDigest)
+			}
+			previous = &value
+		}
+		derived, err := DeriveNextState(previous, vector.Action, vector.ExpectedAuthorityPolicyDigest, vector.ObservedUnixSeconds)
+		if err != nil || !reflect.DeepEqual(derived, vector.State) {
+			t.Fatalf("%s transition mismatch: %v", vector.Name, err)
+		}
+		states[stateDigest] = vector.State
+		kinds[vector.Action.Kind] = true
+	}
+	for _, kind := range []ActionKind{ActionRegisterAgent, ActionUpdateAgentPolicy, ActionDelegateAgent, ActionInitiateRecovery, ActionRecoverAgent, ActionRevokeAgent, ActionRegisterCapability, ActionUpdateCapability, ActionTransferCapability, ActionRevokeCapability} {
+		if !kinds[kind] {
+			t.Fatalf("missing normative transition vector for %s", kind)
+		}
+	}
 }
 
 // TestExecutableNegativeVectors deliberately applies every named normative

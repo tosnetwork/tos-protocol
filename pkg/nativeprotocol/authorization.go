@@ -83,6 +83,34 @@ func RequiredPurpose(kind ActionKind) string {
 // rules. Controller policy validation already proves public-key uniqueness, so
 // one physical key can contribute weight at most once.
 func VerifyAuthorization(action RegistryAction, expectedPolicyDigest string, policy ControllerPolicy, signatures []Signature) error {
+	if err := validateAuthorizationPolicy(action, expectedPolicyDigest, policy); err != nil {
+		return err
+	}
+	keyIDs := make([]string, len(signatures))
+	for i := range signatures {
+		keyIDs[i] = signatures[i].KeyID
+	}
+	if err := validateAuthorizationKeyIDs(action, policy, RequiredPurpose(action.Kind), keyIDs); err != nil {
+		return err
+	}
+	keys := map[string]ControllerKey{}
+	for _, key := range policy.Controllers {
+		keys[key.KeyID] = key
+	}
+	for _, signature := range signatures {
+		key := keys[signature.KeyID]
+		publicKey, err := base64.RawURLEncoding.DecodeString(key.PublicKeyBase64)
+		if err != nil {
+			return fail(CodeCanonicalEncoding, "controller.public_key")
+		}
+		if err := VerifyAction(ed25519.PublicKey(publicKey), action, signature); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAuthorizationPolicy(action RegistryAction, expectedPolicyDigest string, policy ControllerPolicy) error {
 	if action.Kind == ActionTransferCapability {
 		return fail(CodePurposeUnauthorized, "transfer.dual_authorization_required")
 	}
@@ -128,9 +156,54 @@ func VerifyAuthorization(action RegistryAction, expectedPolicyDigest string, pol
 			return err
 		}
 	}
-	return verifyAuthorizationForPurpose(action, policy, RequiredPurpose(action.Kind), signatures)
+	return nil
 }
-func verifyAuthorizationForPurpose(action RegistryAction, policy ControllerPolicy, purpose string, signatures []Signature) error {
+
+// ValidateAuthorizationKeyIDs validates the exact sorted controller set that
+// authorized a finalized TVM execution. Cryptographic signature verification
+// remains the caller's responsibility; this function single-sources purpose,
+// uniqueness and weighted-threshold semantics for the contract and resolver.
+
+func ValidateAuthorizationKeyIDs(action RegistryAction, expectedPolicyDigest string, policy ControllerPolicy, keyIDs []string) error {
+	if err := validateAuthorizationPolicy(action, expectedPolicyDigest, policy); err != nil {
+		return err
+	}
+	return validateAuthorizationKeyIDs(action, policy, RequiredPurpose(action.Kind), keyIDs)
+}
+
+// ValidateTransferAuthorizationKeyIDs applies the frozen dual-owner policy
+// binding and threshold rules to the independently verified finalized TVM
+// signer identities.
+func ValidateTransferAuthorizationKeyIDs(action RegistryAction, expectedCurrentPolicyDigest string, currentPolicy ControllerPolicy, expectedNewOwnerPolicyDigest string, newOwnerPolicy ControllerPolicy, currentKeyIDs, newOwnerKeyIDs []string) error {
+	if action.Kind != ActionTransferCapability {
+		return fail(CodePurposeUnauthorized, "kind")
+	}
+	var payload TransferCapabilityPayload
+	if err := DecodePayload(action, &payload); err != nil {
+		return err
+	}
+	currentPolicyDigest, err := ControllerPolicyDigest(currentPolicy)
+	if err != nil || !validDigest(expectedCurrentPolicyDigest) || currentPolicyDigest != expectedCurrentPolicyDigest || currentPolicyDigest != action.PolicyDigest {
+		return fail(CodePolicyUnauthorized, "current_controller_policy")
+	}
+	newPolicyDigest, err := ControllerPolicyDigest(newOwnerPolicy)
+	if err != nil || !validDigest(expectedNewOwnerPolicyDigest) || newPolicyDigest != expectedNewOwnerPolicyDigest || newPolicyDigest != payload.NewOwnerPolicyDigest {
+		return fail(CodePolicyUnauthorized, "payload.new_owner_policy_digest")
+	}
+	encoded, _, err := EncodeControllerPolicy(newOwnerPolicy)
+	if err != nil || encoded != payload.NewOwnerPolicyCBORBase64 {
+		return fail(CodePolicyUnauthorized, "payload.new_owner_policy")
+	}
+	if payload.CurrentOwnerAgentID != action.AgentID {
+		return fail(CodeCrossDomainReplay, "payload.current_owner_agent_id")
+	}
+	if err := validateAuthorizationKeyIDs(action, currentPolicy, "capability_control", currentKeyIDs); err != nil {
+		return err
+	}
+	return validateAuthorizationKeyIDs(action, newOwnerPolicy, "capability_control", newOwnerKeyIDs)
+}
+
+func validateAuthorizationKeyIDs(action RegistryAction, policy ControllerPolicy, purpose string, keyIDs []string) error {
 	if err := action.Validate(); err != nil {
 		return err
 	}
@@ -140,7 +213,7 @@ func verifyAuthorizationForPurpose(action RegistryAction, policy ControllerPolic
 	if purpose == "" {
 		return fail(CodePurposeUnauthorized, "kind")
 	}
-	if len(signatures) == 0 || !sort.SliceIsSorted(signatures, func(i, j int) bool { return signatures[i].KeyID < signatures[j].KeyID }) {
+	if len(keyIDs) == 0 || !sort.StringsAreSorted(keyIDs) {
 		return fail(CodeCanonicalEncoding, "signatures.order")
 	}
 	keys := map[string]ControllerKey{}
@@ -149,21 +222,17 @@ func verifyAuthorizationForPurpose(action RegistryAction, policy ControllerPolic
 	}
 	var weight uint64
 	last := ""
-	for _, signature := range signatures {
-		if signature.KeyID == last {
+	for _, keyID := range keyIDs {
+		if keyID == last {
 			return fail(CodeCanonicalEncoding, "signatures.duplicate")
 		}
-		last = signature.KeyID
-		key, ok := keys[signature.KeyID]
+		last = keyID
+		key, ok := keys[keyID]
 		if !ok || !contains(key.Purposes, purpose) {
 			return fail(CodePurposeUnauthorized, "signature.key_id")
 		}
-		publicKey, err := base64.RawURLEncoding.DecodeString(key.PublicKeyBase64)
-		if err != nil {
-			return fail(CodeCanonicalEncoding, "controller.public_key")
-		}
-		if err := VerifyAction(ed25519.PublicKey(publicKey), action, signature); err != nil {
-			return err
+		if purpose == "recovery" && !contains(policy.RecoveryKeyIDs, keyID) {
+			return fail(CodePurposeUnauthorized, "signature.recovery_key_id")
 		}
 		weight += uint64(key.Weight)
 	}
@@ -206,6 +275,30 @@ func VerifyTransferAuthorization(action RegistryAction, expectedCurrentPolicyDig
 		return err
 	}
 	return verifyAuthorizationForPurpose(action, newOwnerPolicy, "capability_control", newOwnerSignatures)
+}
+
+func verifyAuthorizationForPurpose(action RegistryAction, policy ControllerPolicy, purpose string, signatures []Signature) error {
+	keyIDs := make([]string, len(signatures))
+	for i := range signatures {
+		keyIDs[i] = signatures[i].KeyID
+	}
+	if err := validateAuthorizationKeyIDs(action, policy, purpose, keyIDs); err != nil {
+		return err
+	}
+	keys := make(map[string]ControllerKey, len(policy.Controllers))
+	for _, key := range policy.Controllers {
+		keys[key.KeyID] = key
+	}
+	for _, signature := range signatures {
+		publicKey, err := base64.RawURLEncoding.DecodeString(keys[signature.KeyID].PublicKeyBase64)
+		if err != nil {
+			return fail(CodeCanonicalEncoding, "controller.public_key")
+		}
+		if err := VerifyAction(ed25519.PublicKey(publicKey), action, signature); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateCapabilitySignersForPolicy(payload CapabilityVersionPayload, policy ControllerPolicy) error {
@@ -272,7 +365,7 @@ func DeriveNextState(previous *RegistryState, action RegistryAction, expectedAut
 			if err := state.Validate(); err != nil {
 				return RegistryState{}, err
 			}
-			return state, nil
+			return CanonicalState(state)
 		case ActionRegisterCapability:
 			if !validDigest(expectedAuthorityPolicyDigest) || action.PolicyDigest != expectedAuthorityPolicyDigest {
 				return RegistryState{}, fail(CodePolicyUnauthorized, "current_controller_policy")
@@ -285,7 +378,7 @@ func DeriveNextState(previous *RegistryState, action RegistryAction, expectedAut
 			if err := state.Validate(); err != nil {
 				return RegistryState{}, err
 			}
-			return state, nil
+			return CanonicalState(state)
 		default:
 			return RegistryState{}, fail(CodeSequenceConflict, "registry_action.bootstrap")
 		}
@@ -334,7 +427,13 @@ func DeriveNextState(previous *RegistryState, action RegistryAction, expectedAut
 		}
 		state.CurrentPolicyDigest = payload.NewPolicyDigest
 		state.CurrentPolicyCBORBase64 = payload.NewPolicyCBORBase64
+		// Delegations are scoped to the policy that authorized them. Rotation
+		// invalidates and removes the obsolete generation-local set.
+		state.DelegationActionDigests = []string{}
 	case ActionDelegateAgent:
+		if len(state.DelegationActionDigests) >= MaxDelegationsPerGeneration {
+			return RegistryState{}, fail(CodeCanonicalEncoding, "registry_state.delegations.limit")
+		}
 		state.DelegationActionDigests = insertSortedDigest(state.DelegationActionDigests, actionDigest)
 	case ActionInitiateRecovery:
 		var payload InitiateRecoveryPayload
@@ -377,6 +476,9 @@ func DeriveNextState(previous *RegistryState, action RegistryAction, expectedAut
 		if payload.OwnerAgentID != previous.OwnerAgentID || hasCapabilityVersion(state.CapabilityVersions, action.CapabilityVersion) {
 			return RegistryState{}, fail(CodeSequenceConflict, "capability_version")
 		}
+		if len(state.CapabilityVersions) >= MaxCapabilityVersionsPerLineage {
+			return RegistryState{}, fail(CodeCanonicalEncoding, "registry_state.capability_versions.limit")
+		}
 		state.CapabilityVersions = insertCapabilityVersion(state.CapabilityVersions, CapabilityVersionState{Version: action.CapabilityVersion, PayloadDigest: action.PayloadDigest})
 	case ActionTransferCapability:
 		var payload TransferCapabilityPayload
@@ -411,7 +513,7 @@ func DeriveNextState(previous *RegistryState, action RegistryAction, expectedAut
 	if err := state.Validate(); err != nil {
 		return RegistryState{}, err
 	}
-	return state, nil
+	return CanonicalState(state)
 }
 
 func ValidateTransition(previous *RegistryState, action RegistryAction, expectedAuthorityPolicyDigest string, observedUnixSeconds uint64) error {
@@ -480,8 +582,11 @@ func ValidateRecoveryTransition(preInitiation RegistryState, previous RegistrySt
 	if err != nil {
 		return err
 	}
-	executeAfter := observation.BlockUnixSeconds + oldPolicy.RecoveryTimelock
-	if executeAfter < observation.BlockUnixSeconds || recoverPayload.ExecuteAfterUnixSeconds != executeAfter || initiatePayload.ExecuteAfterUnixSeconds != executeAfter || previous.PendingRecovery.ExecuteAfterUnixSeconds != executeAfter {
+	minimumExecuteAfter := observation.BlockUnixSeconds + oldPolicy.RecoveryTimelock
+	if minimumExecuteAfter < observation.BlockUnixSeconds ||
+		recoverPayload.ExecuteAfterUnixSeconds != initiatePayload.ExecuteAfterUnixSeconds ||
+		previous.PendingRecovery.ExecuteAfterUnixSeconds != initiatePayload.ExecuteAfterUnixSeconds ||
+		initiatePayload.ExecuteAfterUnixSeconds < minimumExecuteAfter {
 		return fail(CodeTimelockPending, "recovery.execute_after_unix_seconds")
 	}
 	_, err = DeriveNextState(&previous, action, previous.CurrentPolicyDigest, executionBlockUnixSeconds)

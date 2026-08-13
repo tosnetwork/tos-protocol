@@ -28,24 +28,28 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/atosrpc"
 	"github.com/tosnetwork/tos-protocol/pkg/economic"
 	"github.com/tosnetwork/tos-protocol/pkg/localrpc"
+	"github.com/tosnetwork/tos-protocol/pkg/nativeexecution"
+	"github.com/tosnetwork/tos-protocol/pkg/nativeprotocol"
+	"github.com/tosnetwork/tos-protocol/pkg/nativeregistry"
 	"github.com/tosnetwork/tos-protocol/pkg/toschain"
 )
 
 func main() {
 	var (
-		listen           = flag.String("listen", envOr("TOS_ATOS_RPC_LISTEN", "127.0.0.1:8090"), "ATOS RPC listen address")
-		statePath        = flag.String("state", envOr("TOS_ATOS_RPC_STATE", "./data/atos-rpc.db"), "durable bbolt state path")
-		bearerToken      = flag.String("token", os.Getenv("TOS_ATOS_RPC_TOKEN"), "shared bearer token (or TOS_ATOS_RPC_TOKEN)")
-		workerSocket     = flag.String("worker-socket", os.Getenv("TOS_WORKER_SOCKET"), "private tos-ai Worker Unix socket")
-		thirdPartySocket = flag.String("third-party-worker-socket", os.Getenv("TOS_THIRD_PARTY_WORKER_SOCKET"), "private third-party execution Worker Unix socket")
-		routeFile        = flag.String("routes", os.Getenv("TOS_ATOS_RPC_ROUTES"), "JSON array of public capability to Worker routes")
-		tlsCert          = flag.String("tls-cert", os.Getenv("TOS_ATOS_RPC_TLS_CERT"), "TLS server certificate PEM")
-		tlsKey           = flag.String("tls-key", os.Getenv("TOS_ATOS_RPC_TLS_KEY"), "TLS server private key PEM")
-		clientCA         = flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA PEM; enables required mTLS")
-		authorityMode    = flag.String("authority", envOr("TOS_ATOS_RPC_AUTHORITY", "local"), "Authority backend: local or chain")
-		authorityConfig  = flag.String("authority-config", os.Getenv("TOS_ATOS_RPC_AUTHORITY_CONFIG"), "strict JSON chain Authority configuration")
-		economicMode     = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
-		economicConfig   = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
+		listen               = flag.String("listen", envOr("TOS_ATOS_RPC_LISTEN", "127.0.0.1:8090"), "ATOS RPC listen address")
+		statePath            = flag.String("state", envOr("TOS_ATOS_RPC_STATE", "./data/atos-rpc.db"), "durable bbolt state path")
+		bearerToken          = flag.String("token", os.Getenv("TOS_ATOS_RPC_TOKEN"), "shared bearer token (or TOS_ATOS_RPC_TOKEN)")
+		workerSocket         = flag.String("worker-socket", os.Getenv("TOS_WORKER_SOCKET"), "private tos-ai Worker Unix socket")
+		thirdPartySocket     = flag.String("third-party-worker-socket", os.Getenv("TOS_THIRD_PARTY_WORKER_SOCKET"), "private third-party execution Worker Unix socket")
+		routeFile            = flag.String("routes", os.Getenv("TOS_ATOS_RPC_ROUTES"), "JSON array of public capability to Worker routes")
+		tlsCert              = flag.String("tls-cert", os.Getenv("TOS_ATOS_RPC_TLS_CERT"), "TLS server certificate PEM")
+		tlsKey               = flag.String("tls-key", os.Getenv("TOS_ATOS_RPC_TLS_KEY"), "TLS server private key PEM")
+		clientCA             = flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA PEM; enables required mTLS")
+		authorityMode        = flag.String("authority", envOr("TOS_ATOS_RPC_AUTHORITY", "local"), "Authority backend: local or chain")
+		authorityConfig      = flag.String("authority-config", os.Getenv("TOS_ATOS_RPC_AUTHORITY_CONFIG"), "strict JSON chain Authority configuration")
+		economicMode         = flag.String("economic-driver", envOr("TOS_ATOS_RPC_ECONOMIC_DRIVER", "disabled"), "Economic backend: disabled or task-escrow")
+		economicConfig       = flag.String("economic-config", os.Getenv("TOS_ATOS_RPC_ECONOMIC_CONFIG"), "strict JSON Task Escrow economic configuration")
+		nativeRegistryConfig = flag.String("native-registry-config", os.Getenv("TOS_ATOS_RPC_NATIVE_REGISTRY_CONFIG"), "strict JSON Native Registry relay/resolver configuration")
 		// identitySeedFile is the ONLY way this process establishes a new
 		// AgentIdentity -- Server.SeedIdentity is deliberately not exposed
 		// as a network RPC: creating a brand-new identity from nothing is
@@ -105,9 +109,18 @@ func main() {
 		logger.Error("configure ATOS RPC economic driver", "error", err)
 		os.Exit(2)
 	}
+	nativeRegistry, err := buildNativeRegistry(*nativeRegistryConfig)
+	if err != nil {
+		_ = authority.Close()
+		if economicDriver != nil {
+			_ = economicDriver.Close()
+		}
+		logger.Error("configure Native Registry", "error", err)
+		os.Exit(2)
+	}
 	server, err := atosrpc.Open(atosrpc.Config{
 		StatePath: *statePath, BearerToken: *bearerToken,
-		Authority: authority, EconomicDriver: economicDriver,
+		Authority: authority, EconomicDriver: economicDriver, NativeRegistry: nativeRegistry,
 		TrustDomain: *trustDomain,
 		Worker:      worker, Router: router, ThirdPartyWorker: thirdPartyWorker,
 	})
@@ -163,6 +176,72 @@ func main() {
 	if err := httpServer.Shutdown(shutdown); err != nil {
 		logger.Error("ATOS RPC shutdown", "error", err)
 	}
+}
+
+type nativeRegistryGatewayConfig struct {
+	Version                 string                       `json:"version"`
+	Network                 nativeprotocol.NetworkDomain `json:"network"`
+	Endpoints               []string                     `json:"endpoints"`
+	Quorum                  int                          `json:"quorum"`
+	QueryTimeoutMillis      uint64                       `json:"query_timeout_millis,omitempty"`
+	MaxResponseBytes        int64                        `json:"max_response_bytes,omitempty"`
+	RegistryWorkchain       int32                        `json:"registry_workchain"`
+	ContractCodeBOCBase64   string                       `json:"contract_code_boc_base64"`
+	ContractCodeHash        string                       `json:"contract_code_hash"`
+	PublisherSocket         string                       `json:"publisher_socket"`
+	PublisherJournalID      string                       `json:"publisher_journal_identity"`
+	PublisherJournalBinding string                       `json:"publisher_journal_binding"`
+	PublisherTimeoutMillis  uint64                       `json:"publisher_timeout_millis,omitempty"`
+}
+
+func buildNativeRegistry(path string) (*nativeregistry.Service, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 2<<20 {
+		return nil, errors.New("Native Registry config file is outside bounds")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var config nativeRegistryGatewayConfig
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return nil, errors.New("Native Registry config contains trailing JSON")
+	}
+	if config.Version != "1" || config.Network.Validate() != nil {
+		return nil, errors.New("invalid Native Registry config")
+	}
+	chain, err := toschain.New(toschain.Config{Network: config.Network.NetworkID, Endpoints: config.Endpoints,
+		Quorum: config.Quorum, QueryTimeout: time.Duration(config.QueryTimeoutMillis) * time.Millisecond,
+		MaxResponseBytes: config.MaxResponseBytes})
+	if err != nil {
+		return nil, err
+	}
+	locator, err := nativeexecution.NewObjectLocator(config.Network, config.RegistryWorkchain, config.ContractCodeBOCBase64, config.ContractCodeHash)
+	if err != nil {
+		return nil, err
+	}
+	resolver, err := toschain.NewNativeRegistryResolver(chain, config.Network, locator)
+	if err != nil {
+		return nil, err
+	}
+	timeout := time.Duration(config.PublisherTimeoutMillis) * time.Millisecond
+	publisher, err := localrpc.NewNativeRegistryPublisherClient(localrpc.NativeRegistryPublisherClientConfig{
+		SocketPath: config.PublisherSocket, JournalIdentity: config.PublisherJournalID,
+		JournalBinding: config.PublisherJournalBinding, Timeout: timeout})
+	if err != nil {
+		return nil, err
+	}
+	return nativeregistry.New(resolver, publisher, locator)
 }
 
 // identitySeed is the JSON operator/bootstrap record shape -- deliberately a
