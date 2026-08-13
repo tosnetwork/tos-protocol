@@ -32,7 +32,7 @@ func TestResolveExecutionReceiptIsReadOnlyAndRequiresLiveFinality(t *testing.T) 
 	if e != nil {
 		t.Fatal(e)
 	}
-	if !resp.Msg.Found || resp.Msg.ReceiptRef.FinalizedCheckpoint == 0 {
+	if !resp.Msg.Found || resp.Msg.ReceiptRef.FinalizedCheckpoint == 0 || resp.Msg.ObservedUnixMillis != 1_700_000_000_000 {
 		t.Fatalf("response=%+v", resp.Msg)
 	}
 	if a.commits != before {

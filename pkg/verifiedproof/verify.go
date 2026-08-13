@@ -72,6 +72,7 @@ type EvidenceObservation struct {
 	Reference           string `json:"reference"`
 	Finalized           bool   `json:"finalized"`
 	FinalizedCheckpoint uint64 `json:"finalized_checkpoint"`
+	ObservedUnixNanos   int64  `json:"observed_unix_nanos,omitempty"`
 }
 type SignerObservation struct {
 	Found               bool   `json:"found"`
@@ -92,7 +93,7 @@ type SignerObservation struct {
 }
 type Observer interface {
 	Observe(context.Context, EvidenceRequest) (EvidenceObservation, error)
-	ResolveSigner(context.Context, Package) (SignerObservation, error)
+	ResolveSigner(context.Context, Package, int64) (SignerObservation, error)
 }
 
 type Verifier struct {
@@ -256,6 +257,7 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 	default:
 		add(CodeOutcome, "outcome.kind", "unsupported outcome")
 	}
+	var receiptAuthorityUnixNanos int64
 	refs := []struct {
 		name, kind, id, digest string
 		ref                    Reference
@@ -302,16 +304,26 @@ func (v Verifier) Verify(ctx context.Context, p Package) Result {
 				add(CodeTuple, x.name, "canonical observation tuple mismatch")
 			} else if o.FinalizedCheckpoint < x.ref.FinalizedCheckpoint {
 				add(CodeRegression, x.name, "live checkpoint regressed")
+			} else if x.kind == "verified-receipt" {
+				if o.ObservedUnixNanos <= 0 {
+					add(CodeUnavailable, x.name, "canonical receipt transaction time is unavailable")
+				} else {
+					receiptAuthorityUnixNanos = o.ObservedUnixNanos
+				}
 			}
 		}
 	}
 	if v.Observer == nil {
 		add(CodeUnavailable, "observer", "live observer is required")
 	} else if hasExecution {
-		s, e := v.Observer.ResolveSigner(ctx, p)
+		effectiveReceiptTime := p.Receipt.CompletedUnixNanos
+		if receiptAuthorityUnixNanos > effectiveReceiptTime {
+			effectiveReceiptTime = receiptAuthorityUnixNanos
+		}
+		s, e := v.Observer.ResolveSigner(ctx, p, effectiveReceiptTime)
 		if e != nil {
 			add(CodeUnavailable, "signer_authorization", e.Error())
-		} else if !s.Found || s.Revoked && s.RevokedUnixNanos <= p.Receipt.CompletedUnixNanos || s.AuthorizationID != p.SignerAuthorization.AuthorizationID || s.ProviderID != p.ProviderID || s.CapabilityID != p.Capability.CapabilityID || s.CapabilityVersion != p.Capability.CapabilityVersion || s.SignerID != p.SignerAuthorization.ExecutionSignerID || s.Reference != p.SignerAuthorization.AuthorizationRef.Reference || !strings.EqualFold(s.SignatureAlgorithm, "ed25519") || !equalBytes(s.PublicKey, p.SignerAuthorization.SignerPublicKey) || p.Receipt.CompletedUnixNanos < s.ValidFromUnixNanos || p.Receipt.CompletedUnixNanos >= s.ValidUntilUnixNanos {
+		} else if !s.Found || s.Revoked && s.RevokedUnixNanos <= effectiveReceiptTime || s.AuthorizationID != p.SignerAuthorization.AuthorizationID || s.ProviderID != p.ProviderID || s.CapabilityID != p.Capability.CapabilityID || s.CapabilityVersion != p.Capability.CapabilityVersion || s.SignerID != p.SignerAuthorization.ExecutionSignerID || s.Reference != p.SignerAuthorization.AuthorizationRef.Reference || !strings.EqualFold(s.SignatureAlgorithm, "ed25519") || !equalBytes(s.PublicKey, p.SignerAuthorization.SignerPublicKey) || effectiveReceiptTime < s.ValidFromUnixNanos || effectiveReceiptTime >= s.ValidUntilUnixNanos || effectiveReceiptTime > p.Quote.ExecutionDeadlineUnixNanos || effectiveReceiptTime > p.Escrow.EscrowDeadlineUnixNanos {
 			add(CodeSigner, "signer_authorization", "live signer authorization mismatch")
 		}
 	}

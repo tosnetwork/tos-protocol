@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"math"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -252,7 +253,18 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 		if !resp.Msg.Found {
 			return EvidenceObservation{}, nil
 		}
-		return observation(r, resp.Msg.ReceiptRef)
+		observed, observationErr := observation(r, resp.Msg.ReceiptRef)
+		if observationErr != nil {
+			return EvidenceObservation{}, observationErr
+		}
+		if resp.Msg.ObservedUnixMillis <= 0 {
+			return EvidenceObservation{}, errors.New("canonical receipt transaction time is unavailable")
+		}
+		if resp.Msg.ObservedUnixMillis > math.MaxInt64/int64(time.Millisecond) {
+			return EvidenceObservation{}, errors.New("canonical receipt transaction time overflows nanoseconds")
+		}
+		observed.ObservedUnixNanos = resp.Msg.ObservedUnixMillis * int64(time.Millisecond)
+		return observed, nil
 	case "proof-of-service":
 		v, e := poscommitment.Proto(p.ProofOfService.CanonicalCBOR)
 		if e != nil {
@@ -275,13 +287,13 @@ func (o *ProtocolObserver) Observe(ctx context.Context, r EvidenceRequest) (Evid
 	}
 }
 
-func (o *ProtocolObserver) ResolveSigner(ctx context.Context, p Package) (SignerObservation, error) {
+func (o *ProtocolObserver) ResolveSigner(ctx context.Context, p Package, effectiveReceiptUnixNanos int64) (SignerObservation, error) {
 	if p.SignerAuthorization == nil {
 		return SignerObservation{}, errors.New("signer authorization required")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req := connect.NewRequest(&atostosv1.ResolveExecutionSignerAuthorizationRequest{Context: observerContext(), ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, AtUnixMillis: p.Receipt.CompletedUnixNanos / 1e6, ExpectedAuthorization: &atostosv1.ExecutionSignerAuthorizationInput{AuthorizationId: p.SignerAuthorization.AuthorizationID, ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, SignerPublicKey: append([]byte(nil), p.SignerAuthorization.SignerPublicKey...), SignatureAlgorithm: p.SignerAuthorization.SignatureAlgorithm, ValidFromUnixMillis: p.SignerAuthorization.ValidFromUnixNanos / 1e6, ValidUntilUnixMillis: p.SignerAuthorization.ValidUntilUnixNanos / 1e6}, ExpectedAuthorizationRef: protoRef(p.SignerAuthorization.AuthorizationRef)})
+	req := connect.NewRequest(&atostosv1.ResolveExecutionSignerAuthorizationRequest{Context: observerContext(), ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, AtUnixMillis: effectiveReceiptUnixNanos / 1e6, ExpectedAuthorization: &atostosv1.ExecutionSignerAuthorizationInput{AuthorizationId: p.SignerAuthorization.AuthorizationID, ProviderId: p.ProviderID, CapabilityId: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, ExecutionSignerId: p.SignerAuthorization.ExecutionSignerID, SignerPublicKey: append([]byte(nil), p.SignerAuthorization.SignerPublicKey...), SignatureAlgorithm: p.SignerAuthorization.SignatureAlgorithm, ValidFromUnixMillis: p.SignerAuthorization.ValidFromUnixNanos / 1e6, ValidUntilUnixMillis: p.SignerAuthorization.ValidUntilUnixNanos / 1e6}, ExpectedAuthorizationRef: protoRef(p.SignerAuthorization.AuthorizationRef)})
 	o.decorate(req)
 	resp, e := o.trust.ResolveExecutionSignerAuthorization(ctx, req)
 	if e != nil {

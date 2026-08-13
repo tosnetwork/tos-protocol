@@ -149,6 +149,9 @@ message ResolveExecutionReceiptResponse {
   bool found = 1;
   Digest receipt_digest = 2;
   NetworkReference receipt_ref = 3;
+  // Exact finalized transaction utime of the verified-receipt commitment.
+  // Verifiers use this authority time to prevent signer-controlled backdating.
+  int64 observed_unix_millis = 4;
 }
 
 message ProofOfServiceEvidenceInput {

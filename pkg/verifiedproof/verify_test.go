@@ -24,10 +24,35 @@ import (
 type testObserver struct{ signer SignerObservation }
 
 func (o testObserver) Observe(_ context.Context, r EvidenceRequest) (EvidenceObservation, error) {
-	return EvidenceObservation{Found: true, Network: r.Reference.Network, Kind: r.Kind, ObjectID: r.ObjectID, Digest: r.Digest, Reference: r.Reference.Reference, Finalized: true, FinalizedCheckpoint: r.Reference.FinalizedCheckpoint}, nil
+	observation := EvidenceObservation{Found: true, Network: r.Reference.Network, Kind: r.Kind, ObjectID: r.ObjectID, Digest: r.Digest, Reference: r.Reference.Reference, Finalized: true, FinalizedCheckpoint: r.Reference.FinalizedCheckpoint}
+	if r.Kind == "verified-receipt" {
+		observation.ObservedUnixNanos = 20_000_000
+	}
+	return observation, nil
 }
-func (o testObserver) ResolveSigner(_ context.Context, _ Package) (SignerObservation, error) {
+func (o testObserver) ResolveSigner(_ context.Context, _ Package, _ int64) (SignerObservation, error) {
 	return o.signer, nil
+}
+
+type receiptTimeObserver struct {
+	testObserver
+	observedUnixNanos int64
+	wantSignerTime    int64
+}
+
+func (o receiptTimeObserver) Observe(ctx context.Context, r EvidenceRequest) (EvidenceObservation, error) {
+	observation, err := o.testObserver.Observe(ctx, r)
+	if r.Kind == "verified-receipt" {
+		observation.ObservedUnixNanos = o.observedUnixNanos
+	}
+	return observation, err
+}
+
+func (o receiptTimeObserver) ResolveSigner(ctx context.Context, p Package, effectiveReceiptUnixNanos int64) (SignerObservation, error) {
+	if effectiveReceiptUnixNanos != o.wantSignerTime {
+		return SignerObservation{}, errors.New("signer resolution did not use canonical receipt authority time")
+	}
+	return o.testObserver.ResolveSigner(ctx, p, effectiveReceiptUnixNanos)
 }
 
 type fixedIdentityObserver struct{ testObserver }
@@ -60,14 +85,14 @@ func fixture(t *testing.T) Package {
 	t.Helper()
 	priv := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x42}, ed25519.SeedSize))
 	pub := priv.Public().(ed25519.PublicKey)
-	p := Package{Version: Version, Canonicalization: Canonicalization, NetworkID: "tos-test", GatewayDomain: "atos.im", PrincipalID: "principal-1", RequesterAgentID: "agent-1", RequesterIdentityRef: ref("tos-test", "id-requester", 10), ProviderID: "provider-1", ProviderIdentityRef: ref("tos-test", "id-provider", 10), Capability: Capability{"cap-1", "1.0.0", d(1), d(15), ref("tos-test", "ownership", 11)}, Quote: Quote{QuoteID: "quote-1", CommitmentDigest: d(2), CommitmentRef: ref("tos-test", "quote", 12), TermsDigest: d(3), TrustMode: "verified", ProofProfile: "tos_verified_v1", SettlementBackend: "tos", SettlementAsset: "TOS", AssetDecimals: 9, SubtotalAtomic: "1000", FeesAtomic: "0", TotalMaxAtomic: "1000", AcceptanceDeadlineUnixNanos: 1_000_000, QuoteExpiryUnixNanos: 2_000_000, ExecutionDeadlineUnixNanos: 3_000_000, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: d(4)}, Escrow: Escrow{EscrowID: "esc-1", JobID: "job-1", ContractRef: ref("tos-test", "contract", 13), ContractCodeHash: "tvm-cell-sha256:" + strings.Repeat("5", 64), ReservationDigest: d(6), ReservationRef: ref("tos-test", "reserve", 13), ReservedAtomic: "1000", EscrowDeadlineUnixNanos: 4_000_000, FundingModel: "gateway_sponsored"}, SignerAuthorization: &SignerAuthorization{"auth-1", "signer-1", ref("tos-test", "auth", 11), "ed25519", pub, 0, 100000000}, Receipt: &Receipt{"receipt-1", "", ref("tos-test", "receipt", 14), "success", d(8), d(9), d(10), 10000000, 20000000, "700", "ed25519", nil, nil}, Outcome: Outcome{Kind: "provider_settlement", OutcomeRef: ref("tos-test", "settle", 15), ChargedAtomic: "700", RefundedAtomic: "300"}, ProofOfService: &ProofOfService{EvidenceID: "pos-1", EvidenceRef: ref("tos-test", "pos", 16), ContentDigest: d(12)}}
-	qi := &atostosv1.QuoteCommitmentInput{Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", QuoteId: "quote-1", PrincipalId: "principal-1", RequesterAgentId: "agent-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", ManifestDigest: pd(d(1)), TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Subtotal: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, Fees: &atostosv1.Money{Amount: "0.000000000", Currency: "TOS"}, TotalMax: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, AssetDecimals: 9, TermsDigest: pd(d(3)), DisputePolicyDigest: pd(d(4)), AcceptanceDeadlineUnixMillis: 1, ExpiresUnixMillis: 2, ExecutionDeadlineUnixMillis: 3, SettlementBackend: "tos", SettlementAsset: "TOS", UnderlyingServiceQuoteRef: "service-quote", SignerAuthorizationId: "auth-1", SignerAuthorizationRef: &atostosv1.NetworkReference{Network: "tos-test", Reference: "auth"}}
+	p := Package{Version: Version, Canonicalization: Canonicalization, NetworkID: "tos-test", GatewayDomain: "atos.im", PrincipalID: "principal-1", RequesterAgentID: "agent-1", RequesterIdentityRef: ref("tos-test", "id-requester", 10), ProviderID: "provider-1", ProviderIdentityRef: ref("tos-test", "id-provider", 10), Capability: Capability{"cap-1", "1.0.0", d(1), d(15), ref("tos-test", "ownership", 11)}, Quote: Quote{QuoteID: "quote-1", CommitmentDigest: d(2), CommitmentRef: ref("tos-test", "quote", 12), TermsDigest: d(3), TrustMode: "verified", ProofProfile: "tos_verified_v1", SettlementBackend: "tos", SettlementAsset: "TOS", AssetDecimals: 9, SubtotalAtomic: "1000", FeesAtomic: "0", TotalMaxAtomic: "1000", AcceptanceDeadlineUnixNanos: 10_000_000, QuoteExpiryUnixNanos: 20_000_000, ExecutionDeadlineUnixNanos: 30_000_000, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: d(4)}, Escrow: Escrow{EscrowID: "esc-1", JobID: "job-1", ContractRef: ref("tos-test", "contract", 13), ContractCodeHash: "tvm-cell-sha256:" + strings.Repeat("5", 64), ReservationDigest: d(6), ReservationRef: ref("tos-test", "reserve", 13), ReservedAtomic: "1000", EscrowDeadlineUnixNanos: 40_000_000, FundingModel: "gateway_sponsored"}, SignerAuthorization: &SignerAuthorization{"auth-1", "signer-1", ref("tos-test", "auth", 11), "ed25519", pub, 0, 100000000}, Receipt: &Receipt{"receipt-1", "", ref("tos-test", "receipt", 14), "success", d(8), d(9), d(10), 10000000, 20000000, "700", "ed25519", nil, nil}, Outcome: Outcome{Kind: "provider_settlement", OutcomeRef: ref("tos-test", "settle", 15), ChargedAtomic: "700", RefundedAtomic: "300"}, ProofOfService: &ProofOfService{EvidenceID: "pos-1", EvidenceRef: ref("tos-test", "pos", 16), ContentDigest: d(12)}}
+	qi := &atostosv1.QuoteCommitmentInput{Version: quotecommitment.Version, Canonicalization: quotecommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", QuoteId: "quote-1", PrincipalId: "principal-1", RequesterAgentId: "agent-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", ManifestDigest: pd(d(1)), TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Subtotal: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, Fees: &atostosv1.Money{Amount: "0.000000000", Currency: "TOS"}, TotalMax: &atostosv1.Money{Amount: "0.000001000", Currency: "TOS"}, AssetDecimals: 9, TermsDigest: pd(d(3)), DisputePolicyDigest: pd(d(4)), AcceptanceDeadlineUnixMillis: 10, ExpiresUnixMillis: 20, ExecutionDeadlineUnixMillis: 30, SettlementBackend: "tos", SettlementAsset: "TOS", UnderlyingServiceQuoteRef: "service-quote", SignerAuthorizationId: "auth-1", SignerAuthorizationRef: &atostosv1.NetworkReference{Network: "tos-test", Reference: "auth"}}
 	p.RequesterIdentity = Identity{AgentID: "agent-1", CanonicalURI: "tos://agent/agent-1", Controllers: []string{"0:" + strings.Repeat("1", 64)}, Assurance: "tos_chain_verified", IdentityRef: ref("tos-test", "identity-requester", 9)}
 	p.ProviderIdentity = Identity{AgentID: "provider-1", CanonicalURI: "tos://agent/provider-1", Controllers: []string{"0:" + strings.Repeat("2", 64)}, Assurance: "tos_chain_verified", IdentityRef: ref("tos-test", "identity-provider", 9)}
 	p.ProviderAgentID = "provider-1"
 	p.Quote.CanonicalCBOR, _ = quotecommitment.Bytes(qi)
 	p.Quote.CommitmentDigest, _ = quotecommitment.Digest(qi)
-	ei := &atostosv1.VerifiedEscrowTerms{Version: escrowcommitment.Version, Canonicalization: escrowcommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", EscrowId: "esc-1", JobId: "job-1", QuoteId: "quote-1", QuoteCommitmentDigest: p.Quote.CommitmentDigest, QuoteCommitmentRef: &atostosv1.NetworkReference{Network: "tos-test", Reference: "quote"}, PrincipalId: "principal-1", RequesterAgentId: "agent-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", ManifestDigest: pd(d(1)), TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "gateway_sponsored", AcceptanceDeadlineUnixMillis: 1, ExecutionDeadlineUnixMillis: 3, EscrowDeadlineUnixMillis: 4, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: pd(d(4)), TermsDigest: pd(d(3)), Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "0"}, SignerAuthorizationId: "auth-1", SignerAuthorizationRef: &atostosv1.NetworkReference{Network: "tos-test", Reference: "auth"}}
+	ei := &atostosv1.VerifiedEscrowTerms{Version: escrowcommitment.Version, Canonicalization: escrowcommitment.Canonicalization, NetworkId: "tos-test", Domain: "atos.im", EscrowId: "esc-1", JobId: "job-1", QuoteId: "quote-1", QuoteCommitmentDigest: p.Quote.CommitmentDigest, QuoteCommitmentRef: &atostosv1.NetworkReference{Network: "tos-test", Reference: "quote"}, PrincipalId: "principal-1", RequesterAgentId: "agent-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", ManifestDigest: pd(d(1)), TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Reserve: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, AssetDecimals: 9, SettlementBackend: "tos", SettlementAsset: "TOS", FundingModel: "gateway_sponsored", AcceptanceDeadlineUnixMillis: 10, ExecutionDeadlineUnixMillis: 30, EscrowDeadlineUnixMillis: 40, UnderlyingServiceQuoteRef: "service-quote", DisputePolicyDigest: pd(d(4)), TermsDigest: pd(d(3)), Subtotal: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "1000"}, Fees: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "0"}, SignerAuthorizationId: "auth-1", SignerAuthorizationRef: &atostosv1.NetworkReference{Network: "tos-test", Reference: "auth"}}
 	p.Escrow.CanonicalCBOR, _ = escrowcommitment.Bytes(ei)
 	p.Escrow.ReservationDigest, _ = escrowcommitment.Digest(ei)
 	env := &atostosv1.ExecutionReceiptEnvelope{ReceiptId: "receipt-1", QuoteId: "quote-1", EscrowId: "esc-1", JobId: "job-1", PrincipalId: "principal-1", ProviderId: "provider-1", CapabilityId: "cap-1", CapabilityVersion: "1.0.0", TrustMode: atostosv1.TrustMode_TRUST_MODE_VERIFIED, ProofProfile: atostosv1.ProofProfile_PROOF_PROFILE_TOS_VERIFIED_V1, Result: atostosv1.ExecutionResult_EXECUTION_RESULT_SUCCESS, InputCommitment: pd(d(8)), OutputCommitment: pd(d(9)), UsageCommitment: pd(d(10)), NetworkCharge: &atostosv1.NetworkAmount{Asset: "TOS", AtomicAmount: "700"}, ExecutionSignerId: "signer-1", SignerAuthorizationId: "auth-1", SignatureAlgorithm: "ed25519", StartedUnixMillis: 10, CompletedUnixMillis: 20}
@@ -126,9 +151,9 @@ func TestNormativeVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const expectedDigest = "sha256:9969615a72294122ca60df073c1fd8320769e438d5a3081b4fbc28404bdd86e8"
+	const expectedDigest = "sha256:c2a6baf7e500b98062f86f84a52ebf18e7d81c96fa14d725b88a9e822047f09a"
 	if d != expectedDigest {
-		t.Fatalf("digest=%s\ncbor=%x", d, b)
+		t.Fatalf("digest=%s\ncbor_base64=%s", d, base64.StdEncoding.EncodeToString(b))
 	}
 	vector := struct {
 		Version  string `json:"version"`
@@ -172,7 +197,7 @@ func TestNormativeVector(t *testing.T) {
 		t.Fatal(unmarshalErr)
 	}
 	if vector.Version != Version || vector.Positive.PackageDigest != d || vector.Positive.CanonicalCBORBase64 != base64.StdEncoding.EncodeToString(b) || len(vector.NegativeMutations) < 12 {
-		t.Fatalf("normative vector artifact differs from implementation")
+		t.Fatalf("normative vector artifact differs from implementation: digest=%s cbor_base64=%s", d, base64.StdEncoding.EncodeToString(b))
 	}
 	for _, mutation := range vector.NegativeMutations {
 		if mutation.Name == "" || mutation.Operation.Op != "replace" || !strings.HasPrefix(mutation.Operation.Path, "/") || mutation.ExpectedCode == "" || mutation.ExpectedField == "" {
@@ -316,6 +341,28 @@ func TestSignerRevocationIsEvaluatedAtReceiptTime(t *testing.T) {
 	before.RevokedUnixNanos = p.Receipt.CompletedUnixNanos
 	if got := (Verifier{Observer: testObserver{before}, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), p); got.Valid {
 		t.Fatal("revocation effective at execution was accepted")
+	}
+}
+
+func TestSignerRevocationCannotBeBypassedByBackdatedReceipt(t *testing.T) {
+	p := fixture(t)
+	signer := SignerObservation{Found: true, Revoked: true, RevokedUnixNanos: 21_000_000, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100_000_000}
+	observer := receiptTimeObserver{testObserver: testObserver{signer: signer}, observedUnixNanos: 25_000_000, wantSignerTime: 25_000_000}
+	if got := (Verifier{Observer: observer, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), p); got.Valid {
+		t.Fatal("receipt anchored after signer revocation was accepted using its backdated completion time")
+	}
+}
+
+func TestReceiptAuthorityTimeIsRequiredAndMustPrecedeDeadlines(t *testing.T) {
+	p := fixture(t)
+	signer := SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100_000_000}
+	for name, observed := range map[string]int64{"missing": 0, "after execution deadline": 31_000_000} {
+		t.Run(name, func(t *testing.T) {
+			observer := receiptTimeObserver{testObserver: testObserver{signer: signer}, observedUnixNanos: observed, wantSignerTime: max(p.Receipt.CompletedUnixNanos, observed)}
+			if got := (Verifier{Observer: observer, Network: "tos-test", GatewayDomain: "atos.im"}).Verify(context.Background(), p); got.Valid {
+				t.Fatalf("receipt authority time %d was accepted", observed)
+			}
+		})
 	}
 }
 

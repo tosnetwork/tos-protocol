@@ -896,8 +896,11 @@ type ResolveExecutionReceiptResponse struct {
 	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
 	ReceiptDigest *Digest                `protobuf:"bytes,2,opt,name=receipt_digest,json=receiptDigest,proto3" json:"receipt_digest,omitempty"`
 	ReceiptRef    *NetworkReference      `protobuf:"bytes,3,opt,name=receipt_ref,json=receiptRef,proto3" json:"receipt_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Exact finalized transaction utime of the verified-receipt commitment.
+	// Verifiers use this authority time to prevent signer-controlled backdating.
+	ObservedUnixMillis int64 `protobuf:"varint,4,opt,name=observed_unix_millis,json=observedUnixMillis,proto3" json:"observed_unix_millis,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ResolveExecutionReceiptResponse) Reset() {
@@ -949,6 +952,13 @@ func (x *ResolveExecutionReceiptResponse) GetReceiptRef() *NetworkReference {
 		return x.ReceiptRef
 	}
 	return nil
+}
+
+func (x *ResolveExecutionReceiptResponse) GetObservedUnixMillis() int64 {
+	if x != nil {
+		return x.ObservedUnixMillis
+	}
+	return 0
 }
 
 type ProofOfServiceEvidenceInput struct {
@@ -1944,12 +1954,13 @@ const file_atos_tos_v1_proof_proto_rawDesc = "" +
 	"\x1eResolveExecutionReceiptRequest\x125\n" +
 	"\acontext\x18\x01 \x01(\v2\x1b.atos.tos.v1.RequestContextR\acontext\x12?\n" +
 	"\areceipt\x18\x02 \x01(\v2%.atos.tos.v1.ExecutionReceiptEnvelopeR\areceipt\x12O\n" +
-	"\x14expected_receipt_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"\xb3\x01\n" +
+	"\x14expected_receipt_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\x12expectedReceiptRef\"\xe5\x01\n" +
 	"\x1fResolveExecutionReceiptResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12:\n" +
 	"\x0ereceipt_digest\x18\x02 \x01(\v2\x13.atos.tos.v1.DigestR\rreceiptDigest\x12>\n" +
 	"\vreceipt_ref\x18\x03 \x01(\v2\x1d.atos.tos.v1.NetworkReferenceR\n" +
-	"receiptRef\"\xe6\x04\n" +
+	"receiptRef\x120\n" +
+	"\x14observed_unix_millis\x18\x04 \x01(\x03R\x12observedUnixMillis\"\xe6\x04\n" +
 	"\x1bProofOfServiceEvidenceInput\x12\x1f\n" +
 	"\vevidence_id\x18\x01 \x01(\tR\n" +
 	"evidenceId\x12\x1d\n" +

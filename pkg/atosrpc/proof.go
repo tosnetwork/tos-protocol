@@ -296,8 +296,7 @@ func (s *Server) ResolveExecutionReceipt(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, invalid("INVALID_ARGUMENT", err.Error())
 	}
-	resolver, ok := s.authority.(CommitmentResolver)
-	if !ok {
+	if _, ok := s.authority.(CommitmentObservationResolver); !ok {
 		return nil, unavailable("NETWORK_UNAVAILABLE", "authority does not support read-only receipt resolution")
 	}
 	known := req.Msg.ExpectedReceiptRef
@@ -305,18 +304,22 @@ func (s *Server) ResolveExecutionReceipt(ctx context.Context, req *connect.Reque
 	// finalized "verified-receipt" authority and returns that reference to
 	// ATOS. Resolution therefore follows the promoted authority tuple, not
 	// the earlier pending execution-receipt anchor.
-	live, err := resolver.ResolveCommitment(ctx, "verified-receipt", req.Msg.Receipt.ReceiptId, digestText, known)
+	observation, err := resolveCommitmentObservation(ctx, s.authority, "verified-receipt", req.Msg.Receipt.ReceiptId, digestText, known)
 	if err != nil {
 		if errors.Is(err, ErrCommitmentNotFound) {
 			return connect.NewResponse(&atostosv1.ResolveExecutionReceiptResponse{}), nil
 		}
 		return nil, unavailable("NETWORK_UNAVAILABLE", "receipt authority is unavailable")
 	}
+	if observation == nil || observation.ObservedUnixMillis <= 0 {
+		return nil, unavailable("NETWORK_UNAVAILABLE", "receipt authority transaction time is unavailable")
+	}
+	live := observation.Reference
 	if live == nil || !live.Finalized || live.FinalizedCheckpoint == 0 || live.Network != s.authority.Network() {
 		return nil, unavailable("NETWORK_UNAVAILABLE", "receipt authority returned non-final or mismatched evidence")
 	}
 	raw, _ := hex.DecodeString(strings.TrimPrefix(digestText, "sha256:"))
-	return connect.NewResponse(&atostosv1.ResolveExecutionReceiptResponse{Found: true, ReceiptDigest: &atostosv1.Digest{Algorithm: "sha256", Value: raw}, ReceiptRef: live}), nil
+	return connect.NewResponse(&atostosv1.ResolveExecutionReceiptResponse{Found: true, ReceiptDigest: &atostosv1.Digest{Algorithm: "sha256", Value: raw}, ReceiptRef: live, ObservedUnixMillis: observation.ObservedUnixMillis}), nil
 }
 
 func (s *Server) CommitProofOfServiceEvidence(
