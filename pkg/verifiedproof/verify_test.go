@@ -16,6 +16,7 @@ import (
 	"github.com/tosnetwork/tos-protocol/pkg/receiptcommitment"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -160,7 +161,81 @@ func TestNormativeVector(t *testing.T) {
 		if mutation.Name == "" || mutation.Operation.Op != "replace" || !strings.HasPrefix(mutation.Operation.Path, "/") || mutation.ExpectedCode == "" || mutation.ExpectedField == "" {
 			t.Fatalf("negative mutation is not executable: %+v", mutation)
 		}
+		t.Run(mutation.Name, func(t *testing.T) {
+			mutated := applyJSONReplace(t, p, mutation.Operation.Path, mutation.Operation.Value)
+			observer := fixedIdentityObserver{testObserver{SignerObservation{Found: true, Network: p.NetworkID, AuthorizationID: p.SignerAuthorization.AuthorizationID, ProviderID: p.ProviderID, CapabilityID: p.Capability.CapabilityID, CapabilityVersion: p.Capability.CapabilityVersion, SignerID: p.SignerAuthorization.ExecutionSignerID, Reference: p.SignerAuthorization.AuthorizationRef.Reference, SignatureAlgorithm: "ed25519", PublicKey: p.SignerAuthorization.SignerPublicKey, ValidUntilUnixNanos: 100000000, FinalizedCheckpoint: 11}}}
+			got := (Verifier{Observer: observer, Network: "tos-test", GatewayDomain: "atos.im", MinimumCheckpoint: 9}).Verify(context.Background(), mutated)
+			if got.Valid {
+				t.Fatal("negative normative vector verified as VALID")
+			}
+			for _, failure := range got.Failures {
+				if failure.Code == mutation.ExpectedCode && failure.Field == mutation.ExpectedField {
+					return
+				}
+			}
+			t.Fatalf("failures=%+v, want code=%s field=%s", got.Failures, mutation.ExpectedCode, mutation.ExpectedField)
+		})
 	}
+}
+
+func applyJSONReplace(t *testing.T, input Package, pointer string, value any) Package {
+	t.Helper()
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(strings.TrimPrefix(pointer, "/"), "/")
+	for i := range parts {
+		parts[i] = strings.ReplaceAll(strings.ReplaceAll(parts[i], "~1", "/"), "~0", "~")
+	}
+	var current = document
+	for _, part := range parts[:len(parts)-1] {
+		switch node := current.(type) {
+		case map[string]any:
+			var ok bool
+			current, ok = node[part]
+			if !ok {
+				t.Fatalf("RFC 6901 path does not exist: %s", pointer)
+			}
+		case []any:
+			index, parseErr := strconv.Atoi(part)
+			if parseErr != nil || index < 0 || index >= len(node) {
+				t.Fatalf("invalid RFC 6901 array path: %s", pointer)
+			}
+			current = node[index]
+		default:
+			t.Fatalf("RFC 6901 path traverses scalar: %s", pointer)
+		}
+	}
+	last := parts[len(parts)-1]
+	switch node := current.(type) {
+	case map[string]any:
+		if _, ok := node[last]; !ok {
+			t.Fatalf("RFC 6901 replace target does not exist: %s", pointer)
+		}
+		node[last] = value
+	case []any:
+		index, parseErr := strconv.Atoi(last)
+		if parseErr != nil || index < 0 || index >= len(node) {
+			t.Fatalf("invalid RFC 6901 array target: %s", pointer)
+		}
+		node[index] = value
+	default:
+		t.Fatalf("RFC 6901 replace target is scalar: %s", pointer)
+	}
+	mutatedJSON, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output Package
+	if err := json.Unmarshal(mutatedJSON, &output); err != nil {
+		t.Fatalf("mutated package is not typed: %v", err)
+	}
+	return output
 }
 func TestRejectsNetworkSignerOutcomeAndNonCanonicalCBOR(t *testing.T) {
 	p := fixture(t)

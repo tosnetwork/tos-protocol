@@ -122,6 +122,45 @@ func TestResolvePrincipalBinding_FreshReplicaRejectsCanonicallyRevokedBinding(t 
 	}
 }
 
+func TestCreatePrincipalBinding_RejectsReuseOfCanonicallyRevokedTuple(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000).UTC()
+	authority := new(verifiedTestAuthority)
+	server, err := Open(Config{StatePath: filepath.Join(t.TempDir(), "state.db"), BearerToken: "test-secret", Authority: authority, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	for i, agentID := range []string{"agt_rebind_a", "agt_rebind_b"} {
+		if err := server.SeedIdentity(&atostosv1.AgentIdentity{AgentId: agentID, CanonicalUri: "tos://agent/" + agentID, Controllers: []string{testCanonicalController(byte(20 + i))}, Assurance: "tos_attested"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create := func(agentID, key string) error {
+		_, err := server.CreatePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.CreatePrincipalBindingRequest{Context: bindingReqCtx("operator", key, now), PrincipalId: "prn_rebind", AgentId: agentID}))
+		return err
+	}
+	revoke := func(key string) {
+		t.Helper()
+		if _, err := server.RevokePrincipalBinding(context.Background(), connect.NewRequest(&atostosv1.RevokePrincipalBindingRequest{Context: bindingReqCtx("operator", key, now), PrincipalId: "prn_rebind", ReasonCode: "ROTATED"})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := create("agt_rebind_a", "create-a-1"); err != nil {
+		t.Fatal(err)
+	}
+	revoke("revoke-a-1")
+	if err := create("agt_rebind_a", "create-a-2"); err == nil || connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("revoked tuple reuse error=%v, want AlreadyExists", err)
+	}
+	if err := create("agt_rebind_b", "create-b"); err != nil {
+		t.Fatal(err)
+	}
+	revoke("revoke-b")
+	if err := create("agt_rebind_a", "create-a-3"); err == nil || connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("historical tuple reuse after rotation error=%v, want AlreadyExists", err)
+	}
+}
+
 // TestCreatePrincipalBinding_RejectsSelfAssertedIdentity proves an identity
 // with no independent anchoring (self_asserted, or empty assurance) cannot
 // be bound -- a binding to an identity that can never satisfy

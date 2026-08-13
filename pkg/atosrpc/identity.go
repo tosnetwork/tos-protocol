@@ -409,6 +409,20 @@ func (s *Server) CreatePrincipalBinding(
 		if err != nil {
 			return err
 		}
+		// Binding v2 deliberately has no mutable generation field. Consequently
+		// a tuple that has ever been revoked is a permanent tombstone: reusing
+		// it would make the old canonical revocation indistinguishable from a
+		// revocation of the purported new binding. Check the live authority, not
+		// merely the local revocation bucket, before publishing another binding.
+		if s.authority.Supports(TrustModeVerified) {
+			revoked, resolveErr := resolvePrincipalBindingRevocation(ctx, s.authority, req.Msg.PrincipalId, req.Msg.AgentId, digest)
+			if resolveErr != nil {
+				return unavailable("NETWORK_UNAVAILABLE", "principal binding revocation state is unavailable")
+			}
+			if revoked {
+				return conflict("BINDING_TUPLE_REVOKED", "principal and agent binding tuple was previously revoked and cannot be reused")
+			}
+		}
 		ref, err := s.authority.Commit(ctx, "principal-binding", req.Msg.PrincipalId, digest)
 		if err != nil {
 			return unavailable("UNAVAILABLE", "principal binding authority is unavailable")
@@ -421,9 +435,6 @@ func (s *Server) CreatePrincipalBinding(
 			CreatedUnixMillis: now, UpdatedUnixMillis: now,
 		}
 		if err := s.store.putJSON(tx, bucketPrincipalBindings, req.Msg.PrincipalId, record); err != nil {
-			return err
-		}
-		if err := tx.Bucket(bucketPrincipalRevocations).Delete([]byte(req.Msg.PrincipalId)); err != nil {
 			return err
 		}
 		response.PrincipalId = req.Msg.PrincipalId
