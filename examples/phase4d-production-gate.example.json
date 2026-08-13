@@ -1,0 +1,40 @@
+{
+  "version": "tos_phase4d_production_gate_v1",
+  "network": "tos-mainnet",
+  "gateway_domain": "atos.im",
+  "protocol_observer_url": "https://protocol-verifier.example.com",
+  "atos_replicas": [
+    {"id":"atos-a","operator":"gateway-a","url":"https://atos-a.example.com/readyz"},
+    {"id":"atos-b","operator":"gateway-b","url":"https://atos-b.example.com/readyz"}
+  ],
+  "protocol_replicas": [
+    {"id":"protocol-a","operator":"gateway-a","url":"https://protocol-a.example.com/readyz"},
+    {"id":"protocol-b","operator":"gateway-b","url":"https://protocol-b.example.com/readyz"}
+  ],
+  "chain_endpoints": [
+    {"id":"validator-a","operator":"validator-a","url":"https://validator-a.example.com/readyz"},
+    {"id":"validator-b","operator":"validator-b","url":"https://validator-b.example.com/readyz"},
+    {"id":"validator-c","operator":"validator-c","url":"https://validator-c.example.com/readyz"}
+  ],
+  "chain_quorum": 2,
+  "agent_code_hashes": ["tvm-cell-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+  "escrow_code_hashes": ["tvm-cell-sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+  "custody": [
+    {"purpose":"quote","backend":"hsm","key_id":"replace-quote-key","health_url":"https://keys.example.com/quote/health","evidence":{"subject":"custody:quote:hsm:replace-quote-key","path":"/var/lib/atos/evidence/quote-key.json","sha256":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"}},
+    {"purpose":"receipt","backend":"hsm","key_id":"replace-receipt-key","health_url":"https://keys.example.com/receipt/health","evidence":{"subject":"custody:receipt:hsm:replace-receipt-key","path":"/var/lib/atos/evidence/receipt-key.json","sha256":"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"}},
+    {"purpose":"task-escrow","backend":"vault","key_id":"replace-escrow-key","health_url":"https://keys.example.com/task-escrow/health","evidence":{"subject":"custody:task-escrow:vault:replace-escrow-key","path":"/var/lib/atos/evidence/task-escrow-key.json","sha256":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"}},
+    {"purpose":"chain-action","backend":"kms","key_id":"replace-chain-key","health_url":"https://keys.example.com/chain-action/health","evidence":{"subject":"custody:chain-action:kms:replace-chain-key","path":"/var/lib/atos/evidence/chain-action-key.json","sha256":"sha256:1111111111111111111111111111111111111111111111111111111111111111","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"}}
+  ],
+  "monitoring": {
+    "url": "https://monitoring.example.com/phase4d/metrics",
+    "required_metrics": [
+      {"name":"atos_reconciler_healthy","minimum":1,"maximum":1},
+      {"name":"atos_proof_reconciliation_lag_seconds","maximum":30}
+    ]
+  },
+  "reconciliation": {"subject":"reconciliation","path":"/var/lib/atos/evidence/reconciliation.json","sha256":"sha256:2222222222222222222222222222222222222222222222222222222222222222","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"},
+  "backup": {"subject":"backup","path":"/var/lib/atos/evidence/backup.json","sha256":"sha256:3333333333333333333333333333333333333333333333333333333333333333","completed_unix":1,"maximum_age_seconds":86400,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"},
+  "restore_drill": {"subject":"restore-drill","path":"/var/lib/atos/evidence/restore.json","sha256":"sha256:4444444444444444444444444444444444444444444444444444444444444444","completed_unix":1,"maximum_age_seconds":2592000,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"},
+  "incident_drill": {"subject":"incident-drill","path":"/var/lib/atos/evidence/incident.json","sha256":"sha256:5555555555555555555555555555555555555555555555555555555555555555","completed_unix":1,"maximum_age_seconds":7776000,"signer_id":"replace-auditor","public_key_base64":"REPLACE","signature_base64":"REPLACE"},
+  "proof": {"path":"/var/lib/atos/evidence/completed-proof.cbor","sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}
+}

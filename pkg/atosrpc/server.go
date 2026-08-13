@@ -35,6 +35,9 @@ type Server struct {
 	now              func() time.Time
 	mutationMu       sync.Mutex
 	jobLocks         sync.Map // job_id -> *sync.Mutex
+	readinessMu      sync.Mutex
+	readinessAt      time.Time
+	readinessErr     error
 }
 
 func Open(config Config) (*Server, error) {
@@ -158,13 +161,67 @@ func (s *Server) Handler() http.Handler {
 	} {
 		mux.Handle(registered.path, registered.handler)
 	}
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	readiness := func(w http.ResponseWriter, r *http.Request) {
+		// Client cancellation must not poison the shared readiness cache.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), s.config.CallTimeout)
+		defer cancel()
+		if err := s.checkReady(ctx); err != nil {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}
+	mux.HandleFunc("GET /readyz", readiness)
+	// /healthz remains the backwards-compatible readiness route used by ATOS.
+	mux.HandleFunc("GET /healthz", readiness)
 	return s.authenticate(mux)
+}
+
+func (s *Server) checkReady(ctx context.Context) error {
+	if s == nil {
+		return errors.New("server is not configured")
+	}
+	s.readinessMu.Lock()
+	defer s.readinessMu.Unlock()
+	now := time.Now()
+	if !s.readinessAt.IsZero() && now.Sub(s.readinessAt) < 2*time.Second {
+		return s.readinessErr
+	}
+	err := s.checkReadyUncached(ctx)
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		s.readinessAt, s.readinessErr = now, err
+	}
+	return err
+}
+
+func (s *Server) checkReadyUncached(ctx context.Context) error {
+	if s.authority == nil {
+		return errors.New("authority is not configured")
+	}
+	if err := s.authority.CheckReady(ctx); err != nil {
+		return err
+	}
+	if s.economy != nil {
+		if err := s.economy.CheckReady(ctx); err != nil {
+			return err
+		}
+	}
+	if s.worker != nil {
+		if err := s.worker.CheckReady(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func pair(path string, handler http.Handler) struct {
@@ -180,7 +237,7 @@ func pair(path string, handler http.Handler) struct {
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	expected := []byte(s.config.BearerToken)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/livez" {
 			next.ServeHTTP(w, r)
 			return
 		}
