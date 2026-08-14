@@ -84,6 +84,9 @@ The Native configuration is strict JSON and contains:
 - bounded relay funding in nanoTOS;
 - a mandatory relay budget window plus per-target and relay-wallet action and
   nanoTOS ceilings;
+- a mandatory `recovery_relay_safety_seconds` value between 300 and 86400
+  seconds, applied on top of the live policy timelock and quorum-finalized
+  chain time before a recovery initiation may be relayed;
 - an absolute owner-private `state_directory` for the durable relay journal and
   finalized-checkpoint fence;
 - a pinned, owner-private `tosctl` sender configuration.
@@ -106,6 +109,12 @@ broadcast for the same mutually exclusive transition. The same journal
 atomically enforces `relay_window_seconds`, `max_actions_per_target`,
 `max_funding_per_target_nanotos`, `max_actions_per_wallet`, and
 `max_funding_per_wallet_nanotos`.
+
+Recovery authorization never substitutes gateway wall-clock time for contract
+time. The resolver returns the chain-authored unix time from the same quorum
+observation used for the finalized target-state read. Initiation requires that
+time plus the live timelock and configured relay safety margin; completion is
+not relayed until finalized chain time reaches the stored execution time.
 
 ## Security boundary
 

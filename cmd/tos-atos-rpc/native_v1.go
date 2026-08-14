@@ -35,6 +35,7 @@ type nativeV1GatewayConfig struct {
 	MaxFundingPerTarget   uint64                                   `json:"max_funding_per_target_nanotos"`
 	MaxActionsPerWallet   uint64                                   `json:"max_actions_per_wallet"`
 	MaxFundingPerWallet   uint64                                   `json:"max_funding_per_wallet_nanotos"`
+	RecoverySafetySeconds uint64                                   `json:"recovery_relay_safety_seconds"`
 	StateDirectory        string                                   `json:"state_directory"`
 	Sender                chainactionpublisher.TosctlBackendConfig `json:"sender"`
 }
@@ -75,6 +76,8 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		config.RelayWindowSeconds < 60 || config.RelayWindowSeconds > 31*24*60*60 ||
 		config.MaxActionsPerTarget == 0 || config.MaxActionsPerTarget > config.MaxActionsPerWallet ||
 		config.MaxFundingPerTarget < config.FundingNanoTOS || config.MaxFundingPerTarget > config.MaxFundingPerWallet ||
+		config.RecoverySafetySeconds < uint64(nativecore.MinimumRecoveryRelaySafety/time.Second) ||
+		config.RecoverySafetySeconds > uint64(nativecore.MaximumRecoveryRelaySafety/time.Second) ||
 		config.Sender.Network != config.Network.NetworkId || !matchesNativeGenesis(config.Sender.GenesisRootHash, config.Network.GenesisRootHash) ||
 		!matchesNativeGenesis(config.Sender.GenesisFileHash, config.Network.GenesisFileHash) {
 		return nil, nil, nil, errors.New("invalid atos_native_v1 config")
@@ -111,7 +114,8 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		MaxActionsPerTarget: config.MaxActionsPerTarget, MaxFundingPerTargetNanoTOS: config.MaxFundingPerTarget,
 		MaxActionsPerWallet: config.MaxActionsPerWallet, MaxFundingPerWalletNanoTOS: config.MaxFundingPerWallet}
 	relayer := &nativecore.Relayer{Locator: locator, Sender: sender, FundingNanoTOS: config.FundingNanoTOS,
-		Journal: journal, Resolver: resolver, Limits: limits}
+		Journal: journal, Resolver: resolver, Limits: limits,
+		RecoverySafety: time.Duration(config.RecoverySafetySeconds) * time.Second}
 	return relayer, resolver, func() { _ = sender.Close() }, nil
 }
 

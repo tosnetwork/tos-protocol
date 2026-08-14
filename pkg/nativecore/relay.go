@@ -22,11 +22,14 @@ type ContractCellSender interface {
 
 type RelayStateResolver interface {
 	ResolveState(context.Context, string, string) (*nativev1.NativeStateV1, bool, error)
+	ResolveFinalizedState(context.Context, string, string) (*nativev1.NativeStateV1, bool, time.Time, error)
 }
 
 const (
 	MinimumRelayFundingNanoTOS uint64 = 200_000_000
 	MaximumRelayFundingNanoTOS uint64 = 100_000_000_000
+	MinimumRecoveryRelaySafety        = 5 * time.Minute
+	MaximumRecoveryRelaySafety        = 24 * time.Hour
 )
 
 type Relayer struct {
@@ -36,11 +39,12 @@ type Relayer struct {
 	Journal        RelayJournal
 	Resolver       RelayStateResolver
 	Limits         RelaySpendLimits
+	RecoverySafety time.Duration
 	Now            func() time.Time
 }
 
 func (r *Relayer) CheckReady(ctx context.Context) error {
-	if r == nil || r.Locator == nil || r.Sender == nil || r.Journal == nil || r.Resolver == nil || r.FundingNanoTOS < MinimumRelayFundingNanoTOS || r.FundingNanoTOS > MaximumRelayFundingNanoTOS || !r.Limits.permitsSingle(r.FundingNanoTOS) {
+	if r == nil || r.Locator == nil || r.Sender == nil || r.Journal == nil || r.Resolver == nil || r.FundingNanoTOS < MinimumRelayFundingNanoTOS || r.FundingNanoTOS > MaximumRelayFundingNanoTOS || !r.Limits.permitsSingle(r.FundingNanoTOS) || !validRecoverySafety(r.RecoverySafety) {
 		return errors.New("simplified Native relayer is not configured")
 	}
 	if ready, ok := r.Sender.(interface{ CheckContractCellReady(context.Context) error }); ok {
@@ -64,7 +68,7 @@ func (r *Relayer) SubmitIdempotent(ctx context.Context, submission *nativev1.Sig
 }
 
 func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeActionV1, idempotencyKey string) (string, error) {
-	if r == nil || r.Locator == nil || r.Sender == nil || r.Journal == nil || r.Resolver == nil || r.FundingNanoTOS < MinimumRelayFundingNanoTOS || r.FundingNanoTOS > MaximumRelayFundingNanoTOS || !r.Limits.permitsSingle(r.FundingNanoTOS) || ctx == nil || submission == nil || submission.Action == nil {
+	if r == nil || r.Locator == nil || r.Sender == nil || r.Journal == nil || r.Resolver == nil || r.FundingNanoTOS < MinimumRelayFundingNanoTOS || r.FundingNanoTOS > MaximumRelayFundingNanoTOS || !r.Limits.permitsSingle(r.FundingNanoTOS) || !validRecoverySafety(r.RecoverySafety) || ctx == nil || submission == nil || submission.Action == nil {
 		return "", errors.New("simplified Native relayer is not configured")
 	}
 	built, err := BuildAction(submission.Action)
@@ -135,7 +139,7 @@ func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeA
 	if found {
 		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, actionIdentity, intent, complete, existing)
 	}
-	targetState, err := r.preflightTargetTransition(ctx, submission.Action, built, r.now())
+	targetState, err := r.preflightTargetTransition(ctx, submission.Action, built)
 	if err != nil {
 		return "", err
 	}
@@ -310,14 +314,18 @@ func (r *Relayer) now() time.Time {
 	return time.Now().UTC()
 }
 
-func (r *Relayer) preflightTargetTransition(ctx context.Context, action *nativev1.NativeActionV1, built BuiltAction, now time.Time) (*nativev1.NativeStateV1, error) {
+func validRecoverySafety(value time.Duration) bool {
+	return value >= MinimumRecoveryRelaySafety && value <= MaximumRecoveryRelaySafety && value%time.Second == 0
+}
+
+func (r *Relayer) preflightTargetTransition(ctx context.Context, action *nativev1.NativeActionV1, built BuiltAction) (*nativev1.NativeStateV1, error) {
 	registration := built.Kind == KindRegisterAgent || built.Kind == KindRegisterCapability
 	expected := action.PredecessorTvmStateHash
 	if registration {
 		expected = ""
 	}
-	state, found, err := r.Resolver.ResolveState(ctx, action.TargetObjectId, expected)
-	if err != nil {
+	state, found, finalizedAt, err := r.Resolver.ResolveFinalizedState(ctx, action.TargetObjectId, expected)
+	if err != nil || finalizedAt.IsZero() || finalizedAt.Unix() < 0 {
 		return nil, nativeError(ErrBadTransition, "finalized target state is unavailable")
 	}
 	if registration {
@@ -359,15 +367,18 @@ func (r *Relayer) preflightTargetTransition(ctx context.Context, action *nativev
 				}
 			}
 		case *nativev1.NativeActionV1_InitiateRecovery:
-			if now.Unix() < 0 || agent.Policy == nil || agent.Policy.RecoveryTimelockSeconds > math.MaxUint64-uint64(now.Unix()) ||
-				payload.InitiateRecovery.ExecuteAfterUnixSeconds < uint64(now.Unix())+agent.Policy.RecoveryTimelockSeconds {
+			chainTime := uint64(finalizedAt.Unix())
+			safetySeconds := uint64(r.RecoverySafety / time.Second)
+			if agent.Policy == nil || agent.Policy.RecoveryTimelockSeconds > math.MaxUint64-chainTime ||
+				safetySeconds > math.MaxUint64-chainTime-agent.Policy.RecoveryTimelockSeconds ||
+				payload.InitiateRecovery.ExecuteAfterUnixSeconds < chainTime+agent.Policy.RecoveryTimelockSeconds+safetySeconds {
 				return nil, nativeError(ErrTimelock, "Agent recovery execution time is below the live policy timelock")
 			}
 		case *nativev1.NativeActionV1_CompleteRecovery:
 			if agent.RecoveryPolicy == nil || agent.RecoveryInitiationActionHash != payload.CompleteRecovery.InitiationActionHash {
 				return nil, nativeError(ErrBadTransition, "Agent recovery is absent or superseded")
 			}
-			if now.Unix() < 0 || agent.RecoveryExecuteAfterUnixSeconds > uint64(now.Unix()) {
+			if agent.RecoveryExecuteAfterUnixSeconds > uint64(finalizedAt.Unix()) {
 				return nil, nativeError(ErrTimelock, "Agent recovery timelock has not elapsed")
 			}
 		}

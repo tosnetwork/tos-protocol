@@ -32,15 +32,25 @@ func (a *Adapter) Readiness(
 	if err != nil {
 		return ReadinessSnapshot{}, err
 	}
-	now = now.UTC()
-	if observation.observedAt.After(now.Add(maxClockSkew)) ||
-		!observation.observedAt.Add(a.readinessAge).After(now) {
-		return ReadinessSnapshot{}, errors.New("TOS chain consensus is stale or from the future")
+	if err := a.validateObservationTime(observation, now); err != nil {
+		return ReadinessSnapshot{}, err
 	}
 	return ReadinessSnapshot{
 		Network: a.network, ObservedMasterSeqno: observation.seqno,
 		ObservedAt: observation.observedAt, QuorumEndpoints: len(nodes),
 	}, nil
+}
+
+func (a *Adapter) validateObservationTime(observation consensusObservation, now time.Time) error {
+	if a == nil || now.IsZero() {
+		return errors.New("invalid TOS chain observation time check")
+	}
+	now = now.UTC()
+	if observation.observedAt.IsZero() || observation.observedAt.After(now.Add(maxClockSkew)) ||
+		!observation.observedAt.Add(a.readinessAge).After(now) {
+		return errors.New("TOS chain consensus is stale or from the future")
+	}
+	return nil
 }
 
 // CheckReady implements the generic Edge readiness boundary.

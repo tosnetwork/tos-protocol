@@ -21,12 +21,22 @@ type senderStub struct {
 }
 
 type resolverStub struct {
-	states map[string]*nativev1.NativeStateV1
+	states      map[string]*nativev1.NativeStateV1
+	finalizedAt time.Time
 }
 
 func (r resolverStub) ResolveState(_ context.Context, objectID, _ string) (*nativev1.NativeStateV1, bool, error) {
 	state, found := r.states[objectID]
 	return state, found, nil
+}
+
+func (r resolverStub) ResolveFinalizedState(_ context.Context, objectID, _ string) (*nativev1.NativeStateV1, bool, time.Time, error) {
+	state, found := r.states[objectID]
+	finalizedAt := r.finalizedAt
+	if finalizedAt.IsZero() {
+		finalizedAt = time.Unix(1_700_000_000, 0).UTC()
+	}
+	return state, found, finalizedAt, nil
 }
 
 func testRelayer(t *testing.T, locator *Locator, sender ContractCellSender, resolver RelayStateResolver) *Relayer {
@@ -41,7 +51,8 @@ func testRelayer(t *testing.T, locator *Locator, sender ContractCellSender, reso
 	}
 	return &Relayer{Locator: locator, Sender: sender, FundingNanoTOS: MinimumRelayFundingNanoTOS, Journal: journal, Resolver: resolver,
 		Limits: RelaySpendLimits{Window: time.Hour, MaxActionsPerTarget: 100, MaxFundingPerTargetNanoTOS: 100 * MinimumRelayFundingNanoTOS,
-			MaxActionsPerWallet: 1000, MaxFundingPerWalletNanoTOS: 1000 * MinimumRelayFundingNanoTOS}}
+			MaxActionsPerWallet: 1000, MaxFundingPerWalletNanoTOS: 1000 * MinimumRelayFundingNanoTOS},
+		RecoverySafety: MinimumRecoveryRelaySafety}
 }
 
 func (s *senderStub) SendContractCell(_ context.Context, destination string, _ uint64, body, stateInit string) error {
@@ -74,6 +85,20 @@ func TestRelayerSubmissionFailsClosedWithoutDurableDependencies(t *testing.T) {
 	relay := &Relayer{Locator: testLocator(t), Sender: &senderStub{}, FundingNanoTOS: MinimumRelayFundingNanoTOS}
 	if _, err := relay.Submit(context.Background(), &nativev1.SignedNativeActionV1{Action: &nativev1.NativeActionV1{}}, 1); err == nil {
 		t.Fatal("relayer accepted submission without durable journal and finalized resolver")
+	}
+}
+
+func TestRecoverySafetyPolicyIsBoundedAndWholeSecond(t *testing.T) {
+	for _, value := range []time.Duration{MinimumRecoveryRelaySafety, MaximumRecoveryRelaySafety, 30 * time.Minute} {
+		if !validRecoverySafety(value) {
+			t.Fatalf("valid recovery safety rejected: %v", value)
+		}
+	}
+	for _, value := range []time.Duration{0, MinimumRecoveryRelaySafety - time.Second,
+		MaximumRecoveryRelaySafety + time.Second, MinimumRecoveryRelaySafety + time.Nanosecond} {
+		if validRecoverySafety(value) {
+			t.Fatalf("invalid recovery safety accepted: %v", value)
+		}
 	}
 }
 
@@ -315,5 +340,74 @@ func TestRelayerResolvesAmbiguousIntentWithoutRebroadcast(t *testing.T) {
 	}
 	if sender.calls != 1 {
 		t.Fatalf("ambiguous intent caused %d paid broadcasts", sender.calls)
+	}
+}
+
+func TestRecoveryInitiationUsesFinalizedChainTimeAndSafetyMargin(t *testing.T) {
+	l := testLocator(t)
+	policy, _ := testPolicy(t)
+	agentID := "agent_" + strings.Repeat("81", 32)
+	predecessor := "tvm-cell-sha256:" + strings.Repeat("82", 32)
+	chainTime := time.Unix(1_700_000_000, 0).UTC()
+	state := &nativev1.NativeStateV1{TvmStateHash: predecessor, State: &nativev1.NativeStateV1_Agent{
+		Agent: &nativev1.AgentStateV1{AgentId: agentID, Generation: 1, Sequence: 1, Policy: policy},
+	}}
+	relay := testRelayer(t, l, &senderStub{}, resolverStub{states: map[string]*nativev1.NativeStateV1{agentID: state}, finalizedAt: chainTime})
+	// Host time is deliberately far behind. It must not weaken the chain-time gate.
+	relay.Now = func() time.Time { return chainTime.Add(-24 * time.Hour) }
+	makeAction := func(executeAfter uint64) (*nativev1.NativeActionV1, BuiltAction) {
+		action := &nativev1.NativeActionV1{Protocol: Protocol, Network: l.Network, TargetObjectId: agentID,
+			TargetContractCodeHash: l.CodeHash, Generation: 1, Sequence: 2,
+			PredecessorTvmStateHash: predecessor, Nonce: bytes32('t'),
+			Payload: &nativev1.NativeActionV1_InitiateRecovery{InitiateRecovery: &nativev1.InitiateRecoveryV1{
+				ExecuteAfterUnixSeconds: executeAfter, NewPolicy: policy}}}
+		built, err := BuildAction(action)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return action, built
+	}
+	minimum := uint64(chainTime.Unix()) + policy.RecoveryTimelockSeconds + uint64(relay.RecoverySafety/time.Second)
+	tooSoon, tooSoonBuilt := makeAction(minimum - 1)
+	if _, err := relay.preflightTargetTransition(context.Background(), tooSoon, tooSoonBuilt); err == nil {
+		t.Fatal("recovery initiation below the finalized-chain safety boundary was accepted")
+	}
+	atBoundary, boundaryBuilt := makeAction(minimum)
+	if _, err := relay.preflightTargetTransition(context.Background(), atBoundary, boundaryBuilt); err != nil {
+		t.Fatalf("recovery initiation at the finalized-chain safety boundary: %v", err)
+	}
+}
+
+func TestRecoveryCompletionUsesFinalizedChainTime(t *testing.T) {
+	l := testLocator(t)
+	policy, _ := testPolicy(t)
+	agentID := "agent_" + strings.Repeat("91", 32)
+	predecessor := "tvm-cell-sha256:" + strings.Repeat("92", 32)
+	initiation := "sha256:" + strings.Repeat("93", 32)
+	executeAfter := uint64(1_700_000_100)
+	state := &nativev1.NativeStateV1{TvmStateHash: predecessor, State: &nativev1.NativeStateV1_Agent{
+		Agent: &nativev1.AgentStateV1{AgentId: agentID, Generation: 1, Sequence: 2, Policy: policy,
+			RecoveryPolicy: policy, RecoveryInitiationActionHash: initiation,
+			RecoveryExecuteAfterUnixSeconds: executeAfter},
+	}}
+	action := &nativev1.NativeActionV1{Protocol: Protocol, Network: l.Network, TargetObjectId: agentID,
+		TargetContractCodeHash: l.CodeHash, Generation: 2, Sequence: 1,
+		PredecessorTvmStateHash: predecessor, Nonce: bytes32('u'),
+		Payload: &nativev1.NativeActionV1_CompleteRecovery{CompleteRecovery: &nativev1.CompleteRecoveryV1{
+			InitiationActionHash: initiation}}}
+	built, err := BuildAction(action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := resolverStub{states: map[string]*nativev1.NativeStateV1{agentID: state}, finalizedAt: time.Unix(int64(executeAfter)-1, 0)}
+	relay := testRelayer(t, l, &senderStub{}, before)
+	// Host time is deliberately far ahead. It must not authorize early completion.
+	relay.Now = func() time.Time { return time.Unix(int64(executeAfter)+24*60*60, 0) }
+	if _, err := relay.preflightTargetTransition(context.Background(), action, built); err == nil {
+		t.Fatal("recovery completion before finalized chain time was accepted")
+	}
+	relay.Resolver = resolverStub{states: map[string]*nativev1.NativeStateV1{agentID: state}, finalizedAt: time.Unix(int64(executeAfter), 0)}
+	if _, err := relay.preflightTargetTransition(context.Background(), action, built); err != nil {
+		t.Fatalf("recovery completion at finalized chain time: %v", err)
 	}
 }
