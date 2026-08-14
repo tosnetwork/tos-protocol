@@ -3,6 +3,7 @@ package nativecore
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ func TestFileRelayJournalIsDurableAndConflictSafe(t *testing.T) {
 	}
 	second, _ := NewFileRelayJournal(directory)
 	complete, existing, err = second.Begin("request-1", "sha256:action-one", intent, journalTestLimits, time.Unix(1_700_000_001, 0))
-	if err != nil || complete || existing != "sha256:first" {
+	if err != nil || complete || existing != "" {
 		t.Fatalf("pending restart = (%v, %q, %v)", complete, existing, err)
 	}
 	different := intent
@@ -52,11 +53,24 @@ func TestFileRelayJournalIsDurableAndConflictSafe(t *testing.T) {
 	if _, _, err := second.Begin("request-1", "sha256:action-two", journalTestIntent("sha256:second"), journalTestLimits, time.Unix(1_700_000_002, 0)); err == nil {
 		t.Fatal("idempotency key accepted a different canonical action")
 	}
-	if err := first.Complete("sha256:action-one", intent); err != nil {
-		t.Fatal(err)
+	acquired, complete, err := second.AcquireBroadcastLease("sha256:action-one", intent)
+	if err != nil || !acquired || complete {
+		t.Fatalf("prepared recovery lease = (%v, %v, %v)", acquired, complete, err)
 	}
 	third, _ := NewFileRelayJournal(filepath.Clean(directory))
 	complete, existing, err = third.Begin("request-1", "sha256:action-one", intent, journalTestLimits, time.Unix(1_700_000_003, 0))
+	if err != nil || complete || existing != "sha256:first" {
+		t.Fatalf("broadcasting restart = (%v, %q, %v)", complete, existing, err)
+	}
+	acquired, complete, err = third.AcquireBroadcastLease("sha256:action-one", intent)
+	if err != nil || acquired || complete {
+		t.Fatalf("broadcasting restart reacquired a lease = (%v, %v, %v)", acquired, complete, err)
+	}
+	if err := first.Complete("sha256:action-one", intent); err != nil {
+		t.Fatal(err)
+	}
+	fourth, _ := NewFileRelayJournal(filepath.Clean(directory))
+	complete, existing, err = fourth.Begin("request-1", "sha256:action-one", intent, journalTestLimits, time.Unix(1_700_000_004, 0))
 	if err != nil || !complete || existing != "sha256:first" {
 		t.Fatalf("completed restart = (%v, %q, %v)", complete, existing, err)
 	}
@@ -75,27 +89,77 @@ func TestFileRelayJournalFencesConcurrentBroadcasters(t *testing.T) {
 		}
 		journals[i] = journal
 	}
+	intent := journalTestIntent("sha256:action")
+	if _, _, err := journals[0].Begin("race-a", "sha256:canonical-action", intent,
+		journalTestLimits, time.Unix(1_700_000_000, 0)); err != nil {
+		t.Fatal(err)
+	}
 	type outcome struct {
-		existing string
+		acquired bool
+		complete bool
 		err      error
 	}
 	outcomes := make(chan outcome, 2)
 	var start sync.WaitGroup
 	start.Add(1)
-	for i := range journals {
+	for _, journal := range journals {
 		go func(j *FileRelayJournal) {
 			start.Wait()
-			_, existing, err := j.Begin("race-"+string(rune('a'+i)), "sha256:canonical-action", journalTestIntent("sha256:action"), journalTestLimits, time.Unix(1_700_000_000, 0))
-			outcomes <- outcome{existing: existing, err: err}
-		}(journals[i])
+			acquired, complete, err := j.AcquireBroadcastLease("sha256:canonical-action", intent)
+			outcomes <- outcome{acquired: acquired, complete: complete, err: err}
+		}(journal)
 	}
 	start.Done()
 	first, second := <-outcomes, <-outcomes
 	if first.err != nil || second.err != nil {
 		t.Fatalf("race outcomes: %+v %+v", first, second)
 	}
-	if (first.existing == "") == (second.existing == "") {
+	if first.complete || second.complete || first.acquired == second.acquired {
 		t.Fatalf("exactly one broadcaster must own the new intent: %+v %+v", first, second)
+	}
+}
+
+func TestFileRelayJournalPreparedCrashIsRecoverable(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	intent := journalTestIntent("sha256:action")
+	beforeCrash, err := NewFileRelayJournal(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if complete, existing, err := beforeCrash.Begin("crash-before-send", "sha256:action-identity", intent,
+		journalTestLimits, time.Unix(1_700_000_000, 0)); err != nil || complete || existing != "" {
+		t.Fatalf("initial prepare = (%v, %q, %v)", complete, existing, err)
+	}
+	slot, found, err := beforeCrash.readSlot(intent.StateSlotIdentity)
+	if err != nil || !found || !slot.matches("sha256:action-identity", intent) || slot.Phase != relaySlotPrepared {
+		t.Fatalf("unified prepared slot = (%+v, %v, %v)", slot, found, err)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "action-") {
+			t.Fatalf("separate action record survived unified journal design: %s", entry.Name())
+		}
+	}
+	if err := beforeCrash.Complete("sha256:action-identity", intent); err == nil {
+		t.Fatal("prepared slot completed without acquiring a broadcast lease")
+	}
+	afterRestart, err := NewFileRelayJournal(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if complete, existing, err := afterRestart.Begin("crash-before-send", "sha256:action-identity", intent,
+		journalTestLimits, time.Unix(1_700_000_001, 0)); err != nil || complete || existing != "" {
+		t.Fatalf("prepared recovery must return a new broadcast candidate, got (%v, %q, %v)", complete, existing, err)
+	}
+	acquired, complete, err := afterRestart.AcquireBroadcastLease("sha256:action-identity", intent)
+	if err != nil || !acquired || complete {
+		t.Fatalf("prepared recovery must acquire one broadcast lease, got (%v, %v, %v)", acquired, complete, err)
 	}
 }
 

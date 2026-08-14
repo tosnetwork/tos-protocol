@@ -96,8 +96,12 @@ in-memory idempotency or finality state. `/livez` reports process liveness;
 Every process or host spending from the same relay wallet must use one shared,
 process-independent journal. Request idempotency keys are aliases. The journal
 first claims the canonical network/code/object/generation/sequence/predecessor
-state slot, then binds one exact action identity and outbound intent to that
-slot. Changing either a request key or action nonce cannot purchase a second
+state slot and its exact action identity, complete outbound intent, claimed
+time, and `prepared` phase in one atomic record. A separate atomic broadcast
+lease advances `prepared` to `broadcasting` before entering the sender; only
+the lease winner may pay. `prepared` survives a pre-send crash and is safely
+recoverable, while `broadcasting` is resolved read-only after any ambiguous
+crash. Changing either a request key or action nonce cannot purchase a second
 broadcast for the same mutually exclusive transition. The same journal
 atomically enforces `relay_window_seconds`, `max_actions_per_target`,
 `max_funding_per_target_nanotos`, `max_actions_per_wallet`, and

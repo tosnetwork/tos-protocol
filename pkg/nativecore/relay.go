@@ -163,6 +163,16 @@ func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeA
 	if existing != "" {
 		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, actionIdentity, intent, false, existing)
 	}
+	acquired, complete, err := r.Journal.AcquireBroadcastLease(actionIdentity, intent)
+	if err != nil {
+		return "", err
+	}
+	if complete {
+		return built.HashString, nil
+	}
+	if !acquired {
+		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, actionIdentity, intent, false, built.HashString)
+	}
 	if err := r.Sender.SendContractCell(ctx, identity.Address, r.FundingNanoTOS,
 		base64.StdEncoding.EncodeToString(bodyRaw), stateInit); err != nil {
 		return "", err

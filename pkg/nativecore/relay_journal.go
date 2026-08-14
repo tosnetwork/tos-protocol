@@ -18,6 +18,7 @@ import (
 type RelayJournal interface {
 	Lookup(requestKey, actionIdentity string, intent RelayIntent) (found, complete bool, existingHash string, err error)
 	Begin(requestKey, actionIdentity string, intent RelayIntent, limits RelaySpendLimits, now time.Time) (complete bool, existingHash string, err error)
+	AcquireBroadcastLease(actionIdentity string, intent RelayIntent) (acquired, complete bool, err error)
 	Complete(actionIdentity string, intent RelayIntent) error
 }
 
@@ -65,30 +66,30 @@ type relayRequestRecord struct {
 	ActionIdentity string `json:"action_identity"`
 }
 
-type relayActionRecord struct {
-	ActionIdentity string      `json:"action_identity"`
-	Intent         RelayIntent `json:"intent"`
-	Complete       bool        `json:"complete"`
-}
+type relaySlotPhase string
+
+const (
+	relaySlotPrepared     relaySlotPhase = "prepared"
+	relaySlotBroadcasting relaySlotPhase = "broadcasting"
+	relaySlotComplete     relaySlotPhase = "complete"
+)
 
 type relaySlotRecord struct {
-	StateSlotIdentity string `json:"state_slot_identity"`
-	ActionIdentity    string `json:"action_identity"`
-	ActionHash        string `json:"action_hash"`
-	TargetObjectID    string `json:"target_object_id"`
-	FundingNanoTOS    uint64 `json:"funding_nano_tos"`
-	ClaimedUnix       int64  `json:"claimed_unix"`
+	StateSlotIdentity string         `json:"state_slot_identity"`
+	ActionIdentity    string         `json:"action_identity"`
+	Intent            RelayIntent    `json:"intent"`
+	Phase             relaySlotPhase `json:"phase"`
+	ClaimedUnix       int64          `json:"claimed_unix"`
 }
 
 func (r relaySlotRecord) valid() bool {
-	return r.StateSlotIdentity != "" && r.ActionIdentity != "" && r.ActionHash != "" &&
-		r.TargetObjectID != "" && r.FundingNanoTOS != 0 && r.ClaimedUnix > 0
+	return r.StateSlotIdentity != "" && r.ActionIdentity != "" && r.Intent.valid() &&
+		r.StateSlotIdentity == r.Intent.StateSlotIdentity && r.ClaimedUnix > 0 &&
+		(r.Phase == relaySlotPrepared || r.Phase == relaySlotBroadcasting || r.Phase == relaySlotComplete)
 }
 
 func (r relaySlotRecord) matches(actionIdentity string, intent RelayIntent) bool {
-	return r.ActionIdentity == actionIdentity && r.StateSlotIdentity == intent.StateSlotIdentity &&
-		r.ActionHash == intent.ActionHash && r.TargetObjectID == intent.TargetObjectID &&
-		r.FundingNanoTOS == intent.FundingNanoTOS
+	return r.ActionIdentity == actionIdentity && r.StateSlotIdentity == intent.StateSlotIdentity && r.Intent == intent
 }
 
 func NewFileRelayJournal(directory string) (*FileRelayJournal, error) {
@@ -116,11 +117,6 @@ func (j *FileRelayJournal) requestPath(key string) string {
 	return filepath.Join(j.directory, "request-"+hex.EncodeToString(hash[:])+".json")
 }
 
-func (j *FileRelayJournal) actionPath(identity string) string {
-	hash := sha256.Sum256([]byte(identity))
-	return filepath.Join(j.directory, "action-"+hex.EncodeToString(hash[:])+".json")
-}
-
 func (j *FileRelayJournal) slotPath(identity string) string {
 	hash := sha256.Sum256([]byte(identity))
 	return filepath.Join(j.directory, "slot-"+hex.EncodeToString(hash[:])+".json")
@@ -135,21 +131,31 @@ func (j *FileRelayJournal) Lookup(requestKey, actionIdentity string, intent Rela
 	} else if found && request.ActionIdentity != actionIdentity {
 		return false, false, "", errors.New("Native idempotency key was reused for a different action")
 	}
-	if slot, found, err := j.readSlot(intent.StateSlotIdentity); err != nil {
-		return false, false, "", err
-	} else if found && slot.ActionIdentity != actionIdentity {
-		return true, false, slot.ActionHash, errors.New("Native state slot is already claimed by a different action")
-	} else if found && !slot.matches(actionIdentity, intent) {
-		return true, false, slot.ActionHash, errors.New("Native state slot record does not match its outbound intent")
-	}
-	record, found, err := j.readAction(actionIdentity)
-	if err != nil || !found {
+	slot, found, err := j.readSlot(intent.StateSlotIdentity)
+	if err != nil {
 		return false, false, "", err
 	}
-	if record.Intent != intent {
-		return true, record.Complete, record.Intent.ActionHash, errors.New("Native action was reused with a different outbound intent")
+	if !found {
+		return false, false, "", nil
 	}
-	return true, record.Complete, record.Intent.ActionHash, nil
+	if slot.ActionIdentity != actionIdentity {
+		return true, false, slot.Intent.ActionHash, errors.New("Native state slot is already claimed by a different action")
+	}
+	if !slot.matches(actionIdentity, intent) {
+		return true, false, slot.Intent.ActionHash, errors.New("Native state slot record does not match its outbound intent")
+	}
+	switch slot.Phase {
+	case relaySlotPrepared:
+		// No caller can enter the sender until it atomically advances this record
+		// to broadcasting, so prepared is safely recoverable after preflight.
+		return false, false, "", nil
+	case relaySlotBroadcasting:
+		return true, false, slot.Intent.ActionHash, nil
+	case relaySlotComplete:
+		return true, true, slot.Intent.ActionHash, nil
+	default:
+		return true, false, slot.Intent.ActionHash, errors.New("invalid Native relay state-slot phase")
+	}
 }
 
 func (j *FileRelayJournal) Begin(requestKey, actionIdentity string, intent RelayIntent, limits RelaySpendLimits, now time.Time) (bool, string, error) {
@@ -177,18 +183,17 @@ func (j *FileRelayJournal) beginLocked(requestKey, actionIdentity string, intent
 		return false, "", err
 	}
 	if slotFound && slot.ActionIdentity != actionIdentity {
-		return false, slot.ActionHash, errors.New("Native state slot is already claimed by a different action")
+		return false, slot.Intent.ActionHash, errors.New("Native state slot is already claimed by a different action")
 	}
 	if slotFound && !slot.matches(actionIdentity, intent) {
-		return false, slot.ActionHash, errors.New("Native state slot record does not match its outbound intent")
+		return false, slot.Intent.ActionHash, errors.New("Native state slot record does not match its outbound intent")
 	}
 	if !slotFound {
 		if err := j.enforceSpendLimits(intent, limits, now); err != nil {
 			return false, "", err
 		}
 		slot = relaySlotRecord{StateSlotIdentity: intent.StateSlotIdentity, ActionIdentity: actionIdentity,
-			ActionHash: intent.ActionHash, TargetObjectID: intent.TargetObjectID,
-			FundingNanoTOS: intent.FundingNanoTOS, ClaimedUnix: now.Unix()}
+			Intent: intent, Phase: relaySlotPrepared, ClaimedUnix: now.Unix()}
 		raw, err := json.Marshal(slot)
 		if err != nil {
 			return false, "", err
@@ -196,23 +201,6 @@ func (j *FileRelayJournal) beginLocked(requestKey, actionIdentity string, intent
 		if created, err := j.atomicCreate(j.slotPath(intent.StateSlotIdentity), raw); err != nil || !created {
 			return false, "", errors.New("failed to claim Native state slot")
 		}
-	}
-	record := relayActionRecord{ActionIdentity: actionIdentity, Intent: intent}
-	recordRaw, err := json.Marshal(record)
-	if err != nil {
-		return false, "", err
-	}
-	if created, err := j.atomicCreate(j.actionPath(actionIdentity), recordRaw); err != nil {
-		return false, "", err
-	} else if !created {
-		existing, found, err := j.readAction(actionIdentity)
-		if err != nil || !found {
-			return false, "", errors.New("invalid Native relay action record")
-		}
-		if existing.Intent != intent {
-			return false, existing.Intent.ActionHash, errors.New("Native action was reused with a different outbound intent")
-		}
-		record = existing
 	}
 	request := relayRequestRecord{RequestKey: requestKey, ActionIdentity: actionIdentity}
 	requestRaw, err := json.Marshal(request)
@@ -227,29 +215,72 @@ func (j *FileRelayJournal) beginLocked(requestKey, actionIdentity string, intent
 			return false, "", errors.New("Native idempotency key was reused for a different action")
 		}
 	}
-	if record.Complete {
-		return true, record.Intent.ActionHash, nil
+	switch slot.Phase {
+	case relaySlotPrepared:
+		return false, "", nil
+	case relaySlotBroadcasting:
+		return false, slot.Intent.ActionHash, nil
+	case relaySlotComplete:
+		return true, slot.Intent.ActionHash, nil
+	default:
+		return false, slot.Intent.ActionHash, errors.New("invalid Native relay state-slot phase")
 	}
-	if slotFound {
-		return false, record.Intent.ActionHash, nil
+}
+
+func (j *FileRelayJournal) AcquireBroadcastLease(actionIdentity string, intent RelayIntent) (bool, bool, error) {
+	if actionIdentity == "" || !intent.valid() {
+		return false, false, errors.New("empty Native relay broadcast lease identity")
 	}
-	return false, "", nil
+	var acquired, complete bool
+	err := j.withExclusiveLock(func() error {
+		slot, found, err := j.readSlot(intent.StateSlotIdentity)
+		if err != nil || !found || !slot.matches(actionIdentity, intent) {
+			return errors.New("Native relay broadcast lease mismatch")
+		}
+		switch slot.Phase {
+		case relaySlotPrepared:
+			slot.Phase = relaySlotBroadcasting
+			raw, err := json.Marshal(slot)
+			if err != nil {
+				return err
+			}
+			if err := j.atomicReplace(j.slotPath(intent.StateSlotIdentity), raw); err != nil {
+				return err
+			}
+			acquired = true
+		case relaySlotBroadcasting:
+		case relaySlotComplete:
+			complete = true
+		default:
+			return errors.New("invalid Native relay state-slot phase")
+		}
+		return nil
+	})
+	return acquired, complete, err
 }
 
 func (j *FileRelayJournal) Complete(actionIdentity string, intent RelayIntent) error {
-	record, found, err := j.readAction(actionIdentity)
-	if err != nil || !found || record.Intent != intent {
+	if actionIdentity == "" || !intent.valid() {
 		return errors.New("Native relay journal completion mismatch")
 	}
-	if record.Complete {
-		return nil
-	}
-	record.Complete = true
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	return j.atomicReplace(j.actionPath(actionIdentity), raw)
+	return j.withExclusiveLock(func() error {
+		slot, found, err := j.readSlot(intent.StateSlotIdentity)
+		if err != nil || !found || !slot.matches(actionIdentity, intent) {
+			return errors.New("Native relay journal completion mismatch")
+		}
+		if slot.Phase == relaySlotComplete {
+			return nil
+		}
+		if slot.Phase != relaySlotBroadcasting {
+			return errors.New("Native relay journal completed without a broadcast lease")
+		}
+		slot.Phase = relaySlotComplete
+		raw, err := json.Marshal(slot)
+		if err != nil {
+			return err
+		}
+		return j.atomicReplace(j.slotPath(intent.StateSlotIdentity), raw)
+	})
 }
 
 func (j *FileRelayJournal) enforceSpendLimits(intent RelayIntent, limits RelaySpendLimits, now time.Time) error {
@@ -274,17 +305,17 @@ func (j *FileRelayJournal) enforceSpendLimits(intent RelayIntent, limits RelaySp
 		if slot.ClaimedUnix < cutoff {
 			continue
 		}
-		if walletActions == ^uint64(0) || walletFunding > ^uint64(0)-slot.FundingNanoTOS {
+		if walletActions == ^uint64(0) || walletFunding > ^uint64(0)-slot.Intent.FundingNanoTOS {
 			return errors.New("Native relay wallet budget counter overflow")
 		}
 		walletActions++
-		walletFunding += slot.FundingNanoTOS
-		if slot.TargetObjectID == intent.TargetObjectID {
-			if targetActions == ^uint64(0) || targetFunding > ^uint64(0)-slot.FundingNanoTOS {
+		walletFunding += slot.Intent.FundingNanoTOS
+		if slot.Intent.TargetObjectID == intent.TargetObjectID {
+			if targetActions == ^uint64(0) || targetFunding > ^uint64(0)-slot.Intent.FundingNanoTOS {
 				return errors.New("Native relay target budget counter overflow")
 			}
 			targetActions++
-			targetFunding += slot.FundingNanoTOS
+			targetFunding += slot.Intent.FundingNanoTOS
 		}
 	}
 	if walletActions >= limits.MaxActionsPerWallet || walletFunding > limits.MaxFundingPerWalletNanoTOS-intent.FundingNanoTOS {
@@ -330,18 +361,6 @@ func (j *FileRelayJournal) readRequest(key string) (relayRequestRecord, bool, er
 	}
 	if err != nil || json.Unmarshal(raw, &record) != nil || record.RequestKey != key || record.ActionIdentity == "" {
 		return relayRequestRecord{}, false, errors.New("invalid Native relay request record")
-	}
-	return record, true, nil
-}
-
-func (j *FileRelayJournal) readAction(identity string) (relayActionRecord, bool, error) {
-	var record relayActionRecord
-	raw, err := os.ReadFile(j.actionPath(identity))
-	if errors.Is(err, os.ErrNotExist) {
-		return record, false, nil
-	}
-	if err != nil || json.Unmarshal(raw, &record) != nil || record.ActionIdentity != identity || !record.Intent.valid() {
-		return relayActionRecord{}, false, errors.New("invalid Native relay action record")
 	}
 	return record, true, nil
 }
