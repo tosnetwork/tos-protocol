@@ -45,6 +45,7 @@ type PortableAgentState struct {
 	DelegationDigests               []string        `json:"delegation_digests"`
 	RecoveryExecuteAfterUnixSeconds uint64          `json:"recovery_execute_after_unix_seconds"`
 	RecoveryInitiationActionHash    string          `json:"recovery_initiation_action_hash"`
+	RecoveryInitiatingPolicyHash    string          `json:"recovery_initiating_policy_hash"`
 	RecoveryPolicy                  *PortablePolicy `json:"recovery_policy,omitempty"`
 	Tombstoned                      bool            `json:"tombstoned"`
 }
@@ -78,7 +79,8 @@ func (l *Locator) DecodePortable(data *cell.Cell, objectID string) ([]byte, bool
 		}
 		value := &PortableAgentState{AgentID: agent.AgentId, Generation: agent.Generation, Sequence: agent.Sequence,
 			LastActionHash: agent.LastActionHash, Policy: policy, DelegationDigests: append([]string(nil), agent.DelegationDigests...),
-			RecoveryExecuteAfterUnixSeconds: agent.RecoveryExecuteAfterUnixSeconds, RecoveryInitiationActionHash: agent.RecoveryInitiationActionHash, Tombstoned: agent.Tombstoned}
+			RecoveryExecuteAfterUnixSeconds: agent.RecoveryExecuteAfterUnixSeconds, RecoveryInitiationActionHash: agent.RecoveryInitiationActionHash,
+			RecoveryInitiatingPolicyHash: agent.RecoveryInitiatingPolicyHash, Tombstoned: agent.Tombstoned}
 		if agent.RecoveryPolicy != nil {
 			p, err := projectPolicy(agent.RecoveryPolicy)
 			if err != nil {

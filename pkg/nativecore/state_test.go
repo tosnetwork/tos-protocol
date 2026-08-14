@@ -89,4 +89,33 @@ func TestCapabilityTypedStatePreservesVersionName(t *testing.T) {
 	}
 }
 
+func TestPendingRecoveryIsBoundToLivePolicy(t *testing.T) {
+	l := testLocator(t)
+	policy, _ := testPolicy(t)
+	policyCell, _ := PolicyCell(policy)
+	id, err := DeriveAgentID(l.Network, bytes32('o'), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildData := func(policyHash []byte) *cell.Cell {
+		delegations := cell.BeginCell().MustStoreUInt(0, 16).MustStoreDict(nil).EndCell()
+		recovery := cell.BeginCell().MustStoreBoolBit(true).MustStoreSlice(bytes32('i'), 256).
+			MustStoreSlice(policyHash, 256).MustStoreUInt(1234, 64).MustStoreRef(policyCell).EndCell()
+		state := cell.BeginCell().MustStoreUInt(stateMagic, 32).MustStoreUInt(1, 16).MustStoreUInt(1, 8).
+			MustStoreBoolBit(false).MustStoreUInt(1, 64).MustStoreUInt(2, 64).MustStoreSlice(bytes32('a'), 256).
+			MustStoreRef(policyCell).MustStoreRef(delegations).MustStoreRef(recovery).EndCell()
+		config, _ := l.configCell()
+		rawID, _, _ := objectID(id)
+		return cell.BeginCell().MustStoreUInt(dataMagic, 32).MustStoreUInt(1, 16).MustStoreUInt(1, 8).
+			MustStoreSlice(rawID, 256).MustStoreRef(config).MustStoreBoolBit(true).MustStoreRef(state).EndCell()
+	}
+	decoded, found, err := l.DecodeData(buildData(policyCell.Hash()), id)
+	if err != nil || !found || decoded.GetAgent().GetRecoveryInitiatingPolicyHash() != "tvm-cell-sha256:"+hex.EncodeToString(policyCell.Hash()) {
+		t.Fatalf("valid bound recovery: found=%v err=%v state=%v", found, err, decoded)
+	}
+	if _, _, err := l.DecodeData(buildData(bytes32('x')), id); err == nil {
+		t.Fatal("recovery bound to a stale policy hash was accepted")
+	}
+}
+
 func bytes32(value byte) []byte { return []byte(strings.Repeat(string([]byte{value}), 32)) }

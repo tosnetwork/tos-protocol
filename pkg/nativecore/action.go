@@ -96,11 +96,27 @@ func BuildAction(action *nativev1.NativeActionV1) (BuiltAction, error) {
 	if err := validateRegistrationIdentity(action); err != nil {
 		return BuiltAction{}, wrapNativeError(ErrBadTransition, "invalid registration identity", err)
 	}
-	if (kind == KindRegisterAgent || kind == KindRegisterCapability) && (action.Generation != 1 || action.Sequence != 1) {
-		return BuiltAction{}, nativeError(ErrBadSequence, "Native registration must start at generation 1 sequence 1")
-	}
-	if (action.Sequence == 1) != bytes.Equal(previous, make([]byte, 32)) {
-		return BuiltAction{}, nativeError(ErrBadPredecessor, "Native predecessor/sequence mismatch")
+	registration := kind == KindRegisterAgent || kind == KindRegisterCapability
+	generationReset := kind == KindCompleteRecovery || kind == KindTransferCapability
+	predecessorIsZero := bytes.Equal(previous, make([]byte, 32))
+	if registration {
+		if action.Generation != 1 || action.Sequence != 1 {
+			return BuiltAction{}, nativeError(ErrBadSequence, "Native registration must start at generation 1 sequence 1")
+		}
+		if !predecessorIsZero {
+			return BuiltAction{}, nativeError(ErrBadPredecessor, "Native registration predecessor must be zero")
+		}
+	} else {
+		if predecessorIsZero {
+			return BuiltAction{}, nativeError(ErrBadPredecessor, "Native mutation predecessor must be nonzero")
+		}
+		if generationReset {
+			if action.Generation < 2 || action.Sequence != 1 {
+				return BuiltAction{}, nativeError(ErrBadSequence, "Native generation reset must advance generation and reset sequence")
+			}
+		} else if action.Sequence < 2 {
+			return BuiltAction{}, nativeError(ErrBadSequence, "ordinary Native mutation must advance sequence")
+		}
 	}
 	domainHash := sha256.Sum256([]byte(action.Network.NetworkId))
 	domain := cell.BeginCell().MustStoreSlice(genesisRoot, 256).MustStoreSlice(genesisFile, 256).

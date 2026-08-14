@@ -52,7 +52,7 @@ message NativeActionV1 {
   }
 }
 message SignedNativeActionV1 { NativeActionV1 action = 1; repeated SignatureV1 authority_signatures = 2; repeated SignatureV1 counterparty_signatures = 3; reserved 4, 5; }
-message AgentStateV1 { string agent_id = 1; uint64 generation = 2; uint64 sequence = 3; string last_action_hash = 4; ControllerPolicyV1 policy = 5; repeated string delegation_digests = 6; uint64 recovery_execute_after_unix_seconds = 7; string recovery_initiation_action_hash = 8; ControllerPolicyV1 recovery_policy = 9; bool tombstoned = 10; }
+message AgentStateV1 { string agent_id = 1; uint64 generation = 2; uint64 sequence = 3; string last_action_hash = 4; ControllerPolicyV1 policy = 5; repeated string delegation_digests = 6; uint64 recovery_execute_after_unix_seconds = 7; string recovery_initiation_action_hash = 8; ControllerPolicyV1 recovery_policy = 9; bool tombstoned = 10; string recovery_initiating_policy_hash = 11; }
 message CapabilityStateV1 { string capability_id = 1; uint64 generation = 2; uint64 sequence = 3; string last_action_hash = 4; string owner_agent_id = 5; reserved 6; repeated CapabilityVersionV1 versions = 7; bool tombstoned = 8; }
 message NativeStateV1 { NetworkDomain network = 1; string tvm_state_hash = 2; ChainReference reference = 3; oneof state { AgentStateV1 agent = 10; CapabilityStateV1 capability = 11; } }
 message SubmitNativeActionRequest { RequestContext context = 1; SignedNativeActionV1 submission = 2; }

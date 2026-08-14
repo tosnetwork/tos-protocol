@@ -1469,6 +1469,7 @@ type AgentStateV1 struct {
 	RecoveryInitiationActionHash    string                 `protobuf:"bytes,8,opt,name=recovery_initiation_action_hash,json=recoveryInitiationActionHash,proto3" json:"recovery_initiation_action_hash,omitempty"`
 	RecoveryPolicy                  *ControllerPolicyV1    `protobuf:"bytes,9,opt,name=recovery_policy,json=recoveryPolicy,proto3" json:"recovery_policy,omitempty"`
 	Tombstoned                      bool                   `protobuf:"varint,10,opt,name=tombstoned,proto3" json:"tombstoned,omitempty"`
+	RecoveryInitiatingPolicyHash    string                 `protobuf:"bytes,11,opt,name=recovery_initiating_policy_hash,json=recoveryInitiatingPolicyHash,proto3" json:"recovery_initiating_policy_hash,omitempty"`
 	unknownFields                   protoimpl.UnknownFields
 	sizeCache                       protoimpl.SizeCache
 }
@@ -1571,6 +1572,13 @@ func (x *AgentStateV1) GetTombstoned() bool {
 		return x.Tombstoned
 	}
 	return false
+}
+
+func (x *AgentStateV1) GetRecoveryInitiatingPolicyHash() string {
+	if x != nil {
+		return x.RecoveryInitiatingPolicyHash
+	}
+	return ""
 }
 
 type CapabilityStateV1 struct {
@@ -2347,7 +2355,7 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\x14SignedNativeActionV1\x126\n" +
 	"\x06action\x18\x01 \x01(\v2\x1e.atos.native.v1.NativeActionV1R\x06action\x12N\n" +
 	"\x14authority_signatures\x18\x02 \x03(\v2\x1b.atos.native.v1.SignatureV1R\x13authoritySignatures\x12T\n" +
-	"\x17counterparty_signatures\x18\x03 \x03(\v2\x1b.atos.native.v1.SignatureV1R\x16counterpartySignaturesJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\xfc\x03\n" +
+	"\x17counterparty_signatures\x18\x03 \x03(\v2\x1b.atos.native.v1.SignatureV1R\x16counterpartySignaturesJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\xc3\x04\n" +
 	"\fAgentStateV1\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1e\n" +
 	"\n" +
@@ -2363,7 +2371,8 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\n" +
 	"tombstoned\x18\n" +
 	" \x01(\bR\n" +
-	"tombstoned\"\xab\x02\n" +
+	"tombstoned\x12E\n" +
+	"\x1frecovery_initiating_policy_hash\x18\v \x01(\tR\x1crecoveryInitiatingPolicyHash\"\xab\x02\n" +
 	"\x11CapabilityStateV1\x12#\n" +
 	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12\x1e\n" +
 	"\n" +

@@ -139,14 +139,18 @@ func decodeState(state *cell.Cell, object string, expectedKind uint8) (*nativev1
 		if err != nil {
 			return nil, err
 		}
-		recoveryAt, recoveryAction, recoveryPolicy, err := decodeRecovery(recoveryCell)
+		recoveryAt, recoveryAction, recoveryPolicyHash, recoveryPolicy, err := decodeRecovery(recoveryCell)
 		if err != nil {
 			return nil, err
+		}
+		if recoveryPolicy != nil && recoveryPolicyHash != "tvm-cell-sha256:"+hex.EncodeToString(policyCell.Hash()) {
+			return nil, errors.New("pending Native recovery is not bound to the live policy")
 		}
 		return &nativev1.NativeStateV1{State: &nativev1.NativeStateV1_Agent{Agent: &nativev1.AgentStateV1{
 			AgentId: object, Generation: generation, Sequence: sequence, LastActionHash: last, Policy: policy,
 			DelegationDigests: delegations, RecoveryExecuteAfterUnixSeconds: recoveryAt,
-			RecoveryInitiationActionHash: recoveryAction, RecoveryPolicy: recoveryPolicy, Tombstoned: tombstoned}}}, nil
+			RecoveryInitiationActionHash: recoveryAction, RecoveryInitiatingPolicyHash: recoveryPolicyHash,
+			RecoveryPolicy: recoveryPolicy, Tombstoned: tombstoned}}}, nil
 	}
 	owner, err := s.LoadSlice(256)
 	if err != nil {
@@ -280,32 +284,39 @@ func decodeDelegations(value *cell.Cell) ([]string, error) {
 	return result, nil
 }
 
-func decodeRecovery(value *cell.Cell) (uint64, string, *nativev1.ControllerPolicyV1, error) {
+func decodeRecovery(value *cell.Cell) (uint64, string, string, *nativev1.ControllerPolicyV1, error) {
 	s := value.BeginParse()
 	pending, err := s.LoadBoolBit()
 	if err != nil {
-		return 0, "", nil, err
+		return 0, "", "", nil, err
 	}
 	if !pending {
-		return 0, "", nil, endSlice(s)
+		return 0, "", "", nil, endSlice(s)
 	}
 	action, err := s.LoadSlice(256)
 	if err != nil {
-		return 0, "", nil, err
+		return 0, "", "", nil, err
+	}
+	policyHash, err := s.LoadSlice(256)
+	if err != nil {
+		return 0, "", "", nil, err
+	}
+	if equalBytes(policyHash, make([]byte, 32)) {
+		return 0, "", "", nil, errors.New("pending Native recovery has a zero initiating policy hash")
 	}
 	executeAt, err := s.LoadUInt(64)
 	if err != nil {
-		return 0, "", nil, err
+		return 0, "", "", nil, err
 	}
 	policyCell, err := s.LoadRefCell()
 	if err != nil {
-		return 0, "", nil, err
+		return 0, "", "", nil, err
 	}
 	if err := endSlice(s); err != nil {
-		return 0, "", nil, err
+		return 0, "", "", nil, err
 	}
 	policy, err := DecodePolicyCell(policyCell)
-	return executeAt, "sha256:" + hex.EncodeToString(action), policy, err
+	return executeAt, "sha256:" + hex.EncodeToString(action), "tvm-cell-sha256:" + hex.EncodeToString(policyHash), policy, err
 }
 
 func decodeVersions(value *cell.Cell) ([]*nativev1.CapabilityVersionV1, error) {
