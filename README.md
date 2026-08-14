@@ -82,6 +82,8 @@ The Native configuration is strict JSON and contains:
   majority quorum;
 - Registry workchain, reviewed contract code BOC and exact code hash;
 - bounded relay funding in nanoTOS;
+- a mandatory relay budget window plus per-target and relay-wallet action and
+  nanoTOS ceilings;
 - an absolute owner-private `state_directory` for the durable relay journal and
   finalized-checkpoint fence;
 - a pinned, owner-private `tosctl` sender configuration.
@@ -92,9 +94,14 @@ in-memory idempotency or finality state. `/livez` reports process liveness;
 `/readyz` and `/healthz` verify both Native dependencies.
 
 Every process or host spending from the same relay wallet must use one shared,
-process-independent journal. Request idempotency keys are aliases; the journal
-claims canonical network/code/action identities so changing a request key
-cannot purchase a second broadcast of the same signed action.
+process-independent journal. Request idempotency keys are aliases. The journal
+first claims the canonical network/code/object/generation/sequence/predecessor
+state slot, then binds one exact action identity and outbound intent to that
+slot. Changing either a request key or action nonce cannot purchase a second
+broadcast for the same mutually exclusive transition. The same journal
+atomically enforces `relay_window_seconds`, `max_actions_per_target`,
+`max_funding_per_target_nanotos`, `max_actions_per_wallet`, and
+`max_funding_per_wallet_nanotos`.
 
 ## Security boundary
 

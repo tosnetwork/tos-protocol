@@ -5,11 +5,24 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
+
+var journalTestLimits = RelaySpendLimits{Window: time.Hour, MaxActionsPerTarget: 10,
+	MaxFundingPerTargetNanoTOS: 10 * MinimumRelayFundingNanoTOS, MaxActionsPerWallet: 100,
+	MaxFundingPerWalletNanoTOS: 100 * MinimumRelayFundingNanoTOS}
 
 func journalTestIntent(actionHash string) RelayIntent {
 	return RelayIntent{ActionHash: actionHash, Destination: "0:destination", QueryID: 7,
-		BodyHash: "sha256:body", StateInitHash: "sha256:state-init", FundingNanoTOS: MinimumRelayFundingNanoTOS}
+		BodyHash: "sha256:body", StateInitHash: "sha256:state-init", FundingNanoTOS: MinimumRelayFundingNanoTOS,
+		StateSlotIdentity: "sha256:slot", TargetObjectID: "agent_target"}
+}
+
+func journalIntentFor(actionHash, slot, target string) RelayIntent {
+	intent := journalTestIntent(actionHash)
+	intent.StateSlotIdentity = slot
+	intent.TargetObjectID = target
+	return intent
 }
 
 func TestFileRelayJournalIsDurableAndConflictSafe(t *testing.T) {
@@ -22,28 +35,28 @@ func TestFileRelayJournalIsDurableAndConflictSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	intent := journalTestIntent("sha256:first")
-	complete, existing, err := first.Begin("request-1", "sha256:action-one", intent)
+	complete, existing, err := first.Begin("request-1", "sha256:action-one", intent, journalTestLimits, time.Unix(1_700_000_000, 0))
 	if err != nil || complete || existing != "" {
 		t.Fatalf("first begin = (%v, %q, %v)", complete, existing, err)
 	}
 	second, _ := NewFileRelayJournal(directory)
-	complete, existing, err = second.Begin("request-1", "sha256:action-one", intent)
+	complete, existing, err = second.Begin("request-1", "sha256:action-one", intent, journalTestLimits, time.Unix(1_700_000_001, 0))
 	if err != nil || complete || existing != "sha256:first" {
 		t.Fatalf("pending restart = (%v, %q, %v)", complete, existing, err)
 	}
 	different := intent
 	different.FundingNanoTOS++
-	if _, _, err := second.Begin("request-1", "sha256:action-one", different); err == nil {
+	if _, _, err := second.Begin("request-1", "sha256:action-one", different, journalTestLimits, time.Unix(1_700_000_002, 0)); err == nil {
 		t.Fatal("idempotency key accepted different semantics")
 	}
-	if _, _, err := second.Begin("request-1", "sha256:action-two", journalTestIntent("sha256:second")); err == nil {
+	if _, _, err := second.Begin("request-1", "sha256:action-two", journalTestIntent("sha256:second"), journalTestLimits, time.Unix(1_700_000_002, 0)); err == nil {
 		t.Fatal("idempotency key accepted a different canonical action")
 	}
 	if err := first.Complete("sha256:action-one", intent); err != nil {
 		t.Fatal(err)
 	}
 	third, _ := NewFileRelayJournal(filepath.Clean(directory))
-	complete, existing, err = third.Begin("request-1", "sha256:action-one", intent)
+	complete, existing, err = third.Begin("request-1", "sha256:action-one", intent, journalTestLimits, time.Unix(1_700_000_003, 0))
 	if err != nil || !complete || existing != "sha256:first" {
 		t.Fatalf("completed restart = (%v, %q, %v)", complete, existing, err)
 	}
@@ -72,7 +85,7 @@ func TestFileRelayJournalFencesConcurrentBroadcasters(t *testing.T) {
 	for i := range journals {
 		go func(j *FileRelayJournal) {
 			start.Wait()
-			_, existing, err := j.Begin("race-"+string(rune('a'+i)), "sha256:canonical-action", journalTestIntent("sha256:action"))
+			_, existing, err := j.Begin("race-"+string(rune('a'+i)), "sha256:canonical-action", journalTestIntent("sha256:action"), journalTestLimits, time.Unix(1_700_000_000, 0))
 			outcomes <- outcome{existing: existing, err: err}
 		}(journals[i])
 	}
@@ -83,5 +96,113 @@ func TestFileRelayJournalFencesConcurrentBroadcasters(t *testing.T) {
 	}
 	if (first.existing == "") == (second.existing == "") {
 		t.Fatalf("exactly one broadcaster must own the new intent: %+v %+v", first, second)
+	}
+}
+
+func TestFileRelayJournalFencesConflictingActionsForOneStateSlot(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	journals := make([]*FileRelayJournal, 2)
+	for i := range journals {
+		journal, err := NewFileRelayJournal(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		journals[i] = journal
+	}
+	type outcome struct {
+		existing string
+		err      error
+	}
+	outcomes := make(chan outcome, 2)
+	var start sync.WaitGroup
+	start.Add(1)
+	for i := range journals {
+		go func(index int, journal *FileRelayJournal) {
+			start.Wait()
+			action := "sha256:action-" + string(rune('a'+index))
+			intent := journalIntentFor(action, "sha256:shared-slot", "agent_shared")
+			_, existing, err := journal.Begin("conflict-"+string(rune('a'+index)), action, intent,
+				journalTestLimits, time.Unix(1_700_000_000, 0))
+			outcomes <- outcome{existing: existing, err: err}
+		}(i, journals[i])
+	}
+	start.Done()
+	first, second := <-outcomes, <-outcomes
+	if (first.err == nil) == (second.err == nil) {
+		t.Fatalf("exactly one conflicting action must claim the state slot: %+v %+v", first, second)
+	}
+}
+
+func TestFileRelayJournalEnforcesDurableSpendLimits(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := NewFileRelayJournal(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits := RelaySpendLimits{Window: time.Hour, MaxActionsPerTarget: 1,
+		MaxFundingPerTargetNanoTOS: MinimumRelayFundingNanoTOS, MaxActionsPerWallet: 2,
+		MaxFundingPerWalletNanoTOS: 2 * MinimumRelayFundingNanoTOS}
+	now := time.Unix(1_700_000_000, 0)
+	first := journalIntentFor("sha256:first", "sha256:slot-one", "agent_one")
+	if _, _, err := journal.Begin("budget-1", "sha256:intent-one", first, limits, now); err != nil {
+		t.Fatal(err)
+	}
+	sameTarget := journalIntentFor("sha256:second", "sha256:slot-two", "agent_one")
+	if _, _, err := journal.Begin("budget-2", "sha256:intent-two", sameTarget, limits, now); err == nil {
+		t.Fatal("per-target relay budget accepted a second paid slot")
+	}
+	otherTarget := journalIntentFor("sha256:third", "sha256:slot-three", "agent_two")
+	if _, _, err := journal.Begin("budget-3", "sha256:intent-three", otherTarget, limits, now); err != nil {
+		t.Fatal(err)
+	}
+	thirdTarget := journalIntentFor("sha256:fourth", "sha256:slot-four", "agent_three")
+	if _, _, err := journal.Begin("budget-4", "sha256:intent-four", thirdTarget, limits, now); err == nil {
+		t.Fatal("relay-wallet budget accepted a third paid slot")
+	}
+	restarted, err := NewFileRelayJournal(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := restarted.Begin("budget-5", "sha256:intent-five",
+		journalIntentFor("sha256:fifth", "sha256:slot-five", "agent_four"), limits, now); err == nil {
+		t.Fatal("relay-wallet budget did not survive process restart")
+	}
+}
+
+func TestFileRelayJournalSerializesConcurrentWalletBudget(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	limits := RelaySpendLimits{Window: time.Hour, MaxActionsPerTarget: 1,
+		MaxFundingPerTargetNanoTOS: MinimumRelayFundingNanoTOS, MaxActionsPerWallet: 1,
+		MaxFundingPerWalletNanoTOS: MinimumRelayFundingNanoTOS}
+	results := make(chan error, 2)
+	var start sync.WaitGroup
+	start.Add(1)
+	for i := 0; i < 2; i++ {
+		journal, err := NewFileRelayJournal(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func(index int, j *FileRelayJournal) {
+			start.Wait()
+			suffix := string(rune('a' + index))
+			_, _, err := j.Begin("wallet-"+suffix, "sha256:intent-"+suffix,
+				journalIntentFor("sha256:action-"+suffix, "sha256:slot-"+suffix, "agent_"+suffix),
+				limits, time.Unix(1_700_000_000, 0))
+			results <- err
+		}(i, journal)
+	}
+	start.Done()
+	first, second := <-results, <-results
+	if (first == nil) == (second == nil) {
+		t.Fatalf("exactly one concurrent intent must fit the wallet budget: %v / %v", first, second)
 	}
 }

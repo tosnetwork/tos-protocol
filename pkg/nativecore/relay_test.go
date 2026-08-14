@@ -2,11 +2,13 @@ package nativecore
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
 	"github.com/xssnick/tonutils-go/tvm/cell"
@@ -37,13 +39,35 @@ func testRelayer(t *testing.T, locator *Locator, sender ContractCellSender, reso
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Relayer{Locator: locator, Sender: sender, FundingNanoTOS: MinimumRelayFundingNanoTOS, Journal: journal, Resolver: resolver}
+	return &Relayer{Locator: locator, Sender: sender, FundingNanoTOS: MinimumRelayFundingNanoTOS, Journal: journal, Resolver: resolver,
+		Limits: RelaySpendLimits{Window: time.Hour, MaxActionsPerTarget: 100, MaxFundingPerTargetNanoTOS: 100 * MinimumRelayFundingNanoTOS,
+			MaxActionsPerWallet: 1000, MaxFundingPerWalletNanoTOS: 1000 * MinimumRelayFundingNanoTOS}}
 }
 
 func (s *senderStub) SendContractCell(_ context.Context, destination string, _ uint64, body, stateInit string) error {
 	s.destination, s.body, s.stateInit = destination, body, stateInit
 	s.calls++
 	return s.sendErr
+}
+
+func signedAgentRegistration(t *testing.T, locator *Locator, policy *nativev1.ControllerPolicyV1, privateKey ed25519.PrivateKey, objectNonce, actionNonce []byte) (*nativev1.SignedNativeActionV1, BuiltAction) {
+	t.Helper()
+	id, err := DeriveAgentID(locator.Network, objectNonce, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := &nativev1.NativeActionV1{Protocol: Protocol, Network: locator.Network, TargetObjectId: id,
+		TargetContractCodeHash: locator.CodeHash, Generation: 1, Sequence: 1, Nonce: actionNonce,
+		Payload: &nativev1.NativeActionV1_RegisterAgent{RegisterAgent: &nativev1.RegisterAgentV1{ObjectNonce: objectNonce, InitialPolicy: policy}}}
+	built, err := BuildAction(action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := SignAction(privateKey, policy.Controllers[0].KeyId, built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &nativev1.SignedNativeActionV1{Action: action, AuthoritySignatures: []*nativev1.SignatureV1{signature}}, built
 }
 
 func TestRelayerSubmissionFailsClosedWithoutDurableDependencies(t *testing.T) {
@@ -109,6 +133,107 @@ func TestRelayerDeduplicatesCanonicalActionAcrossRequestKeys(t *testing.T) {
 	}
 	if sender.calls != 1 {
 		t.Fatalf("completed intent caused %d paid broadcasts", sender.calls)
+	}
+}
+
+func TestRelayerFencesConflictingRegistrationNonceVariants(t *testing.T) {
+	l := testLocator(t)
+	policy, privateKey := testPolicy(t)
+	first, firstBuilt := signedAgentRegistration(t, l, policy, privateKey, bytes32('o'), bytes32('a'))
+	second, secondBuilt := signedAgentRegistration(t, l, policy, privateKey, bytes32('o'), bytes32('b'))
+	if firstBuilt.HashString == secondBuilt.HashString {
+		t.Fatal("nonce variants unexpectedly produced one action hash")
+	}
+	if canonicalRelayStateSlotIdentity(first.Action) != canonicalRelayStateSlotIdentity(second.Action) {
+		t.Fatal("nonce variants escaped their shared canonical state slot")
+	}
+	sender := &senderStub{}
+	relay := testRelayer(t, l, sender, resolverStub{states: map[string]*nativev1.NativeStateV1{}})
+	if _, err := relay.SubmitIdempotent(context.Background(), first, "slot-key-one"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := relay.SubmitIdempotent(context.Background(), second, "slot-key-two"); err == nil {
+		t.Fatal("conflicting nonce variant acquired a second paid broadcast")
+	}
+	if sender.calls != 1 {
+		t.Fatalf("conflicting registration actions caused %d paid broadcasts, want 1", sender.calls)
+	}
+}
+
+func TestRelayerRejectsExistingRegistrationBeforePaidBroadcast(t *testing.T) {
+	l := testLocator(t)
+	policy, privateKey := testPolicy(t)
+	submission, _ := signedAgentRegistration(t, l, policy, privateKey, bytes32('x'), bytes32('a'))
+	id := submission.Action.TargetObjectId
+	state := &nativev1.NativeStateV1{TvmStateHash: "tvm-cell-sha256:" + strings.Repeat("11", 32),
+		State: &nativev1.NativeStateV1_Agent{Agent: &nativev1.AgentStateV1{AgentId: id, Generation: 1, Sequence: 1, Policy: policy}}}
+	sender := &senderStub{}
+	relay := testRelayer(t, l, sender, resolverStub{states: map[string]*nativev1.NativeStateV1{id: state}})
+	if _, err := relay.SubmitIdempotent(context.Background(), submission, "existing-registration"); err == nil {
+		t.Fatal("existing Agent registration passed finalized-state preflight")
+	}
+	if sender.calls != 0 {
+		t.Fatalf("existing Agent registration caused %d paid broadcasts", sender.calls)
+	}
+}
+
+func TestRelayerRejectsInvalidCapabilityStateBeforePaidBroadcast(t *testing.T) {
+	l := testLocator(t)
+	policy, privateKey := testPolicy(t)
+	ownerNonce := bytes32('o')
+	owner, err := DeriveAgentID(l.Network, ownerNonce, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialVersion := &nativev1.CapabilityVersionV1{Version: "1.0.0", ManifestDigest: "sha256:" + strings.Repeat("55", 32)}
+	capability, err := DeriveCapabilityID(l.Network, bytes32('c'), owner, initialVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	predecessor := "tvm-cell-sha256:" + strings.Repeat("66", 32)
+	newVersion := &nativev1.CapabilityVersionV1{Version: "2.0.0", ManifestDigest: "sha256:" + strings.Repeat("77", 32)}
+	makeSubmission := func(ownerID string, generation, sequence uint64) *nativev1.SignedNativeActionV1 {
+		action := &nativev1.NativeActionV1{Protocol: Protocol, Network: l.Network, TargetObjectId: capability,
+			TargetContractCodeHash: l.CodeHash, Generation: generation, Sequence: sequence,
+			PredecessorTvmStateHash: predecessor, Nonce: bytes32('n'),
+			Payload: &nativev1.NativeActionV1_AddCapabilityVersion{AddCapabilityVersion: &nativev1.AddCapabilityVersionV1{
+				Version: newVersion, OwnerAgentId: ownerID}}}
+		built, err := BuildAction(action)
+		if err != nil {
+			t.Fatal(err)
+		}
+		signature, err := SignAction(privateKey, policy.Controllers[0].KeyId, built)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &nativev1.SignedNativeActionV1{Action: action, AuthoritySignatures: []*nativev1.SignatureV1{signature}}
+	}
+	for _, test := range []struct {
+		name       string
+		owner      string
+		generation uint64
+		sequence   uint64
+		tombstoned bool
+	}{
+		{name: "wrong owner", owner: "agent_" + strings.Repeat("22", 32), generation: 1, sequence: 2},
+		{name: "skipped sequence", owner: owner, generation: 1, sequence: 3},
+		{name: "terminal capability", owner: owner, generation: 1, sequence: 2, tombstoned: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			targetState := &nativev1.NativeStateV1{TvmStateHash: predecessor, State: &nativev1.NativeStateV1_Capability{
+				Capability: &nativev1.CapabilityStateV1{CapabilityId: capability, Generation: 1, Sequence: 1,
+					OwnerAgentId: owner, Versions: []*nativev1.CapabilityVersionV1{initialVersion}, Tombstoned: test.tombstoned}}}
+			ownerState := &nativev1.NativeStateV1{State: &nativev1.NativeStateV1_Agent{
+				Agent: &nativev1.AgentStateV1{AgentId: owner, Policy: policy}}}
+			sender := &senderStub{}
+			relay := testRelayer(t, l, sender, resolverStub{states: map[string]*nativev1.NativeStateV1{capability: targetState, owner: ownerState}})
+			if _, err := relay.SubmitIdempotent(context.Background(), makeSubmission(test.owner, test.generation, test.sequence), "capability-"+test.name); err == nil {
+				t.Fatal("invalid finalized Capability state passed preflight")
+			}
+			if sender.calls != 0 {
+				t.Fatalf("invalid Capability state caused %d paid broadcasts", sender.calls)
+			}
+		})
 	}
 }
 

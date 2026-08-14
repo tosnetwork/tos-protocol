@@ -30,6 +30,11 @@ type nativeV1GatewayConfig struct {
 	ContractCodeBOCBase64 string                                   `json:"contract_code_boc_base64"`
 	ContractCodeHash      string                                   `json:"contract_code_hash"`
 	FundingNanoTOS        uint64                                   `json:"funding_nanotos"`
+	RelayWindowSeconds    uint64                                   `json:"relay_window_seconds"`
+	MaxActionsPerTarget   uint64                                   `json:"max_actions_per_target"`
+	MaxFundingPerTarget   uint64                                   `json:"max_funding_per_target_nanotos"`
+	MaxActionsPerWallet   uint64                                   `json:"max_actions_per_wallet"`
+	MaxFundingPerWallet   uint64                                   `json:"max_funding_per_wallet_nanotos"`
 	StateDirectory        string                                   `json:"state_directory"`
 	Sender                chainactionpublisher.TosctlBackendConfig `json:"sender"`
 }
@@ -67,6 +72,9 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 	if config.Protocol != nativecore.Protocol || config.Network == nil || config.Network.NetworkId == "" || config.ContractCodeBOCBase64 == "" || config.ContractCodeHash == "" ||
 		!filepath.IsAbs(config.StateDirectory) || filepath.Clean(config.StateDirectory) != config.StateDirectory ||
 		config.FundingNanoTOS < nativecore.MinimumRelayFundingNanoTOS || config.FundingNanoTOS > nativecore.MaximumRelayFundingNanoTOS ||
+		config.RelayWindowSeconds < 60 || config.RelayWindowSeconds > 31*24*60*60 ||
+		config.MaxActionsPerTarget == 0 || config.MaxActionsPerTarget > config.MaxActionsPerWallet ||
+		config.MaxFundingPerTarget < config.FundingNanoTOS || config.MaxFundingPerTarget > config.MaxFundingPerWallet ||
 		config.Sender.Network != config.Network.NetworkId || !matchesNativeGenesis(config.Sender.GenesisRootHash, config.Network.GenesisRootHash) ||
 		!matchesNativeGenesis(config.Sender.GenesisFileHash, config.Network.GenesisFileHash) {
 		return nil, nil, nil, errors.New("invalid atos_native_v1 config")
@@ -99,7 +107,11 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		_ = sender.Close()
 		return nil, nil, nil, err
 	}
-	relayer := &nativecore.Relayer{Locator: locator, Sender: sender, FundingNanoTOS: config.FundingNanoTOS, Journal: journal, Resolver: resolver}
+	limits := nativecore.RelaySpendLimits{Window: time.Duration(config.RelayWindowSeconds) * time.Second,
+		MaxActionsPerTarget: config.MaxActionsPerTarget, MaxFundingPerTargetNanoTOS: config.MaxFundingPerTarget,
+		MaxActionsPerWallet: config.MaxActionsPerWallet, MaxFundingPerWalletNanoTOS: config.MaxFundingPerWallet}
+	relayer := &nativecore.Relayer{Locator: locator, Sender: sender, FundingNanoTOS: config.FundingNanoTOS,
+		Journal: journal, Resolver: resolver, Limits: limits}
 	return relayer, resolver, func() { _ = sender.Close() }, nil
 }
 
