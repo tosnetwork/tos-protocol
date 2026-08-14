@@ -19,8 +19,8 @@ func testSoftwareWorkManifest() SoftwareWorkManifestV1 {
 		Invocation:      SoftwareWorkInvocationV1{Executable: "/usr/local/bin/go", Arguments: []string{"test", "./...", "-count=1"}, WorkingDirectory: "/workspace/source"},
 		NetworkPolicy:   "none", Limits: SoftwareWorkLimitsV1{CPUMillis: 120000, MemoryBytes: 1073741824, ScratchBytes: 2147483648, OutputBytes: 16777216, WallClockMillis: 180000},
 		ArtifactMediaTypes: []string{"application/vnd.atos.software-artifact.v1+tar"}, ReportMediaTypes: []string{"application/vnd.atos.test-report.v1+json"},
-		SuccessCondition: "exit-code-zero-and-valid-reports", RefundConditions: []string{"executor-infrastructure-failure", "not-started-before-deadline", "resource-limit-contract-breach", "result-or-report-digest-mismatch"},
-		EndpointCommitment: "sha256:" + strings.Repeat("44", 32), ExecutionSignerAuthorization: "sha256:" + strings.Repeat("55", 32), RetentionSeconds: 86400,
+		SuccessCondition: "exit-code-zero-and-valid-reports", RefundConditions: []string{"not-started-before-deadline"},
+		EndpointCommitment: "sha256:dca9babcd44775f2c19ef571964c01e2e75b15254d0d16f2349c8d446f76c44c", ExecutionSignerAuthorization: "sha256:" + strings.Repeat("55", 32), RetentionSeconds: 86400,
 		SupportedAssets: []SoftwareWorkAssetIdentityV1{{Workchain: 0, MasterAccount: "ca11200a7d4a3c6822af077f035131868584f40f48fb1b7b7b1889ae51f9926a",
 			MasterCodeHash: "tvm-cell-sha256:18d5b6e780ff0bb451254c2c760d09d6e485638cd1407abb97078752c3c1c9ee",
 			WalletCodeHash: "tvm-cell-sha256:8f452d7a4dfd74066b682365177259ed05734435be76b5fd4bd5d8af2b7c3d68", Decimals: 6}},
@@ -66,16 +66,16 @@ func TestSoftwareWorkManifestRejectsCircularCapabilityID(t *testing.T) {
 	}
 }
 
-func TestSoftwareWorkManifestRejectsShellAndUnsortedSets(t *testing.T) {
+func TestSoftwareWorkManifestRejectsShellAndNonObjectiveRefunds(t *testing.T) {
 	manifest := testSoftwareWorkManifest()
 	manifest.Invocation.Executable = "/bin/sh"
 	if err := ValidateSoftwareWorkManifest(manifest); err == nil {
 		t.Fatal("manifest accepted a general-purpose shell")
 	}
 	manifest = testSoftwareWorkManifest()
-	manifest.RefundConditions[0], manifest.RefundConditions[1] = manifest.RefundConditions[1], manifest.RefundConditions[0]
+	manifest.RefundConditions = []string{"executor-infrastructure-failure"}
 	if err := ValidateSoftwareWorkManifest(manifest); err == nil {
-		t.Fatal("manifest accepted a non-canonical set ordering")
+		t.Fatal("manifest accepted a subjective refund condition")
 	}
 }
 
@@ -111,7 +111,7 @@ func TestFrozenSoftwareWorkManifestVector(t *testing.T) {
 		t.Fatal(err)
 	}
 	if digest != frozen.Expected.Digest || !bytes.Equal(encoded, expectedBytes) {
-		t.Fatalf("frozen software-work vector mismatch: got %s", digest)
+		t.Fatalf("frozen software-work vector mismatch: got digest=%s cbor=%s", digest, base64.StdEncoding.EncodeToString(encoded))
 	}
 	for _, mutation := range frozen.NegativeMutations {
 		candidate := manifest
@@ -130,9 +130,8 @@ func TestFrozenSoftwareWorkManifestVector(t *testing.T) {
 			candidate.NetworkPolicy = "full"
 		case "zero_cpu_limit":
 			candidate.Limits.CPUMillis = 0
-		case "unsorted_refund_conditions":
-			candidate.RefundConditions = append([]string(nil), candidate.RefundConditions...)
-			candidate.RefundConditions[0], candidate.RefundConditions[1] = candidate.RefundConditions[1], candidate.RefundConditions[0]
+		case "subjective_refund_condition":
+			candidate.RefundConditions = []string{"executor-infrastructure-failure"}
 		case "ticker_only_asset":
 			candidate.SupportedAssets = []SoftwareWorkAssetIdentityV1{{MasterAccount: "USDT", Decimals: 6}}
 		case "zero_asset_decimals":

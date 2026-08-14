@@ -101,7 +101,8 @@ func (r *EscrowResolver) ResolveFinalized(ctx context.Context, escrowAddress str
 			FundingDeadline: state.FundingDeadline, RefundAvailableAt: state.RefundAvailableAt,
 		},
 		ExecutionSignerEd25519: state.ExecutionSignerEd25519,
-		AssetMasterAddress: state.AssetMasterAddress, AssetWalletCode: state.AssetWalletCode,
+		TransportBinding:       state.TransportBinding,
+		AssetMasterAddress:     state.AssetMasterAddress, AssetWalletCode: state.AssetWalletCode,
 	})
 	if err != nil || identity.Address != escrowAddress {
 		return nil, false, nativecore.NewProtocolError(nativecore.ErrWrongContract, "escrow account does not match canonical StateInit", err)

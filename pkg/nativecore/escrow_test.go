@@ -32,10 +32,13 @@ func escrowDataWithRuntime(t *testing.T, original *cell.Cell, status uint8, fund
 	r.MustLoadSlice(256)
 	r.MustLoadUInt(64)
 	route, _ := r.LoadRefCell()
+	transport, _ := r.LoadRefCell()
+	dispute, _ := r.LoadRefCell()
 	runtime := cell.BeginCell().MustStoreUInt(escrowRuntimeMagic, 32).MustStoreUInt(escrowSchema, 16).
 		MustStoreBigUInt(new(big.Int).SetUint64(funded), 128).
 		MustStoreBigUInt(new(big.Int).SetUint64(settled), 128).
-		MustStoreSlice(receipt, 256).MustStoreUInt(pending, 64).MustStoreRef(route).EndCell()
+		MustStoreSlice(receipt, 256).MustStoreUInt(pending, 64).MustStoreRef(route).
+		MustStoreRef(transport).MustStoreRef(dispute).EndCell()
 	return cell.BeginCell().MustStoreUInt(escrowDataMagic, 32).MustStoreUInt(escrowSchema, 16).
 		MustStoreUInt(uint64(status), 8).MustStoreSlice(quoteHash, 256).MustStoreSlice(termsHash, 256).
 		MustStoreSlice(authHash, 256).MustStoreRef(quote).MustStoreRef(terms).
@@ -61,6 +64,12 @@ func testEscrowQuote(t *testing.T, terms EscrowTermsV1, signer []byte, walletCod
 	if err != nil {
 		t.Fatal(err)
 	}
+	transport := testEscrowTransport()
+	_, transportDigest, err := BuildTransportBindingCellV1(transport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, disputeDigest := BuildObjectiveDisputePolicyCellV1()
 	network := &nativev1.NetworkDomain{
 		NetworkId: "tos-escrow-test", GenesisRootHash: "sha256:" + strings.Repeat("11", 32),
 		GenesisFileHash: "sha256:" + strings.Repeat("22", 32),
@@ -68,9 +77,9 @@ func testEscrowQuote(t *testing.T, terms EscrowTermsV1, signer []byte, walletCod
 	proposal := &nativev1.QuoteProposalV1{
 		CapabilityId: "cap_" + strings.Repeat("33", 32), CapabilityVersion: "1.0.0",
 		ProviderAgentId: "agent_" + strings.Repeat("44", 32), ManifestDigest: "sha256:" + strings.Repeat("55", 32),
-		TransportBindingDigest: "sha256:" + strings.Repeat("66", 32), ExpiresAtUnixSeconds: terms.FundingDeadline,
+		TransportBindingDigest: transportDigest, ExpiresAtUnixSeconds: terms.FundingDeadline,
 		EscrowTermsDigest:   "sha256:" + strings.TrimPrefix(digestString(termsCell.Hash()), "tvm-cell-sha256:"),
-		DisputePolicyDigest: "sha256:" + strings.Repeat("77", 32),
+		DisputePolicyDigest: disputeDigest,
 		MaximumPrice: &nativev1.MoneyV1{AtomicAmount: "25000000", Asset: &nativev1.TOSAssetIdentityV1{
 			Master:         &nativev1.TOSContractIdentityV1{Workchain: 0, AccountId: []byte(strings.Repeat("m", 32)), CodeHash: "tvm-cell-sha256:" + strings.Repeat("88", 32)},
 			WalletCodeHash: digestString(walletCode.Hash()), Decimals: 6,
@@ -82,6 +91,10 @@ func testEscrowQuote(t *testing.T, terms EscrowTermsV1, signer []byte, walletCod
 		t.Fatal(err)
 	}
 	return quote, address.NewAddress(0, 0, []byte(strings.Repeat("m", 32))).StringRaw()
+}
+
+func testEscrowTransport() TransportBindingV1 {
+	return TransportBindingV1{SecurityMode: TransportLoopbackHTTP, MaxRequestBytes: 16 << 20, BaseURL: "http://127.0.0.1:8080"}
 }
 
 func TestEscrowStateInitRoundTrip(t *testing.T) {
@@ -97,6 +110,7 @@ func TestEscrowStateInitRoundTrip(t *testing.T) {
 
 	identity, err := BuildEscrowStateInitV1(0, code, EscrowInitV1{
 		AcceptedQuote: quote, Terms: terms, ExecutionSignerEd25519: signer,
+		TransportBinding:   testEscrowTransport(),
 		AssetMasterAddress: master, AssetWalletCode: walletCode,
 	})
 	if err != nil {
@@ -149,6 +163,7 @@ func TestEscrowStateInitRejectsOpaqueQuoteDigests(t *testing.T) {
 	changed.RefundAvailableAt++
 	_, err := BuildEscrowStateInitV1(0, cell.BeginCell().EndCell(), EscrowInitV1{
 		AcceptedQuote: quote, Terms: changed, ExecutionSignerEd25519: signer,
+		TransportBinding:   testEscrowTransport(),
 		AssetMasterAddress: master, AssetWalletCode: walletCode,
 	})
 	if err == nil || !strings.Contains(err.Error(), "terms do not match") {
@@ -167,6 +182,7 @@ func TestEscrowDecoderAcceptsOnlyCoherentTerminalAndPendingStates(t *testing.T) 
 	quote, master := testEscrowQuote(t, terms, signer, walletCode)
 	identity, err := BuildEscrowStateInitV1(0, cell.BeginCell().EndCell(), EscrowInitV1{
 		AcceptedQuote: quote, Terms: terms, ExecutionSignerEd25519: signer,
+		TransportBinding:   testEscrowTransport(),
 		AssetMasterAddress: master, AssetWalletCode: walletCode,
 	})
 	if err != nil {
@@ -214,6 +230,7 @@ func TestEscrowDecoderRejectsForgedRootCommitment(t *testing.T) {
 	quote, master := testEscrowQuote(t, terms, signer, walletCode)
 	identity, err := BuildEscrowStateInitV1(0, cell.BeginCell().EndCell(), EscrowInitV1{
 		AcceptedQuote: quote, Terms: terms, ExecutionSignerEd25519: signer,
+		TransportBinding:   testEscrowTransport(),
 		AssetMasterAddress: master, AssetWalletCode: walletCode,
 	})
 	if err != nil {

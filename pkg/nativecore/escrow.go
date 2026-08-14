@@ -42,6 +42,7 @@ type EscrowInitV1 struct {
 	AcceptedQuote          *cell.Cell
 	Terms                  EscrowTermsV1
 	ExecutionSignerEd25519 []byte
+	TransportBinding       TransportBindingV1
 	AssetMasterAddress     string
 	AssetWalletCode        *cell.Cell
 }
@@ -53,6 +54,8 @@ type EscrowIdentityV1 struct {
 	QuoteCommitment     string
 	EscrowTermsDigest   string
 	AuthorizationDigest string
+	TransportDigest     string
+	DisputePolicyDigest string
 	StateInitBOC        string
 	Data                *cell.Cell
 }
@@ -64,6 +67,9 @@ type EscrowStateV1 struct {
 	QuoteCommitment        string
 	EscrowTermsDigest      string
 	AuthorizationDigest    string
+	TransportDigest        string
+	DisputePolicyDigest    string
+	TransportBinding       TransportBindingV1
 	BuyerAddress           string
 	ProviderAddress        string
 	AssetMasterAddress     string
@@ -139,7 +145,16 @@ func BuildEscrowStateInitV1(workchain int32, code *cell.Cell, init EscrowInitV1)
 		}
 		return EscrowIdentityV1{}, err
 	}
+	transport, _, err := BuildTransportBindingCellV1(init.TransportBinding)
+	if err != nil {
+		return EscrowIdentityV1{}, err
+	}
+	dispute, _ := BuildObjectiveDisputePolicyCellV1()
 	quoteTerms, quoteAuthorization, quoteExpiry, quoteMaximum, err := acceptedQuoteBoundValues(init.AcceptedQuote)
+	if err != nil {
+		return EscrowIdentityV1{}, err
+	}
+	quoteTransport, quoteDispute, err := acceptedQuotePolicyDigests(init.AcceptedQuote)
 	if err != nil {
 		return EscrowIdentityV1{}, err
 	}
@@ -148,6 +163,9 @@ func BuildEscrowStateInitV1(workchain int32, code *cell.Cell, init EscrowInitV1)
 	}
 	if !equalBytes(quoteAuthorization, authorization.Hash()) {
 		return EscrowIdentityV1{}, errors.New("execution authorization does not match Accepted Quote")
+	}
+	if !equalBytes(quoteTransport, transport.Hash()) || !equalBytes(quoteDispute, dispute.Hash()) {
+		return EscrowIdentityV1{}, errors.New("transport or dispute policy does not match Accepted Quote")
 	}
 	if init.Terms.FundingDeadline > quoteExpiry || quoteMaximum.Sign() <= 0 || quoteMaximum.BitLen() > 120 {
 		return EscrowIdentityV1{}, errors.New("escrow deadlines or amount exceed Accepted Quote")
@@ -161,7 +179,8 @@ func BuildEscrowStateInitV1(workchain int32, code *cell.Cell, init EscrowInitV1)
 		MustStoreRef(init.AssetWalletCode).EndCell()
 	runtime := cell.BeginCell().MustStoreUInt(escrowRuntimeMagic, 32).MustStoreUInt(escrowSchema, 16).
 		MustStoreBigUInt(new(big.Int), 128).MustStoreBigUInt(new(big.Int), 128).
-		MustStoreSlice(make([]byte, 32), 256).MustStoreUInt(0, 64).MustStoreRef(route).EndCell()
+		MustStoreSlice(make([]byte, 32), 256).MustStoreUInt(0, 64).MustStoreRef(route).
+		MustStoreRef(transport).MustStoreRef(dispute).EndCell()
 	data := cell.BeginCell().MustStoreUInt(escrowDataMagic, 32).MustStoreUInt(escrowSchema, 16).
 		MustStoreUInt(uint64(EscrowStatusAwaitingFunding), 8).MustStoreSlice(init.AcceptedQuote.Hash(), 256).
 		MustStoreSlice(terms.Hash(), 256).MustStoreSlice(authorization.Hash(), 256).
@@ -175,6 +194,8 @@ func BuildEscrowStateInitV1(workchain int32, code *cell.Cell, init EscrowInitV1)
 		QuoteCommitment:     "tvm-cell-sha256:" + hex.EncodeToString(init.AcceptedQuote.Hash()),
 		EscrowTermsDigest:   "tvm-cell-sha256:" + hex.EncodeToString(terms.Hash()),
 		AuthorizationDigest: "tvm-cell-sha256:" + hex.EncodeToString(authorization.Hash()),
+		TransportDigest:     "tvm-cell-sha256:" + hex.EncodeToString(transport.Hash()),
+		DisputePolicyDigest: "tvm-cell-sha256:" + hex.EncodeToString(dispute.Hash()),
 		StateInitBOC:        base64.StdEncoding.EncodeToString(stateInit.ToBOC()), Data: data,
 	}, nil
 }
@@ -233,6 +254,10 @@ func DecodeEscrowDataV1(data *cell.Cell) (*EscrowStateV1, error) {
 	if err != nil || !equalBytes(quoteTerms, termsHash) || !equalBytes(quoteAuthorization, authorizationHash) {
 		return nil, errors.New("Accepted Quote does not bind escrow cells")
 	}
+	quoteTransport, quoteDispute, err := acceptedQuotePolicyDigests(quote)
+	if err != nil {
+		return nil, err
+	}
 	decodedTerms, err := decodeEscrowTerms(terms)
 	if err != nil {
 		return nil, err
@@ -267,8 +292,15 @@ func DecodeEscrowDataV1(data *cell.Cell) (*EscrowStateV1, error) {
 		return nil, errors.New("invalid pending query ID")
 	}
 	route, err := r.LoadRefCell()
-	if err != nil || r.BitsLeft() != 0 || r.RefsNum() != 0 || settled.Cmp(funded) > 0 || funded.Cmp(quoteMaximum) > 0 {
+	transport, transportErr := r.LoadRefCell()
+	dispute, disputeErr := r.LoadRefCell()
+	if err != nil || transportErr != nil || disputeErr != nil || r.BitsLeft() != 0 || r.RefsNum() != 0 || settled.Cmp(funded) > 0 || funded.Cmp(quoteMaximum) > 0 {
 		return nil, errors.New("invalid escrow runtime")
+	}
+	transportBinding, transportErr := DecodeTransportBindingCellV1(transport)
+	disputeErr = ValidateObjectiveDisputePolicyCellV1(dispute)
+	if transportErr != nil || disputeErr != nil || !equalBytes(quoteTransport, transport.Hash()) || !equalBytes(quoteDispute, dispute.Hash()) {
+		return nil, errors.New("escrow transport or dispute policy does not match Accepted Quote")
 	}
 	assetMaster, walletCodeHash, walletCode, err := decodeEscrowAssetRoute(route)
 	quoteMaster, quoteWalletCode, quoteRouteErr := acceptedQuoteAssetRoute(quote)
@@ -297,7 +329,9 @@ func DecodeEscrowDataV1(data *cell.Cell) (*EscrowStateV1, error) {
 	return &EscrowStateV1{
 		Status: uint8(status), QuoteCommitment: digestString(quoteHash), EscrowTermsDigest: digestString(termsHash),
 		AuthorizationDigest: digestString(authorizationHash), BuyerAddress: decodedTerms.BuyerAddress,
-		ProviderAddress: decodedTerms.ProviderAddress, AssetMasterAddress: assetMaster,
+		TransportDigest: digestString(transport.Hash()), DisputePolicyDigest: digestString(dispute.Hash()),
+		TransportBinding: transportBinding,
+		ProviderAddress:  decodedTerms.ProviderAddress, AssetMasterAddress: assetMaster,
 		AssetWalletCodeHash: digestString(walletCodeHash), AssetWalletCode: walletCode,
 		FundingDeadline: decodedTerms.FundingDeadline, RefundAvailableAt: decodedTerms.RefundAvailableAt,
 		FundedAtomicAmount: funded.String(), SettledAtomicAmount: settled.String(), ReceiptCommitment: func() string {
@@ -575,6 +609,63 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 		return nil, nil, 0, nil, errors.New("invalid Quote authority shape")
 	}
 	return terms, auth, expiry, maximum, nil
+}
+
+func acceptedQuotePolicyDigests(quote *cell.Cell) ([]byte, []byte, error) {
+	if quote == nil {
+		return nil, nil, errors.New("missing Accepted Quote")
+	}
+	s := quote.BeginParse()
+	magic, err := s.LoadUInt(32)
+	if err != nil || magic != acceptedQuoteMagic {
+		return nil, nil, errors.New("invalid Accepted Quote magic")
+	}
+	schema, err := s.LoadUInt(16)
+	if err != nil || schema != 1 {
+		return nil, nil, errors.New("unsupported Accepted Quote schema")
+	}
+	if _, err := s.LoadRefCell(); err != nil {
+		return nil, nil, errors.New("missing Quote network")
+	}
+	identity, err := s.LoadRefCell()
+	if err != nil {
+		return nil, nil, errors.New("missing Quote identity")
+	}
+	economic, err := s.LoadRefCell()
+	if err != nil {
+		return nil, nil, errors.New("missing Quote economic terms")
+	}
+	i := identity.BeginParse()
+	if _, err := i.LoadSlice(256); err != nil {
+		return nil, nil, errors.New("invalid Quote Capability")
+	}
+	if _, err := i.LoadSlice(256); err != nil {
+		return nil, nil, errors.New("invalid Quote provider")
+	}
+	version, err := i.LoadRefCell()
+	if err != nil {
+		return nil, nil, errors.New("missing Quote version")
+	}
+	v := version.BeginParse()
+	if _, err := v.LoadSlice(256); err != nil {
+		return nil, nil, errors.New("invalid Quote version hash")
+	}
+	if _, err := v.LoadSlice(256); err != nil {
+		return nil, nil, errors.New("invalid Quote manifest digest")
+	}
+	transport, err := v.LoadSlice(256)
+	if err != nil || equalBytes(transport, make([]byte, 32)) {
+		return nil, nil, errors.New("invalid Quote transport digest")
+	}
+	e := economic.BeginParse()
+	if _, err := e.LoadSlice(256); err != nil {
+		return nil, nil, errors.New("invalid Quote escrow terms digest")
+	}
+	dispute, err := e.LoadSlice(256)
+	if err != nil || equalBytes(dispute, make([]byte, 32)) {
+		return nil, nil, errors.New("invalid Quote dispute policy digest")
+	}
+	return transport, dispute, nil
 }
 
 func digestString(value []byte) string { return "tvm-cell-sha256:" + hex.EncodeToString(value) }

@@ -67,6 +67,7 @@ func TestProductionAcceptedQuoteFrozenVector(t *testing.T) {
 	}
 	actualBOC := base64.StdEncoding.EncodeToString(root.ToBOC())
 	if commitment != vector.Expected.Commitment || actualBOC != vector.Expected.BOCBase64 {
+		t.Logf("replacement expected: commitment=%s boc_base64=%s", commitment, actualBOC)
 		index := 0
 		for index < len(actualBOC) && index < len(vector.Expected.BOCBase64) && actualBOC[index] == vector.Expected.BOCBase64[index] {
 			index++
@@ -98,6 +99,19 @@ func TestProductionAcceptedQuoteFrozenVector(t *testing.T) {
 	authorization, err := BuildEscrowAuthorizationCellV1(signerKey)
 	if err != nil || "sha256:"+hex.EncodeToString(authorization.Hash()) != vector.Quote.SignerAuthorizationDigest {
 		t.Fatalf("Accepted Quote execution authorization preimage mismatch: %v", err)
+	}
+	_, transportDigest, err := BuildTransportBindingCellV1(TransportBindingV1{
+		SecurityMode: vector.Quote.TransportBinding.SecurityMode, MaxRequestBytes: vector.Quote.TransportBinding.MaxRequestBytes,
+		BaseURL: vector.Quote.TransportBinding.BaseURL,
+	})
+	if err != nil || transportDigest != vector.Quote.TransportBindingDigest {
+		t.Fatalf("Accepted Quote transport preimage mismatch: %v", err)
+	}
+	dispute, disputeDigest := BuildObjectiveDisputePolicyCellV1()
+	if vector.Quote.DisputePolicy.Mode != ObjectiveDisputeMode || vector.Quote.DisputePolicy.ReleaseRule != ReceiptReleaseRule ||
+		vector.Quote.DisputePolicy.RefundRule != TimeoutRefundRule || disputeDigest != vector.Quote.DisputePolicyDigest ||
+		ValidateObjectiveDisputePolicyCellV1(dispute) != nil {
+		t.Fatal("Accepted Quote dispute policy preimage mismatch")
 	}
 }
 

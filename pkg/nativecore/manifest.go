@@ -147,10 +147,8 @@ func ValidateSoftwareWorkManifest(manifest SoftwareWorkManifestV1) error {
 	if manifest.SuccessCondition != "exit-code-zero-and-valid-reports" {
 		return errors.New("unsupported software-work success condition")
 	}
-	if err := validateSortedEnum(manifest.RefundConditions, 1, 4, map[string]bool{
-		"not-started-before-deadline": true, "executor-infrastructure-failure": true,
-		"result-or-report-digest-mismatch": true, "resource-limit-contract-breach": true}); err != nil {
-		return fmt.Errorf("invalid refund conditions: %w", err)
+	if len(manifest.RefundConditions) != 1 || manifest.RefundConditions[0] != "not-started-before-deadline" {
+		return errors.New("software-work v1 supports only the objective not-started-before-deadline refund")
 	}
 	if manifest.RetentionSeconds < 3600 || manifest.RetentionSeconds > 30*24*3600 {
 		return errors.New("retention_seconds is out of bounds")
