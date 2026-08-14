@@ -22,9 +22,13 @@ func BuildAcceptedQuoteCommitment(network *nativev1.NetworkDomain, proposal *nat
 		return nil, "", err
 	}
 	if proposal == nil || proposal.MaximumPrice == nil || proposal.ExpiresAtUnixSeconds == 0 ||
-		!validProtocolText(proposal.CapabilityVersion, 128) || !validProtocolText(proposal.MaximumPrice.Asset, 32) ||
+		!validProtocolText(proposal.CapabilityVersion, 128) ||
 		len(proposal.MaximumPrice.AtomicAmount) > 128 || !atomicAmountPattern.MatchString(proposal.MaximumPrice.AtomicAmount) {
 		return nil, "", errors.New("invalid Native Quote Proposal")
+	}
+	asset, err := quoteAssetCell(proposal.MaximumPrice.Asset)
+	if err != nil {
+		return nil, "", err
 	}
 	capability, kind, err := objectID(proposal.CapabilityId)
 	if err != nil || kind != 2 {
@@ -60,9 +64,34 @@ func BuildAcceptedQuoteCommitment(network *nativev1.NetworkDomain, proposal *nat
 		MustStoreRef(stringCell(proposal.CapabilityVersion)).EndCell()
 	identity := cell.BeginCell().MustStoreSlice(capability, 256).MustStoreSlice(provider, 256).MustStoreRef(version).EndCell()
 	economic := cell.BeginCell().MustStoreSlice(escrow, 256).MustStoreSlice(dispute, 256).
-		MustStoreRef(stringCell(proposal.MaximumPrice.Asset)).MustStoreRef(stringCell(proposal.MaximumPrice.AtomicAmount)).EndCell()
+		MustStoreRef(asset).MustStoreRef(stringCell(proposal.MaximumPrice.AtomicAmount)).EndCell()
 	authority := cell.BeginCell().MustStoreSlice(signer, 256).EndCell()
 	root := cell.BeginCell().MustStoreUInt(acceptedQuoteMagic, 32).MustStoreUInt(1, 16).
 		MustStoreRef(domain).MustStoreRef(identity).MustStoreRef(economic).MustStoreRef(authority).EndCell()
 	return root, "tvm-cell-sha256:" + hex.EncodeToString(root.Hash()), nil
+}
+
+func quoteAssetCell(asset *nativev1.TOSAssetIdentityV1) (*cell.Cell, error) {
+	if asset == nil || asset.Master == nil || asset.Master.Workchain != 0 || len(asset.Master.AccountId) != 32 ||
+		asset.Decimals == 0 || asset.Decimals > 18 {
+		return nil, errors.New("invalid TOS-network stablecoin identity")
+	}
+	allZero := true
+	for _, value := range asset.Master.AccountId {
+		allZero = allZero && value == 0
+	}
+	if allZero {
+		return nil, errors.New("invalid TOS-network stablecoin account")
+	}
+	masterCode, err := digestBytes(asset.Master.CodeHash, "tvm-cell-sha256:", false)
+	if err != nil {
+		return nil, errors.New("invalid TOS-network stablecoin master code hash")
+	}
+	walletCode, err := digestBytes(asset.WalletCodeHash, "tvm-cell-sha256:", false)
+	if err != nil {
+		return nil, errors.New("invalid TOS-network stablecoin wallet code hash")
+	}
+	return cell.BeginCell().MustStoreInt(int64(asset.Master.Workchain), 32).
+		MustStoreSlice(asset.Master.AccountId, 256).MustStoreSlice(masterCode, 256).
+		MustStoreSlice(walletCode, 256).MustStoreUInt(uint64(asset.Decimals), 8).EndCell(), nil
 }

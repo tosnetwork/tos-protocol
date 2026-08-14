@@ -2003,9 +2003,133 @@ func (x *ResolveNativeStateResponse) GetState() *NativeStateV1 {
 	return nil
 }
 
+// Contract identities are network-relative. The surrounding NetworkDomain
+// supplies the network/genesis binding; workchain + account_id identify the
+// account and code_hash prevents a different implementation being treated as
+// the same protocol asset.
+type TOSContractIdentityV1 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Workchain     int32                  `protobuf:"varint,1,opt,name=workchain,proto3" json:"workchain,omitempty"`
+	AccountId     []byte                 `protobuf:"bytes,2,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	CodeHash      string                 `protobuf:"bytes,3,opt,name=code_hash,json=codeHash,proto3" json:"code_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TOSContractIdentityV1) Reset() {
+	*x = TOSContractIdentityV1{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TOSContractIdentityV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TOSContractIdentityV1) ProtoMessage() {}
+
+func (x *TOSContractIdentityV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TOSContractIdentityV1.ProtoReflect.Descriptor instead.
+func (*TOSContractIdentityV1) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *TOSContractIdentityV1) GetWorkchain() int32 {
+	if x != nil {
+		return x.Workchain
+	}
+	return 0
+}
+
+func (x *TOSContractIdentityV1) GetAccountId() []byte {
+	if x != nil {
+		return x.AccountId
+	}
+	return nil
+}
+
+func (x *TOSContractIdentityV1) GetCodeHash() string {
+	if x != nil {
+		return x.CodeHash
+	}
+	return ""
+}
+
+type TOSAssetIdentityV1 struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Master         *TOSContractIdentityV1 `protobuf:"bytes,1,opt,name=master,proto3" json:"master,omitempty"`
+	WalletCodeHash string                 `protobuf:"bytes,2,opt,name=wallet_code_hash,json=walletCodeHash,proto3" json:"wallet_code_hash,omitempty"`
+	Decimals       uint32                 `protobuf:"varint,3,opt,name=decimals,proto3" json:"decimals,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *TOSAssetIdentityV1) Reset() {
+	*x = TOSAssetIdentityV1{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TOSAssetIdentityV1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TOSAssetIdentityV1) ProtoMessage() {}
+
+func (x *TOSAssetIdentityV1) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TOSAssetIdentityV1.ProtoReflect.Descriptor instead.
+func (*TOSAssetIdentityV1) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *TOSAssetIdentityV1) GetMaster() *TOSContractIdentityV1 {
+	if x != nil {
+		return x.Master
+	}
+	return nil
+}
+
+func (x *TOSAssetIdentityV1) GetWalletCodeHash() string {
+	if x != nil {
+		return x.WalletCodeHash
+	}
+	return ""
+}
+
+func (x *TOSAssetIdentityV1) GetDecimals() uint32 {
+	if x != nil {
+		return x.Decimals
+	}
+	return 0
+}
+
 type MoneyV1 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Asset         string                 `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
+	Asset         *TOSAssetIdentityV1    `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
 	AtomicAmount  string                 `protobuf:"bytes,2,opt,name=atomic_amount,json=atomicAmount,proto3" json:"atomic_amount,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2013,7 +2137,7 @@ type MoneyV1 struct {
 
 func (x *MoneyV1) Reset() {
 	*x = MoneyV1{}
-	mi := &file_atos_native_v1_native_proto_msgTypes[27]
+	mi := &file_atos_native_v1_native_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2025,7 +2149,7 @@ func (x *MoneyV1) String() string {
 func (*MoneyV1) ProtoMessage() {}
 
 func (x *MoneyV1) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_native_v1_native_proto_msgTypes[27]
+	mi := &file_atos_native_v1_native_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2038,14 +2162,14 @@ func (x *MoneyV1) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoneyV1.ProtoReflect.Descriptor instead.
 func (*MoneyV1) Descriptor() ([]byte, []int) {
-	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{27}
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *MoneyV1) GetAsset() string {
+func (x *MoneyV1) GetAsset() *TOSAssetIdentityV1 {
 	if x != nil {
 		return x.Asset
 	}
-	return ""
+	return nil
 }
 
 func (x *MoneyV1) GetAtomicAmount() string {
@@ -2073,7 +2197,7 @@ type QuoteProposalV1 struct {
 
 func (x *QuoteProposalV1) Reset() {
 	*x = QuoteProposalV1{}
-	mi := &file_atos_native_v1_native_proto_msgTypes[28]
+	mi := &file_atos_native_v1_native_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2085,7 +2209,7 @@ func (x *QuoteProposalV1) String() string {
 func (*QuoteProposalV1) ProtoMessage() {}
 
 func (x *QuoteProposalV1) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_native_v1_native_proto_msgTypes[28]
+	mi := &file_atos_native_v1_native_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2098,7 +2222,7 @@ func (x *QuoteProposalV1) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuoteProposalV1.ProtoReflect.Descriptor instead.
 func (*QuoteProposalV1) Descriptor() ([]byte, []int) {
-	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{28}
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *QuoteProposalV1) GetProposalId() string {
@@ -2185,7 +2309,7 @@ type AcceptedQuoteV1 struct {
 
 func (x *AcceptedQuoteV1) Reset() {
 	*x = AcceptedQuoteV1{}
-	mi := &file_atos_native_v1_native_proto_msgTypes[29]
+	mi := &file_atos_native_v1_native_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2197,7 +2321,7 @@ func (x *AcceptedQuoteV1) String() string {
 func (*AcceptedQuoteV1) ProtoMessage() {}
 
 func (x *AcceptedQuoteV1) ProtoReflect() protoreflect.Message {
-	mi := &file_atos_native_v1_native_proto_msgTypes[29]
+	mi := &file_atos_native_v1_native_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2210,7 +2334,7 @@ func (x *AcceptedQuoteV1) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptedQuoteV1.ProtoReflect.Descriptor instead.
 func (*AcceptedQuoteV1) Descriptor() ([]byte, []int) {
-	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{29}
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *AcceptedQuoteV1) GetProtocol() string {
@@ -2411,9 +2535,18 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\x17expected_tvm_state_hash\x18\x03 \x01(\tR\x14expectedTvmStateHash\"g\n" +
 	"\x1aResolveNativeStateResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x123\n" +
-	"\x05state\x18\x02 \x01(\v2\x1d.atos.native.v1.NativeStateV1R\x05state\"D\n" +
-	"\aMoneyV1\x12\x14\n" +
-	"\x05asset\x18\x01 \x01(\tR\x05asset\x12#\n" +
+	"\x05state\x18\x02 \x01(\v2\x1d.atos.native.v1.NativeStateV1R\x05state\"q\n" +
+	"\x15TOSContractIdentityV1\x12\x1c\n" +
+	"\tworkchain\x18\x01 \x01(\x05R\tworkchain\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x02 \x01(\fR\taccountId\x12\x1b\n" +
+	"\tcode_hash\x18\x03 \x01(\tR\bcodeHash\"\x99\x01\n" +
+	"\x12TOSAssetIdentityV1\x12=\n" +
+	"\x06master\x18\x01 \x01(\v2%.atos.native.v1.TOSContractIdentityV1R\x06master\x12(\n" +
+	"\x10wallet_code_hash\x18\x02 \x01(\tR\x0ewalletCodeHash\x12\x1a\n" +
+	"\bdecimals\x18\x03 \x01(\rR\bdecimals\"h\n" +
+	"\aMoneyV1\x128\n" +
+	"\x05asset\x18\x01 \x01(\v2\".atos.native.v1.TOSAssetIdentityV1R\x05asset\x12#\n" +
 	"\ratomic_amount\x18\x02 \x01(\tR\fatomicAmount\"\xee\x03\n" +
 	"\x0fQuoteProposalV1\x12\x1f\n" +
 	"\vproposal_id\x18\x01 \x01(\tR\n" +
@@ -2468,7 +2601,7 @@ func file_atos_native_v1_native_proto_rawDescGZIP() []byte {
 }
 
 var file_atos_native_v1_native_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_atos_native_v1_native_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_atos_native_v1_native_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_atos_native_v1_native_proto_goTypes = []any{
 	(NativeErrorCodeV1)(0),             // 0: atos.native.v1.NativeErrorCodeV1
 	(*RequestContext)(nil),             // 1: atos.native.v1.RequestContext
@@ -2498,9 +2631,11 @@ var file_atos_native_v1_native_proto_goTypes = []any{
 	(*SubmitNativeActionResponse)(nil), // 25: atos.native.v1.SubmitNativeActionResponse
 	(*ResolveNativeStateRequest)(nil),  // 26: atos.native.v1.ResolveNativeStateRequest
 	(*ResolveNativeStateResponse)(nil), // 27: atos.native.v1.ResolveNativeStateResponse
-	(*MoneyV1)(nil),                    // 28: atos.native.v1.MoneyV1
-	(*QuoteProposalV1)(nil),            // 29: atos.native.v1.QuoteProposalV1
-	(*AcceptedQuoteV1)(nil),            // 30: atos.native.v1.AcceptedQuoteV1
+	(*TOSContractIdentityV1)(nil),      // 28: atos.native.v1.TOSContractIdentityV1
+	(*TOSAssetIdentityV1)(nil),         // 29: atos.native.v1.TOSAssetIdentityV1
+	(*MoneyV1)(nil),                    // 30: atos.native.v1.MoneyV1
+	(*QuoteProposalV1)(nil),            // 31: atos.native.v1.QuoteProposalV1
+	(*AcceptedQuoteV1)(nil),            // 32: atos.native.v1.AcceptedQuoteV1
 }
 var file_atos_native_v1_native_proto_depIdxs = []int32{
 	0,  // 0: atos.native.v1.NativeErrorV1.code:type_name -> atos.native.v1.NativeErrorCodeV1
@@ -2536,19 +2671,21 @@ var file_atos_native_v1_native_proto_depIdxs = []int32{
 	23, // 30: atos.native.v1.SubmitNativeActionResponse.state:type_name -> atos.native.v1.NativeStateV1
 	1,  // 31: atos.native.v1.ResolveNativeStateRequest.context:type_name -> atos.native.v1.RequestContext
 	23, // 32: atos.native.v1.ResolveNativeStateResponse.state:type_name -> atos.native.v1.NativeStateV1
-	28, // 33: atos.native.v1.QuoteProposalV1.maximum_price:type_name -> atos.native.v1.MoneyV1
-	29, // 34: atos.native.v1.AcceptedQuoteV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
-	4,  // 35: atos.native.v1.AcceptedQuoteV1.reference:type_name -> atos.native.v1.ChainReference
-	3,  // 36: atos.native.v1.AcceptedQuoteV1.network:type_name -> atos.native.v1.NetworkDomain
-	24, // 37: atos.native.v1.NativeService.SubmitNativeAction:input_type -> atos.native.v1.SubmitNativeActionRequest
-	26, // 38: atos.native.v1.NativeService.ResolveNativeState:input_type -> atos.native.v1.ResolveNativeStateRequest
-	25, // 39: atos.native.v1.NativeService.SubmitNativeAction:output_type -> atos.native.v1.SubmitNativeActionResponse
-	27, // 40: atos.native.v1.NativeService.ResolveNativeState:output_type -> atos.native.v1.ResolveNativeStateResponse
-	39, // [39:41] is the sub-list for method output_type
-	37, // [37:39] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	28, // 33: atos.native.v1.TOSAssetIdentityV1.master:type_name -> atos.native.v1.TOSContractIdentityV1
+	29, // 34: atos.native.v1.MoneyV1.asset:type_name -> atos.native.v1.TOSAssetIdentityV1
+	30, // 35: atos.native.v1.QuoteProposalV1.maximum_price:type_name -> atos.native.v1.MoneyV1
+	31, // 36: atos.native.v1.AcceptedQuoteV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
+	4,  // 37: atos.native.v1.AcceptedQuoteV1.reference:type_name -> atos.native.v1.ChainReference
+	3,  // 38: atos.native.v1.AcceptedQuoteV1.network:type_name -> atos.native.v1.NetworkDomain
+	24, // 39: atos.native.v1.NativeService.SubmitNativeAction:input_type -> atos.native.v1.SubmitNativeActionRequest
+	26, // 40: atos.native.v1.NativeService.ResolveNativeState:input_type -> atos.native.v1.ResolveNativeStateRequest
+	25, // 41: atos.native.v1.NativeService.SubmitNativeAction:output_type -> atos.native.v1.SubmitNativeActionResponse
+	27, // 42: atos.native.v1.NativeService.ResolveNativeState:output_type -> atos.native.v1.ResolveNativeStateResponse
+	41, // [41:43] is the sub-list for method output_type
+	39, // [39:41] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_atos_native_v1_native_proto_init() }
@@ -2578,7 +2715,7 @@ func file_atos_native_v1_native_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_native_v1_native_proto_rawDesc), len(file_atos_native_v1_native_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   30,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

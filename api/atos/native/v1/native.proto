@@ -59,7 +59,17 @@ message SubmitNativeActionRequest { RequestContext context = 1; SignedNativeActi
 message SubmitNativeActionResponse { string action_hash = 1; NativeStateV1 state = 2; reserved 3; bool relay_accepted = 4; }
 message ResolveNativeStateRequest { RequestContext context = 1; string object_id = 2; string expected_tvm_state_hash = 3; }
 message ResolveNativeStateResponse { bool found = 1; NativeStateV1 state = 2; }
-message MoneyV1 { string asset = 1; string atomic_amount = 2; }
+// Contract identities are network-relative. The surrounding NetworkDomain
+// supplies the network/genesis binding; workchain + account_id identify the
+// account and code_hash prevents a different implementation being treated as
+// the same protocol asset.
+message TOSContractIdentityV1 { int32 workchain = 1; bytes account_id = 2; string code_hash = 3; }
+message TOSAssetIdentityV1 {
+  TOSContractIdentityV1 master = 1;
+  string wallet_code_hash = 2;
+  uint32 decimals = 3;
+}
+message MoneyV1 { TOSAssetIdentityV1 asset = 1; string atomic_amount = 2; }
 message QuoteProposalV1 { string proposal_id = 1; string capability_id = 2; string capability_version = 3; string provider_agent_id = 4; string manifest_digest = 5; string transport_binding_digest = 6; MoneyV1 maximum_price = 7; string escrow_terms_digest = 8; string dispute_policy_digest = 9; uint64 expires_at_unix_seconds = 10; }
 message AcceptedQuoteV1 { string protocol = 1; string quote_commitment = 2; QuoteProposalV1 proposal = 3; string execution_signer_authorization = 4; ChainReference reference = 5; NetworkDomain network = 6; }
 service NativeService { rpc SubmitNativeAction(SubmitNativeActionRequest) returns (SubmitNativeActionResponse); rpc ResolveNativeState(ResolveNativeStateRequest) returns (ResolveNativeStateResponse); }
