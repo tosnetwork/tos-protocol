@@ -88,10 +88,14 @@ func quorumRead[T any](
 	}
 	groups := make(map[string]*group, len(nodes))
 	failures := 0
+	var firstFailure error
 	for range nodes {
 		result := <-results
 		if result.err != nil {
 			failures++
+			if firstFailure == nil {
+				firstFailure = result.err
+			}
 			continue
 		}
 		key, err := quorumKey(result.value)
@@ -113,6 +117,12 @@ func quorumRead[T any](
 		if len(candidate.nodes) >= quorum {
 			return candidate.value, candidate.nodes, nil
 		}
+	}
+	if firstFailure != nil {
+		return zero, nil, fmt.Errorf(
+			"quorum not reached: %d value groups and %d endpoint errors (first: %v)",
+			len(groups), failures, firstFailure,
+		)
 	}
 	return zero, nil, fmt.Errorf(
 		"quorum not reached: %d value groups and %d endpoint errors",

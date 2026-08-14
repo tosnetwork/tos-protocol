@@ -48,6 +48,8 @@ type rawTransaction struct {
 	Type          string        `json:"@type"`
 	BlockID       blockID       `json:"block_id"`
 	Data          string        `json:"data"`
+	Fee           string        `json:"fee"`
+	InMsgHash     string        `json:"in_msg_hash"`
 	Utime         uint32        `json:"utime"`
 	TransactionID transactionID `json:"transaction_id"`
 	Account       string        `json:"account"`
