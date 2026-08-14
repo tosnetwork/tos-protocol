@@ -82,3 +82,21 @@ func TestApplyExternalSignatureRejectsInvalidSignature(t *testing.T) {
 		t.Fatal("invalid signature accepted")
 	}
 }
+
+func TestOutcomeRequiresExplicitSuccessfulExitCode(t *testing.T) {
+	valid := `{"quote_commitment":"q","execution_id":"e","input_digest":"i",` +
+		`"result_digest":"r","source_digest":"s","toolchain_digest":"t",` +
+		`"sandbox_digest":"x","exit_code":0}`
+	var decoded outcome
+	if err := json.Unmarshal([]byte(valid), &decoded); err != nil {
+		t.Fatalf("explicit success rejected: %v", err)
+	}
+	missing := strings.Replace(valid, `,"exit_code":0`, "", 1)
+	if err := json.Unmarshal([]byte(missing), &decoded); err == nil {
+		t.Fatal("missing exit_code accepted as implicit success")
+	}
+	failed := strings.Replace(valid, `"exit_code":0`, `"exit_code":1`, 1)
+	if err := json.Unmarshal([]byte(failed), &decoded); err == nil {
+		t.Fatal("failed execution accepted")
+	}
+}

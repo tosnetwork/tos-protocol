@@ -40,12 +40,12 @@ func (o *outcome) UnmarshalJSON(data []byte) error {
 		Sandbox          string `json:"sandbox_digest"`
 		Artifact, Report descriptor
 		Completed        uint64 `json:"completed_at_unix"`
-		ExitCode         int32  `json:"exit_code"`
+		ExitCode         *int32 `json:"exit_code"`
 	}
 	if err := json.Unmarshal(data, &value); err != nil {
 		return err
 	}
-	if value.ExitCode != 0 {
+	if value.ExitCode == nil || *value.ExitCode != 0 {
 		return errors.New("execution outcome is not successful")
 	}
 	*o = outcome{value.Quote, value.Execution, value.Input, value.Result, value.Source,
