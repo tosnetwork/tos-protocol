@@ -433,12 +433,8 @@ func validatePolicy(policy *nativev1.ControllerPolicyV1) (map[string]*nativev1.C
 		if _, duplicate := publicKeys[publicKey]; duplicate {
 			return nil, errors.New("duplicate Native controller public key")
 		}
-		if controller.Recovery && controller.PurposeMask&PurposeRecovery == 0 {
-			return nil, errors.New("recovery controller lacks recovery purpose")
-		}
-		const normalPurposes = PurposeAgentControl | PurposeDelegation | PurposeCapabilityControl
-		if controller.PurposeMask&normalPurposes != normalPurposes || controller.Recovery != (controller.PurposeMask&PurposeRecovery != 0) {
-			return nil, errors.New("Native controller must authorize every normal purpose and declare recovery consistently")
+		if controller.Recovery != (controller.PurposeMask&PurposeRecovery != 0) {
+			return nil, errors.New("Native controller must declare recovery purpose consistently")
 		}
 		controllers[controller.KeyId] = controller
 		publicKeys[publicKey] = struct{}{}

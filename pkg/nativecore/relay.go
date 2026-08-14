@@ -45,20 +45,21 @@ func (r *Relayer) CheckReady(ctx context.Context) error {
 	return nil
 }
 
-func (r *Relayer) Submit(ctx context.Context, submission *nativev1.SignedNativeActionV1, queryID uint64) (string, error) {
-	return r.submit(ctx, submission, queryID, "query:"+strconv.FormatUint(queryID, 10))
+func (r *Relayer) Submit(ctx context.Context, submission *nativev1.SignedNativeActionV1, requestID uint64) (string, error) {
+	if requestID == 0 {
+		return "", errors.New("Native relay request ID must be nonzero")
+	}
+	return r.submit(ctx, submission, "request:"+strconv.FormatUint(requestID, 10))
 }
 
 func (r *Relayer) SubmitIdempotent(ctx context.Context, submission *nativev1.SignedNativeActionV1, idempotencyKey string) (string, error) {
-	digest := sha256.Sum256([]byte(idempotencyKey))
-	queryID := binary.BigEndian.Uint64(digest[:8])
-	if queryID == 0 {
-		queryID = 1
+	if idempotencyKey == "" {
+		return "", errors.New("Native relay idempotency key must be nonempty")
 	}
-	return r.submit(ctx, submission, queryID, idempotencyKey)
+	return r.submit(ctx, submission, idempotencyKey)
 }
 
-func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeActionV1, queryID uint64, idempotencyKey string) (string, error) {
+func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeActionV1, idempotencyKey string) (string, error) {
 	if r == nil || r.Locator == nil || r.Sender == nil || r.Journal == nil || r.Resolver == nil || r.FundingNanoTOS < MinimumRelayFundingNanoTOS || r.FundingNanoTOS > MaximumRelayFundingNanoTOS || ctx == nil || submission == nil || submission.Action == nil {
 		return "", errors.New("simplified Native relayer is not configured")
 	}
@@ -69,8 +70,14 @@ func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeA
 	if submission.Action.TargetContractCodeHash != r.Locator.CodeHash {
 		return "", nativeError(ErrWrongContract, "Native action is bound to a different contract code hash")
 	}
+	if err := validateSignatureShape(built.Kind, submission.CounterpartySignatures); err != nil {
+		return "", err
+	}
+	actionIdentity := canonicalRelayActionIdentity(submission.Action, built.HashString)
+	digest := sha256.Sum256([]byte(actionIdentity))
+	queryID := binary.BigEndian.Uint64(digest[:8])
 	if queryID == 0 {
-		return "", errors.New("Native relay query ID must be nonzero")
+		queryID = 1
 	}
 	bodyBuilder := MessageBody
 	destinationID := submission.Action.TargetObjectId
@@ -115,12 +122,12 @@ func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeA
 		BodyHash: relayPayloadHash(bodyRaw), StateInitHash: relayPayloadHash(stateInitRaw),
 		FundingNanoTOS: r.FundingNanoTOS,
 	}
-	found, complete, existing, err := r.Journal.Lookup(idempotencyKey, intent)
+	found, complete, existing, err := r.Journal.Lookup(idempotencyKey, actionIdentity, intent)
 	if err != nil {
 		return "", err
 	}
 	if found {
-		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, idempotencyKey, intent, complete, existing)
+		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, actionIdentity, intent, complete, existing)
 	}
 	if built.Kind == KindRegisterAgent {
 		payload := submission.Action.GetRegisterAgent()
@@ -136,7 +143,7 @@ func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeA
 	} else if err := r.verifyLiveAuthorization(ctx, submission, built); err != nil {
 		return "", err
 	}
-	complete, existing, err = r.Journal.Begin(idempotencyKey, intent)
+	complete, existing, err = r.Journal.Begin(idempotencyKey, actionIdentity, intent)
 	if err != nil {
 		return "", err
 	}
@@ -144,16 +151,44 @@ func (r *Relayer) submit(ctx context.Context, submission *nativev1.SignedNativeA
 		return existing, nil
 	}
 	if existing != "" {
-		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, idempotencyKey, intent, false, existing)
+		return r.resolveRecordedIntent(ctx, submission.Action.TargetObjectId, actionIdentity, intent, false, existing)
 	}
 	if err := r.Sender.SendContractCell(ctx, identity.Address, r.FundingNanoTOS,
 		base64.StdEncoding.EncodeToString(bodyRaw), stateInit); err != nil {
 		return "", err
 	}
-	if err := r.Journal.Complete(idempotencyKey, intent); err != nil {
+	if err := r.Journal.Complete(actionIdentity, intent); err != nil {
 		return "", err
 	}
 	return built.HashString, nil
+}
+
+func validateSignatureShape(kind Kind, counterparty []*nativev1.SignatureV1) error {
+	switch kind {
+	case KindUpdateAgentPolicy, KindInitiateRecovery, KindTransferCapability:
+		if len(counterparty) == 0 {
+			return nativeError(ErrBadSignature, "Native action requires counterparty signatures")
+		}
+	default:
+		if len(counterparty) != 0 {
+			return nativeError(ErrBadSignature, "Native action forbids counterparty signatures")
+		}
+	}
+	return nil
+}
+
+func canonicalRelayActionIdentity(action *nativev1.NativeActionV1, actionHash string) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("atos.native.relay.action.v1"))
+	fields := []string{action.Protocol, action.Network.NetworkId, action.Network.GenesisRootHash,
+		action.Network.GenesisFileHash, action.TargetContractCodeHash, actionHash}
+	for _, field := range fields {
+		var length [4]byte
+		binary.BigEndian.PutUint32(length[:], uint32(len(field)))
+		_, _ = hash.Write(length[:])
+		_, _ = hash.Write([]byte(field))
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
 }
 
 func relayPayloadHash(payload []byte) string {
@@ -161,7 +196,7 @@ func relayPayloadHash(payload []byte) string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
-func (r *Relayer) resolveRecordedIntent(ctx context.Context, objectID, key string, intent RelayIntent, complete bool, existing string) (string, error) {
+func (r *Relayer) resolveRecordedIntent(ctx context.Context, objectID, actionIdentity string, intent RelayIntent, complete bool, existing string) (string, error) {
 	if complete {
 		return existing, nil
 	}
@@ -174,7 +209,7 @@ func (r *Relayer) resolveRecordedIntent(ctx context.Context, objectID, key strin
 			last = state.GetCapability().LastActionHash
 		}
 		if last == intent.ActionHash {
-			if err := r.Journal.Complete(key, intent); err != nil {
+			if err := r.Journal.Complete(actionIdentity, intent); err != nil {
 				return "", err
 			}
 			return intent.ActionHash, nil

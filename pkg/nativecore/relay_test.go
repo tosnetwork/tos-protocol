@@ -53,7 +53,28 @@ func TestRelayerSubmissionFailsClosedWithoutDurableDependencies(t *testing.T) {
 	}
 }
 
-func TestRelayerTransportsDirectRegistrationWithoutAnchor(t *testing.T) {
+func TestRelayerMirrorsContractCounterpartySignatureShape(t *testing.T) {
+	nonempty := []*nativev1.SignatureV1{{}}
+	for _, kind := range []Kind{KindUpdateAgentPolicy, KindInitiateRecovery, KindTransferCapability} {
+		if err := validateSignatureShape(kind, nonempty); err != nil {
+			t.Fatalf("required counterparty shape rejected for kind %d: %v", kind, err)
+		}
+		if err := validateSignatureShape(kind, nil); err == nil {
+			t.Fatalf("empty required counterparty shape accepted for kind %d", kind)
+		}
+	}
+	for _, kind := range []Kind{KindRegisterAgent, KindDelegateAgent, KindCompleteRecovery, KindRevokeAgent,
+		KindRegisterCapability, KindAddCapabilityVersion, KindRevokeCapability} {
+		if err := validateSignatureShape(kind, nil); err != nil {
+			t.Fatalf("empty counterparty shape rejected for kind %d: %v", kind, err)
+		}
+		if err := validateSignatureShape(kind, nonempty); err == nil {
+			t.Fatalf("forbidden counterparty shape accepted for kind %d", kind)
+		}
+	}
+}
+
+func TestRelayerDeduplicatesCanonicalActionAcrossRequestKeys(t *testing.T) {
 	l := testLocator(t)
 	policy, privateKey := testPolicy(t)
 	objectNonce := bytes32('o')
@@ -74,11 +95,16 @@ func TestRelayerTransportsDirectRegistrationWithoutAnchor(t *testing.T) {
 	}
 	sender := &senderStub{}
 	relay := testRelayer(t, l, sender, resolverStub{states: map[string]*nativev1.NativeStateV1{}})
-	hash, err := relay.Submit(context.Background(), &nativev1.SignedNativeActionV1{Action: action, AuthoritySignatures: []*nativev1.SignatureV1{signature}}, 9)
+	submission := &nativev1.SignedNativeActionV1{Action: action, AuthoritySignatures: []*nativev1.SignatureV1{signature}}
+	forbidden := &nativev1.SignedNativeActionV1{Action: action, AuthoritySignatures: []*nativev1.SignatureV1{signature}, CounterpartySignatures: []*nativev1.SignatureV1{signature}}
+	if _, err := relay.SubmitIdempotent(context.Background(), forbidden, "forbidden-signature-shape"); err == nil || sender.calls != 0 {
+		t.Fatalf("forbidden counterparty signature reached paid broadcast: err=%v calls=%d", err, sender.calls)
+	}
+	hash, err := relay.SubmitIdempotent(context.Background(), submission, "audit-key-one")
 	if err != nil || hash != built.HashString || sender.destination == "" || sender.body == "" || sender.stateInit == "" {
 		t.Fatalf("relay: %v", err)
 	}
-	if _, err := relay.Submit(context.Background(), &nativev1.SignedNativeActionV1{Action: action, AuthoritySignatures: []*nativev1.SignatureV1{signature}}, 9); err != nil {
+	if _, err := relay.SubmitIdempotent(context.Background(), submission, "audit-key-two"); err != nil {
 		t.Fatal(err)
 	}
 	if sender.calls != 1 {

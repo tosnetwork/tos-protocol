@@ -72,20 +72,34 @@ func TestNativePolicyEncodingIsIndependentOfInputOrder(t *testing.T) {
 	}
 }
 
-func TestNativePolicyHasOneNormalAuthorityAndExplicitRecoverySubset(t *testing.T) {
-	policy, _ := testPolicy(t)
-	controller := policy.Controllers[0]
-	controller.PurposeMask &^= PurposeCapabilityControl
-	if _, err := PolicyCell(policy); err == nil {
-		t.Fatal("split normal-purpose controller was accepted")
+func TestNativePolicyPreservesPurposeIsolationAndReachability(t *testing.T) {
+	controller := func(mask uint32, recovery bool) *nativev1.ControllerV1 {
+		public, _, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &nativev1.ControllerV1{KeyId: "ed25519:" + fmt.Sprintf("%x", public), Ed25519PublicKey: public,
+			Weight: 1, PurposeMask: mask, Recovery: recovery}
 	}
-	controller.PurposeMask |= PurposeCapabilityControl
-	controller.Recovery = false
+	policy := &nativev1.ControllerPolicyV1{Threshold: 1, RecoveryThreshold: 1, Controllers: []*nativev1.ControllerV1{
+		controller(PurposeAgentControl|PurposeRecovery, true),
+		controller(PurposeDelegation, false),
+		controller(PurposeCapabilityControl, false),
+	}}
+	if _, err := PolicyCell(policy); err != nil {
+		t.Fatalf("reachable purpose-isolated policy was rejected: %v", err)
+	}
+	policy.Controllers[2].PurposeMask = PurposeDelegation
+	if _, err := PolicyCell(policy); err == nil {
+		t.Fatal("policy with unreachable Capability purpose was accepted")
+	}
+	policy.Controllers[2].PurposeMask = PurposeCapabilityControl
+	policy.Controllers[0].Recovery = false
 	if _, err := PolicyCell(policy); err == nil {
 		t.Fatal("recovery purpose without recovery designation was accepted")
 	}
-	controller.PurposeMask &^= PurposeRecovery
-	controller.Recovery = true
+	policy.Controllers[0].PurposeMask &^= PurposeRecovery
+	policy.Controllers[0].Recovery = true
 	if _, err := PolicyCell(policy); err == nil {
 		t.Fatal("recovery designation without recovery purpose was accepted")
 	}

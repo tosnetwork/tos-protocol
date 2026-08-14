@@ -91,6 +91,11 @@ ready. The state directory is mandatory: a process never falls back to
 in-memory idempotency or finality state. `/livez` reports process liveness;
 `/readyz` and `/healthz` verify both Native dependencies.
 
+Every process or host spending from the same relay wallet must use one shared,
+process-independent journal. Request idempotency keys are aliases; the journal
+claims canonical network/code/action identities so changing a request key
+cannot purchase a second broadcast of the same signed action.
+
 ## Security boundary
 
 The RPC server and gateways authenticate transport access only. A relayer can
