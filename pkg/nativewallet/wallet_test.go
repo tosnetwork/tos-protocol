@@ -3,6 +3,7 @@ package nativewallet
 import (
 	"bufio"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -47,6 +48,10 @@ func TestLoadReviewConfirmAndSign(t *testing.T) {
 	review, built, err := ReviewAction(action)
 	if err != nil || review.Action != "register_agent" || review.ActionHash != built.HashString {
 		t.Fatalf("review = %+v, err = %v", review, err)
+	}
+	if !strings.Contains(string(review.SignedAction), `"initial_policy"`) ||
+		!strings.Contains(string(review.SignedAction), base64.StdEncoding.EncodeToString(objectNonce)) {
+		t.Fatalf("review omitted signed payload semantics: %s", review.SignedAction)
 	}
 	if err := ConfirmHash(bufio.NewReader(strings.NewReader(review.ActionHash+"\n")), review.ActionHash); err != nil {
 		t.Fatal(err)

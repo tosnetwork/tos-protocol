@@ -82,11 +82,14 @@ The Native configuration is strict JSON and contains:
   majority quorum;
 - Registry workchain, reviewed contract code BOC and exact code hash;
 - bounded relay funding in nanoTOS;
+- an absolute owner-private `state_directory` for the durable relay journal and
+  finalized-checkpoint fence;
 - a pinned, owner-private `tosctl` sender configuration.
 
 Startup fails closed unless both the finalized-state resolver and sender are
-ready. `/livez` reports process liveness; `/readyz` and `/healthz` verify both
-Native dependencies.
+ready. The state directory is mandatory: a process never falls back to
+in-memory idempotency or finality state. `/livez` reports process liveness;
+`/readyz` and `/healthz` verify both Native dependencies.
 
 ## Security boundary
 

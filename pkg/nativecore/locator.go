@@ -40,10 +40,11 @@ func NewLocator(network *nativev1.NetworkDomain, workchain int32, codeBOCBase64,
 	if err != nil {
 		return nil, errors.New("invalid simplified Native code BOC")
 	}
-	code, err := cell.FromBOC(raw)
-	if err != nil || code == nil {
+	roots, err := cell.FromBOCMultiRoot(raw)
+	if err != nil || len(roots) != 1 || roots[0] == nil {
 		return nil, errors.New("invalid simplified Native code cell")
 	}
+	code := roots[0]
 	actual := "tvm-cell-sha256:" + hex.EncodeToString(code.Hash())
 	if actual != expectedCodeHash {
 		return nil, errors.New("simplified Native code hash mismatch")

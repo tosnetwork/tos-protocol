@@ -27,7 +27,6 @@ func main() {
 	var authorityPaths, counterpartyPaths pathsFlag
 	actionPath := flag.String("action", "", "absolute path to NativeActionV1 JSON")
 	outputPath := flag.String("output", "", "optional output path; stdout when empty")
-	yes := flag.Bool("yes", false, "sign after printing review without typed hash confirmation")
 	flag.Var(&authorityPaths, "authority-key", "owner-private Ed25519 seed file; repeat for multisig")
 	flag.Var(&counterpartyPaths, "counterparty-key", "owner-private acceptance/new-policy seed file; repeat for multisig")
 	flag.Parse()
@@ -42,11 +41,9 @@ func main() {
 	}
 	reviewJSON, _ := json.MarshalIndent(review, "", "  ")
 	_, _ = fmt.Fprintf(os.Stderr, "%s\n", reviewJSON)
-	if !*yes {
-		_, _ = fmt.Fprintf(os.Stderr, "Type the complete action hash to sign: ")
-		if err := nativewallet.ConfirmHash(bufio.NewReader(os.Stdin), review.ActionHash); err != nil {
-			fail(err)
-		}
+	_, _ = fmt.Fprintf(os.Stderr, "Type the complete action hash to sign: ")
+	if err := nativewallet.ConfirmHash(bufio.NewReader(os.Stdin), review.ActionHash); err != nil {
+		fail(err)
 	}
 
 	authority, err := loadKeys(authorityPaths)

@@ -416,7 +416,12 @@ func validatePolicy(policy *nativev1.ControllerPolicyV1) (map[string]*nativev1.C
 	}
 	controllers := make(map[string]*nativev1.ControllerV1, len(policy.Controllers))
 	publicKeys := make(map[string]struct{}, len(policy.Controllers))
-	var total, recoveryTotal uint64
+	var recoveryTotal uint64
+	purposeTotals := map[uint32]uint64{
+		PurposeAgentControl:      0,
+		PurposeDelegation:        0,
+		PurposeCapabilityControl: 0,
+	}
 	for _, controller := range policy.Controllers {
 		if controller == nil || !validKeyID(controller.KeyId) || len(controller.Ed25519PublicKey) != ed25519.PublicKeySize || !bytes.Equal(keyIDHash(controller.KeyId), controller.Ed25519PublicKey) || bytes.Equal(controller.Ed25519PublicKey, make([]byte, 32)) || controller.Weight == 0 || controller.Weight > MaxControllerWeight || controller.PurposeMask == 0 || controller.PurposeMask&^uint32(knownPurposeMask) != 0 {
 			return nil, errors.New("Native controllers must be valid")
@@ -431,14 +436,29 @@ func validatePolicy(policy *nativev1.ControllerPolicyV1) (map[string]*nativev1.C
 		if controller.Recovery && controller.PurposeMask&PurposeRecovery == 0 {
 			return nil, errors.New("recovery controller lacks recovery purpose")
 		}
+		const normalPurposes = PurposeAgentControl | PurposeDelegation | PurposeCapabilityControl
+		if controller.PurposeMask&normalPurposes != normalPurposes || controller.Recovery != (controller.PurposeMask&PurposeRecovery != 0) {
+			return nil, errors.New("Native controller must authorize every normal purpose and declare recovery consistently")
+		}
 		controllers[controller.KeyId] = controller
 		publicKeys[publicKey] = struct{}{}
-		total += uint64(controller.Weight)
+		for purpose := range purposeTotals {
+			if controller.PurposeMask&purpose != 0 {
+				purposeTotals[purpose] += uint64(controller.Weight)
+			}
+		}
 		if controller.Recovery {
-			recoveryTotal += uint64(controller.Weight)
+			if controller.PurposeMask&PurposeRecovery != 0 {
+				recoveryTotal += uint64(controller.Weight)
+			}
 		}
 	}
-	if uint64(policy.Threshold) > total || uint64(policy.RecoveryThreshold) > recoveryTotal {
+	for _, total := range purposeTotals {
+		if uint64(policy.Threshold) > total {
+			return nil, errors.New("Native policy threshold is unreachable for a required purpose")
+		}
+	}
+	if uint64(policy.RecoveryThreshold) > recoveryTotal {
 		return nil, errors.New("Native policy threshold is unattainable")
 	}
 	if policy.RecoveryTimelockSeconds > MaxRecoveryTimelockSeconds {

@@ -13,18 +13,25 @@ import (
 // SimplifiedNativeResolver reads the deterministic object account directly.
 // It never consults Action Anchors, a gateway database, or portable state.
 type SimplifiedNativeResolver struct {
-	chain     *Adapter
-	locator   *nativecore.Locator
-	network   *nativev1.NetworkDomain
-	mu        sync.Mutex
-	highWater uint64
+	chain      *Adapter
+	locator    *nativecore.Locator
+	network    *nativev1.NetworkDomain
+	mu         sync.Mutex
+	highWater  uint64
+	checkpoint *checkpointStore
 }
 
-func NewSimplifiedNativeResolver(chain *Adapter, locator *nativecore.Locator) (*SimplifiedNativeResolver, error) {
+func NewSimplifiedNativeResolver(chain *Adapter, locator *nativecore.Locator, checkpointPath string) (*SimplifiedNativeResolver, error) {
 	if chain == nil || locator == nil || locator.Network == nil || chain.network != locator.Network.NetworkId {
 		return nil, errors.New("invalid simplified Native resolver configuration")
 	}
-	return &SimplifiedNativeResolver{chain: chain, locator: locator, network: locator.Network}, nil
+	result := &SimplifiedNativeResolver{chain: chain, locator: locator, network: locator.Network}
+	store, err := newCheckpointStore(checkpointPath)
+	if err != nil {
+		return nil, err
+	}
+	result.checkpoint = store
+	return result, nil
 }
 
 func (r *SimplifiedNativeResolver) CheckReady(ctx context.Context) error {
@@ -52,7 +59,6 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 		r.mu.Unlock()
 		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadSequence, "simplified Native finalized checkpoint regressed", nil)
 	}
-	r.highWater = observation.seqno
 	r.mu.Unlock()
 	vote, _, err := quorumRead(ctx, nodes, r.chain.quorum, func(ctx context.Context, node *rpcNode) (nativeAccountVote, error) {
 		return readNativeAccountAt(ctx, node, identity.Address, observation.seqno, r.network, r.locator.CodeHash)
@@ -61,6 +67,9 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 		return nil, false, err
 	}
 	if !vote.Found {
+		if err := r.commitCheckpoint(observation.seqno); err != nil {
+			return nil, false, err
+		}
 		return nil, false, nil
 	}
 	data, err := decodeCellBOC(vote.Data)
@@ -81,5 +90,24 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 	state.Reference = &nativev1.ChainReference{Workchain: r.locator.Workchain, Account: identity.Address,
 		LogicalTime: lt, TransactionHash: "sha256:" + hex.EncodeToString(txHash), ContractCodeHash: identity.CodeHash,
 		FinalizedCheckpoint: observation.seqno}
+	if err := r.commitCheckpoint(observation.seqno); err != nil {
+		return nil, false, err
+	}
 	return state, true, nil
+}
+
+func (r *SimplifiedNativeResolver) commitCheckpoint(value uint64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if value == 0 || value < r.highWater {
+		return nativecore.NewProtocolError(nativecore.ErrBadSequence, "simplified Native finalized checkpoint regressed", nil)
+	}
+	if r.checkpoint == nil {
+		return nativecore.NewProtocolError(nativecore.ErrBadSequence, "simplified Native durable checkpoint is unavailable", nil)
+	}
+	if err := r.checkpoint.checkAndAdvance(value); err != nil {
+		return nativecore.NewProtocolError(nativecore.ErrBadSequence, "simplified Native durable checkpoint rejected observation", err)
+	}
+	r.highWater = value
+	return nil
 }

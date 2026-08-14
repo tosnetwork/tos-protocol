@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +30,7 @@ type nativeV1GatewayConfig struct {
 	ContractCodeBOCBase64 string                                   `json:"contract_code_boc_base64"`
 	ContractCodeHash      string                                   `json:"contract_code_hash"`
 	FundingNanoTOS        uint64                                   `json:"funding_nanotos"`
+	StateDirectory        string                                   `json:"state_directory"`
 	Sender                chainactionpublisher.TosctlBackendConfig `json:"sender"`
 }
 
@@ -63,6 +65,7 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		return nil, nil, nil, errors.New("atos_native_v1 config contains trailing JSON")
 	}
 	if config.Protocol != nativecore.Protocol || config.Network == nil || config.Network.NetworkId == "" || config.ContractCodeBOCBase64 == "" || config.ContractCodeHash == "" ||
+		!filepath.IsAbs(config.StateDirectory) || filepath.Clean(config.StateDirectory) != config.StateDirectory ||
 		config.FundingNanoTOS < nativecore.MinimumRelayFundingNanoTOS || config.FundingNanoTOS > nativecore.MaximumRelayFundingNanoTOS ||
 		config.Sender.Network != config.Network.NetworkId || !matchesNativeGenesis(config.Sender.GenesisRootHash, config.Network.GenesisRootHash) ||
 		!matchesNativeGenesis(config.Sender.GenesisFileHash, config.Network.GenesisFileHash) {
@@ -77,7 +80,13 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	resolver, err := toschain.NewSimplifiedNativeResolver(chain, locator)
+	stateInfo, err := os.Lstat(config.StateDirectory)
+	if err != nil || !stateInfo.IsDir() || stateInfo.Mode().Perm()&0o077 != 0 {
+		return nil, nil, nil, errors.New("Native state directory must be owner-private")
+	}
+	checkpointIdentity := sha256.Sum256([]byte(config.Network.NetworkId + "\x00" + config.Network.GenesisRootHash + "\x00" + config.Network.GenesisFileHash))
+	resolver, err := toschain.NewSimplifiedNativeResolver(chain, locator,
+		filepath.Join(config.StateDirectory, "finalized-checkpoint-"+hex.EncodeToString(checkpointIdentity[:])))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -85,7 +94,12 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	relayer := &nativecore.Relayer{Locator: locator, Sender: sender, FundingNanoTOS: config.FundingNanoTOS}
+	journal, err := nativecore.NewFileRelayJournal(config.StateDirectory)
+	if err != nil {
+		_ = sender.Close()
+		return nil, nil, nil, err
+	}
+	relayer := &nativecore.Relayer{Locator: locator, Sender: sender, FundingNanoTOS: config.FundingNanoTOS, Journal: journal, Resolver: resolver}
 	return relayer, resolver, func() { _ = sender.Close() }, nil
 }
 

@@ -111,7 +111,7 @@ func decodeState(state *cell.Cell, object string, expectedKind uint8) (*nativev1
 		return nil, errors.New("invalid simplified Native sequence")
 	}
 	lastAction, err := s.LoadSlice(256)
-	if err != nil {
+	if err != nil || equalBytes(lastAction, make([]byte, 32)) {
 		return nil, errors.New("invalid simplified Native action hash")
 	}
 	last := "sha256:" + hex.EncodeToString(lastAction)
@@ -153,8 +153,8 @@ func decodeState(state *cell.Cell, object string, expectedKind uint8) (*nativev1
 			RecoveryPolicy: recoveryPolicy, Tombstoned: tombstoned}}}, nil
 	}
 	owner, err := s.LoadSlice(256)
-	if err != nil {
-		return nil, err
+	if err != nil || equalBytes(owner, make([]byte, 32)) {
+		return nil, errors.New("invalid Capability owner")
 	}
 	versionsCell, err := s.LoadRefCell()
 	if err != nil {
@@ -294,8 +294,8 @@ func decodeRecovery(value *cell.Cell) (uint64, string, string, *nativev1.Control
 		return 0, "", "", nil, endSlice(s)
 	}
 	action, err := s.LoadSlice(256)
-	if err != nil {
-		return 0, "", "", nil, err
+	if err != nil || equalBytes(action, make([]byte, 32)) {
+		return 0, "", "", nil, errors.New("pending Native recovery has a zero initiation action hash")
 	}
 	policyHash, err := s.LoadSlice(256)
 	if err != nil {
@@ -305,8 +305,8 @@ func decodeRecovery(value *cell.Cell) (uint64, string, string, *nativev1.Control
 		return 0, "", "", nil, errors.New("pending Native recovery has a zero initiating policy hash")
 	}
 	executeAt, err := s.LoadUInt(64)
-	if err != nil {
-		return 0, "", "", nil, err
+	if err != nil || executeAt == 0 {
+		return 0, "", "", nil, errors.New("pending Native recovery has an invalid execution time")
 	}
 	policyCell, err := s.LoadRefCell()
 	if err != nil {
@@ -354,9 +354,12 @@ func decodeVersions(value *cell.Cell) ([]*nativev1.CapabilityVersionV1, error) {
 		if err != nil || endSlice(item.Value) != nil {
 			return nil, errors.New("invalid Native version value")
 		}
-		name, err := nameCell.BeginParse().LoadStringSnake()
-		if err != nil || name == "" {
+		name, err := decodeProtocolText(nameCell, 128)
+		if err != nil {
 			return nil, errors.New("invalid Native version name")
+		}
+		if equalBytes(manifest, make([]byte, 32)) {
+			return nil, errors.New("invalid Native version manifest")
 		}
 		h := sha256.Sum256([]byte(name))
 		if !equalBytes(h[:], key) {
@@ -366,6 +369,45 @@ func decodeVersions(value *cell.Cell) ([]*nativev1.CapabilityVersionV1, error) {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Version < result[j].Version })
 	return result, nil
+}
+
+func decodeProtocolText(value *cell.Cell, limit int) (string, error) {
+	if value == nil || limit <= 0 {
+		return "", errors.New("missing protocol text")
+	}
+	var out []byte
+	for current := value; current != nil; {
+		s := current.BeginParse()
+		bits, refs := s.BitsLeft(), s.RefsNum()
+		if bits%8 != 0 || refs > 1 || len(out)+int(bits/8) > limit || refs == 1 && bits != 1016 {
+			return "", errors.New("non-canonical protocol text")
+		}
+		part, err := s.LoadSlice(uint(bits))
+		if err != nil {
+			return "", err
+		}
+		for _, character := range part {
+			if character < 0x21 || character > 0x7e {
+				return "", errors.New("invalid protocol text character")
+			}
+		}
+		out = append(out, part...)
+		if refs == 0 {
+			current = nil
+		} else {
+			current, err = s.LoadRefCell()
+			if err != nil {
+				return "", err
+			}
+		}
+		if err := endSlice(s); err != nil {
+			return "", err
+		}
+	}
+	if len(out) == 0 {
+		return "", errors.New("empty protocol text")
+	}
+	return string(out), nil
 }
 
 func endSlice(s *cell.Slice) error {

@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,22 +18,24 @@ import (
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
 	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const KeySchema = "atos.native.wallet-key.v1"
 
 type Review struct {
-	Protocol               string `json:"protocol"`
-	NetworkID              string `json:"network_id"`
-	GenesisRootHash        string `json:"genesis_root_hash"`
-	GenesisFileHash        string `json:"genesis_file_hash"`
-	TargetObjectID         string `json:"target_object_id"`
-	TargetContractCodeHash string `json:"target_contract_code_hash"`
-	Generation             uint64 `json:"generation"`
-	Sequence               uint64 `json:"sequence"`
-	PredecessorStateHash   string `json:"predecessor_tvm_state_hash,omitempty"`
-	Action                 string `json:"action"`
-	ActionHash             string `json:"action_hash"`
+	Protocol               string          `json:"protocol"`
+	NetworkID              string          `json:"network_id"`
+	GenesisRootHash        string          `json:"genesis_root_hash"`
+	GenesisFileHash        string          `json:"genesis_file_hash"`
+	TargetObjectID         string          `json:"target_object_id"`
+	TargetContractCodeHash string          `json:"target_contract_code_hash"`
+	Generation             uint64          `json:"generation"`
+	Sequence               uint64          `json:"sequence"`
+	PredecessorStateHash   string          `json:"predecessor_tvm_state_hash,omitempty"`
+	Action                 string          `json:"action"`
+	ActionHash             string          `json:"action_hash"`
+	SignedAction           json.RawMessage `json:"signed_action"`
 }
 
 type Key struct {
@@ -97,11 +100,15 @@ func ReviewAction(action *nativev1.NativeActionV1) (Review, nativecore.BuiltActi
 	if err != nil {
 		return Review{}, nativecore.BuiltAction{}, err
 	}
+	signedAction, err := (protojson.MarshalOptions{UseProtoNames: true}).Marshal(action)
+	if err != nil {
+		return Review{}, nativecore.BuiltAction{}, err
+	}
 	return Review{Protocol: action.Protocol, NetworkID: action.Network.NetworkId,
 		GenesisRootHash: action.Network.GenesisRootHash, GenesisFileHash: action.Network.GenesisFileHash,
 		TargetObjectID: action.TargetObjectId, TargetContractCodeHash: action.TargetContractCodeHash,
 		Generation: action.Generation, Sequence: action.Sequence, PredecessorStateHash: action.PredecessorTvmStateHash,
-		Action: actionName(action), ActionHash: built.HashString}, built, nil
+		Action: actionName(action), ActionHash: built.HashString, SignedAction: signedAction}, built, nil
 }
 
 func Sign(built nativecore.BuiltAction, keys []*Key) ([]*nativev1.SignatureV1, error) {

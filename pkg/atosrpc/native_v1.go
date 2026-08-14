@@ -24,7 +24,15 @@ func (s *Server) SubmitNativeAction(ctx context.Context, req *connect.Request[na
 	if s.nativeV1Relayer == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("atos_native_v1 relayer is not configured"))
 	}
-	hash, err := s.nativeV1Relayer.Submit(ctx, req.Msg.Submission, 0)
+	var hash string
+	var err error
+	if relayer, ok := s.nativeV1Relayer.(interface {
+		SubmitIdempotent(context.Context, *nativev1.SignedNativeActionV1, string) (string, error)
+	}); ok {
+		hash, err = relayer.SubmitIdempotent(ctx, req.Msg.Submission, req.Msg.Context.IdempotencyKey)
+	} else {
+		hash, err = s.nativeV1Relayer.Submit(ctx, req.Msg.Submission, 1)
+	}
 	if err != nil {
 		return nil, nativeConnectError(connect.CodeFailedPrecondition, err)
 	}

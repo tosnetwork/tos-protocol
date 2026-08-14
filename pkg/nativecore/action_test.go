@@ -55,8 +55,8 @@ func TestNativePolicyEncodingIsIndependentOfInputOrder(t *testing.T) {
 	pubA, _, _ := ed25519.GenerateKey(rand.Reader)
 	pubB, _, _ := ed25519.GenerateKey(rand.Reader)
 	policy := &nativev1.ControllerPolicyV1{Threshold: 1, RecoveryThreshold: 1, Controllers: []*nativev1.ControllerV1{
-		{KeyId: "ed25519:" + fmt.Sprintf("%x", pubA), Ed25519PublicKey: pubA, Weight: 1, PurposeMask: PurposeRecovery, Recovery: true},
-		{KeyId: "ed25519:" + fmt.Sprintf("%x", pubB), Ed25519PublicKey: pubB, Weight: 1, PurposeMask: PurposeRecovery, Recovery: true},
+		{KeyId: "ed25519:" + fmt.Sprintf("%x", pubA), Ed25519PublicKey: pubA, Weight: 1, PurposeMask: knownPurposeMask, Recovery: true},
+		{KeyId: "ed25519:" + fmt.Sprintf("%x", pubB), Ed25519PublicKey: pubB, Weight: 1, PurposeMask: knownPurposeMask, Recovery: true},
 	}}
 	first, err := PolicyCell(policy)
 	if err != nil {
@@ -69,6 +69,25 @@ func TestNativePolicyEncodingIsIndependentOfInputOrder(t *testing.T) {
 	}
 	if string(first.Hash()) != string(second.Hash()) {
 		t.Fatal("policy input order changed canonical Cell")
+	}
+}
+
+func TestNativePolicyHasOneNormalAuthorityAndExplicitRecoverySubset(t *testing.T) {
+	policy, _ := testPolicy(t)
+	controller := policy.Controllers[0]
+	controller.PurposeMask &^= PurposeCapabilityControl
+	if _, err := PolicyCell(policy); err == nil {
+		t.Fatal("split normal-purpose controller was accepted")
+	}
+	controller.PurposeMask |= PurposeCapabilityControl
+	controller.Recovery = false
+	if _, err := PolicyCell(policy); err == nil {
+		t.Fatal("recovery purpose without recovery designation was accepted")
+	}
+	controller.PurposeMask &^= PurposeRecovery
+	controller.Recovery = true
+	if _, err := PolicyCell(policy); err == nil {
+		t.Fatal("recovery designation without recovery purpose was accepted")
 	}
 }
 
