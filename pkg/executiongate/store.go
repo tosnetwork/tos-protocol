@@ -49,6 +49,14 @@ func (s *store) claim(req Request, evidence Evidence) error {
 				evidence.CapabilityFinalizedCheckpoint < existing.Evidence.CapabilityFinalizedCheckpoint {
 				return errors.New("execution authority checkpoint regressed")
 			}
+			if !sameObservation(existing.Evidence.EscrowFinalizedCheckpoint, existing.Evidence.EscrowTransactionHash,
+				evidence.EscrowFinalizedCheckpoint, evidence.EscrowTransactionHash) ||
+				!sameObservation(existing.Evidence.AgentFinalizedCheckpoint, existing.Evidence.AgentTransactionHash,
+					evidence.AgentFinalizedCheckpoint, evidence.AgentTransactionHash) ||
+				!sameObservation(existing.Evidence.CapabilityFinalizedCheckpoint, existing.Evidence.CapabilityTransactionHash,
+					evidence.CapabilityFinalizedCheckpoint, evidence.CapabilityTransactionHash) {
+				return errors.New("execution authority changed at the same finalized checkpoint")
+			}
 			if evidence == existing.Evidence {
 				return nil
 			}
@@ -56,6 +64,10 @@ func (s *store) claim(req Request, evidence Evidence) error {
 		}
 		return s.write(path, record{Schema: "atos.native.execution-claim.v1", Request: req, Evidence: evidence}, false)
 	})
+}
+
+func sameObservation(oldCheckpoint uint64, oldTransaction string, newCheckpoint uint64, newTransaction string) bool {
+	return oldCheckpoint != newCheckpoint || oldTransaction == newTransaction
 }
 
 func sameAuthority(a, b Evidence) bool {
@@ -136,7 +148,8 @@ func (s *store) read(path string) (record, bool, error) {
 	if err = d.Decode(&extra); !errors.Is(err, io.EOF) {
 		return r, false, errors.New("execution claim has trailing data")
 	}
-	if r.Schema != "atos.native.execution-claim.v1" || !validRequest(r.Request) || !validEvidence(r.Evidence) {
+	if r.Schema != "atos.native.execution-claim.v1" || !validRequest(r.Request) || !validEvidence(r.Evidence) ||
+		r.Evidence.QuoteCommitment != r.Request.QuoteCommitment || r.Evidence.EscrowAddress != r.Request.EscrowAddress {
 		return r, false, errors.New("invalid execution claim")
 	}
 	return r, true, nil
