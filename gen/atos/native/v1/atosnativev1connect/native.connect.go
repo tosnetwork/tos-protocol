@@ -54,6 +54,9 @@ const (
 	// CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure is the fully-qualified name of the
 	// CapabilityDiscoveryService's GetSoftwareWorkManifest RPC.
 	CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure = "/atos.native.v1.CapabilityDiscoveryService/GetSoftwareWorkManifest"
+	// CapabilityDiscoveryServiceRequestQuoteProposalProcedure is the fully-qualified name of the
+	// CapabilityDiscoveryService's RequestQuoteProposal RPC.
+	CapabilityDiscoveryServiceRequestQuoteProposalProcedure = "/atos.native.v1.CapabilityDiscoveryService/RequestQuoteProposal"
 )
 
 // NativeServiceClient is a client for the atos.native.v1.NativeService service.
@@ -159,6 +162,7 @@ type CapabilityDiscoveryServiceClient interface {
 	SearchCapabilities(context.Context, *connect.Request[v1.SearchCapabilitiesRequest]) (*connect.Response[v1.SearchCapabilitiesResponse], error)
 	PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error)
 	GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error)
+	RequestQuoteProposal(context.Context, *connect.Request[v1.RequestQuoteProposalRequest]) (*connect.Response[v1.RequestQuoteProposalResponse], error)
 }
 
 // NewCapabilityDiscoveryServiceClient constructs a client for the
@@ -196,6 +200,12 @@ func NewCapabilityDiscoveryServiceClient(httpClient connect.HTTPClient, baseURL 
 			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("GetSoftwareWorkManifest")),
 			connect.WithClientOptions(opts...),
 		),
+		requestQuoteProposal: connect.NewClient[v1.RequestQuoteProposalRequest, v1.RequestQuoteProposalResponse](
+			httpClient,
+			baseURL+CapabilityDiscoveryServiceRequestQuoteProposalProcedure,
+			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("RequestQuoteProposal")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -205,6 +215,7 @@ type capabilityDiscoveryServiceClient struct {
 	searchCapabilities          *connect.Client[v1.SearchCapabilitiesRequest, v1.SearchCapabilitiesResponse]
 	publishSoftwareWorkManifest *connect.Client[v1.PublishSoftwareWorkManifestRequest, v1.PublishSoftwareWorkManifestResponse]
 	getSoftwareWorkManifest     *connect.Client[v1.GetSoftwareWorkManifestRequest, v1.GetSoftwareWorkManifestResponse]
+	requestQuoteProposal        *connect.Client[v1.RequestQuoteProposalRequest, v1.RequestQuoteProposalResponse]
 }
 
 // ListCapabilities calls atos.native.v1.CapabilityDiscoveryService.ListCapabilities.
@@ -228,6 +239,11 @@ func (c *capabilityDiscoveryServiceClient) GetSoftwareWorkManifest(ctx context.C
 	return c.getSoftwareWorkManifest.CallUnary(ctx, req)
 }
 
+// RequestQuoteProposal calls atos.native.v1.CapabilityDiscoveryService.RequestQuoteProposal.
+func (c *capabilityDiscoveryServiceClient) RequestQuoteProposal(ctx context.Context, req *connect.Request[v1.RequestQuoteProposalRequest]) (*connect.Response[v1.RequestQuoteProposalResponse], error) {
+	return c.requestQuoteProposal.CallUnary(ctx, req)
+}
+
 // CapabilityDiscoveryServiceHandler is an implementation of the
 // atos.native.v1.CapabilityDiscoveryService service.
 type CapabilityDiscoveryServiceHandler interface {
@@ -235,6 +251,7 @@ type CapabilityDiscoveryServiceHandler interface {
 	SearchCapabilities(context.Context, *connect.Request[v1.SearchCapabilitiesRequest]) (*connect.Response[v1.SearchCapabilitiesResponse], error)
 	PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error)
 	GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error)
+	RequestQuoteProposal(context.Context, *connect.Request[v1.RequestQuoteProposalRequest]) (*connect.Response[v1.RequestQuoteProposalResponse], error)
 }
 
 // NewCapabilityDiscoveryServiceHandler builds an HTTP handler from the service implementation. It
@@ -268,6 +285,12 @@ func NewCapabilityDiscoveryServiceHandler(svc CapabilityDiscoveryServiceHandler,
 		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("GetSoftwareWorkManifest")),
 		connect.WithHandlerOptions(opts...),
 	)
+	capabilityDiscoveryServiceRequestQuoteProposalHandler := connect.NewUnaryHandler(
+		CapabilityDiscoveryServiceRequestQuoteProposalProcedure,
+		svc.RequestQuoteProposal,
+		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("RequestQuoteProposal")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/atos.native.v1.CapabilityDiscoveryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CapabilityDiscoveryServiceListCapabilitiesProcedure:
@@ -278,6 +301,8 @@ func NewCapabilityDiscoveryServiceHandler(svc CapabilityDiscoveryServiceHandler,
 			capabilityDiscoveryServicePublishSoftwareWorkManifestHandler.ServeHTTP(w, r)
 		case CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure:
 			capabilityDiscoveryServiceGetSoftwareWorkManifestHandler.ServeHTTP(w, r)
+		case CapabilityDiscoveryServiceRequestQuoteProposalProcedure:
+			capabilityDiscoveryServiceRequestQuoteProposalHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -301,4 +326,8 @@ func (UnimplementedCapabilityDiscoveryServiceHandler) PublishSoftwareWorkManifes
 
 func (UnimplementedCapabilityDiscoveryServiceHandler) GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest is not implemented"))
+}
+
+func (UnimplementedCapabilityDiscoveryServiceHandler) RequestQuoteProposal(context.Context, *connect.Request[v1.RequestQuoteProposalRequest]) (*connect.Response[v1.RequestQuoteProposalResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.RequestQuoteProposal is not implemented"))
 }

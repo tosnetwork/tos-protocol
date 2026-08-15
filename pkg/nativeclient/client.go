@@ -160,6 +160,19 @@ func (c *Client) GetSoftwareWorkManifest(ctx context.Context, request *nativev1.
 	return response.Msg, nil
 }
 
+func (c *Client) RequestQuoteProposal(ctx context.Context, request *nativev1.RequestQuoteProposalRequest) (*nativev1.RequestQuoteProposalResponse, error) {
+	if c == nil || c.discovery == nil || request == nil {
+		return nil, errors.New("invalid Quote Proposal request")
+	}
+	callCtx, cancel := c.callContext(ctx)
+	defer cancel()
+	response, err := c.discovery.RequestQuoteProposal(callCtx, authorized(c, request))
+	if err != nil {
+		return nil, err
+	}
+	return response.Msg, nil
+}
+
 func authorized[T any](c *Client, message *T) *connect.Request[T] {
 	request := connect.NewRequest(message)
 	request.Header().Set("Authorization", "Bearer "+c.token)

@@ -92,10 +92,14 @@ message PublishSoftwareWorkManifestRequest { RequestContext context = 1; string 
 message PublishSoftwareWorkManifestResponse { string manifest_digest = 1; NativeStateV1 capability = 2; }
 message GetSoftwareWorkManifestRequest { RequestContext context = 1; string manifest_digest = 2; }
 message GetSoftwareWorkManifestResponse { string manifest_digest = 1; bytes canonical_cbor = 2; }
+message RequestQuoteProposalRequest { RequestContext context = 1; string capability_id = 2; string capability_version = 3; string buyer_address = 4; }
+message QuoteProposalPackageV1 { QuoteProposalV1 proposal = 1; bytes canonical_manifest_cbor = 2; bytes escrow_terms_boc = 3; bytes transport_binding_boc = 4; bytes dispute_policy_boc = 5; }
+message RequestQuoteProposalResponse { QuoteProposalPackageV1 package = 1; }
 service NativeService { rpc SubmitNativeAction(SubmitNativeActionRequest) returns (SubmitNativeActionResponse); rpc ResolveNativeState(ResolveNativeStateRequest) returns (ResolveNativeStateResponse); }
 service CapabilityDiscoveryService {
   rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
   rpc SearchCapabilities(SearchCapabilitiesRequest) returns (SearchCapabilitiesResponse);
   rpc PublishSoftwareWorkManifest(PublishSoftwareWorkManifestRequest) returns (PublishSoftwareWorkManifestResponse);
   rpc GetSoftwareWorkManifest(GetSoftwareWorkManifestRequest) returns (GetSoftwareWorkManifestResponse);
+  rpc RequestQuoteProposal(RequestQuoteProposalRequest) returns (RequestQuoteProposalResponse);
 }

@@ -35,6 +35,13 @@ func (s discoveryService) SearchCapabilities(_ context.Context, request *connect
 	return connect.NewResponse(&nativev1.SearchCapabilitiesResponse{}), nil
 }
 
+func (s discoveryService) RequestQuoteProposal(_ context.Context, request *connect.Request[nativev1.RequestQuoteProposalRequest]) (*connect.Response[nativev1.RequestQuoteProposalResponse], error) {
+	if request.Header().Get("Authorization") != "Bearer relay-secret" {
+		s.testing.Fatal("Native Quote client omitted its bearer token")
+	}
+	return connect.NewResponse(&nativev1.RequestQuoteProposalResponse{}), nil
+}
+
 func (s nativeService) ResolveNativeState(_ context.Context, request *connect.Request[nativev1.ResolveNativeStateRequest]) (*connect.Response[nativev1.ResolveNativeStateResponse], error) {
 	if request.Header().Get("Authorization") != "Bearer relay-secret" {
 		s.testing.Fatal("Native client omitted its bearer token")
@@ -65,6 +72,9 @@ func TestClientRequiresExplicitPlaintextAndAuthenticates(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := client.SearchCapabilities(context.Background(), &nativev1.SearchCapabilitiesRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RequestQuoteProposal(context.Background(), &nativev1.RequestQuoteProposalRequest{}); err != nil {
 		t.Fatal(err)
 	}
 }

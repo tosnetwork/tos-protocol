@@ -373,6 +373,15 @@ func decodeEscrowTerms(value *cell.Cell) (EscrowTermsV1, error) {
 	return EscrowTermsV1{buyer.StringRaw(), provider.StringRaw(), funding, refund}, nil
 }
 
+// DecodeEscrowTermsCellV1 validates and exposes the complete typed Quote
+// preimage transported by a non-canonical Quote Proposal package.
+func DecodeEscrowTermsCellV1(value *cell.Cell) (EscrowTermsV1, error) {
+	if value == nil {
+		return EscrowTermsV1{}, errors.New("missing escrow terms")
+	}
+	return decodeEscrowTerms(value)
+}
+
 func decodeEscrowAuthorization(value *cell.Cell) ([]byte, error) {
 	s := value.BeginParse()
 	magic, err := s.LoadUInt(32)
