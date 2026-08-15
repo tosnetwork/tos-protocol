@@ -27,14 +27,32 @@ type Validated struct {
 // carried in the package and that the request identity is unchanged.
 func Validate(network *nativev1.NetworkDomain, request *nativev1.RequestQuoteProposalRequest,
 	value *nativev1.QuoteProposalPackageV1, now time.Time) (*Validated, error) {
-	if network == nil || request == nil || value == nil || value.Proposal == nil || now.IsZero() ||
+	validated, err := validatePortable(network, request, value)
+	if err != nil || now.IsZero() ||
+		value.Proposal.ExpiresAtUnixSeconds <= uint64(now.Unix()) ||
+		value.Proposal.ExpiresAtUnixSeconds > uint64(now.Add(time.Hour).Unix()) {
+		return nil, errors.New("invalid Quote Proposal package identity or expiry")
+	}
+	return validated, nil
+}
+
+// ValidatePortable proves the immutable Quote preimages without applying the
+// pre-acceptance freshness window. It is intended for post-acceptance audit and
+// recovery, where finalized escrow state—not a gateway clock—is authoritative.
+func ValidatePortable(network *nativev1.NetworkDomain, request *nativev1.RequestQuoteProposalRequest,
+	value *nativev1.QuoteProposalPackageV1) (*Validated, error) {
+	return validatePortable(network, request, value)
+}
+
+func validatePortable(network *nativev1.NetworkDomain, request *nativev1.RequestQuoteProposalRequest,
+	value *nativev1.QuoteProposalPackageV1) (*Validated, error) {
+	if network == nil || request == nil || value == nil || value.Proposal == nil ||
 		request.CapabilityId == "" || request.CapabilityVersion == "" || request.BuyerAddress == "" ||
 		value.Proposal.CapabilityId != request.CapabilityId || value.Proposal.CapabilityVersion != request.CapabilityVersion ||
 		value.Proposal.ProposalId == "" || len(value.Proposal.ProposalId) > 256 ||
 		strings.TrimSpace(value.Proposal.ProposalId) != value.Proposal.ProposalId ||
-		value.Proposal.ExpiresAtUnixSeconds <= uint64(now.Unix()) ||
-		value.Proposal.ExpiresAtUnixSeconds > uint64(now.Add(time.Hour).Unix()) {
-		return nil, errors.New("invalid Quote Proposal package identity or expiry")
+		value.Proposal.ExpiresAtUnixSeconds == 0 {
+		return nil, errors.New("invalid Quote Proposal package identity")
 	}
 	total := len(value.CanonicalManifestCbor) + len(value.EscrowTermsBoc) + len(value.TransportBindingBoc) + len(value.DisputePolicyBoc)
 	if total <= 0 || total > MaxPackageBytes {
