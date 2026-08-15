@@ -42,6 +42,7 @@ type Client struct {
 	timeout    time.Duration
 	httpClient *http.Client
 	native     atosnativev1connect.NativeServiceClient
+	discovery  atosnativev1connect.CapabilityDiscoveryServiceClient
 }
 
 func New(config Config) (*Client, error) {
@@ -103,7 +104,53 @@ func New(config Config) (*Client, error) {
 		connect.WithSendMaxBytes(config.MaxMessageBytes),
 	}
 	return &Client{token: config.BearerToken, timeout: config.Timeout, httpClient: httpClient,
-		native: atosnativev1connect.NewNativeServiceClient(httpClient, config.BaseURL, options...)}, nil
+		native:    atosnativev1connect.NewNativeServiceClient(httpClient, config.BaseURL, options...),
+		discovery: atosnativev1connect.NewCapabilityDiscoveryServiceClient(httpClient, config.BaseURL, options...)}, nil
+}
+
+func (c *Client) ListCapabilities(ctx context.Context, request *nativev1.ListCapabilitiesRequest) (*nativev1.ListCapabilitiesResponse, error) {
+	if c == nil || c.discovery == nil || request == nil {
+		return nil, errors.New("invalid Capability listing request")
+	}
+	callCtx, cancel := c.callContext(ctx)
+	defer cancel()
+	response, err := c.discovery.ListCapabilities(callCtx, authorized(c, request))
+	if err != nil {
+		return nil, err
+	}
+	return response.Msg, nil
+}
+
+func (c *Client) PublishSoftwareWorkManifest(ctx context.Context, request *nativev1.PublishSoftwareWorkManifestRequest) (*nativev1.PublishSoftwareWorkManifestResponse, error) {
+	if c == nil || c.discovery == nil || request == nil {
+		return nil, errors.New("invalid software-work manifest publication request")
+	}
+	callCtx, cancel := c.callContext(ctx)
+	defer cancel()
+	response, err := c.discovery.PublishSoftwareWorkManifest(callCtx, authorized(c, request))
+	if err != nil {
+		return nil, err
+	}
+	return response.Msg, nil
+}
+
+func (c *Client) GetSoftwareWorkManifest(ctx context.Context, request *nativev1.GetSoftwareWorkManifestRequest) (*nativev1.GetSoftwareWorkManifestResponse, error) {
+	if c == nil || c.discovery == nil || request == nil {
+		return nil, errors.New("invalid software-work manifest retrieval request")
+	}
+	callCtx, cancel := c.callContext(ctx)
+	defer cancel()
+	response, err := c.discovery.GetSoftwareWorkManifest(callCtx, authorized(c, request))
+	if err != nil {
+		return nil, err
+	}
+	return response.Msg, nil
+}
+
+func authorized[T any](c *Client, message *T) *connect.Request[T] {
+	request := connect.NewRequest(message)
+	request.Header().Set("Authorization", "Bearer "+c.token)
+	return request
 }
 
 func (c *Client) SubmitNativeAction(ctx context.Context, request *nativev1.SubmitNativeActionRequest) (*nativev1.SubmitNativeActionResponse, error) {

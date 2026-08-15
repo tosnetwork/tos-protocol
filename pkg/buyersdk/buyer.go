@@ -97,6 +97,7 @@ type Buyer struct {
 type PurchaseInput struct {
 	Proposal               *nativev1.QuoteProposalV1
 	ManifestJSON           []byte
+	ManifestCBOR           []byte
 	EscrowTerms            nativecore.EscrowTermsV1
 	ExecutionSignerEd25519 []byte
 	TransportBinding       nativecore.TransportBindingV1
@@ -144,14 +145,22 @@ func New(config Config) (*Buyer, error) {
 }
 
 func (b *Buyer) PreparePurchase(ctx context.Context, input PurchaseInput) (*PreparedPurchase, error) {
-	if b == nil || ctx == nil || input.Proposal == nil || len(input.ManifestJSON) == 0 || len(input.ManifestJSON) > 1<<20 {
+	if b == nil || ctx == nil || input.Proposal == nil ||
+		(len(input.ManifestJSON) == 0) == (len(input.ManifestCBOR) == 0) ||
+		len(input.ManifestJSON) > 1<<20 || len(input.ManifestCBOR) > 1<<20 {
 		return nil, errors.New("invalid buyer purchase input")
 	}
 	if input.EscrowTerms.BuyerAddress != b.buyerAddress || input.Proposal.ExpiresAtUnixSeconds <= uint64(b.now().Unix()) ||
 		input.EscrowTerms.FundingDeadline <= uint64(b.now().Unix()) {
 		return nil, errors.New("buyer or Quote deadline is invalid")
 	}
-	manifest, err := nativecore.DecodeSoftwareWorkManifestJSON(input.ManifestJSON)
+	var manifest nativecore.SoftwareWorkManifestV1
+	var err error
+	if len(input.ManifestCBOR) != 0 {
+		manifest, err = nativecore.DecodeCanonicalSoftwareWorkManifestCBOR(input.ManifestCBOR)
+	} else {
+		manifest, err = nativecore.DecodeSoftwareWorkManifestJSON(input.ManifestJSON)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("decode purchase manifest: %w", err)
 	}

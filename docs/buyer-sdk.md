@@ -46,7 +46,9 @@ The directory must already exist, be owned by the process user, and have mode
 base-10 atomic units and are enforced per exact TOS stablecoin identity.
 
 Prepare the purchase from the received Quote Proposal and independently
-retrieved manifest:
+retrieved manifest. `ManifestJSON` is accepted for a locally authored strict
+projection; use `ManifestCBOR` for the exact bytes returned by
+`GetSoftwareWorkManifest` (set exactly one of them):
 
 ```go
 prepared, err := buyer.PreparePurchase(ctx, buyersdk.PurchaseInput{

@@ -16,6 +16,18 @@ type nativeService struct {
 	testing *testing.T
 }
 
+type discoveryService struct {
+	atosnativev1connect.UnimplementedCapabilityDiscoveryServiceHandler
+	testing *testing.T
+}
+
+func (s discoveryService) ListCapabilities(_ context.Context, request *connect.Request[nativev1.ListCapabilitiesRequest]) (*connect.Response[nativev1.ListCapabilitiesResponse], error) {
+	if request.Header().Get("Authorization") != "Bearer relay-secret" {
+		s.testing.Fatal("Native discovery client omitted its bearer token")
+	}
+	return connect.NewResponse(&nativev1.ListCapabilitiesResponse{}), nil
+}
+
 func (s nativeService) ResolveNativeState(_ context.Context, request *connect.Request[nativev1.ResolveNativeStateRequest]) (*connect.Response[nativev1.ResolveNativeStateResponse], error) {
 	if request.Header().Get("Authorization") != "Bearer relay-secret" {
 		s.testing.Fatal("Native client omitted its bearer token")
@@ -25,12 +37,11 @@ func (s nativeService) ResolveNativeState(_ context.Context, request *connect.Re
 
 func TestClientRequiresExplicitPlaintextAndAuthenticates(t *testing.T) {
 	path, handler := atosnativev1connect.NewNativeServiceHandler(nativeService{testing: t})
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path[:len(path)] != path {
-			t.Fatal("unexpected Native path")
-		}
-		handler.ServeHTTP(writer, request)
-	}))
+	discoveryPath, discoveryHandler := atosnativev1connect.NewCapabilityDiscoveryServiceHandler(discoveryService{testing: t})
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	mux.Handle(discoveryPath, discoveryHandler)
+	server := httptest.NewServer(mux)
 	defer server.Close()
 	if _, err := New(Config{BaseURL: server.URL, BearerToken: "relay-secret"}); err == nil {
 		t.Fatal("plaintext Native gateway accepted implicitly")
@@ -41,6 +52,9 @@ func TestClientRequiresExplicitPlaintextAndAuthenticates(t *testing.T) {
 	}
 	defer client.Close()
 	if _, err := client.ResolveNativeState(context.Background(), &nativev1.ResolveNativeStateRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ListCapabilities(context.Background(), &nativev1.ListCapabilitiesRequest{}); err != nil {
 		t.Fatal(err)
 	}
 }

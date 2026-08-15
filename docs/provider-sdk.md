@@ -60,6 +60,18 @@ if err != nil { /* absence, conflict, timeout, or quorum failure */ }
 Success means `state` is finalized canonical TOS state containing the exact
 publication action. It never means only `relay_accepted=true`.
 
+After finalization, publish the immutable manifest to the gateway's derived
+catalog with a separate durable request key:
+
+```go
+catalogState, err := provider.PublishManifest(ctx, prepared, manifestRetryKey)
+```
+
+The SDK sends the exact reviewed canonical CBOR. The gateway re-resolves the
+Capability and admits the bytes only when its active version commits to their
+digest. `catalogState` is the finalized admission observation; catalog
+inclusion itself is not canonical publication.
+
 The client requires HTTPS by default. Plain HTTP must be explicitly enabled
 and is intended only for loopback development. Mutual TLS and a private CA can
 be configured through `nativeclient.Config`; bearer credentials grant

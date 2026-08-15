@@ -1,6 +1,7 @@
 package providersdk
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -20,7 +21,14 @@ type fakeNativeClient struct {
 	owner      *nativev1.NativeStateV1
 	capability *nativev1.NativeStateV1
 	submitted  *nativev1.SubmitNativeActionRequest
+	manifest   *nativev1.PublishSoftwareWorkManifestRequest
 	resolves   int
+}
+
+func (f *fakeNativeClient) PublishSoftwareWorkManifest(_ context.Context, request *nativev1.PublishSoftwareWorkManifestRequest) (*nativev1.PublishSoftwareWorkManifestResponse, error) {
+	f.manifest = proto.Clone(request).(*nativev1.PublishSoftwareWorkManifestRequest)
+	return &nativev1.PublishSoftwareWorkManifestResponse{ManifestDigest: f.capability.GetCapability().Versions[0].ManifestDigest,
+		Capability: proto.Clone(f.capability).(*nativev1.NativeStateV1)}, nil
 }
 
 func (f *fakeNativeClient) SubmitNativeAction(_ context.Context, request *nativev1.SubmitNativeActionRequest) (*nativev1.SubmitNativeActionResponse, error) {
@@ -95,6 +103,13 @@ func TestProviderPreparesSignsAndFinalizesCapabilityPublication(t *testing.T) {
 	}
 	if state.GetCapability().CapabilityId != prepared.CapabilityID || fake.submitted.Context.IdempotencyKey != "publish-one" || fake.resolves != 2 {
 		t.Fatal("provider SDK did not bind submission to finalized Capability state")
+	}
+	if _, err := provider.PublishManifest(context.Background(), prepared, "manifest-one"); err != nil {
+		t.Fatal(err)
+	}
+	if fake.manifest == nil || fake.manifest.Context.IdempotencyKey != "manifest-one" ||
+		!bytes.Equal(fake.manifest.CanonicalCbor, prepared.ManifestCBOR) {
+		t.Fatal("provider SDK did not publish exact canonical manifest bytes")
 	}
 }
 

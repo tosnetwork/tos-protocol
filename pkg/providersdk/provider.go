@@ -24,6 +24,49 @@ const MaxManifestJSONBytes = 1 << 20
 type NativeClient interface {
 	SubmitNativeAction(context.Context, *nativev1.SubmitNativeActionRequest) (*nativev1.SubmitNativeActionResponse, error)
 	ResolveNativeState(context.Context, *nativev1.ResolveNativeStateRequest) (*nativev1.ResolveNativeStateResponse, error)
+	PublishSoftwareWorkManifest(context.Context, *nativev1.PublishSoftwareWorkManifestRequest) (*nativev1.PublishSoftwareWorkManifestResponse, error)
+}
+
+// PublishManifest sends immutable canonical bytes to the gateway's derived
+// catalog only after Capability publication has finalized. Catalog admission
+// re-resolves the Capability and cannot create a canonical registry fact.
+func (p *Provider) PublishManifest(ctx context.Context, prepared *PreparedPublication, idempotencyKey string) (*nativev1.NativeStateV1, error) {
+	if p == nil || ctx == nil || prepared == nil || prepared.Action == nil || idempotencyKey == "" || len(idempotencyKey) > 256 {
+		return nil, errors.New("invalid provider manifest publication request")
+	}
+	manifestHash := sha256.Sum256(prepared.ManifestCBOR)
+	registration := prepared.Action.GetRegisterCapability()
+	built, err := nativecore.BuildAction(prepared.Action)
+	if err != nil || registration == nil || registration.InitialVersion == nil ||
+		"sha256:"+hex.EncodeToString(manifestHash[:]) != prepared.ManifestDigest ||
+		built.HashString != prepared.ActionHash || prepared.CapabilityID != prepared.Action.TargetObjectId ||
+		registration.InitialVersion.ManifestDigest != prepared.ManifestDigest {
+		return nil, errors.New("prepared Capability manifest changed after review")
+	}
+	requestContext, err := p.requestContext(idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	response, err := p.client.PublishSoftwareWorkManifest(ctx, &nativev1.PublishSoftwareWorkManifestRequest{
+		Context: requestContext, CapabilityId: prepared.CapabilityID, CanonicalCbor: append([]byte(nil), prepared.ManifestCBOR...),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if response == nil || response.ManifestDigest != prepared.ManifestDigest || !p.validStateEnvelope(response.Capability) {
+		return nil, errors.New("gateway did not admit manifest against exact finalized Capability state")
+	}
+	capability := response.Capability.GetCapability()
+	if capability == nil || capability.CapabilityId != prepared.CapabilityID || capability.Tombstoned {
+		return nil, errors.New("gateway manifest admission returned conflicting Capability state")
+	}
+	for _, version := range capability.Versions {
+		if version != nil && version.Version == registration.InitialVersion.Version &&
+			version.ManifestDigest == prepared.ManifestDigest && !version.Revoked {
+			return proto.Clone(response.Capability).(*nativev1.NativeStateV1), nil
+		}
+	}
+	return nil, errors.New("gateway manifest admission omitted the committed Capability version")
 }
 
 type Config struct {

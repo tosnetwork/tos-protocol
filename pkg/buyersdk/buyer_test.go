@@ -186,6 +186,24 @@ func TestBuyerRejectsProposalMutationAfterReview(t *testing.T) {
 	}
 }
 
+func TestBuyerAcceptsExactCatalogManifestCBOR(t *testing.T) {
+	fixture := newBuyerFixture(t, BudgetLimits{Window: time.Hour, MaxPurchases: 2,
+		MaxPerPurchaseAtomic: "100", MaxTotalAtomic: "200"})
+	manifest, err := nativecore.DecodeSoftwareWorkManifestJSON(fixture.input.ManifestJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _, err := nativecore.CanonicalSoftwareWorkManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.input.ManifestJSON = nil
+	fixture.input.ManifestCBOR = canonical
+	if _, err := fixture.buyer.PreparePurchase(context.Background(), fixture.input); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newBuyerFixture(t *testing.T, limits BudgetLimits) buyerFixture {
 	t.Helper()
 	now := time.Unix(1_900_000_000, 0)
