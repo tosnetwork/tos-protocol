@@ -378,15 +378,14 @@ func (x *ChainReference) GetFinalizedCheckpoint() uint64 {
 	return 0
 }
 
+// key_id is exactly ed25519:<lowercase 32-byte-public-key-hex>.
 type ControllerV1 struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Exactly ed25519:<lowercase 32-byte-public-key-hex>. Native v1 does not
-	// depend on an off-chain alias table to reconstruct controller identity.
-	KeyId            string `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
-	Ed25519PublicKey []byte `protobuf:"bytes,2,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"`
-	Weight           uint32 `protobuf:"varint,3,opt,name=weight,proto3" json:"weight,omitempty"`
-	PurposeMask      uint32 `protobuf:"varint,4,opt,name=purpose_mask,json=purposeMask,proto3" json:"purpose_mask,omitempty"`
-	Recovery         bool   `protobuf:"varint,5,opt,name=recovery,proto3" json:"recovery,omitempty"`
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	KeyId            string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	Ed25519PublicKey []byte                 `protobuf:"bytes,2,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"`
+	Weight           uint32                 `protobuf:"varint,3,opt,name=weight,proto3" json:"weight,omitempty"`
+	PurposeMask      uint32                 `protobuf:"varint,4,opt,name=purpose_mask,json=purposeMask,proto3" json:"purpose_mask,omitempty"`
+	Recovery         bool                   `protobuf:"varint,5,opt,name=recovery,proto3" json:"recovery,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1074,7 +1073,7 @@ func (x *TransferCapabilityV1) GetNewOwnerAgentId() string {
 
 type RevokeCapabilityV1 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"` // empty means tombstone the complete Capability
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	OwnerAgentId  string                 `protobuf:"bytes,2,opt,name=owner_agent_id,json=ownerAgentId,proto3" json:"owner_agent_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1126,7 +1125,7 @@ func (x *RevokeCapabilityV1) GetOwnerAgentId() string {
 
 type NativeActionV1 struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Protocol                string                 `protobuf:"bytes,1,opt,name=protocol,proto3" json:"protocol,omitempty"` // exactly atos_native_v1
+	Protocol                string                 `protobuf:"bytes,1,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	Network                 *NetworkDomain         `protobuf:"bytes,2,opt,name=network,proto3" json:"network,omitempty"`
 	TargetObjectId          string                 `protobuf:"bytes,3,opt,name=target_object_id,json=targetObjectId,proto3" json:"target_object_id,omitempty"`
 	TargetContractCodeHash  string                 `protobuf:"bytes,4,opt,name=target_contract_code_hash,json=targetContractCodeHash,proto3" json:"target_contract_code_hash,omitempty"`
@@ -1399,12 +1398,10 @@ func (*NativeActionV1_TransferCapability) isNativeActionV1_Payload() {}
 func (*NativeActionV1_RevokeCapability) isNativeActionV1_Payload() {}
 
 type SignedNativeActionV1 struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Action              *NativeActionV1        `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
-	AuthoritySignatures []*SignatureV1         `protobuf:"bytes,2,rep,name=authority_signatures,json=authoritySignatures,proto3" json:"authority_signatures,omitempty"`
-	// New-owner acceptance for Capability transfer, or proof of possession by
-	// every key in a newly installed Agent policy.
-	CounterpartySignatures []*SignatureV1 `protobuf:"bytes,3,rep,name=counterparty_signatures,json=counterpartySignatures,proto3" json:"counterparty_signatures,omitempty"`
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Action                 *NativeActionV1        `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
+	AuthoritySignatures    []*SignatureV1         `protobuf:"bytes,2,rep,name=authority_signatures,json=authoritySignatures,proto3" json:"authority_signatures,omitempty"`
+	CounterpartySignatures []*SignatureV1         `protobuf:"bytes,3,rep,name=counterparty_signatures,json=counterpartySignatures,proto3" json:"counterparty_signatures,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -1472,11 +1469,9 @@ type AgentStateV1 struct {
 	RecoveryInitiationActionHash    string                 `protobuf:"bytes,8,opt,name=recovery_initiation_action_hash,json=recoveryInitiationActionHash,proto3" json:"recovery_initiation_action_hash,omitempty"`
 	RecoveryPolicy                  *ControllerPolicyV1    `protobuf:"bytes,9,opt,name=recovery_policy,json=recoveryPolicy,proto3" json:"recovery_policy,omitempty"`
 	Tombstoned                      bool                   `protobuf:"varint,10,opt,name=tombstoned,proto3" json:"tombstoned,omitempty"`
-	// Hash of the live canonical policy cell at recovery initiation. Completion
-	// fails unless this still matches the current live policy.
-	RecoveryInitiatingPolicyHash string `protobuf:"bytes,11,opt,name=recovery_initiating_policy_hash,json=recoveryInitiatingPolicyHash,proto3" json:"recovery_initiating_policy_hash,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	RecoveryInitiatingPolicyHash    string                 `protobuf:"bytes,11,opt,name=recovery_initiating_policy_hash,json=recoveryInitiatingPolicyHash,proto3" json:"recovery_initiating_policy_hash,omitempty"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *AgentStateV1) Reset() {
@@ -1837,12 +1832,10 @@ func (x *SubmitNativeActionRequest) GetSubmission() *SignedNativeActionV1 {
 }
 
 type SubmitNativeActionResponse struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	ActionHash string                 `protobuf:"bytes,1,opt,name=action_hash,json=actionHash,proto3" json:"action_hash,omitempty"`
-	State      *NativeStateV1         `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	// Transport acknowledgement only. Canonical success requires a later
-	// finalized ResolveNativeState result containing this action hash.
-	RelayAccepted bool `protobuf:"varint,4,opt,name=relay_accepted,json=relayAccepted,proto3" json:"relay_accepted,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActionHash    string                 `protobuf:"bytes,1,opt,name=action_hash,json=actionHash,proto3" json:"action_hash,omitempty"`
+	State         *NativeStateV1         `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	RelayAccepted bool                   `protobuf:"varint,4,opt,name=relay_accepted,json=relayAccepted,proto3" json:"relay_accepted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2010,8 +2003,10 @@ func (x *ResolveNativeStateResponse) GetState() *NativeStateV1 {
 	return nil
 }
 
-// Contract identities are network-relative. NetworkDomain supplies the
-// network/genesis binding; the account tuple and exact code bind the asset.
+// Contract identities are network-relative. The surrounding NetworkDomain
+// supplies the network/genesis binding; workchain + account_id identify the
+// account and code_hash prevents a different implementation being treated as
+// the same protocol asset.
 type TOSContractIdentityV1 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Workchain     int32                  `protobuf:"varint,1,opt,name=workchain,proto3" json:"workchain,omitempty"`
@@ -2133,11 +2128,9 @@ func (x *TOSAssetIdentityV1) GetDecimals() uint32 {
 }
 
 type MoneyV1 struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Canonical TOS-network asset contract identity, never a display ticker.
-	Asset *TOSAssetIdentityV1 `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
-	// Unsigned canonical base-10 atomic units: 0 or [1-9][0-9]*.
-	AtomicAmount  string `protobuf:"bytes,2,opt,name=atomic_amount,json=atomicAmount,proto3" json:"atomic_amount,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Asset         *TOSAssetIdentityV1    `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
+	AtomicAmount  string                 `protobuf:"bytes,2,opt,name=atomic_amount,json=atomicAmount,proto3" json:"atomic_amount,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2186,7 +2179,6 @@ func (x *MoneyV1) GetAtomicAmount() string {
 	return ""
 }
 
-// A Quote Proposal is gateway-local and non-canonical until accepted on TOS.
 type QuoteProposalV1 struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	ProposalId             string                 `protobuf:"bytes,1,opt,name=proposal_id,json=proposalId,proto3" json:"proposal_id,omitempty"`
@@ -2305,7 +2297,7 @@ func (x *QuoteProposalV1) GetExpiresAtUnixSeconds() uint64 {
 
 type AcceptedQuoteV1 struct {
 	state                        protoimpl.MessageState `protogen:"open.v1"`
-	Protocol                     string                 `protobuf:"bytes,1,opt,name=protocol,proto3" json:"protocol,omitempty"` // exactly atos_native_v1
+	Protocol                     string                 `protobuf:"bytes,1,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	QuoteCommitment              string                 `protobuf:"bytes,2,opt,name=quote_commitment,json=quoteCommitment,proto3" json:"quote_commitment,omitempty"`
 	Proposal                     *QuoteProposalV1       `protobuf:"bytes,3,opt,name=proposal,proto3" json:"proposal,omitempty"`
 	ExecutionSignerAuthorization string                 `protobuf:"bytes,4,opt,name=execution_signer_authorization,json=executionSignerAuthorization,proto3" json:"execution_signer_authorization,omitempty"`
@@ -2387,8 +2379,8 @@ func (x *AcceptedQuoteV1) GetNetwork() *NetworkDomain {
 	return nil
 }
 
-// Discovery is explicitly derived and may be incomplete. Each returned state
-// is nevertheless a fresh finalized Native resolution, not index authority.
+// Discovery is derived and may be incomplete. Returned states are fresh
+// finalized Native resolutions and are never index authority.
 type ListCapabilitiesRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Context           *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -2501,8 +2493,6 @@ func (x *ListCapabilitiesResponse) GetNextAfterCapabilityId() string {
 	return ""
 }
 
-// Gateway-local projection of digest-authenticated manifest content. These
-// fields and their match score are discovery hints, never TOS state.
 type GatewayLocalCapabilityMetadataV1 struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3233,7 +3223,7 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\x10ListCapabilities\x12'.atos.native.v1.ListCapabilitiesRequest\x1a(.atos.native.v1.ListCapabilitiesResponse\x12k\n" +
 	"\x12SearchCapabilities\x12).atos.native.v1.SearchCapabilitiesRequest\x1a*.atos.native.v1.SearchCapabilitiesResponse\x12\x86\x01\n" +
 	"\x1bPublishSoftwareWorkManifest\x122.atos.native.v1.PublishSoftwareWorkManifestRequest\x1a3.atos.native.v1.PublishSoftwareWorkManifestResponse\x12z\n" +
-	"\x17GetSoftwareWorkManifest\x12..atos.native.v1.GetSoftwareWorkManifestRequest\x1a/.atos.native.v1.GetSoftwareWorkManifestResponseBCZAgithub.com/tosnetwork/atos-spec/proto/atos/native/v1;atosnativev1b\x06proto3"
+	"\x17GetSoftwareWorkManifest\x12..atos.native.v1.GetSoftwareWorkManifestRequest\x1a/.atos.native.v1.GetSoftwareWorkManifestResponseBDZBgithub.com/tosnetwork/tos-protocol/gen/atos/native/v1;atosnativev1b\x06proto3"
 
 var (
 	file_atos_native_v1_native_proto_rawDescOnce sync.Once
