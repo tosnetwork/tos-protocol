@@ -28,13 +28,7 @@ type NativeClient interface {
 	ResolveNativeState(context.Context, *nativev1.ResolveNativeStateRequest) (*nativev1.ResolveNativeStateResponse, error)
 }
 
-type AssetObservation struct {
-	Asset               *nativev1.TOSAssetIdentityV1
-	MasterAddress       string
-	BuyerWalletAddress  string
-	BuyerBalanceAtomic  string
-	FinalizedCheckpoint uint64
-}
+type AssetObservation = toschain.StablecoinAssetObservation
 
 type AssetResolver interface {
 	ResolveBuyerAsset(context.Context, *nativev1.TOSAssetIdentityV1, string) (*AssetObservation, error)

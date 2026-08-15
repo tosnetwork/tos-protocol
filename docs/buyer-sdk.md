@@ -20,9 +20,22 @@ absolute budget-journal directory, and explicit limits:
 journal, err := buyersdk.NewFileBudgetJournal("/var/lib/atos-buyer/budget")
 if err != nil { /* fail closed */ }
 
+chain, err := toschain.New(toschain.Config{
+    Network: networkDomain.NetworkId,
+    Endpoints: []string{nodeA, nodeB, nodeC},
+    Quorum: 2,
+})
+if err != nil { /* fail closed */ }
+assetResolver, err := toschain.NewStablecoinResolver(
+    chain,
+    networkDomain,
+    "/var/lib/atos-buyer/stablecoin.checkpoint",
+)
+if err != nil { /* fail closed */ }
+
 buyer, err := buyersdk.New(buyersdk.Config{
     NativeClient: nativeResolver,
-    AssetResolver: stablecoinResolver,
+    AssetResolver: assetResolver,
     EscrowResolver: escrowResolver,
     FundingSender: custodySender,
     BudgetJournal: journal,
@@ -64,6 +77,12 @@ current user. The sender never receives mnemonic or private-key material.
 The directory must already exist, be owned by the process user, and have mode
 `0700`. Journal records are owner-only regular files. The limits use exact
 base-10 atomic units and are enforced per exact TOS stablecoin identity.
+The stablecoin resolver reads the authenticated master and the buyer's
+deterministically derived wallet at one quorum-finalized checkpoint. It obtains
+the wallet-code preimage from the reviewed master contract, checks both code
+hashes, owner, master, unlocked status, exact balance, network genesis, and a
+durable monotonic checkpoint. It does not resolve assets by ticker or trust a
+gateway-projected balance.
 
 Prepare the purchase from the received Quote Proposal and independently
 retrieved manifest. `ManifestJSON` is accepted for a locally authored strict
