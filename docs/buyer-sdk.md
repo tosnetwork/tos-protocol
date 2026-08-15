@@ -26,6 +26,21 @@ chain, err := toschain.New(toschain.Config{
     Quorum: 2,
 })
 if err != nil { /* fail closed */ }
+locator, err := nativecore.NewLocator(
+    networkDomain,
+    0,
+    reviewedRegistryCodeBOCBase64,
+    registryCodeHash,
+)
+if err != nil { /* fail closed */ }
+nativeResolver, err := toschain.NewSimplifiedNativeResolver(
+    chain,
+    locator,
+    "/var/lib/atos-buyer/native.checkpoint",
+)
+if err != nil { /* fail closed */ }
+nativeClient, err := toschain.NewDirectNativeClient(nativeResolver)
+if err != nil { /* fail closed */ }
 assetResolver, err := toschain.NewStablecoinResolver(
     chain,
     networkDomain,
@@ -34,7 +49,7 @@ assetResolver, err := toschain.NewStablecoinResolver(
 if err != nil { /* fail closed */ }
 
 buyer, err := buyersdk.New(buyersdk.Config{
-    NativeClient: nativeResolver,
+    NativeClient: nativeClient,
     AssetResolver: assetResolver,
     EscrowResolver: escrowResolver,
     FundingSender: custodySender,
@@ -53,6 +68,13 @@ buyer, err := buyersdk.New(buyersdk.Config{
     CallerID: buyerAgentID,
 })
 ```
+
+`DirectNativeClient` is an in-process interface adapter, not another resolver.
+The authoritative result still comes from `SimplifiedNativeResolver` reading
+typed Registry state at a strict-majority finalized TOS checkpoint. Deployments
+may instead supply the authenticated Connect client when process separation is
+required; both paths apply the same SDK verification and neither makes the
+gateway authoritative.
 
 For local `tosctl` custody, construct the production sender with pinned,
 owner-controlled absolute paths:
