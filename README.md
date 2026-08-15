@@ -15,6 +15,8 @@ The normative product and protocol design lives in
   Quote commitment construction.
 - `pkg/toschain` — strict-majority finalized chain reads and typed Native state
   decoding.
+- `pkg/nativeclient`, `pkg/providersdk`, and `pkg/buyersdk` — public Gate E
+  building blocks for canonical publication and bounded stablecoin purchases.
 - `pkg/chainactionpublisher` — hardened `tosctl` transport for exact signed TVM
   message cells. It pays relay fees but has no semantic authority.
 - `pkg/atosrpc` and `cmd/tos-atos-rpc` — private authenticated Connect service
@@ -41,6 +43,16 @@ accept externally generated controller signatures, relay the exact reviewed
 action, and wait for matching finalized typed TOS state. They contain no
 private-key or gateway-database authority. See
 [`docs/provider-sdk.md`](docs/provider-sdk.md).
+
+## Buyer SDK
+
+`pkg/buyersdk` prepares an exact Accepted Quote and deterministic escrow only
+after checking the manifest, finalized Capability, TOS-network stablecoin, and
+buyer balance. Its owner-private journal atomically enforces purchase budgets
+and grants one crash-safe funding lease; an ambiguous broadcast is resolved
+from finalized chain state and is never paid again automatically. Wallet keys
+remain behind an injected custody sender. See
+[`docs/buyer-sdk.md`](docs/buyer-sdk.md).
 
 Frozen registry vectors are checked twice: `pkg/nativecore` is the production
 encoder, while `internal/referencecodec` is an independent conformance encoder
