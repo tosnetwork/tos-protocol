@@ -24,21 +24,30 @@ const (
 type NativeErrorCodeV1 int32
 
 const (
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_UNSPECIFIED         NativeErrorCodeV1 = 0
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_MESSAGE         NativeErrorCodeV1 = 2200
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_WRONG_NETWORK       NativeErrorCodeV1 = 2201
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_WRONG_CONTRACT      NativeErrorCodeV1 = 2202
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_ACTION          NativeErrorCodeV1 = 2203
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_PREDECESSOR     NativeErrorCodeV1 = 2204
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_SEQUENCE        NativeErrorCodeV1 = 2205
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_TOMBSTONED          NativeErrorCodeV1 = 2206
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_POLICY          NativeErrorCodeV1 = 2207
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_SIGNATURE       NativeErrorCodeV1 = 2208
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_THRESHOLD           NativeErrorCodeV1 = 2209
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_TRANSITION      NativeErrorCodeV1 = 2210
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION   NativeErrorCodeV1 = 2211
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_TIMELOCK            NativeErrorCodeV1 = 2212
-	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE NativeErrorCodeV1 = 2213
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_UNSPECIFIED                   NativeErrorCodeV1 = 0
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_MESSAGE                   NativeErrorCodeV1 = 2200
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_WRONG_NETWORK                 NativeErrorCodeV1 = 2201
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_WRONG_CONTRACT                NativeErrorCodeV1 = 2202
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_ACTION                    NativeErrorCodeV1 = 2203
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_PREDECESSOR               NativeErrorCodeV1 = 2204
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_SEQUENCE                  NativeErrorCodeV1 = 2205
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_TOMBSTONED                    NativeErrorCodeV1 = 2206
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_POLICY                    NativeErrorCodeV1 = 2207
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_SIGNATURE                 NativeErrorCodeV1 = 2208
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_THRESHOLD                     NativeErrorCodeV1 = 2209
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_TRANSITION                NativeErrorCodeV1 = 2210
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION             NativeErrorCodeV1 = 2211
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_TIMELOCK                      NativeErrorCodeV1 = 2212
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE           NativeErrorCodeV1 = 2213
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_BAD_REQUEST            NativeErrorCodeV1 = 2300
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_NOT_FOUND              NativeErrorCodeV1 = 2301
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_CONFLICT               NativeErrorCodeV1 = 2302
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_DEPENDENCY_UNAVAILABLE NativeErrorCodeV1 = 2303
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_CAPACITY               NativeErrorCodeV1 = 2304
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_AMBIGUOUS_OUTCOME      NativeErrorCodeV1 = 2305
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_DEADLINE               NativeErrorCodeV1 = 2306
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_UNAUTHENTICATED        NativeErrorCodeV1 = 2307
+	NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_PUBLIC_PERMISSION_DENIED      NativeErrorCodeV1 = 2308
 )
 
 // Enum value maps for NativeErrorCodeV1.
@@ -59,23 +68,41 @@ var (
 		2211: "NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION",
 		2212: "NATIVE_ERROR_CODE_V1_TIMELOCK",
 		2213: "NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE",
+		2300: "NATIVE_ERROR_CODE_V1_PUBLIC_BAD_REQUEST",
+		2301: "NATIVE_ERROR_CODE_V1_PUBLIC_NOT_FOUND",
+		2302: "NATIVE_ERROR_CODE_V1_PUBLIC_CONFLICT",
+		2303: "NATIVE_ERROR_CODE_V1_PUBLIC_DEPENDENCY_UNAVAILABLE",
+		2304: "NATIVE_ERROR_CODE_V1_PUBLIC_CAPACITY",
+		2305: "NATIVE_ERROR_CODE_V1_PUBLIC_AMBIGUOUS_OUTCOME",
+		2306: "NATIVE_ERROR_CODE_V1_PUBLIC_DEADLINE",
+		2307: "NATIVE_ERROR_CODE_V1_PUBLIC_UNAUTHENTICATED",
+		2308: "NATIVE_ERROR_CODE_V1_PUBLIC_PERMISSION_DENIED",
 	}
 	NativeErrorCodeV1_value = map[string]int32{
-		"NATIVE_ERROR_CODE_V1_UNSPECIFIED":         0,
-		"NATIVE_ERROR_CODE_V1_BAD_MESSAGE":         2200,
-		"NATIVE_ERROR_CODE_V1_WRONG_NETWORK":       2201,
-		"NATIVE_ERROR_CODE_V1_WRONG_CONTRACT":      2202,
-		"NATIVE_ERROR_CODE_V1_BAD_ACTION":          2203,
-		"NATIVE_ERROR_CODE_V1_BAD_PREDECESSOR":     2204,
-		"NATIVE_ERROR_CODE_V1_BAD_SEQUENCE":        2205,
-		"NATIVE_ERROR_CODE_V1_TOMBSTONED":          2206,
-		"NATIVE_ERROR_CODE_V1_BAD_POLICY":          2207,
-		"NATIVE_ERROR_CODE_V1_BAD_SIGNATURE":       2208,
-		"NATIVE_ERROR_CODE_V1_THRESHOLD":           2209,
-		"NATIVE_ERROR_CODE_V1_BAD_TRANSITION":      2210,
-		"NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION":   2211,
-		"NATIVE_ERROR_CODE_V1_TIMELOCK":            2212,
-		"NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE": 2213,
+		"NATIVE_ERROR_CODE_V1_UNSPECIFIED":                   0,
+		"NATIVE_ERROR_CODE_V1_BAD_MESSAGE":                   2200,
+		"NATIVE_ERROR_CODE_V1_WRONG_NETWORK":                 2201,
+		"NATIVE_ERROR_CODE_V1_WRONG_CONTRACT":                2202,
+		"NATIVE_ERROR_CODE_V1_BAD_ACTION":                    2203,
+		"NATIVE_ERROR_CODE_V1_BAD_PREDECESSOR":               2204,
+		"NATIVE_ERROR_CODE_V1_BAD_SEQUENCE":                  2205,
+		"NATIVE_ERROR_CODE_V1_TOMBSTONED":                    2206,
+		"NATIVE_ERROR_CODE_V1_BAD_POLICY":                    2207,
+		"NATIVE_ERROR_CODE_V1_BAD_SIGNATURE":                 2208,
+		"NATIVE_ERROR_CODE_V1_THRESHOLD":                     2209,
+		"NATIVE_ERROR_CODE_V1_BAD_TRANSITION":                2210,
+		"NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION":             2211,
+		"NATIVE_ERROR_CODE_V1_TIMELOCK":                      2212,
+		"NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE":           2213,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_BAD_REQUEST":            2300,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_NOT_FOUND":              2301,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_CONFLICT":               2302,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_DEPENDENCY_UNAVAILABLE": 2303,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_CAPACITY":               2304,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_AMBIGUOUS_OUTCOME":      2305,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_DEADLINE":               2306,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_UNAUTHENTICATED":        2307,
+		"NATIVE_ERROR_CODE_V1_PUBLIC_PERMISSION_DENIED":      2308,
 	}
 )
 
@@ -104,6 +131,58 @@ func (x NativeErrorCodeV1) Number() protoreflect.EnumNumber {
 // Deprecated: Use NativeErrorCodeV1.Descriptor instead.
 func (NativeErrorCodeV1) EnumDescriptor() ([]byte, []int) {
 	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{0}
+}
+
+type RetryDispositionV1 int32
+
+const (
+	RetryDispositionV1_RETRY_DISPOSITION_V1_UNSPECIFIED                RetryDispositionV1 = 0
+	RetryDispositionV1_RETRY_DISPOSITION_V1_NEVER                      RetryDispositionV1 = 1
+	RetryDispositionV1_RETRY_DISPOSITION_V1_SAME_REQUEST_AFTER_BACKOFF RetryDispositionV1 = 2
+	RetryDispositionV1_RETRY_DISPOSITION_V1_RESOLVE_BEFORE_RETRY       RetryDispositionV1 = 3
+)
+
+// Enum value maps for RetryDispositionV1.
+var (
+	RetryDispositionV1_name = map[int32]string{
+		0: "RETRY_DISPOSITION_V1_UNSPECIFIED",
+		1: "RETRY_DISPOSITION_V1_NEVER",
+		2: "RETRY_DISPOSITION_V1_SAME_REQUEST_AFTER_BACKOFF",
+		3: "RETRY_DISPOSITION_V1_RESOLVE_BEFORE_RETRY",
+	}
+	RetryDispositionV1_value = map[string]int32{
+		"RETRY_DISPOSITION_V1_UNSPECIFIED":                0,
+		"RETRY_DISPOSITION_V1_NEVER":                      1,
+		"RETRY_DISPOSITION_V1_SAME_REQUEST_AFTER_BACKOFF": 2,
+		"RETRY_DISPOSITION_V1_RESOLVE_BEFORE_RETRY":       3,
+	}
+)
+
+func (x RetryDispositionV1) Enum() *RetryDispositionV1 {
+	p := new(RetryDispositionV1)
+	*p = x
+	return p
+}
+
+func (x RetryDispositionV1) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RetryDispositionV1) Descriptor() protoreflect.EnumDescriptor {
+	return file_atos_native_v1_native_proto_enumTypes[1].Descriptor()
+}
+
+func (RetryDispositionV1) Type() protoreflect.EnumType {
+	return &file_atos_native_v1_native_proto_enumTypes[1]
+}
+
+func (x RetryDispositionV1) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RetryDispositionV1.Descriptor instead.
+func (RetryDispositionV1) EnumDescriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{1}
 }
 
 type RequestContext struct {
@@ -183,11 +262,13 @@ func (x *RequestContext) GetDeadlineUnixMillis() int64 {
 }
 
 type NativeErrorV1 struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          NativeErrorCodeV1      `protobuf:"varint,1,opt,name=code,proto3,enum=atos.native.v1.NativeErrorCodeV1" json:"code,omitempty"`
-	Identifier    string                 `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Code             NativeErrorCodeV1      `protobuf:"varint,1,opt,name=code,proto3,enum=atos.native.v1.NativeErrorCodeV1" json:"code,omitempty"`
+	Identifier       string                 `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	RetryDisposition RetryDispositionV1     `protobuf:"varint,3,opt,name=retry_disposition,json=retryDisposition,proto3,enum=atos.native.v1.RetryDispositionV1" json:"retry_disposition,omitempty"`
+	RetryAfterMillis uint32                 `protobuf:"varint,4,opt,name=retry_after_millis,json=retryAfterMillis,proto3" json:"retry_after_millis,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *NativeErrorV1) Reset() {
@@ -232,6 +313,20 @@ func (x *NativeErrorV1) GetIdentifier() string {
 		return x.Identifier
 	}
 	return ""
+}
+
+func (x *NativeErrorV1) GetRetryDisposition() RetryDispositionV1 {
+	if x != nil {
+		return x.RetryDisposition
+	}
+	return RetryDispositionV1_RETRY_DISPOSITION_V1_UNSPECIFIED
+}
+
+func (x *NativeErrorV1) GetRetryAfterMillis() uint32 {
+	if x != nil {
+		return x.RetryAfterMillis
+	}
+	return 0
 }
 
 type NetworkDomain struct {
@@ -3167,12 +3262,14 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\btrace_id\x18\x02 \x01(\tR\atraceId\x12'\n" +
 	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
 	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x120\n" +
-	"\x14deadline_unix_millis\x18\x05 \x01(\x03R\x12deadlineUnixMillis\"f\n" +
+	"\x14deadline_unix_millis\x18\x05 \x01(\x03R\x12deadlineUnixMillis\"\xe5\x01\n" +
 	"\rNativeErrorV1\x125\n" +
 	"\x04code\x18\x01 \x01(\x0e2!.atos.native.v1.NativeErrorCodeV1R\x04code\x12\x1e\n" +
 	"\n" +
 	"identifier\x18\x02 \x01(\tR\n" +
-	"identifier\"\x86\x01\n" +
+	"identifier\x12O\n" +
+	"\x11retry_disposition\x18\x03 \x01(\x0e2\".atos.native.v1.RetryDispositionV1R\x10retryDisposition\x12,\n" +
+	"\x12retry_after_millis\x18\x04 \x01(\rR\x10retryAfterMillis\"\x86\x01\n" +
 	"\rNetworkDomain\x12\x1d\n" +
 	"\n" +
 	"network_id\x18\x01 \x01(\tR\tnetworkId\x12*\n" +
@@ -3400,7 +3497,7 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\x15transport_binding_boc\x18\x04 \x01(\fR\x13transportBindingBoc\x12,\n" +
 	"\x12dispute_policy_boc\x18\x05 \x01(\fR\x10disputePolicyBoc\"`\n" +
 	"\x1cRequestQuoteProposalResponse\x12@\n" +
-	"\apackage\x18\x01 \x01(\v2&.atos.native.v1.QuoteProposalPackageV1R\apackage*\xf0\x04\n" +
+	"\apackage\x18\x01 \x01(\v2&.atos.native.v1.QuoteProposalPackageV1R\apackage*\x9e\b\n" +
 	"\x11NativeErrorCodeV1\x12$\n" +
 	" NATIVE_ERROR_CODE_V1_UNSPECIFIED\x10\x00\x12%\n" +
 	" NATIVE_ERROR_CODE_V1_BAD_MESSAGE\x10\x98\x11\x12'\n" +
@@ -3416,7 +3513,21 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"#NATIVE_ERROR_CODE_V1_BAD_TRANSITION\x10\xa2\x11\x12+\n" +
 	"&NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION\x10\xa3\x11\x12\"\n" +
 	"\x1dNATIVE_ERROR_CODE_V1_TIMELOCK\x10\xa4\x11\x12-\n" +
-	"(NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE\x10\xa5\x112\xe9\x01\n" +
+	"(NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE\x10\xa5\x11\x12,\n" +
+	"'NATIVE_ERROR_CODE_V1_PUBLIC_BAD_REQUEST\x10\xfc\x11\x12*\n" +
+	"%NATIVE_ERROR_CODE_V1_PUBLIC_NOT_FOUND\x10\xfd\x11\x12)\n" +
+	"$NATIVE_ERROR_CODE_V1_PUBLIC_CONFLICT\x10\xfe\x11\x127\n" +
+	"2NATIVE_ERROR_CODE_V1_PUBLIC_DEPENDENCY_UNAVAILABLE\x10\xff\x11\x12)\n" +
+	"$NATIVE_ERROR_CODE_V1_PUBLIC_CAPACITY\x10\x80\x12\x122\n" +
+	"-NATIVE_ERROR_CODE_V1_PUBLIC_AMBIGUOUS_OUTCOME\x10\x81\x12\x12)\n" +
+	"$NATIVE_ERROR_CODE_V1_PUBLIC_DEADLINE\x10\x82\x12\x120\n" +
+	"+NATIVE_ERROR_CODE_V1_PUBLIC_UNAUTHENTICATED\x10\x83\x12\x122\n" +
+	"-NATIVE_ERROR_CODE_V1_PUBLIC_PERMISSION_DENIED\x10\x84\x12*\xbe\x01\n" +
+	"\x12RetryDispositionV1\x12$\n" +
+	" RETRY_DISPOSITION_V1_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aRETRY_DISPOSITION_V1_NEVER\x10\x01\x123\n" +
+	"/RETRY_DISPOSITION_V1_SAME_REQUEST_AFTER_BACKOFF\x10\x02\x12-\n" +
+	")RETRY_DISPOSITION_V1_RESOLVE_BEFORE_RETRY\x10\x032\xe9\x01\n" +
 	"\rNativeService\x12k\n" +
 	"\x12SubmitNativeAction\x12).atos.native.v1.SubmitNativeActionRequest\x1a*.atos.native.v1.SubmitNativeActionResponse\x12k\n" +
 	"\x12ResolveNativeState\x12).atos.native.v1.ResolveNativeStateRequest\x1a*.atos.native.v1.ResolveNativeStateResponse2\xe8\x04\n" +
@@ -3439,127 +3550,129 @@ func file_atos_native_v1_native_proto_rawDescGZIP() []byte {
 	return file_atos_native_v1_native_proto_rawDescData
 }
 
-var file_atos_native_v1_native_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_atos_native_v1_native_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_atos_native_v1_native_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_atos_native_v1_native_proto_goTypes = []any{
 	(NativeErrorCodeV1)(0),                      // 0: atos.native.v1.NativeErrorCodeV1
-	(*RequestContext)(nil),                      // 1: atos.native.v1.RequestContext
-	(*NativeErrorV1)(nil),                       // 2: atos.native.v1.NativeErrorV1
-	(*NetworkDomain)(nil),                       // 3: atos.native.v1.NetworkDomain
-	(*ChainReference)(nil),                      // 4: atos.native.v1.ChainReference
-	(*ControllerV1)(nil),                        // 5: atos.native.v1.ControllerV1
-	(*ControllerPolicyV1)(nil),                  // 6: atos.native.v1.ControllerPolicyV1
-	(*SignatureV1)(nil),                         // 7: atos.native.v1.SignatureV1
-	(*CapabilityVersionV1)(nil),                 // 8: atos.native.v1.CapabilityVersionV1
-	(*RegisterAgentV1)(nil),                     // 9: atos.native.v1.RegisterAgentV1
-	(*UpdateAgentPolicyV1)(nil),                 // 10: atos.native.v1.UpdateAgentPolicyV1
-	(*DelegateAgentV1)(nil),                     // 11: atos.native.v1.DelegateAgentV1
-	(*InitiateRecoveryV1)(nil),                  // 12: atos.native.v1.InitiateRecoveryV1
-	(*CompleteRecoveryV1)(nil),                  // 13: atos.native.v1.CompleteRecoveryV1
-	(*RevokeAgentV1)(nil),                       // 14: atos.native.v1.RevokeAgentV1
-	(*RegisterCapabilityV1)(nil),                // 15: atos.native.v1.RegisterCapabilityV1
-	(*AddCapabilityVersionV1)(nil),              // 16: atos.native.v1.AddCapabilityVersionV1
-	(*TransferCapabilityV1)(nil),                // 17: atos.native.v1.TransferCapabilityV1
-	(*RevokeCapabilityV1)(nil),                  // 18: atos.native.v1.RevokeCapabilityV1
-	(*NativeActionV1)(nil),                      // 19: atos.native.v1.NativeActionV1
-	(*SignedNativeActionV1)(nil),                // 20: atos.native.v1.SignedNativeActionV1
-	(*AgentStateV1)(nil),                        // 21: atos.native.v1.AgentStateV1
-	(*CapabilityStateV1)(nil),                   // 22: atos.native.v1.CapabilityStateV1
-	(*NativeStateV1)(nil),                       // 23: atos.native.v1.NativeStateV1
-	(*SubmitNativeActionRequest)(nil),           // 24: atos.native.v1.SubmitNativeActionRequest
-	(*SubmitNativeActionResponse)(nil),          // 25: atos.native.v1.SubmitNativeActionResponse
-	(*ResolveNativeStateRequest)(nil),           // 26: atos.native.v1.ResolveNativeStateRequest
-	(*ResolveNativeStateResponse)(nil),          // 27: atos.native.v1.ResolveNativeStateResponse
-	(*TOSContractIdentityV1)(nil),               // 28: atos.native.v1.TOSContractIdentityV1
-	(*TOSAssetIdentityV1)(nil),                  // 29: atos.native.v1.TOSAssetIdentityV1
-	(*MoneyV1)(nil),                             // 30: atos.native.v1.MoneyV1
-	(*QuoteProposalV1)(nil),                     // 31: atos.native.v1.QuoteProposalV1
-	(*AcceptedQuoteV1)(nil),                     // 32: atos.native.v1.AcceptedQuoteV1
-	(*ListCapabilitiesRequest)(nil),             // 33: atos.native.v1.ListCapabilitiesRequest
-	(*ListCapabilitiesResponse)(nil),            // 34: atos.native.v1.ListCapabilitiesResponse
-	(*GatewayLocalCapabilityMetadataV1)(nil),    // 35: atos.native.v1.GatewayLocalCapabilityMetadataV1
-	(*CapabilitySearchResultV1)(nil),            // 36: atos.native.v1.CapabilitySearchResultV1
-	(*SearchCapabilitiesRequest)(nil),           // 37: atos.native.v1.SearchCapabilitiesRequest
-	(*SearchCapabilitiesResponse)(nil),          // 38: atos.native.v1.SearchCapabilitiesResponse
-	(*PublishSoftwareWorkManifestRequest)(nil),  // 39: atos.native.v1.PublishSoftwareWorkManifestRequest
-	(*PublishSoftwareWorkManifestResponse)(nil), // 40: atos.native.v1.PublishSoftwareWorkManifestResponse
-	(*GetSoftwareWorkManifestRequest)(nil),      // 41: atos.native.v1.GetSoftwareWorkManifestRequest
-	(*GetSoftwareWorkManifestResponse)(nil),     // 42: atos.native.v1.GetSoftwareWorkManifestResponse
-	(*RequestQuoteProposalRequest)(nil),         // 43: atos.native.v1.RequestQuoteProposalRequest
-	(*QuoteProposalPackageV1)(nil),              // 44: atos.native.v1.QuoteProposalPackageV1
-	(*RequestQuoteProposalResponse)(nil),        // 45: atos.native.v1.RequestQuoteProposalResponse
+	(RetryDispositionV1)(0),                     // 1: atos.native.v1.RetryDispositionV1
+	(*RequestContext)(nil),                      // 2: atos.native.v1.RequestContext
+	(*NativeErrorV1)(nil),                       // 3: atos.native.v1.NativeErrorV1
+	(*NetworkDomain)(nil),                       // 4: atos.native.v1.NetworkDomain
+	(*ChainReference)(nil),                      // 5: atos.native.v1.ChainReference
+	(*ControllerV1)(nil),                        // 6: atos.native.v1.ControllerV1
+	(*ControllerPolicyV1)(nil),                  // 7: atos.native.v1.ControllerPolicyV1
+	(*SignatureV1)(nil),                         // 8: atos.native.v1.SignatureV1
+	(*CapabilityVersionV1)(nil),                 // 9: atos.native.v1.CapabilityVersionV1
+	(*RegisterAgentV1)(nil),                     // 10: atos.native.v1.RegisterAgentV1
+	(*UpdateAgentPolicyV1)(nil),                 // 11: atos.native.v1.UpdateAgentPolicyV1
+	(*DelegateAgentV1)(nil),                     // 12: atos.native.v1.DelegateAgentV1
+	(*InitiateRecoveryV1)(nil),                  // 13: atos.native.v1.InitiateRecoveryV1
+	(*CompleteRecoveryV1)(nil),                  // 14: atos.native.v1.CompleteRecoveryV1
+	(*RevokeAgentV1)(nil),                       // 15: atos.native.v1.RevokeAgentV1
+	(*RegisterCapabilityV1)(nil),                // 16: atos.native.v1.RegisterCapabilityV1
+	(*AddCapabilityVersionV1)(nil),              // 17: atos.native.v1.AddCapabilityVersionV1
+	(*TransferCapabilityV1)(nil),                // 18: atos.native.v1.TransferCapabilityV1
+	(*RevokeCapabilityV1)(nil),                  // 19: atos.native.v1.RevokeCapabilityV1
+	(*NativeActionV1)(nil),                      // 20: atos.native.v1.NativeActionV1
+	(*SignedNativeActionV1)(nil),                // 21: atos.native.v1.SignedNativeActionV1
+	(*AgentStateV1)(nil),                        // 22: atos.native.v1.AgentStateV1
+	(*CapabilityStateV1)(nil),                   // 23: atos.native.v1.CapabilityStateV1
+	(*NativeStateV1)(nil),                       // 24: atos.native.v1.NativeStateV1
+	(*SubmitNativeActionRequest)(nil),           // 25: atos.native.v1.SubmitNativeActionRequest
+	(*SubmitNativeActionResponse)(nil),          // 26: atos.native.v1.SubmitNativeActionResponse
+	(*ResolveNativeStateRequest)(nil),           // 27: atos.native.v1.ResolveNativeStateRequest
+	(*ResolveNativeStateResponse)(nil),          // 28: atos.native.v1.ResolveNativeStateResponse
+	(*TOSContractIdentityV1)(nil),               // 29: atos.native.v1.TOSContractIdentityV1
+	(*TOSAssetIdentityV1)(nil),                  // 30: atos.native.v1.TOSAssetIdentityV1
+	(*MoneyV1)(nil),                             // 31: atos.native.v1.MoneyV1
+	(*QuoteProposalV1)(nil),                     // 32: atos.native.v1.QuoteProposalV1
+	(*AcceptedQuoteV1)(nil),                     // 33: atos.native.v1.AcceptedQuoteV1
+	(*ListCapabilitiesRequest)(nil),             // 34: atos.native.v1.ListCapabilitiesRequest
+	(*ListCapabilitiesResponse)(nil),            // 35: atos.native.v1.ListCapabilitiesResponse
+	(*GatewayLocalCapabilityMetadataV1)(nil),    // 36: atos.native.v1.GatewayLocalCapabilityMetadataV1
+	(*CapabilitySearchResultV1)(nil),            // 37: atos.native.v1.CapabilitySearchResultV1
+	(*SearchCapabilitiesRequest)(nil),           // 38: atos.native.v1.SearchCapabilitiesRequest
+	(*SearchCapabilitiesResponse)(nil),          // 39: atos.native.v1.SearchCapabilitiesResponse
+	(*PublishSoftwareWorkManifestRequest)(nil),  // 40: atos.native.v1.PublishSoftwareWorkManifestRequest
+	(*PublishSoftwareWorkManifestResponse)(nil), // 41: atos.native.v1.PublishSoftwareWorkManifestResponse
+	(*GetSoftwareWorkManifestRequest)(nil),      // 42: atos.native.v1.GetSoftwareWorkManifestRequest
+	(*GetSoftwareWorkManifestResponse)(nil),     // 43: atos.native.v1.GetSoftwareWorkManifestResponse
+	(*RequestQuoteProposalRequest)(nil),         // 44: atos.native.v1.RequestQuoteProposalRequest
+	(*QuoteProposalPackageV1)(nil),              // 45: atos.native.v1.QuoteProposalPackageV1
+	(*RequestQuoteProposalResponse)(nil),        // 46: atos.native.v1.RequestQuoteProposalResponse
 }
 var file_atos_native_v1_native_proto_depIdxs = []int32{
 	0,  // 0: atos.native.v1.NativeErrorV1.code:type_name -> atos.native.v1.NativeErrorCodeV1
-	5,  // 1: atos.native.v1.ControllerPolicyV1.controllers:type_name -> atos.native.v1.ControllerV1
-	6,  // 2: atos.native.v1.RegisterAgentV1.initial_policy:type_name -> atos.native.v1.ControllerPolicyV1
-	6,  // 3: atos.native.v1.UpdateAgentPolicyV1.new_policy:type_name -> atos.native.v1.ControllerPolicyV1
-	6,  // 4: atos.native.v1.InitiateRecoveryV1.new_policy:type_name -> atos.native.v1.ControllerPolicyV1
-	8,  // 5: atos.native.v1.RegisterCapabilityV1.initial_version:type_name -> atos.native.v1.CapabilityVersionV1
-	8,  // 6: atos.native.v1.AddCapabilityVersionV1.version:type_name -> atos.native.v1.CapabilityVersionV1
-	3,  // 7: atos.native.v1.NativeActionV1.network:type_name -> atos.native.v1.NetworkDomain
-	9,  // 8: atos.native.v1.NativeActionV1.register_agent:type_name -> atos.native.v1.RegisterAgentV1
-	10, // 9: atos.native.v1.NativeActionV1.update_agent_policy:type_name -> atos.native.v1.UpdateAgentPolicyV1
-	11, // 10: atos.native.v1.NativeActionV1.delegate_agent:type_name -> atos.native.v1.DelegateAgentV1
-	12, // 11: atos.native.v1.NativeActionV1.initiate_recovery:type_name -> atos.native.v1.InitiateRecoveryV1
-	13, // 12: atos.native.v1.NativeActionV1.complete_recovery:type_name -> atos.native.v1.CompleteRecoveryV1
-	14, // 13: atos.native.v1.NativeActionV1.revoke_agent:type_name -> atos.native.v1.RevokeAgentV1
-	15, // 14: atos.native.v1.NativeActionV1.register_capability:type_name -> atos.native.v1.RegisterCapabilityV1
-	16, // 15: atos.native.v1.NativeActionV1.add_capability_version:type_name -> atos.native.v1.AddCapabilityVersionV1
-	17, // 16: atos.native.v1.NativeActionV1.transfer_capability:type_name -> atos.native.v1.TransferCapabilityV1
-	18, // 17: atos.native.v1.NativeActionV1.revoke_capability:type_name -> atos.native.v1.RevokeCapabilityV1
-	19, // 18: atos.native.v1.SignedNativeActionV1.action:type_name -> atos.native.v1.NativeActionV1
-	7,  // 19: atos.native.v1.SignedNativeActionV1.authority_signatures:type_name -> atos.native.v1.SignatureV1
-	7,  // 20: atos.native.v1.SignedNativeActionV1.counterparty_signatures:type_name -> atos.native.v1.SignatureV1
-	6,  // 21: atos.native.v1.AgentStateV1.policy:type_name -> atos.native.v1.ControllerPolicyV1
-	6,  // 22: atos.native.v1.AgentStateV1.recovery_policy:type_name -> atos.native.v1.ControllerPolicyV1
-	8,  // 23: atos.native.v1.CapabilityStateV1.versions:type_name -> atos.native.v1.CapabilityVersionV1
-	3,  // 24: atos.native.v1.NativeStateV1.network:type_name -> atos.native.v1.NetworkDomain
-	4,  // 25: atos.native.v1.NativeStateV1.reference:type_name -> atos.native.v1.ChainReference
-	21, // 26: atos.native.v1.NativeStateV1.agent:type_name -> atos.native.v1.AgentStateV1
-	22, // 27: atos.native.v1.NativeStateV1.capability:type_name -> atos.native.v1.CapabilityStateV1
-	1,  // 28: atos.native.v1.SubmitNativeActionRequest.context:type_name -> atos.native.v1.RequestContext
-	20, // 29: atos.native.v1.SubmitNativeActionRequest.submission:type_name -> atos.native.v1.SignedNativeActionV1
-	23, // 30: atos.native.v1.SubmitNativeActionResponse.state:type_name -> atos.native.v1.NativeStateV1
-	1,  // 31: atos.native.v1.ResolveNativeStateRequest.context:type_name -> atos.native.v1.RequestContext
-	23, // 32: atos.native.v1.ResolveNativeStateResponse.state:type_name -> atos.native.v1.NativeStateV1
-	28, // 33: atos.native.v1.TOSAssetIdentityV1.master:type_name -> atos.native.v1.TOSContractIdentityV1
-	29, // 34: atos.native.v1.MoneyV1.asset:type_name -> atos.native.v1.TOSAssetIdentityV1
-	30, // 35: atos.native.v1.QuoteProposalV1.maximum_price:type_name -> atos.native.v1.MoneyV1
-	31, // 36: atos.native.v1.AcceptedQuoteV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
-	4,  // 37: atos.native.v1.AcceptedQuoteV1.reference:type_name -> atos.native.v1.ChainReference
-	3,  // 38: atos.native.v1.AcceptedQuoteV1.network:type_name -> atos.native.v1.NetworkDomain
-	1,  // 39: atos.native.v1.ListCapabilitiesRequest.context:type_name -> atos.native.v1.RequestContext
-	23, // 40: atos.native.v1.ListCapabilitiesResponse.capabilities:type_name -> atos.native.v1.NativeStateV1
-	23, // 41: atos.native.v1.CapabilitySearchResultV1.capability:type_name -> atos.native.v1.NativeStateV1
-	35, // 42: atos.native.v1.CapabilitySearchResultV1.gateway_local:type_name -> atos.native.v1.GatewayLocalCapabilityMetadataV1
-	1,  // 43: atos.native.v1.SearchCapabilitiesRequest.context:type_name -> atos.native.v1.RequestContext
-	36, // 44: atos.native.v1.SearchCapabilitiesResponse.results:type_name -> atos.native.v1.CapabilitySearchResultV1
-	1,  // 45: atos.native.v1.PublishSoftwareWorkManifestRequest.context:type_name -> atos.native.v1.RequestContext
-	23, // 46: atos.native.v1.PublishSoftwareWorkManifestResponse.capability:type_name -> atos.native.v1.NativeStateV1
-	1,  // 47: atos.native.v1.GetSoftwareWorkManifestRequest.context:type_name -> atos.native.v1.RequestContext
-	1,  // 48: atos.native.v1.RequestQuoteProposalRequest.context:type_name -> atos.native.v1.RequestContext
-	31, // 49: atos.native.v1.QuoteProposalPackageV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
-	44, // 50: atos.native.v1.RequestQuoteProposalResponse.package:type_name -> atos.native.v1.QuoteProposalPackageV1
-	24, // 51: atos.native.v1.NativeService.SubmitNativeAction:input_type -> atos.native.v1.SubmitNativeActionRequest
-	26, // 52: atos.native.v1.NativeService.ResolveNativeState:input_type -> atos.native.v1.ResolveNativeStateRequest
-	33, // 53: atos.native.v1.CapabilityDiscoveryService.ListCapabilities:input_type -> atos.native.v1.ListCapabilitiesRequest
-	37, // 54: atos.native.v1.CapabilityDiscoveryService.SearchCapabilities:input_type -> atos.native.v1.SearchCapabilitiesRequest
-	39, // 55: atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest:input_type -> atos.native.v1.PublishSoftwareWorkManifestRequest
-	41, // 56: atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest:input_type -> atos.native.v1.GetSoftwareWorkManifestRequest
-	43, // 57: atos.native.v1.CapabilityDiscoveryService.RequestQuoteProposal:input_type -> atos.native.v1.RequestQuoteProposalRequest
-	25, // 58: atos.native.v1.NativeService.SubmitNativeAction:output_type -> atos.native.v1.SubmitNativeActionResponse
-	27, // 59: atos.native.v1.NativeService.ResolveNativeState:output_type -> atos.native.v1.ResolveNativeStateResponse
-	34, // 60: atos.native.v1.CapabilityDiscoveryService.ListCapabilities:output_type -> atos.native.v1.ListCapabilitiesResponse
-	38, // 61: atos.native.v1.CapabilityDiscoveryService.SearchCapabilities:output_type -> atos.native.v1.SearchCapabilitiesResponse
-	40, // 62: atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest:output_type -> atos.native.v1.PublishSoftwareWorkManifestResponse
-	42, // 63: atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest:output_type -> atos.native.v1.GetSoftwareWorkManifestResponse
-	45, // 64: atos.native.v1.CapabilityDiscoveryService.RequestQuoteProposal:output_type -> atos.native.v1.RequestQuoteProposalResponse
-	58, // [58:65] is the sub-list for method output_type
-	51, // [51:58] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	1,  // 1: atos.native.v1.NativeErrorV1.retry_disposition:type_name -> atos.native.v1.RetryDispositionV1
+	6,  // 2: atos.native.v1.ControllerPolicyV1.controllers:type_name -> atos.native.v1.ControllerV1
+	7,  // 3: atos.native.v1.RegisterAgentV1.initial_policy:type_name -> atos.native.v1.ControllerPolicyV1
+	7,  // 4: atos.native.v1.UpdateAgentPolicyV1.new_policy:type_name -> atos.native.v1.ControllerPolicyV1
+	7,  // 5: atos.native.v1.InitiateRecoveryV1.new_policy:type_name -> atos.native.v1.ControllerPolicyV1
+	9,  // 6: atos.native.v1.RegisterCapabilityV1.initial_version:type_name -> atos.native.v1.CapabilityVersionV1
+	9,  // 7: atos.native.v1.AddCapabilityVersionV1.version:type_name -> atos.native.v1.CapabilityVersionV1
+	4,  // 8: atos.native.v1.NativeActionV1.network:type_name -> atos.native.v1.NetworkDomain
+	10, // 9: atos.native.v1.NativeActionV1.register_agent:type_name -> atos.native.v1.RegisterAgentV1
+	11, // 10: atos.native.v1.NativeActionV1.update_agent_policy:type_name -> atos.native.v1.UpdateAgentPolicyV1
+	12, // 11: atos.native.v1.NativeActionV1.delegate_agent:type_name -> atos.native.v1.DelegateAgentV1
+	13, // 12: atos.native.v1.NativeActionV1.initiate_recovery:type_name -> atos.native.v1.InitiateRecoveryV1
+	14, // 13: atos.native.v1.NativeActionV1.complete_recovery:type_name -> atos.native.v1.CompleteRecoveryV1
+	15, // 14: atos.native.v1.NativeActionV1.revoke_agent:type_name -> atos.native.v1.RevokeAgentV1
+	16, // 15: atos.native.v1.NativeActionV1.register_capability:type_name -> atos.native.v1.RegisterCapabilityV1
+	17, // 16: atos.native.v1.NativeActionV1.add_capability_version:type_name -> atos.native.v1.AddCapabilityVersionV1
+	18, // 17: atos.native.v1.NativeActionV1.transfer_capability:type_name -> atos.native.v1.TransferCapabilityV1
+	19, // 18: atos.native.v1.NativeActionV1.revoke_capability:type_name -> atos.native.v1.RevokeCapabilityV1
+	20, // 19: atos.native.v1.SignedNativeActionV1.action:type_name -> atos.native.v1.NativeActionV1
+	8,  // 20: atos.native.v1.SignedNativeActionV1.authority_signatures:type_name -> atos.native.v1.SignatureV1
+	8,  // 21: atos.native.v1.SignedNativeActionV1.counterparty_signatures:type_name -> atos.native.v1.SignatureV1
+	7,  // 22: atos.native.v1.AgentStateV1.policy:type_name -> atos.native.v1.ControllerPolicyV1
+	7,  // 23: atos.native.v1.AgentStateV1.recovery_policy:type_name -> atos.native.v1.ControllerPolicyV1
+	9,  // 24: atos.native.v1.CapabilityStateV1.versions:type_name -> atos.native.v1.CapabilityVersionV1
+	4,  // 25: atos.native.v1.NativeStateV1.network:type_name -> atos.native.v1.NetworkDomain
+	5,  // 26: atos.native.v1.NativeStateV1.reference:type_name -> atos.native.v1.ChainReference
+	22, // 27: atos.native.v1.NativeStateV1.agent:type_name -> atos.native.v1.AgentStateV1
+	23, // 28: atos.native.v1.NativeStateV1.capability:type_name -> atos.native.v1.CapabilityStateV1
+	2,  // 29: atos.native.v1.SubmitNativeActionRequest.context:type_name -> atos.native.v1.RequestContext
+	21, // 30: atos.native.v1.SubmitNativeActionRequest.submission:type_name -> atos.native.v1.SignedNativeActionV1
+	24, // 31: atos.native.v1.SubmitNativeActionResponse.state:type_name -> atos.native.v1.NativeStateV1
+	2,  // 32: atos.native.v1.ResolveNativeStateRequest.context:type_name -> atos.native.v1.RequestContext
+	24, // 33: atos.native.v1.ResolveNativeStateResponse.state:type_name -> atos.native.v1.NativeStateV1
+	29, // 34: atos.native.v1.TOSAssetIdentityV1.master:type_name -> atos.native.v1.TOSContractIdentityV1
+	30, // 35: atos.native.v1.MoneyV1.asset:type_name -> atos.native.v1.TOSAssetIdentityV1
+	31, // 36: atos.native.v1.QuoteProposalV1.maximum_price:type_name -> atos.native.v1.MoneyV1
+	32, // 37: atos.native.v1.AcceptedQuoteV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
+	5,  // 38: atos.native.v1.AcceptedQuoteV1.reference:type_name -> atos.native.v1.ChainReference
+	4,  // 39: atos.native.v1.AcceptedQuoteV1.network:type_name -> atos.native.v1.NetworkDomain
+	2,  // 40: atos.native.v1.ListCapabilitiesRequest.context:type_name -> atos.native.v1.RequestContext
+	24, // 41: atos.native.v1.ListCapabilitiesResponse.capabilities:type_name -> atos.native.v1.NativeStateV1
+	24, // 42: atos.native.v1.CapabilitySearchResultV1.capability:type_name -> atos.native.v1.NativeStateV1
+	36, // 43: atos.native.v1.CapabilitySearchResultV1.gateway_local:type_name -> atos.native.v1.GatewayLocalCapabilityMetadataV1
+	2,  // 44: atos.native.v1.SearchCapabilitiesRequest.context:type_name -> atos.native.v1.RequestContext
+	37, // 45: atos.native.v1.SearchCapabilitiesResponse.results:type_name -> atos.native.v1.CapabilitySearchResultV1
+	2,  // 46: atos.native.v1.PublishSoftwareWorkManifestRequest.context:type_name -> atos.native.v1.RequestContext
+	24, // 47: atos.native.v1.PublishSoftwareWorkManifestResponse.capability:type_name -> atos.native.v1.NativeStateV1
+	2,  // 48: atos.native.v1.GetSoftwareWorkManifestRequest.context:type_name -> atos.native.v1.RequestContext
+	2,  // 49: atos.native.v1.RequestQuoteProposalRequest.context:type_name -> atos.native.v1.RequestContext
+	32, // 50: atos.native.v1.QuoteProposalPackageV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
+	45, // 51: atos.native.v1.RequestQuoteProposalResponse.package:type_name -> atos.native.v1.QuoteProposalPackageV1
+	25, // 52: atos.native.v1.NativeService.SubmitNativeAction:input_type -> atos.native.v1.SubmitNativeActionRequest
+	27, // 53: atos.native.v1.NativeService.ResolveNativeState:input_type -> atos.native.v1.ResolveNativeStateRequest
+	34, // 54: atos.native.v1.CapabilityDiscoveryService.ListCapabilities:input_type -> atos.native.v1.ListCapabilitiesRequest
+	38, // 55: atos.native.v1.CapabilityDiscoveryService.SearchCapabilities:input_type -> atos.native.v1.SearchCapabilitiesRequest
+	40, // 56: atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest:input_type -> atos.native.v1.PublishSoftwareWorkManifestRequest
+	42, // 57: atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest:input_type -> atos.native.v1.GetSoftwareWorkManifestRequest
+	44, // 58: atos.native.v1.CapabilityDiscoveryService.RequestQuoteProposal:input_type -> atos.native.v1.RequestQuoteProposalRequest
+	26, // 59: atos.native.v1.NativeService.SubmitNativeAction:output_type -> atos.native.v1.SubmitNativeActionResponse
+	28, // 60: atos.native.v1.NativeService.ResolveNativeState:output_type -> atos.native.v1.ResolveNativeStateResponse
+	35, // 61: atos.native.v1.CapabilityDiscoveryService.ListCapabilities:output_type -> atos.native.v1.ListCapabilitiesResponse
+	39, // 62: atos.native.v1.CapabilityDiscoveryService.SearchCapabilities:output_type -> atos.native.v1.SearchCapabilitiesResponse
+	41, // 63: atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest:output_type -> atos.native.v1.PublishSoftwareWorkManifestResponse
+	43, // 64: atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest:output_type -> atos.native.v1.GetSoftwareWorkManifestResponse
+	46, // 65: atos.native.v1.CapabilityDiscoveryService.RequestQuoteProposal:output_type -> atos.native.v1.RequestQuoteProposalResponse
+	59, // [59:66] is the sub-list for method output_type
+	52, // [52:59] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_atos_native_v1_native_proto_init() }
@@ -3588,7 +3701,7 @@ func file_atos_native_v1_native_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_native_v1_native_proto_rawDesc), len(file_atos_native_v1_native_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   2,

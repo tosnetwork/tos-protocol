@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
 	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
+	"github.com/tosnetwork/tos-protocol/pkg/publicerrors"
 )
 
 type nativeStub struct {
@@ -21,7 +22,7 @@ type nativeStub struct {
 
 func TestNativeProtocolErrorsCarryStableTypedDetail(t *testing.T) {
 	cause := &nativecore.ProtocolError{Code: nativecore.ErrBadSequence, Message: "test diagnostic"}
-	err := nativeConnectError(connect.CodeFailedPrecondition, cause)
+	err := nativeConnectError(connect.CodeFailedPrecondition, cause, publicerrors.AmbiguousOutcome)
 	var connectErr *connect.Error
 	if !errors.As(err, &connectErr) || len(connectErr.Details()) != 1 {
 		t.Fatalf("error = %v", err)
@@ -32,7 +33,7 @@ func TestNativeProtocolErrorsCarryStableTypedDetail(t *testing.T) {
 	}
 	detail, ok := value.(*nativev1.NativeErrorV1)
 	if !ok || detail.Code != nativev1.NativeErrorCodeV1_NATIVE_ERROR_CODE_V1_BAD_SEQUENCE ||
-		detail.Identifier != "NATIVE_BAD_SEQUENCE" {
+		detail.Identifier != "NATIVE_BAD_SEQUENCE" || detail.RetryDisposition != nativev1.RetryDispositionV1_RETRY_DISPOSITION_V1_NEVER {
 		t.Fatalf("detail = %#v", value)
 	}
 }

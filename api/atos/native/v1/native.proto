@@ -21,8 +21,23 @@ enum NativeErrorCodeV1 {
   NATIVE_ERROR_CODE_V1_IMMUTABLE_VERSION = 2211;
   NATIVE_ERROR_CODE_V1_TIMELOCK = 2212;
   NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE = 2213;
+  NATIVE_ERROR_CODE_V1_PUBLIC_BAD_REQUEST = 2300;
+  NATIVE_ERROR_CODE_V1_PUBLIC_NOT_FOUND = 2301;
+  NATIVE_ERROR_CODE_V1_PUBLIC_CONFLICT = 2302;
+  NATIVE_ERROR_CODE_V1_PUBLIC_DEPENDENCY_UNAVAILABLE = 2303;
+  NATIVE_ERROR_CODE_V1_PUBLIC_CAPACITY = 2304;
+  NATIVE_ERROR_CODE_V1_PUBLIC_AMBIGUOUS_OUTCOME = 2305;
+  NATIVE_ERROR_CODE_V1_PUBLIC_DEADLINE = 2306;
+  NATIVE_ERROR_CODE_V1_PUBLIC_UNAUTHENTICATED = 2307;
+  NATIVE_ERROR_CODE_V1_PUBLIC_PERMISSION_DENIED = 2308;
 }
-message NativeErrorV1 { NativeErrorCodeV1 code = 1; string identifier = 2; }
+enum RetryDispositionV1 {
+  RETRY_DISPOSITION_V1_UNSPECIFIED = 0;
+  RETRY_DISPOSITION_V1_NEVER = 1;
+  RETRY_DISPOSITION_V1_SAME_REQUEST_AFTER_BACKOFF = 2;
+  RETRY_DISPOSITION_V1_RESOLVE_BEFORE_RETRY = 3;
+}
+message NativeErrorV1 { NativeErrorCodeV1 code = 1; string identifier = 2; RetryDispositionV1 retry_disposition = 3; uint32 retry_after_millis = 4; }
 message NetworkDomain { string network_id = 1; string genesis_root_hash = 2; string genesis_file_hash = 3; }
 message ChainReference { int32 workchain = 1; string account = 2; uint64 logical_time = 3; string transaction_hash = 4; string contract_code_hash = 5; uint64 finalized_checkpoint = 6; }
 // key_id is exactly ed25519:<lowercase 32-byte-public-key-hex>.
