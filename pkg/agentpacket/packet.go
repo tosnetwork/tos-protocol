@@ -7,9 +7,12 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"regexp"
 	"sync"
 	"time"
@@ -40,6 +43,76 @@ type Packet struct {
 
 type AgentResolver interface {
 	ResolveAgent(string) (*nativev1.AgentStateV1, bool, error)
+}
+
+type wirePacket struct {
+	Schema           string `json:"schema"`
+	SenderAgentID    string `json:"sender_agent_id"`
+	RecipientAgentID string `json:"recipient_agent_id"`
+	CapabilityID     string `json:"capability_id"`
+	QuoteCommitment  string `json:"quote_commitment,omitempty"`
+	Sequence         uint64 `json:"sequence"`
+	NonceHex         string `json:"nonce_hex"`
+	PayloadBase64    string `json:"payload_base64"`
+	CreatedAtUnix    uint64 `json:"created_at_unix"`
+	SenderPublicKey  string `json:"sender_public_key_hex"`
+	Signature        string `json:"signature_hex"`
+}
+
+// EncodeJSON returns the strict transport representation. JSON is a wire
+// format only; signing always covers the canonical binary preimage above.
+func EncodeJSON(packet Packet) ([]byte, error) {
+	if err := validate(packet, true); err != nil {
+		return nil, err
+	}
+	value := wirePacket{Schema: "atos.native.agent-packet.v1", SenderAgentID: packet.SenderAgentID,
+		RecipientAgentID: packet.RecipientAgentID, CapabilityID: packet.CapabilityID, QuoteCommitment: packet.QuoteCommitment,
+		Sequence: packet.Sequence, NonceHex: hex.EncodeToString(packet.Nonce[:]), PayloadBase64: base64.StdEncoding.EncodeToString(packet.Payload),
+		CreatedAtUnix: packet.CreatedAtUnix, SenderPublicKey: hex.EncodeToString(packet.SenderPublicKey), Signature: hex.EncodeToString(packet.Signature)}
+	return json.Marshal(value)
+}
+
+// DecodeJSON rejects unknown or trailing fields and reconstructs the exact
+// signed packet. It does not claim chain authority; Verify must still run.
+func DecodeJSON(raw []byte) (Packet, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var value wirePacket
+	if err := decoder.Decode(&value); err != nil {
+		return Packet{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return Packet{}, errors.New("Agent packet has trailing JSON")
+	}
+	if value.Schema != "atos.native.agent-packet.v1" {
+		return Packet{}, errors.New("unsupported Agent packet schema")
+	}
+	nonce, err := hex.DecodeString(value.NonceHex)
+	if err != nil || len(nonce) != 32 {
+		return Packet{}, errors.New("invalid Agent packet nonce")
+	}
+	publicKey, err := hex.DecodeString(value.SenderPublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return Packet{}, errors.New("invalid Agent packet public key")
+	}
+	signature, err := hex.DecodeString(value.Signature)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return Packet{}, errors.New("invalid Agent packet signature")
+	}
+	payload, err := base64.StdEncoding.Strict().DecodeString(value.PayloadBase64)
+	if err != nil {
+		return Packet{}, errors.New("invalid Agent packet payload")
+	}
+	var nonceValue [32]byte
+	copy(nonceValue[:], nonce)
+	packet := Packet{SenderAgentID: value.SenderAgentID, RecipientAgentID: value.RecipientAgentID, CapabilityID: value.CapabilityID,
+		QuoteCommitment: value.QuoteCommitment, Sequence: value.Sequence, Nonce: nonceValue, Payload: payload,
+		CreatedAtUnix: value.CreatedAtUnix, SenderPublicKey: ed25519.PublicKey(publicKey), Signature: signature}
+	if err := validate(packet, true); err != nil {
+		return Packet{}, err
+	}
+	return packet, nil
 }
 
 type ReplayGuard struct {

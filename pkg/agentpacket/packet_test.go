@@ -58,6 +58,29 @@ func TestPacketRejectsUnauthorizedSenderAndMissingRecipient(t *testing.T) {
 	}
 }
 
+func TestJSONWireRoundTripAndStrictParsing(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	private := ed25519.NewKeyFromSeed(seed)
+	packet, err := Sign(Packet{SenderAgentID: "agent_" + repeatHex("77"), RecipientAgentID: "agent_" + repeatHex("88"),
+		CapabilityID: "cap_" + repeatHex("99"), Sequence: 2, CreatedAtUnix: 200, Payload: []byte("wire")}, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := EncodeJSON(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeJSON(raw)
+	if err != nil || string(decoded.Payload) != "wire" || string(decoded.Signature) != string(packet.Signature) {
+		t.Fatalf("decoded=%+v err=%v", decoded, err)
+	}
+	for _, mutation := range [][]byte{append(raw, []byte("{}")...), append(raw[:len(raw)-1], []byte(`,"unknown":true}`)...)} {
+		if _, err := DecodeJSON(mutation); err == nil {
+			t.Fatal("non-strict wire accepted")
+		}
+	}
+}
+
 func repeatHex(value string) string {
 	result := ""
 	for i := 0; i < 32; i++ {
