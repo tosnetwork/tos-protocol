@@ -21,6 +21,9 @@ func TestContactCardIsFinalizedAndTimeBound(t *testing.T) {
 	if err := VerifyContact(resolver{agent: state}, card, now); err != nil {
 		t.Fatal(err)
 	}
+	if err := VerifyContactForNetwork(resolver{agent: state}, &nativev1.NetworkDomain{NetworkId: "other", GenesisRootHash: network.GenesisRootHash, GenesisFileHash: network.GenesisFileHash}, card, now); err == nil {
+		t.Fatal("cross-network Contact Card accepted")
+	}
 	if err := VerifyContact(resolver{agent: state}, card, time.Unix(1500, 0)); err == nil {
 		t.Fatal("expired Contact Card accepted")
 	}

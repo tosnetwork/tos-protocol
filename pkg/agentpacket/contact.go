@@ -96,11 +96,20 @@ func SignContact(card ContactCard, privateKey ed25519.PrivateKey) (ContactCard, 
 }
 
 func VerifyContact(resolver AgentResolver, card ContactCard, now time.Time) error {
+	return VerifyContactForNetwork(resolver, nil, card, now)
+}
+
+// VerifyContactForNetwork additionally binds the locator to the caller's
+// configured TOS network tuple. Pass a non-nil network in production.
+func VerifyContactForNetwork(resolver AgentResolver, network *nativev1.NetworkDomain, card ContactCard, now time.Time) error {
 	if resolver == nil || now.IsZero() {
 		return errors.New("invalid Contact Card verification context")
 	}
 	if err := validateContact(card, true, now); err != nil {
 		return err
+	}
+	if network != nil && (card.Network == nil || card.Network.NetworkId != network.NetworkId || card.Network.GenesisRootHash != network.GenesisRootHash || card.Network.GenesisFileHash != network.GenesisFileHash) {
+		return errors.New("Contact Card network tuple mismatch")
 	}
 	state, found, err := resolver.ResolveAgent(card.AgentID)
 	if err != nil {
