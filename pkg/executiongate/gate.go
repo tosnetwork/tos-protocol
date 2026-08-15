@@ -5,7 +5,6 @@ package executiongate
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"strings"
@@ -22,7 +21,7 @@ type EscrowResolver interface {
 }
 
 type NativeResolver interface {
-	ResolveNativeState(context.Context, *nativev1.ResolveNativeStateRequest) (*nativev1.ResolveNativeStateResponse, error)
+	ResolveFinalizedState(context.Context, string, string) (*nativev1.NativeStateV1, bool, time.Time, error)
 }
 
 type Config struct {
@@ -36,7 +35,6 @@ type Config struct {
 	ManifestDigest               string
 	TransportDigest              string
 	ExecutionSignerAuthorization string
-	CallerID                     string
 	Timeout                      time.Duration
 	Now                          func() time.Time
 }
@@ -52,7 +50,6 @@ type Gate struct {
 	manifest      string
 	transport     string
 	signerAuth    string
-	callerID      string
 	timeout       time.Duration
 	now           func() time.Time
 }
@@ -92,7 +89,7 @@ func New(c Config) (*Gate, error) {
 		c.Network.NetworkId == "" || !cellDigest(c.RegistryCodeHash) ||
 		!agentID(c.ProviderAgentID) || !rawAddress(c.ProviderAddress) ||
 		!shaDigest(c.ManifestDigest) || !shaDigest(c.TransportDigest) ||
-		!shaDigest(c.ExecutionSignerAuthorization) || c.CallerID == "" {
+		!shaDigest(c.ExecutionSignerAuthorization) {
 		return nil, errors.New("invalid execution gate configuration")
 	}
 	if c.Timeout == 0 {
@@ -113,7 +110,7 @@ func New(c Config) (*Gate, error) {
 		network: proto.Clone(c.Network).(*nativev1.NetworkDomain), registryHash: c.RegistryCodeHash,
 		providerAgent: c.ProviderAgentID, provider: c.ProviderAddress, manifest: c.ManifestDigest,
 		transport: c.TransportDigest, signerAuth: c.ExecutionSignerAuthorization,
-		callerID: c.CallerID, timeout: c.Timeout, now: c.Now,
+		timeout: c.Timeout, now: c.Now,
 	}, nil
 }
 
@@ -196,26 +193,16 @@ func (g *Gate) ClaimExecution(ctx context.Context, r Request) (Evidence, error) 
 }
 
 func (g *Gate) resolveNative(ctx context.Context, objectID string, now time.Time) (*nativev1.NativeStateV1, error) {
-	var nonce [16]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
-		return nil, errors.New("cannot create Native resolution request ID")
-	}
-	resolved, err := g.native.ResolveNativeState(ctx, &nativev1.ResolveNativeStateRequest{
-		Context: &nativev1.RequestContext{
-			RequestId: hex.EncodeToString(nonce[:]), CallerId: g.callerID,
-			DeadlineUnixMillis: now.Add(g.timeout).UnixMilli(),
-		},
-		ObjectId: objectID,
-	})
+	state, found, finalizedAt, err := g.native.ResolveFinalizedState(ctx, objectID, "")
 	if err != nil {
 		return nil, err
 	}
-	if resolved == nil || !resolved.Found || resolved.State == nil ||
-		!validReference(resolved.State.Reference, g.registryHash) ||
-		!cellDigest(resolved.State.TvmStateHash) || !proto.Equal(resolved.State.Network, g.network) {
+	if !found || state == nil || finalizedAt.IsZero() || finalizedAt.After(now.Add(time.Minute)) ||
+		!validReference(state.Reference, g.registryHash) ||
+		!cellDigest(state.TvmStateHash) || !proto.Equal(state.Network, g.network) {
 		return nil, errors.New("object is not valid finalized Native state")
 	}
-	return resolved.State, nil
+	return state, nil
 }
 
 func validReference(r *nativev1.ChainReference, expectedCodeHash string) bool {

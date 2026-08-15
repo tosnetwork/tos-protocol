@@ -23,12 +23,12 @@ type nativeFake struct {
 	values map[string]*nativev1.NativeStateV1
 }
 
-func (f nativeFake) ResolveNativeState(_ context.Context, req *nativev1.ResolveNativeStateRequest) (*nativev1.ResolveNativeStateResponse, error) {
-	state, ok := f.values[req.ObjectId]
+func (f nativeFake) ResolveFinalizedState(_ context.Context, objectID, _ string) (*nativev1.NativeStateV1, bool, time.Time, error) {
+	state, ok := f.values[objectID]
 	if !ok {
-		return &nativev1.ResolveNativeStateResponse{}, nil
+		return nil, false, time.Time{}, nil
 	}
-	return &nativev1.ResolveNativeStateResponse{Found: true, State: proto.Clone(state).(*nativev1.NativeStateV1)}, nil
+	return proto.Clone(state).(*nativev1.NativeStateV1), true, time.Unix(2_000_000_000, 0), nil
 }
 
 func TestGateAtomicallyBindsOnePaidQuoteExecution(t *testing.T) {
@@ -184,7 +184,7 @@ func fixture(t *testing.T) (*Gate, Request) {
 		NativeResolver: nativeFake{map[string]*nativev1.NativeStateV1{agentID: agentState, capID: capabilityState}},
 		Network:        network, RegistryCodeHash: codeHash, ProviderAgentID: agentID,
 		ProviderAddress: provider, ManifestDigest: manifest, TransportDigest: transport,
-		ExecutionSignerAuthorization: signer, CallerID: "gate", Timeout: time.Second,
+		ExecutionSignerAuthorization: signer, Timeout: time.Second,
 		Now: func() time.Time { return now },
 	})
 	if err != nil {
