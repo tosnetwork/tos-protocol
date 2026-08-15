@@ -85,6 +85,13 @@ func TestProductionAcceptedQuoteFrozenVector(t *testing.T) {
 		}
 		t.Fatalf("production Accepted Quote vector mismatch: commitment=%s actual_len=%d expected_len=%d first_diff=%d actual=%q expected=%q", commitment, len(actualBOC), len(vector.Expected.BOCBase64), index, actualBOC[start:endActual], vector.Expected.BOCBase64[start:endExpected])
 	}
+	decoded, err := DecodeAcceptedQuoteV1(root, network)
+	if err != nil || decoded.Proposal.CapabilityId != proposal.CapabilityId ||
+		decoded.Proposal.CapabilityVersion != proposal.CapabilityVersion ||
+		decoded.Proposal.MaximumPrice.AtomicAmount != proposal.MaximumPrice.AtomicAmount ||
+		decoded.ExecutionSignerAuthorization != vector.Quote.SignerAuthorizationDigest {
+		t.Fatalf("Accepted Quote decode mismatch: decoded=%+v err=%v", decoded, err)
+	}
 	terms, err := BuildEscrowTermsCellV1(EscrowTermsV1{
 		BuyerAddress: vector.Quote.EscrowTerms.BuyerAddress, ProviderAddress: vector.Quote.EscrowTerms.ProviderAddress,
 		FundingDeadline: vector.Quote.EscrowTerms.FundingDeadline, RefundAvailableAt: vector.Quote.EscrowTerms.RefundAvailableAt,
