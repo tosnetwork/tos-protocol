@@ -38,11 +38,11 @@ type Bundle struct {
 }
 
 type Result struct {
-	QuoteCommitment     string
-	ReceiptCommitment   string
-	FinalizedCheckpoint uint64
-	ReadyToBroadcast    bool
-	AlreadyPending      bool
+	QuoteCommitment     string `json:"quote_commitment"`
+	ReceiptCommitment   string `json:"receipt_commitment"`
+	FinalizedCheckpoint uint64 `json:"finalized_checkpoint"`
+	ReadyToBroadcast    bool   `json:"ready_to_broadcast"`
+	AlreadyPending      bool   `json:"already_pending"`
 }
 
 // Verify reconstructs all commercial commitments and binds them to finalized
