@@ -35,6 +35,12 @@ Consumers must compare retrieved manifest bytes with the exact digest in a
 fresh Capability resolution or Accepted Quote. Discovery order, inclusion,
 availability, and search ranking are never protocol facts.
 
+`pkg/gatewayfederation` composes two or more public catalog clients without a
+shared database. It preserves source Gateway identity, validates the finalized
+Capability envelope and selected active version, isolates malformed or
+unavailable peers, and retrieves manifests only when the exact SHA-256 digest
+matches. Its merged order remains a presentation detail, not consensus.
+
 ## Public-interface example
 
 `cmd/atos-native-discovery` exercises the catalog exclusively through its
