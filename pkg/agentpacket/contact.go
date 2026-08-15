@@ -5,7 +5,9 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/url"
 	"strings"
 	"time"
@@ -23,6 +25,58 @@ type ContactCard struct {
 	ExpiresAtUnix uint64
 	PublicKey     ed25519.PublicKey
 	Signature     []byte
+}
+
+type wireContactCard struct {
+	Schema        string   `json:"schema"`
+	AgentID       string   `json:"agent_id"`
+	NetworkID     string   `json:"network_id"`
+	GenesisRoot   string   `json:"genesis_root_hash"`
+	GenesisFile   string   `json:"genesis_file_hash"`
+	Endpoint      string   `json:"endpoint"`
+	Capabilities  []string `json:"capabilities,omitempty"`
+	ExpiresAtUnix uint64   `json:"expires_at_unix"`
+	PublicKeyHex  string   `json:"public_key_hex"`
+	SignatureHex  string   `json:"signature_hex"`
+}
+
+func EncodeContactJSON(card ContactCard) ([]byte, error) {
+	if err := validateContact(card, true, time.Unix(int64(card.ExpiresAtUnix-1), 0)); err != nil {
+		return nil, err
+	}
+	value := wireContactCard{Schema: "atos.native.agent-contact.v1", AgentID: card.AgentID, NetworkID: card.Network.NetworkId,
+		GenesisRoot: card.Network.GenesisRootHash, GenesisFile: card.Network.GenesisFileHash, Endpoint: card.Endpoint,
+		Capabilities: card.Capabilities, ExpiresAtUnix: card.ExpiresAtUnix, PublicKeyHex: hex.EncodeToString(card.PublicKey), SignatureHex: hex.EncodeToString(card.Signature)}
+	return json.Marshal(value)
+}
+
+func DecodeContactJSON(raw []byte) (ContactCard, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var value wireContactCard
+	if err := decoder.Decode(&value); err != nil {
+		return ContactCard{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return ContactCard{}, errors.New("Contact Card has trailing JSON")
+	}
+	if value.Schema != "atos.native.agent-contact.v1" {
+		return ContactCard{}, errors.New("unsupported Contact Card schema")
+	}
+	publicKey, err := hex.DecodeString(value.PublicKeyHex)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return ContactCard{}, errors.New("invalid Contact Card public key")
+	}
+	signature, err := hex.DecodeString(value.SignatureHex)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return ContactCard{}, errors.New("invalid Contact Card signature")
+	}
+	card := ContactCard{AgentID: value.AgentID, Network: &nativev1.NetworkDomain{NetworkId: value.NetworkID, GenesisRootHash: value.GenesisRoot, GenesisFileHash: value.GenesisFile}, Endpoint: value.Endpoint, Capabilities: value.Capabilities, ExpiresAtUnix: value.ExpiresAtUnix, PublicKey: ed25519.PublicKey(publicKey), Signature: signature}
+	if err := validateContact(card, true, time.Unix(int64(card.ExpiresAtUnix-1), 0)); err != nil {
+		return ContactCard{}, err
+	}
+	return card, nil
 }
 
 func SignContact(card ContactCard, privateKey ed25519.PrivateKey) (ContactCard, error) {

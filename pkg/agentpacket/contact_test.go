@@ -29,3 +29,22 @@ func TestContactCardIsFinalizedAndTimeBound(t *testing.T) {
 		t.Fatal("plaintext public endpoint accepted")
 	}
 }
+
+func TestContactCardJSONRoundTripIsStrict(t *testing.T) {
+	private := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+	card, err := SignContact(ContactCard{AgentID: "agent_" + repeatHex("ef"), Network: &nativev1.NetworkDomain{NetworkId: "test", GenesisRootHash: "sha256:" + repeatHex("01"), GenesisFileHash: "sha256:" + repeatHex("02")}, Endpoint: "https://agent.example", ExpiresAtUnix: 1500}, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := EncodeContactJSON(card)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeContactJSON(raw)
+	if err != nil || decoded.AgentID != card.AgentID || string(decoded.Signature) != string(card.Signature) {
+		t.Fatalf("decoded=%+v err=%v", decoded, err)
+	}
+	if _, err := DecodeContactJSON(append(raw, []byte("{}")...)); err == nil {
+		t.Fatal("trailing Contact Card JSON accepted")
+	}
+}
