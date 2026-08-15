@@ -23,6 +23,8 @@ jobs:
         run: |
           sudo install -d -o root -g root -m 0755 /usr/local/libexec/tos-protocol-test
           sudo install -o root -g root -m 0755 tests/fixtures/tosctl-chain-publisher /usr/local/libexec/tos-protocol-test/tosctl
+      - name: Verify Native protobuf generated sources
+        run: scripts/test-native-proto-generated.sh
       - run: make all
       - run: make test-race
       - run: make reproducible-builds
