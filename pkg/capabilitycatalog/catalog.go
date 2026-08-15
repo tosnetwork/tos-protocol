@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -52,6 +53,11 @@ type Catalog struct {
 type Page struct {
 	Capabilities []*nativev1.NativeStateV1
 	NextToken    string
+}
+
+type SearchPage struct {
+	Results   []*nativev1.CapabilitySearchResultV1
+	NextToken string
 }
 
 func New(config Config) (*Catalog, error) {
@@ -169,6 +175,127 @@ func (c *Catalog) List(ctx context.Context, pageSize uint32, after string) (*Pag
 		page.NextToken = entries[end-1].CapabilityID
 	}
 	return page, nil
+}
+
+// Search scans the gateway-local discovery set in Capability-ID order. Chain
+// state, selected version, and digest remain separate from the explicitly
+// local manifest projection and score.
+func (c *Catalog) Search(ctx context.Context, query string, pageSize uint32, after string) (*SearchPage, error) {
+	query = strings.TrimSpace(query)
+	if c == nil || ctx == nil || query == "" || len(query) > 128 ||
+		(after != "" && !capabilityIDValid(after)) {
+		return nil, errors.New("invalid Capability search request")
+	}
+	if pageSize == 0 {
+		pageSize = DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		return nil, errors.New("Capability search page is too large")
+	}
+	tokens := strings.Fields(strings.ToLower(query))
+	if len(tokens) == 0 || len(tokens) > 16 {
+		return nil, errors.New("invalid Capability search query")
+	}
+	entries, err := c.store.entries()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].CapabilityID < entries[j].CapabilityID })
+	start := sort.Search(len(entries), func(i int) bool { return entries[i].CapabilityID > after })
+	page := &SearchPage{}
+	lastScanned := start - 1
+	for index := start; index < len(entries) && uint32(len(page.Results)) < pageSize; index++ {
+		lastScanned = index
+		entry := entries[index]
+		state, err := c.resolve(ctx, entry.CapabilityID)
+		if err != nil {
+			return nil, err
+		}
+		if state.Reference.FinalizedCheckpoint < entry.FinalizedCheckpoint {
+			return nil, errors.New("finalized Capability observation rolled back behind catalog fence")
+		}
+		if err := c.store.observe(state); err != nil {
+			return nil, err
+		}
+		capability := state.GetCapability()
+		if capability.Tombstoned {
+			continue
+		}
+		result, err := c.searchResult(state, tokens)
+		if err != nil {
+			return nil, err
+		}
+		if result != nil {
+			page.Results = append(page.Results, result)
+		}
+	}
+	if lastScanned >= start && lastScanned+1 < len(entries) {
+		page.NextToken = entries[lastScanned].CapabilityID
+	}
+	return page, nil
+}
+
+func (c *Catalog) searchResult(state *nativev1.NativeStateV1, tokens []string) (*nativev1.CapabilitySearchResultV1, error) {
+	capability := state.GetCapability()
+	var best *nativev1.CapabilitySearchResultV1
+	for _, version := range capability.Versions {
+		if version == nil || version.Revoked {
+			continue
+		}
+		raw, err := c.store.manifest(version.ManifestDigest)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		manifest, err := nativecore.DecodeCanonicalSoftwareWorkManifestCBOR(raw)
+		if err != nil || manifest.Version != version.Version {
+			return nil, errors.New("stored manifest conflicts with finalized Capability version")
+		}
+		score := searchScore(tokens, capability.CapabilityId, capability.OwnerAgentId,
+			version.Version, version.ManifestDigest, manifest.Name, manifest.Description, manifest.Operation)
+		if score == 0 {
+			continue
+		}
+		candidate := &nativev1.CapabilitySearchResultV1{Capability: proto.Clone(state).(*nativev1.NativeStateV1),
+			CapabilityVersion: version.Version, ManifestDigest: version.ManifestDigest,
+			GatewayLocal: &nativev1.GatewayLocalCapabilityMetadataV1{Name: manifest.Name,
+				Description: manifest.Description, Operation: manifest.Operation, MatchScore: score}}
+		if best == nil || score > best.GatewayLocal.MatchScore ||
+			score == best.GatewayLocal.MatchScore && version.Version < best.CapabilityVersion {
+			best = candidate
+		}
+	}
+	return best, nil
+}
+
+func searchScore(tokens []string, fields ...string) uint32 {
+	values := make([]string, len(fields))
+	for index, field := range fields {
+		values[index] = strings.ToLower(field)
+	}
+	var score uint32
+	for _, token := range tokens {
+		matched := false
+		for index, value := range values {
+			if strings.Contains(value, token) {
+				matched = true
+				weight := uint32(2)
+				if index < 4 {
+					weight = 12
+				} else if index == 4 || index == 6 {
+					weight = 8
+				}
+				score += weight
+				break
+			}
+		}
+		if !matched {
+			return 0
+		}
+	}
+	return score
 }
 
 func (c *Catalog) resolve(ctx context.Context, capabilityID string) (*nativev1.NativeStateV1, error) {

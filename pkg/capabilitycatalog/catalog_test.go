@@ -120,6 +120,52 @@ func TestCatalogEnforcesEntryBound(t *testing.T) {
 	}
 }
 
+func TestCatalogSearchSeparatesFinalizedAndGatewayLocalFields(t *testing.T) {
+	catalog, resolver, manifest, digest, state := newCatalogFixture(t, 10)
+	capabilityID := state.GetCapability().CapabilityId
+	if _, _, err := catalog.PublishManifest(context.Background(), capabilityID, manifest); err != nil {
+		t.Fatal(err)
+	}
+	resolver.states[capabilityID].Reference.FinalizedCheckpoint = 21
+	page, err := catalog.Search(context.Background(), "deterministic test", 10, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Results) != 1 || page.NextToken != "" {
+		t.Fatal("search did not return the one local match")
+	}
+	result := page.Results[0]
+	if result.Capability.Reference.FinalizedCheckpoint != 21 || result.ManifestDigest != digest ||
+		result.CapabilityVersion == "" || result.GatewayLocal == nil ||
+		result.GatewayLocal.Name != "Deterministic Go test" || result.GatewayLocal.MatchScore == 0 {
+		t.Fatal("search mixed or omitted finalized and gateway-local fields")
+	}
+	if _, err := catalog.Search(context.Background(), "not-present", 10, ""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCatalogSearchRejectsRevokedVersionAndCorruptManifest(t *testing.T) {
+	catalog, resolver, manifest, digest, state := newCatalogFixture(t, 10)
+	capabilityID := state.GetCapability().CapabilityId
+	if _, _, err := catalog.PublishManifest(context.Background(), capabilityID, manifest); err != nil {
+		t.Fatal(err)
+	}
+	resolver.states[capabilityID].GetCapability().Versions[0].Revoked = true
+	page, err := catalog.Search(context.Background(), "deterministic", 10, "")
+	if err != nil || len(page.Results) != 0 {
+		t.Fatal("search returned a revoked Capability version")
+	}
+	resolver.states[capabilityID].GetCapability().Versions[0].Revoked = false
+	path, _ := catalog.store.manifestPath(digest)
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := catalog.Search(context.Background(), "deterministic", 10, ""); err == nil {
+		t.Fatal("search ignored corrupted local manifest storage")
+	}
+}
+
 func newCatalogFixture(t *testing.T, maxEntries uint32) (*Catalog, *catalogResolverFake, []byte, string, *nativev1.NativeStateV1) {
 	t.Helper()
 	raw, err := os.ReadFile("../nativecore/testdata/software_work_manifest_v1_vector.json")

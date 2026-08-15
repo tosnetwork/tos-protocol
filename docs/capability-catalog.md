@@ -26,6 +26,9 @@ The protobuf exposes this derived boundary as a separate
   Capability verification;
 - `ListCapabilities` returns freshly resolved typed Native states from an
   explicitly incomplete discovery set; and
+- `SearchCapabilities` scans the local set in Capability-ID order, returning
+  fresh finalized state and chain-selected version/digest separately from
+  explicitly gateway-local manifest metadata and match score; and
 - `GetSoftwareWorkManifest` retrieves immutable canonical CBOR by digest.
 
 Consumers must compare retrieved manifest bytes with the exact digest in a

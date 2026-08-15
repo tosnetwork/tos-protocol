@@ -121,6 +121,19 @@ func (c *Client) ListCapabilities(ctx context.Context, request *nativev1.ListCap
 	return response.Msg, nil
 }
 
+func (c *Client) SearchCapabilities(ctx context.Context, request *nativev1.SearchCapabilitiesRequest) (*nativev1.SearchCapabilitiesResponse, error) {
+	if c == nil || c.discovery == nil || request == nil {
+		return nil, errors.New("invalid Capability search request")
+	}
+	callCtx, cancel := c.callContext(ctx)
+	defer cancel()
+	response, err := c.discovery.SearchCapabilities(callCtx, authorized(c, request))
+	if err != nil {
+		return nil, err
+	}
+	return response.Msg, nil
+}
+
 func (c *Client) PublishSoftwareWorkManifest(ctx context.Context, request *nativev1.PublishSoftwareWorkManifestRequest) (*nativev1.PublishSoftwareWorkManifestResponse, error) {
 	if c == nil || c.discovery == nil || request == nil {
 		return nil, errors.New("invalid software-work manifest publication request")

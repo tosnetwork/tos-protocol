@@ -45,6 +45,9 @@ const (
 	// CapabilityDiscoveryServiceListCapabilitiesProcedure is the fully-qualified name of the
 	// CapabilityDiscoveryService's ListCapabilities RPC.
 	CapabilityDiscoveryServiceListCapabilitiesProcedure = "/atos.native.v1.CapabilityDiscoveryService/ListCapabilities"
+	// CapabilityDiscoveryServiceSearchCapabilitiesProcedure is the fully-qualified name of the
+	// CapabilityDiscoveryService's SearchCapabilities RPC.
+	CapabilityDiscoveryServiceSearchCapabilitiesProcedure = "/atos.native.v1.CapabilityDiscoveryService/SearchCapabilities"
 	// CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure is the fully-qualified name of the
 	// CapabilityDiscoveryService's PublishSoftwareWorkManifest RPC.
 	CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure = "/atos.native.v1.CapabilityDiscoveryService/PublishSoftwareWorkManifest"
@@ -153,6 +156,7 @@ func (UnimplementedNativeServiceHandler) ResolveNativeState(context.Context, *co
 // service.
 type CapabilityDiscoveryServiceClient interface {
 	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
+	SearchCapabilities(context.Context, *connect.Request[v1.SearchCapabilitiesRequest]) (*connect.Response[v1.SearchCapabilitiesResponse], error)
 	PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error)
 	GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error)
 }
@@ -174,6 +178,12 @@ func NewCapabilityDiscoveryServiceClient(httpClient connect.HTTPClient, baseURL 
 			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("ListCapabilities")),
 			connect.WithClientOptions(opts...),
 		),
+		searchCapabilities: connect.NewClient[v1.SearchCapabilitiesRequest, v1.SearchCapabilitiesResponse](
+			httpClient,
+			baseURL+CapabilityDiscoveryServiceSearchCapabilitiesProcedure,
+			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("SearchCapabilities")),
+			connect.WithClientOptions(opts...),
+		),
 		publishSoftwareWorkManifest: connect.NewClient[v1.PublishSoftwareWorkManifestRequest, v1.PublishSoftwareWorkManifestResponse](
 			httpClient,
 			baseURL+CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure,
@@ -192,6 +202,7 @@ func NewCapabilityDiscoveryServiceClient(httpClient connect.HTTPClient, baseURL 
 // capabilityDiscoveryServiceClient implements CapabilityDiscoveryServiceClient.
 type capabilityDiscoveryServiceClient struct {
 	listCapabilities            *connect.Client[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse]
+	searchCapabilities          *connect.Client[v1.SearchCapabilitiesRequest, v1.SearchCapabilitiesResponse]
 	publishSoftwareWorkManifest *connect.Client[v1.PublishSoftwareWorkManifestRequest, v1.PublishSoftwareWorkManifestResponse]
 	getSoftwareWorkManifest     *connect.Client[v1.GetSoftwareWorkManifestRequest, v1.GetSoftwareWorkManifestResponse]
 }
@@ -199,6 +210,11 @@ type capabilityDiscoveryServiceClient struct {
 // ListCapabilities calls atos.native.v1.CapabilityDiscoveryService.ListCapabilities.
 func (c *capabilityDiscoveryServiceClient) ListCapabilities(ctx context.Context, req *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
 	return c.listCapabilities.CallUnary(ctx, req)
+}
+
+// SearchCapabilities calls atos.native.v1.CapabilityDiscoveryService.SearchCapabilities.
+func (c *capabilityDiscoveryServiceClient) SearchCapabilities(ctx context.Context, req *connect.Request[v1.SearchCapabilitiesRequest]) (*connect.Response[v1.SearchCapabilitiesResponse], error) {
+	return c.searchCapabilities.CallUnary(ctx, req)
 }
 
 // PublishSoftwareWorkManifest calls
@@ -216,6 +232,7 @@ func (c *capabilityDiscoveryServiceClient) GetSoftwareWorkManifest(ctx context.C
 // atos.native.v1.CapabilityDiscoveryService service.
 type CapabilityDiscoveryServiceHandler interface {
 	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
+	SearchCapabilities(context.Context, *connect.Request[v1.SearchCapabilitiesRequest]) (*connect.Response[v1.SearchCapabilitiesResponse], error)
 	PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error)
 	GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error)
 }
@@ -231,6 +248,12 @@ func NewCapabilityDiscoveryServiceHandler(svc CapabilityDiscoveryServiceHandler,
 		CapabilityDiscoveryServiceListCapabilitiesProcedure,
 		svc.ListCapabilities,
 		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("ListCapabilities")),
+		connect.WithHandlerOptions(opts...),
+	)
+	capabilityDiscoveryServiceSearchCapabilitiesHandler := connect.NewUnaryHandler(
+		CapabilityDiscoveryServiceSearchCapabilitiesProcedure,
+		svc.SearchCapabilities,
+		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("SearchCapabilities")),
 		connect.WithHandlerOptions(opts...),
 	)
 	capabilityDiscoveryServicePublishSoftwareWorkManifestHandler := connect.NewUnaryHandler(
@@ -249,6 +272,8 @@ func NewCapabilityDiscoveryServiceHandler(svc CapabilityDiscoveryServiceHandler,
 		switch r.URL.Path {
 		case CapabilityDiscoveryServiceListCapabilitiesProcedure:
 			capabilityDiscoveryServiceListCapabilitiesHandler.ServeHTTP(w, r)
+		case CapabilityDiscoveryServiceSearchCapabilitiesProcedure:
+			capabilityDiscoveryServiceSearchCapabilitiesHandler.ServeHTTP(w, r)
 		case CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure:
 			capabilityDiscoveryServicePublishSoftwareWorkManifestHandler.ServeHTTP(w, r)
 		case CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure:
@@ -264,6 +289,10 @@ type UnimplementedCapabilityDiscoveryServiceHandler struct{}
 
 func (UnimplementedCapabilityDiscoveryServiceHandler) ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.ListCapabilities is not implemented"))
+}
+
+func (UnimplementedCapabilityDiscoveryServiceHandler) SearchCapabilities(context.Context, *connect.Request[v1.SearchCapabilitiesRequest]) (*connect.Response[v1.SearchCapabilitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.SearchCapabilities is not implemented"))
 }
 
 func (UnimplementedCapabilityDiscoveryServiceHandler) PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error) {
