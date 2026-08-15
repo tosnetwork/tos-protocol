@@ -328,12 +328,22 @@ func (b *Buyer) revalidatePurchase(ctx context.Context, purchase *PreparedPurcha
 }
 
 func (b *Buyer) validateCapability(ctx context.Context, proposal *nativev1.QuoteProposalV1) error {
+	return b.ValidateCapability(ctx, proposal.CapabilityId, proposal.ProviderAgentId, proposal.CapabilityVersion, proposal.ManifestDigest)
+}
+
+// ValidateCapability verifies that a finalized Capability exists and matches the
+// expected owner Agent, version, and manifest digest against this buyer's
+// network and registry code hash. It is the single authority for capability
+// validation: the internal quote flow calls it, and it is exported so an
+// external caller resolving the same Capability independently performs the exact
+// same finalized check rather than re-deriving it.
+func (b *Buyer) ValidateCapability(ctx context.Context, capabilityID, ownerAgentID, version, manifestDigest string) error {
 	requestContext, err := b.requestContext()
 	if err != nil {
 		return err
 	}
 	response, err := b.nativeClient.ResolveNativeState(ctx, &nativev1.ResolveNativeStateRequest{
-		Context: requestContext, ObjectId: proposal.CapabilityId,
+		Context: requestContext, ObjectId: capabilityID,
 	})
 	if err != nil {
 		return err
@@ -344,11 +354,11 @@ func (b *Buyer) validateCapability(ctx context.Context, proposal *nativev1.Quote
 		return errors.New("Capability is not available from finalized typed state")
 	}
 	capability := response.State.GetCapability()
-	if capability == nil || capability.CapabilityId != proposal.CapabilityId || capability.OwnerAgentId != proposal.ProviderAgentId || capability.Tombstoned {
+	if capability == nil || capability.CapabilityId != capabilityID || capability.OwnerAgentId != ownerAgentID || capability.Tombstoned {
 		return errors.New("Quote provider does not own the finalized Capability")
 	}
-	for _, version := range capability.Versions {
-		if version != nil && version.Version == proposal.CapabilityVersion && version.ManifestDigest == proposal.ManifestDigest && !version.Revoked {
+	for _, capabilityVersion := range capability.Versions {
+		if capabilityVersion != nil && capabilityVersion.Version == version && capabilityVersion.ManifestDigest == manifestDigest && !capabilityVersion.Revoked {
 			return nil
 		}
 	}
