@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 )
 
 // ContactCard is a signed, non-canonical locator. It can be exchanged through
@@ -44,7 +44,7 @@ func EncodeContactJSON(card ContactCard) ([]byte, error) {
 	if err := validateContact(card, true, time.Unix(int64(card.ExpiresAtUnix-1), 0)); err != nil {
 		return nil, err
 	}
-	value := wireContactCard{Schema: "atos.native.agent-contact.v1", AgentID: card.AgentID, NetworkID: card.Network.NetworkId,
+	value := wireContactCard{Schema: "tos.service.agent-contact.v1", AgentID: card.AgentID, NetworkID: card.Network.NetworkId,
 		GenesisRoot: card.Network.GenesisRootHash, GenesisFile: card.Network.GenesisFileHash, Endpoint: card.Endpoint,
 		Capabilities: card.Capabilities, ExpiresAtUnix: card.ExpiresAtUnix, PublicKeyHex: hex.EncodeToString(card.PublicKey), SignatureHex: hex.EncodeToString(card.Signature)}
 	return json.Marshal(value)
@@ -61,7 +61,7 @@ func DecodeContactJSON(raw []byte) (ContactCard, error) {
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return ContactCard{}, errors.New("Contact Card has trailing JSON")
 	}
-	if value.Schema != "atos.native.agent-contact.v1" {
+	if value.Schema != "tos.service.agent-contact.v1" {
 		return ContactCard{}, errors.New("unsupported Contact Card schema")
 	}
 	publicKey, err := hex.DecodeString(value.PublicKeyHex)
@@ -161,7 +161,7 @@ func validateContact(card ContactCard, signed bool, now time.Time) error {
 }
 
 func contactBytes(card ContactCard) []byte {
-	buffer := bytes.NewBufferString("atos.agent.contact.v1\x00")
+	buffer := bytes.NewBufferString("tos.service.agent.contact.v1\x00")
 	text := func(value string) {
 		binary.Write(buffer, binary.BigEndian, uint32(len(value)))
 		buffer.WriteString(value)

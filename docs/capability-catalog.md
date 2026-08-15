@@ -43,17 +43,17 @@ matches. Its merged order remains a presentation detail, not consensus.
 
 ## Public-interface example
 
-`cmd/atos-native-discovery` exercises the catalog exclusively through its
+`cmd/tos-service-discovery` exercises the catalog exclusively through its
 public Connect API. It has no catalog-directory flag and cannot edit gateway
-storage. The bearer credential is read only from `ATOS_NATIVE_TOKEN`, keeping
+storage. The bearer credential is read only from `TOS_SERVICE_TOKEN`, keeping
 it out of shell history and process arguments.
 
 After the provider SDK has finalized the Capability and written its reviewed
 canonical CBOR, publish it through the relay-scoped endpoint:
 
 ```bash
-export ATOS_NATIVE_TOKEN='<relay token>'
-go run ./cmd/atos-native-discovery publish \
+export TOS_SERVICE_TOKEN='<relay token>'
+go run ./cmd/tos-service-discovery publish \
   --gateway 'https://gateway.example' \
   --caller-id 'agent_<provider>' \
   --capability-id 'cap_<id>' \
@@ -65,13 +65,13 @@ Then switch to a read-scoped credential and discover or retrieve the same
 digest without any operator database change:
 
 ```bash
-export ATOS_NATIVE_TOKEN='<read token>'
-go run ./cmd/atos-native-discovery search \
+export TOS_SERVICE_TOKEN='<read token>'
+go run ./cmd/tos-service-discovery search \
   --gateway 'https://gateway.example' \
   --caller-id 'buyer-discovery' \
   --query 'deterministic test'
 
-go run ./cmd/atos-native-discovery get \
+go run ./cmd/tos-service-discovery get \
   --gateway 'https://gateway.example' \
   --caller-id 'buyer-discovery' \
   --manifest-digest 'sha256:<digest>'

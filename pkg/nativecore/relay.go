@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 )
 
 // ContractCellSender is a fee-paying transport boundary. Implementations must
@@ -203,7 +203,7 @@ func validateSignatureShape(kind Kind, counterparty []*nativev1.SignatureV1) err
 
 func canonicalRelayActionIdentity(action *nativev1.NativeActionV1, actionHash string) string {
 	hash := sha256.New()
-	_, _ = hash.Write([]byte("atos.native.relay.action.v1"))
+	_, _ = hash.Write([]byte("tos.service.relay.action.v1"))
 	fields := []string{action.Protocol, action.Network.NetworkId, action.Network.GenesisRootHash,
 		action.Network.GenesisFileHash, action.TargetContractCodeHash, actionHash}
 	for _, field := range fields {
@@ -217,7 +217,7 @@ func canonicalRelayActionIdentity(action *nativev1.NativeActionV1, actionHash st
 
 func canonicalRelayStateSlotIdentity(action *nativev1.NativeActionV1) string {
 	hash := sha256.New()
-	_, _ = hash.Write([]byte("atos.native.relay.state-slot.v1"))
+	_, _ = hash.Write([]byte("tos.service.relay.state-slot.v1"))
 	fields := []string{action.Protocol, action.Network.NetworkId, action.Network.GenesisRootHash,
 		action.Network.GenesisFileHash, action.TargetContractCodeHash, action.TargetObjectId,
 		strconv.FormatUint(action.Generation, 10), strconv.FormatUint(action.Sequence, 10), action.PredecessorTvmStateHash}

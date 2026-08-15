@@ -11,4 +11,4 @@ GOBIN="$tools" go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19
 PATH="$tools:$PATH" protoc -I "$repo/api" \
   --go_out="$repo/gen" --go_opt=paths=source_relative \
   --connect-go_out="$repo/gen" --connect-go_opt=paths=source_relative \
-  "$repo/api/atos/native/v1/native.proto"
+  "$repo/api/tos/service/v1/native.proto"

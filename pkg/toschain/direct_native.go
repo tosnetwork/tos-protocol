@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 )
 
 // NativeStateResolver is the authoritative typed-state surface required by a

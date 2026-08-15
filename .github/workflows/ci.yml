@@ -21,8 +21,8 @@ jobs:
           node-version: "22.x"
       - name: Install root-owned Quote publisher fixture
         run: |
-          sudo install -d -o root -g root -m 0755 /usr/local/libexec/tos-protocol-test
-          sudo install -o root -g root -m 0755 tests/fixtures/tosctl-chain-publisher /usr/local/libexec/tos-protocol-test/tosctl
+          sudo install -d -o root -g root -m 0755 /usr/local/libexec/tos-service-protocol-test
+          sudo install -o root -g root -m 0755 tests/fixtures/tosctl-chain-publisher /usr/local/libexec/tos-service-protocol-test/tosctl
       - name: Verify Native protobuf generated sources
         run: scripts/test-native-proto-generated.sh
       - run: make all

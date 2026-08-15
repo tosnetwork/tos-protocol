@@ -14,8 +14,8 @@ import (
 	"math/big"
 	"os"
 
-	"github.com/tosnetwork/tos-protocol/internal/referencecodec"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
+	"github.com/tosnetwork/tos-service-protocol/internal/referencecodec"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
@@ -112,7 +112,7 @@ func buildSigningPackage(out outcome, vector referencecodec.QuoteVector, escrow 
 		return signingPackage{}, nil, errors.New("invalid Quote execution signer public key")
 	}
 	return signingPackage{
-		Schema:            "atos.native.software-work-settlement-signing.v1",
+		Schema:            "tos.service.software-work-settlement-signing.v1",
 		ReceiptCommitment: commitment, ReceiptBOCBase64: base64.StdEncoding.EncodeToString(receipt.ToBOC()),
 		SettlementIntent:         "tvm-cell-sha256:" + hex.EncodeToString(intent.Hash()),
 		SigningPayloadHex:        hex.EncodeToString(intent.Hash()),
@@ -145,7 +145,7 @@ func applyExternalSignature(value *signingPackage, receipt *cell.Cell, path stri
 	if err != nil {
 		return fmt.Errorf("build release body: %w", err)
 	}
-	value.Schema = "atos.native.software-work-settlement-release.v1"
+	value.Schema = "tos.service.software-work-settlement-release.v1"
 	value.SignatureHex = signed.SignatureHex
 	value.ReleaseBodyBOCBase64 = base64.StdEncoding.EncodeToString(body.ToBOC())
 	return nil

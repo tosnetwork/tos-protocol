@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 )
 
 func TestContactCardIsFinalizedAndTimeBound(t *testing.T) {

@@ -7,17 +7,17 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/gen/atos/native/v1/atosnativev1connect"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1/tosservicev1connect"
 )
 
 type nativeService struct {
-	atosnativev1connect.UnimplementedNativeServiceHandler
+	tosservicev1connect.UnimplementedNativeServiceHandler
 	testing *testing.T
 }
 
 type discoveryService struct {
-	atosnativev1connect.UnimplementedCapabilityDiscoveryServiceHandler
+	tosservicev1connect.UnimplementedCapabilityDiscoveryServiceHandler
 	testing *testing.T
 }
 
@@ -50,8 +50,8 @@ func (s nativeService) ResolveNativeState(_ context.Context, request *connect.Re
 }
 
 func TestClientRequiresExplicitPlaintextAndAuthenticates(t *testing.T) {
-	path, handler := atosnativev1connect.NewNativeServiceHandler(nativeService{testing: t})
-	discoveryPath, discoveryHandler := atosnativev1connect.NewCapabilityDiscoveryServiceHandler(discoveryService{testing: t})
+	path, handler := tosservicev1connect.NewNativeServiceHandler(nativeService{testing: t})
+	discoveryPath, discoveryHandler := tosservicev1connect.NewCapabilityDiscoveryServiceHandler(discoveryService{testing: t})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	mux.Handle(discoveryPath, discoveryHandler)

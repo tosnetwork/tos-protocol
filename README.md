@@ -1,15 +1,15 @@
-# TOS Protocol — ATOS Native Boundary
+# TOS Service Protocol — Finalized TOS Boundary
 
-This repository implements the `atos_native_v1` protocol boundary between the
-ATOS gateway and finalized TOS Network state. It has one protocol and one
+This repository implements the `tos_service_v1` protocol boundary between the
+TOS Service Gateway and finalized TOS Network state. It has one protocol and one
 authority model: typed TVM state in finalized TOS accounts.
 
 The normative product and protocol design lives in
-[`tosnetwork/atos-spec`](https://github.com/tosnetwork/atos-spec).
+[`tosnetwork/tos-service-spec`](https://github.com/tosnetwork/tos-service-spec).
 
 ## What remains here
 
-- `api/atos/native/v1/native.proto` — the single Native Connect contract.
+- `api/tos/service/v1/native.proto` — the single Native Connect contract.
 - `pkg/nativecore` — deterministic Agent and Capability action/state machines,
   contract addressing, signatures, portable off-chain projection, and Accepted
   Quote commitment construction.
@@ -21,8 +21,8 @@ The normative product and protocol design lives in
   digest-addressed manifests; all listed state is freshly resolved from TOS.
 - `pkg/chainactionpublisher` — hardened `tosctl` transport for exact signed TVM
   message cells. It pays relay fees but has no semantic authority.
-- `pkg/atosrpc` and `cmd/tos-atos-rpc` — private authenticated Connect service
-  used by the public ATOS gateway.
+- `pkg/servicerpc` and `cmd/tos-service-rpc` — private authenticated Connect service
+  used by the public TOS Service Gateway.
 
 There is no Managed or Verified mode, gateway-owned registry, per-action
 contract, legacy execution RPC, payment observer, or hosted settlement path in
@@ -34,7 +34,7 @@ The module uses Go 1.26.5.
 
 ```bash
 go test ./...
-go build ./cmd/tos-atos-rpc
+go build ./cmd/tos-service-rpc
 ```
 
 ## Provider SDK
@@ -72,19 +72,19 @@ go run ./cmd/native-vector-reference
 
 ## Review and sign an action
 
-`atos-native-wallet` signs the canonical TVM action hash using an owner-private
+`tos-service-wallet` signs the canonical TVM action hash using an owner-private
 Ed25519 seed file. It prints the complete action semantics and, by default,
 requires the operator to type the exact hash before signing:
 
 ```bash
-go run ./cmd/atos-native-wallet \
+go run ./cmd/tos-service-wallet \
   --action /absolute/path/action.json \
   --authority-key /absolute/private/controller.json \
   --output /absolute/private/signed-action.json
 ```
 
 The key file is mode `0600` and contains
-`{"schema":"atos.native.wallet-key.v1","private_seed_hex":"<64 lowercase hex>"}`.
+`{"schema":"tos.service.wallet-key.v1","private_seed_hex":"<64 lowercase hex>"}`.
 Use `--counterparty-key` for Capability transfer acceptance or new-policy proof
 of possession. The tool produces a signed action only; finality is confirmed
 separately through `ResolveNativeState`.
@@ -92,19 +92,19 @@ separately through `ResolveNativeState`.
 ## Run the private Native service
 
 ```bash
-export TOS_ATOS_RPC_TOKEN='<private-token>'
-export TOS_ATOS_NATIVE_V1_CONFIG='/absolute/private/native-v1.json'
+export TOS_SERVICE_RPC_TOKEN='<private-token>'
+export TOS_SERVICE_V1_CONFIG='/absolute/private/native-v1.json'
 
-go run ./cmd/tos-atos-rpc
+go run ./cmd/tos-service-rpc
 ```
 
-Plain HTTP is restricted to loopback. Configure `TOS_ATOS_RPC_TLS_CERT` and
-`TOS_ATOS_RPC_TLS_KEY` for a remote listener, and optionally
-`TOS_ATOS_RPC_CLIENT_CA` for mTLS.
+Plain HTTP is restricted to loopback. Configure `TOS_SERVICE_RPC_TLS_CERT` and
+`TOS_SERVICE_RPC_TLS_KEY` for a remote listener, and optionally
+`TOS_SERVICE_RPC_CLIENT_CA` for mTLS.
 
 The Native configuration is strict JSON and contains:
 
-- `protocol: "atos_native_v1"`;
+- `protocol: "tos_service_v1"`;
 - the exact network ID and genesis root/file digests;
 - three to eight independently operated JSON-RPC endpoints and a strict
   majority quorum;

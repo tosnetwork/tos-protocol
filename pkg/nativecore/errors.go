@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ErrorCode is the stable atos_native_v1 validation code. The numeric values
+// ErrorCode is the stable tos_service_v1 validation code. The numeric values
 // intentionally match the Native Registry TVM exit codes so clients can use a
 // single vocabulary before and after submission.
 type ErrorCode uint16

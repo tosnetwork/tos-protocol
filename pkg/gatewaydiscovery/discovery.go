@@ -1,4 +1,4 @@
-// Package gatewaydiscovery validates the authority-neutral ATOS Gateway
+// Package gatewaydiscovery validates the authority-neutral TOS Service Gateway
 // locator. Discovery never resolves or vouches for protocol state.
 package gatewaydiscovery
 
@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-service-protocol/internal/jsonstrict"
 )
 
 const (
-	Schema           = "atos.gateway-discovery.v1"
-	Protocol         = "atos_native_v1"
+	Schema           = "tos.service.gateway-discovery.v1"
+	Protocol         = "tos_service_v1"
 	MaxDocumentBytes = 64 << 10
 )
 
@@ -120,7 +120,7 @@ func Fetch(ctx context.Context, c FetchConfig) (Document, error) {
 	transport := &http.Transport{Proxy: nil, DialContext: pinnedDialer(origin.Hostname(), origin.Port(), origin.Scheme, c.AllowLoopbackHTTP), TLSHandshakeTimeout: c.Timeout}
 	client := &http.Client{Transport: transport, Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	defer transport.CloseIdleConnections()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, origin.String()+"/.well-known/atos-native.json", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, origin.String()+"/.well-known/tos-service.json", nil)
 	if err != nil {
 		return Document{}, err
 	}

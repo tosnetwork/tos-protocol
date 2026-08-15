@@ -13,7 +13,7 @@ import (
 	"io"
 	"os"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -98,7 +98,7 @@ func main() {
 	encodedNetwork, _ := protojson.Marshal(network)
 	encodedRequest, _ := protojson.Marshal(request)
 	encodedPackage, _ := protojson.Marshal(quotePackage)
-	result := document{Schema: "atos.native.safe-handoff.v1", Network: encodedNetwork,
+	result := document{Schema: "tos.service.safe-handoff.v1", Network: encodedNetwork,
 		QuoteRequest: encodedRequest, QuotePackage: encodedPackage,
 		ExecutionSignerPublicKeyHex: signing.ExecutionSignerPublicKey, EscrowAddress: *escrow,
 		ExpectedEscrowCodeHash: *codeHash, ReceiptBOCBase64: signing.ReceiptBOCBase64,

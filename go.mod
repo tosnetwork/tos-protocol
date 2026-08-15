@@ -1,4 +1,4 @@
-module github.com/tosnetwork/tos-protocol
+module github.com/tosnetwork/tos-service-protocol
 
 go 1.26.5
 

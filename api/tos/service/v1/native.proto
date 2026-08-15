@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package atos.native.v1;
+package tos.service.v1;
 
-option go_package = "github.com/tosnetwork/tos-protocol/gen/atos/native/v1;atosnativev1";
+option go_package = "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1;tosservicev1";
 
 message RequestContext { string request_id = 1; string trace_id = 2; string idempotency_key = 3; string caller_id = 4; int64 deadline_unix_millis = 5; }
 enum NativeErrorCodeV1 {

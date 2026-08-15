@@ -3,7 +3,7 @@ package toschain
 import (
 	"testing"
 
-	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-service-protocol/internal/jsonstrict"
 )
 
 func TestRawTransactionAcceptsNodeFeeMetadata(t *testing.T) {

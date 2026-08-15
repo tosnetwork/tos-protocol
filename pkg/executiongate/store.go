@@ -60,9 +60,9 @@ func (s *store) claim(req Request, evidence Evidence) error {
 			if evidence == existing.Evidence {
 				return nil
 			}
-			return s.write(path, record{Schema: "atos.native.execution-claim.v1", Request: req, Evidence: evidence}, true)
+			return s.write(path, record{Schema: "tos.service.execution-claim.v1", Request: req, Evidence: evidence}, true)
 		}
-		return s.write(path, record{Schema: "atos.native.execution-claim.v1", Request: req, Evidence: evidence}, false)
+		return s.write(path, record{Schema: "tos.service.execution-claim.v1", Request: req, Evidence: evidence}, false)
 	})
 }
 
@@ -148,7 +148,7 @@ func (s *store) read(path string) (record, bool, error) {
 	if err = d.Decode(&extra); !errors.Is(err, io.EOF) {
 		return r, false, errors.New("execution claim has trailing data")
 	}
-	if r.Schema != "atos.native.execution-claim.v1" || !validRequest(r.Request) || !validEvidence(r.Evidence) ||
+	if r.Schema != "tos.service.execution-claim.v1" || !validRequest(r.Request) || !validEvidence(r.Evidence) ||
 		r.Evidence.QuoteCommitment != r.Request.QuoteCommitment || r.Evidence.EscrowAddress != r.Request.EscrowAddress {
 		return r, false, errors.New("invalid execution claim")
 	}

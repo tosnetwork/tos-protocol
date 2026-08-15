@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/safehandoff"
-	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/safehandoff"
+	"github.com/tosnetwork/tos-service-protocol/pkg/toschain"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -55,7 +55,7 @@ func decodeBundle(path string) (safehandoff.Bundle, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&document); err != nil || decoder.Decode(new(any)) != io.EOF ||
-		document.Schema != "atos.native.safe-handoff.v1" {
+		document.Schema != "tos.service.safe-handoff.v1" {
 		return safehandoff.Bundle{}, errors.New("invalid safe-handoff document")
 	}
 	network := new(nativev1.NetworkDomain)
@@ -122,7 +122,7 @@ func main() {
 		EscrowAddress    string              `json:"escrow_address"`
 		ExpectedCodeHash string              `json:"expected_escrow_code_hash"`
 		Result           *safehandoff.Result `json:"result"`
-	}{"atos.native.safe-handoff-evidence.v1", time.Now().UTC().Format(time.RFC3339), 0,
+	}{"tos.service.safe-handoff-evidence.v1", time.Now().UTC().Format(time.RFC3339), 0,
 		endpoints, len(endpoints)/2 + 1, bundle.EscrowAddress, bundle.ExpectedEscrowCodeHash, result}
 	encoded, err := json.MarshalIndent(evidence, "", "  ")
 	if err != nil {

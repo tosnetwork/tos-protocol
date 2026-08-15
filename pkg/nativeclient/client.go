@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/gen/atos/native/v1/atosnativev1connect"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1/tosservicev1connect"
 )
 
 const (
@@ -41,8 +41,8 @@ type Client struct {
 	token      string
 	timeout    time.Duration
 	httpClient *http.Client
-	native     atosnativev1connect.NativeServiceClient
-	discovery  atosnativev1connect.CapabilityDiscoveryServiceClient
+	native     tosservicev1connect.NativeServiceClient
+	discovery  tosservicev1connect.CapabilityDiscoveryServiceClient
 }
 
 func New(config Config) (*Client, error) {
@@ -104,8 +104,8 @@ func New(config Config) (*Client, error) {
 		connect.WithSendMaxBytes(config.MaxMessageBytes),
 	}
 	return &Client{token: config.BearerToken, timeout: config.Timeout, httpClient: httpClient,
-		native:    atosnativev1connect.NewNativeServiceClient(httpClient, config.BaseURL, options...),
-		discovery: atosnativev1connect.NewCapabilityDiscoveryServiceClient(httpClient, config.BaseURL, options...)}, nil
+		native:    tosservicev1connect.NewNativeServiceClient(httpClient, config.BaseURL, options...),
+		discovery: tosservicev1connect.NewCapabilityDiscoveryServiceClient(httpClient, config.BaseURL, options...)}, nil
 }
 
 func (c *Client) ListCapabilities(ctx context.Context, request *nativev1.ListCapabilitiesRequest) (*nativev1.ListCapabilitiesResponse, error) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -260,7 +260,7 @@ func applyFrozenMutation(t *testing.T, action *nativev1.NativeActionV1, mutation
 	t.Helper()
 	switch mutation {
 	case "wrong_protocol":
-		action.Protocol = "atos_native_v0"
+		action.Protocol = "tos_service_v0"
 	case "empty_network_id":
 		action.Network.NetworkId = ""
 	case "zero_genesis_root":

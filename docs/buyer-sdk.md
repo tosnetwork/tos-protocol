@@ -17,7 +17,7 @@ reviewed escrow and asset-wallet code cells, buyer address, an owner-private
 absolute budget-journal directory, and explicit limits:
 
 ```go
-journal, err := buyersdk.NewFileBudgetJournal("/var/lib/atos-buyer/budget")
+journal, err := buyersdk.NewFileBudgetJournal("/var/lib/tos-service-buyer/budget")
 if err != nil { /* fail closed */ }
 
 chain, err := toschain.New(toschain.Config{
@@ -36,7 +36,7 @@ if err != nil { /* fail closed */ }
 nativeResolver, err := toschain.NewSimplifiedNativeResolver(
     chain,
     locator,
-    "/var/lib/atos-buyer/native.checkpoint",
+    "/var/lib/tos-service-buyer/native.checkpoint",
 )
 if err != nil { /* fail closed */ }
 nativeClient, err := toschain.NewDirectNativeClient(nativeResolver)
@@ -44,7 +44,7 @@ if err != nil { /* fail closed */ }
 assetResolver, err := toschain.NewStablecoinResolver(
     chain,
     networkDomain,
-    "/var/lib/atos-buyer/stablecoin.checkpoint",
+    "/var/lib/tos-service-buyer/stablecoin.checkpoint",
 )
 if err != nil { /* fail closed */ }
 
@@ -83,7 +83,7 @@ owner-controlled absolute paths:
 custodySender, err := buyersdk.NewTOSCTLFundingSender(
     buyersdk.TOSCTLFundingSenderConfig{
         BinaryPath: "/opt/tos/bin/tosctl",
-        ConfigPath: "/var/lib/atos-buyer/tosctl.json",
+        ConfigPath: "/var/lib/tos-service-buyer/tosctl.json",
         WalletName: "buyer",
         AttachedNanoTOS: 100_000_000,
         ForwardNanoTOS: 50_000_000,

@@ -1,4 +1,4 @@
-// Command atos-native-wallet reviews and signs atos_native_v1 action JSON.
+// Command tos-service-wallet reviews and signs tos_service_v1 action JSON.
 package main
 
 import (
@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/nativewallet"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativewallet"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

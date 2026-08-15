@@ -1,4 +1,4 @@
-package atosrpc
+package servicerpc
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
-	"github.com/tosnetwork/tos-protocol/pkg/publicerrors"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
+	"github.com/tosnetwork/tos-service-protocol/pkg/publicerrors"
 )
 
 type nativeStub struct {
@@ -73,7 +73,7 @@ func TestHandlerProtectsRPCButNotHealth(t *testing.T) {
 		}
 	}
 	response := httptest.NewRecorder()
-	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/atos.native.v1.NativeService/ResolveNativeState", nil))
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/tos.service.v1.NativeService/ResolveNativeState", nil))
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("RPC status = %d", response.Code)
 	}

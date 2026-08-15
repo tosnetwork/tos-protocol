@@ -1,5 +1,5 @@
 // Package nativewallet provides local, review-before-signing support for
-// atos_native_v1 actions. It never submits a transaction or grants a gateway
+// tos_service_v1 actions. It never submits a transaction or grants a gateway
 // access to controller keys.
 package nativewallet
 
@@ -15,13 +15,13 @@ import (
 	"strings"
 	"syscall"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const KeySchema = "atos.native.wallet-key.v1"
+const KeySchema = "tos.service.wallet-key.v1"
 
 type Review struct {
 	Protocol               string          `json:"protocol"`

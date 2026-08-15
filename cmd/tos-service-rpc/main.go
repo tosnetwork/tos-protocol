@@ -1,4 +1,4 @@
-// Command tos-atos-rpc runs the private atos_native_v1 chain boundary.
+// Command tos-service-rpc runs the private tos_service_v1 chain boundary.
 package main
 
 import (
@@ -16,26 +16,26 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tosnetwork/tos-protocol/pkg/atosrpc"
+	"github.com/tosnetwork/tos-service-protocol/pkg/servicerpc"
 )
 
 func main() {
-	listen := flag.String("listen", envOr("TOS_ATOS_RPC_LISTEN", "127.0.0.1:8090"), "listen address")
-	bearerToken := flag.String("bearer-token", os.Getenv("TOS_ATOS_RPC_TOKEN"), "private bearer token")
-	nativeConfig := flag.String("native-v1-config", os.Getenv("TOS_ATOS_NATIVE_V1_CONFIG"), "absolute atos_native_v1 JSON config")
-	tlsCert := flag.String("tls-cert", os.Getenv("TOS_ATOS_RPC_TLS_CERT"), "server TLS certificate")
-	tlsKey := flag.String("tls-key", os.Getenv("TOS_ATOS_RPC_TLS_KEY"), "server TLS key")
-	clientCA := flag.String("client-ca", os.Getenv("TOS_ATOS_RPC_CLIENT_CA"), "optional client CA for mTLS")
+	listen := flag.String("listen", envOr("TOS_SERVICE_RPC_LISTEN", "127.0.0.1:8090"), "listen address")
+	bearerToken := flag.String("bearer-token", os.Getenv("TOS_SERVICE_RPC_TOKEN"), "private bearer token")
+	nativeConfig := flag.String("native-v1-config", os.Getenv("TOS_SERVICE_V1_CONFIG"), "absolute tos_service_v1 JSON config")
+	tlsCert := flag.String("tls-cert", os.Getenv("TOS_SERVICE_RPC_TLS_CERT"), "server TLS certificate")
+	tlsKey := flag.String("tls-key", os.Getenv("TOS_SERVICE_RPC_TLS_KEY"), "server TLS key")
+	clientCA := flag.String("client-ca", os.Getenv("TOS_SERVICE_RPC_CLIENT_CA"), "optional client CA for mTLS")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	relayer, resolver, closeSender, err := buildNativeV1(*nativeConfig)
 	if err != nil || relayer == nil || resolver == nil {
-		logger.Error("configure atos_native_v1", "error", err)
+		logger.Error("configure tos_service_v1", "error", err)
 		os.Exit(2)
 	}
 	defer closeSender()
-	server, err := atosrpc.Open(atosrpc.Config{BearerToken: *bearerToken, NativeV1Relayer: relayer, NativeV1Resolver: resolver})
+	server, err := servicerpc.Open(servicerpc.Config{BearerToken: *bearerToken, NativeV1Relayer: relayer, NativeV1Resolver: resolver})
 	if err != nil {
 		logger.Error("start Native RPC", "error", err)
 		os.Exit(1)
@@ -50,7 +50,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute}
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("tos-protocol Native RPC listening", "address", *listen, "tls", useTLS)
+		logger.Info("tos-service-protocol Native RPC listening", "address", *listen, "tls", useTLS)
 		if useTLS {
 			errCh <- httpServer.ListenAndServeTLS("", "")
 		} else {

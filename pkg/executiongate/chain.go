@@ -3,8 +3,8 @@ package executiongate
 import (
 	"errors"
 
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
-	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
+	"github.com/tosnetwork/tos-service-protocol/pkg/toschain"
 )
 
 // ChainConfig composes the Gate directly from quorum TOS JSON-RPC endpoints.

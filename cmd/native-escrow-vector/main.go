@@ -12,9 +12,9 @@ import (
 	"os"
 	"strings"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/internal/referencecodec"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/referencecodec"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
@@ -94,7 +94,7 @@ func main() {
 	if err != nil || state.AssetWalletCodeHash != vector.Quote.Asset.WalletCodeHash {
 		fail(errors.New("canonical escrow StateInit failed independent typed decoding"))
 	}
-	result := output{Schema: "atos.native.escrow-state-init.v1", EscrowAddress: identity.Address,
+	result := output{Schema: "tos.service.escrow-state-init.v1", EscrowAddress: identity.Address,
 		EscrowCodeHash: identity.CodeHash, EscrowDataHash: "tvm-cell-sha256:" + hex.EncodeToString(identity.Data.Hash()),
 		QuoteCommitment:   identity.QuoteCommitment,
 		EscrowTermsDigest: identity.EscrowTermsDigest, AuthorizationDigest: identity.AuthorizationDigest,

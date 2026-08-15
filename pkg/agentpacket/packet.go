@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 )
 
 const MaxPayloadBytes = 1 << 20
@@ -65,7 +65,7 @@ func EncodeJSON(packet Packet) ([]byte, error) {
 	if err := validate(packet, true); err != nil {
 		return nil, err
 	}
-	value := wirePacket{Schema: "atos.native.agent-packet.v1", SenderAgentID: packet.SenderAgentID,
+	value := wirePacket{Schema: "tos.service.agent-packet.v1", SenderAgentID: packet.SenderAgentID,
 		RecipientAgentID: packet.RecipientAgentID, CapabilityID: packet.CapabilityID, QuoteCommitment: packet.QuoteCommitment,
 		Sequence: packet.Sequence, NonceHex: hex.EncodeToString(packet.Nonce[:]), PayloadBase64: base64.StdEncoding.EncodeToString(packet.Payload),
 		CreatedAtUnix: packet.CreatedAtUnix, SenderPublicKey: hex.EncodeToString(packet.SenderPublicKey), Signature: hex.EncodeToString(packet.Signature)}
@@ -85,7 +85,7 @@ func DecodeJSON(raw []byte) (Packet, error) {
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return Packet{}, errors.New("Agent packet has trailing JSON")
 	}
-	if value.Schema != "atos.native.agent-packet.v1" {
+	if value.Schema != "tos.service.agent-packet.v1" {
 		return Packet{}, errors.New("unsupported Agent packet schema")
 	}
 	nonce, err := hex.DecodeString(value.NonceHex)
@@ -211,7 +211,7 @@ func validate(packet Packet, signature bool) error {
 
 func signingBytes(packet Packet) []byte {
 	payloadHash := sha256.Sum256(packet.Payload)
-	buffer := bytes.NewBufferString("atos.agent.packet.v1\x00")
+	buffer := bytes.NewBufferString("tos.service.agent.packet.v1\x00")
 	putText := func(value string) {
 		binary.Write(buffer, binary.BigEndian, uint32(len(value)))
 		buffer.WriteString(value)

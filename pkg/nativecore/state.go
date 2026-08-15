@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 

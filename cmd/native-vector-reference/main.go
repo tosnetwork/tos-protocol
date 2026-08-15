@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tosnetwork/tos-protocol/internal/referencecodec"
+	"github.com/tosnetwork/tos-service-protocol/internal/referencecodec"
 )
 
 func main() {

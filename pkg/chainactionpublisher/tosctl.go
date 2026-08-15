@@ -20,9 +20,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tosnetwork/tos-protocol/internal/jsonstrict"
-	"github.com/tosnetwork/tos-protocol/pkg/chain"
-	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	"github.com/tosnetwork/tos-service-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-service-protocol/pkg/chain"
+	"github.com/tosnetwork/tos-service-protocol/pkg/toschain"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
@@ -106,7 +106,7 @@ func NewTosctlBackend(c TosctlBackendConfig) (*TosctlBackend, error) {
 	}
 	bindingBytes, _ := json.Marshal(struct {
 		Version, Network, RPCURL, GenesisRootHash, GenesisFileHash, WalletName, Payer, ConfigDigest, BinaryDigest, VaultDigest string
-	}{"atos-native-sender-v1", c.Network, c.RPCURL, c.GenesisRootHash, c.GenesisFileHash, c.WalletName, payer, sha256Text(rawConfig), binaryIdentity.digest, sha256Text([]byte(strings.TrimSpace(c.VaultURL)))})
+	}{"tos-service-sender-v1", c.Network, c.RPCURL, c.GenesisRootHash, c.GenesisFileHash, c.WalletName, payer, sha256Text(rawConfig), binaryIdentity.digest, sha256Text([]byte(strings.TrimSpace(c.VaultURL)))})
 	return &TosctlBackend{network: c.Network, binary: c.Binary, binaryIdentity: binaryIdentity, configFile: configFile, vaultURL: c.VaultURL, walletName: c.WalletName, payer: payer, client: client, genesisRootHash: c.GenesisRootHash, genesisFileHash: c.GenesisFileHash, enrollmentBinding: sha256Text(bindingBytes)}, nil
 }
 

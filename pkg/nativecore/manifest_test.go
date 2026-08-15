@@ -18,7 +18,7 @@ func testSoftwareWorkManifest() SoftwareWorkManifestV1 {
 		ToolchainDigest: "sha256:" + strings.Repeat("33", 32),
 		Invocation:      SoftwareWorkInvocationV1{Executable: "/usr/local/bin/go", Arguments: []string{"test", "./...", "-count=1"}, WorkingDirectory: "/workspace/source"},
 		NetworkPolicy:   "none", Limits: SoftwareWorkLimitsV1{CPUMillis: 120000, MemoryBytes: 1073741824, ScratchBytes: 2147483648, OutputBytes: 16777216, WallClockMillis: 180000},
-		ArtifactMediaTypes: []string{"application/vnd.atos.software-artifact.v1+tar"}, ReportMediaTypes: []string{"application/vnd.atos.test-report.v1+json"},
+		ArtifactMediaTypes: []string{"application/vnd.tos.service.software-artifact.v1+tar"}, ReportMediaTypes: []string{"application/vnd.tos.service.test-report.v1+json"},
 		SuccessCondition: "exit-code-zero-and-valid-reports", RefundConditions: []string{"not-started-before-deadline"},
 		EndpointCommitment: "sha256:dca9babcd44775f2c19ef571964c01e2e75b15254d0d16f2349c8d446f76c44c", ExecutionSignerAuthorization: "sha256:" + strings.Repeat("55", 32), RetentionSeconds: 86400,
 		SupportedAssets: []SoftwareWorkAssetIdentityV1{{Workchain: 0, MasterAccount: "ca11200a7d4a3c6822af077f035131868584f40f48fb1b7b7b1889ae51f9926a",
@@ -117,7 +117,7 @@ func TestFrozenSoftwareWorkManifestVector(t *testing.T) {
 		t.Fatal(err)
 	}
 	var frozen vector
-	if err := json.Unmarshal(data, &frozen); err != nil || frozen.Schema != "atos.software-work-manifest.v1.vector" {
+	if err := json.Unmarshal(data, &frozen); err != nil || frozen.Schema != "tos.service.software-work-manifest.v1.vector" {
 		t.Fatalf("invalid frozen vector: %v", err)
 	}
 	manifest, err := DecodeSoftwareWorkManifestJSON(frozen.Manifest)
@@ -145,7 +145,7 @@ func TestFrozenSoftwareWorkManifestVector(t *testing.T) {
 			}
 			continue
 		case "wrong_protocol":
-			candidate.Protocol = "atos.software-work-manifest.v0"
+			candidate.Protocol = "tos.service.software-work-manifest.v0"
 		case "shell_executable":
 			candidate.Invocation.Executable = "/bin/sh"
 		case "network_enabled":

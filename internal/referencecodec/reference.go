@@ -1,4 +1,4 @@
-// Package referencecodec is an independent atos_native_v1 registration
+// Package referencecodec is an independent tos_service_v1 registration
 // encoder used only for conformance. It deliberately does not import generated
 // protocol messages or pkg/nativecore.
 package referencecodec
@@ -121,7 +121,7 @@ func Decode(data []byte) (VectorSet, error) {
 	if err := decoder.Decode(&vectors); err != nil {
 		return VectorSet{}, err
 	}
-	if vectors.Schema != "atos.native.registry.v1.vectors" || vectors.Protocol != "atos_native_v1" {
+	if vectors.Schema != "tos.service.registry.v1.vectors" || vectors.Protocol != "tos_service_v1" {
 		return VectorSet{}, errors.New("unsupported Native vector schema")
 	}
 	return vectors, nil
@@ -204,7 +204,7 @@ func CheckNegative(v VectorSet, mutation NegativeMutation) error {
 	}
 	switch mutation.Mutation {
 	case "wrong_protocol":
-		c.protocol = "atos_native_v0"
+		c.protocol = "tos_service_v0"
 	case "empty_network_id":
 		c.networkID = ""
 	case "zero_genesis_root":
@@ -246,7 +246,7 @@ func CheckNegative(v VectorSet, mutation NegativeMutation) error {
 	default:
 		return errors.New("unknown frozen mutation")
 	}
-	if c.protocol != "atos_native_v1" {
+	if c.protocol != "tos_service_v1" {
 		return validationError(2200, "wrong protocol")
 	}
 	nonce, err := hex32(c.actionNonce)

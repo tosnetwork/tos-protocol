@@ -1,4 +1,4 @@
-// Command atos-native-discovery uses only the public derived Capability API.
+// Command tos-service-discovery uses only the public derived Capability API.
 // It never reads or edits a gateway catalog directory.
 package main
 
@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/nativeclient"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativeclient"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -29,7 +29,7 @@ type connectionFlags struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fail(errors.New("usage: atos-native-discovery <publish|list|search|get> [flags]"))
+		fail(errors.New("usage: tos-service-discovery <publish|list|search|get> [flags]"))
 	}
 	var err error
 	switch os.Args[1] {
@@ -60,9 +60,9 @@ func addConnectionFlags(set *flag.FlagSet) *connectionFlags {
 }
 
 func openClient(flags *connectionFlags) (*nativeclient.Client, error) {
-	token := os.Getenv("ATOS_NATIVE_TOKEN")
+	token := os.Getenv("TOS_SERVICE_TOKEN")
 	if flags == nil || flags.gateway == "" || flags.caller == "" || len(flags.caller) > 256 || token == "" {
-		return nil, errors.New("--gateway, --caller-id, and ATOS_NATIVE_TOKEN are required")
+		return nil, errors.New("--gateway, --caller-id, and TOS_SERVICE_TOKEN are required")
 	}
 	return nativeclient.New(nativeclient.Config{BaseURL: flags.gateway, BearerToken: token,
 		Insecure: flags.insecure, CAFile: flags.caFile, ServerName: flags.serverName})

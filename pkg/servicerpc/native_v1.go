@@ -1,4 +1,4 @@
-package atosrpc
+package servicerpc
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
-	"github.com/tosnetwork/tos-protocol/pkg/publicerrors"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
+	"github.com/tosnetwork/tos-service-protocol/pkg/publicerrors"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -23,7 +23,7 @@ func (s *Server) SubmitNativeAction(ctx context.Context, req *connect.Request[na
 		return nil, err
 	}
 	if s.nativeV1Relayer == nil {
-		return nil, publicerrors.New(publicerrors.DependencyUnavailable, errors.New("atos_native_v1 relayer is not configured"), time.Second)
+		return nil, publicerrors.New(publicerrors.DependencyUnavailable, errors.New("tos_service_v1 relayer is not configured"), time.Second)
 	}
 	var hash string
 	var err error
@@ -71,7 +71,7 @@ func (s *Server) ResolveNativeState(ctx context.Context, req *connect.Request[na
 		return nil, err
 	}
 	if s.nativeV1Resolver == nil {
-		return nil, publicerrors.New(publicerrors.DependencyUnavailable, errors.New("atos_native_v1 resolver is not configured"), time.Second)
+		return nil, publicerrors.New(publicerrors.DependencyUnavailable, errors.New("tos_service_v1 resolver is not configured"), time.Second)
 	}
 	state, found, err := s.nativeV1Resolver.ResolveState(ctx, req.Msg.ObjectId, req.Msg.ExpectedTvmStateHash)
 	if err != nil {

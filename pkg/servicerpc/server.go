@@ -1,5 +1,5 @@
-// Package atosrpc exposes the private Native-only Connect boundary.
-package atosrpc
+// Package servicerpc exposes the private Native-only Connect boundary.
+package servicerpc
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/gen/atos/native/v1/atosnativev1connect"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1/tosservicev1connect"
 )
 
 type Relayer interface {
@@ -45,22 +45,22 @@ type Server struct {
 func Open(config Config) (*Server, error) {
 	config.BearerToken = strings.TrimSpace(config.BearerToken)
 	if config.BearerToken == "" {
-		return nil, errors.New("ATOS RPC bearer token is required")
+		return nil, errors.New("TOS Service RPC bearer token is required")
 	}
 	if config.NativeV1Relayer == nil || config.NativeV1Resolver == nil {
-		return nil, errors.New("atos_native_v1 relayer and resolver are required")
+		return nil, errors.New("tos_service_v1 relayer and resolver are required")
 	}
 	if config.MaxMessageBytes == 0 {
 		config.MaxMessageBytes = 16 << 20
 	}
 	if config.MaxMessageBytes <= 0 || config.MaxMessageBytes > 64<<20 {
-		return nil, errors.New("invalid ATOS RPC message limit")
+		return nil, errors.New("invalid TOS Service RPC message limit")
 	}
 	if config.CallTimeout == 0 {
 		config.CallTimeout = 30 * time.Second
 	}
 	if config.CallTimeout <= 0 || config.CallTimeout > 15*time.Minute {
-		return nil, errors.New("invalid ATOS RPC call timeout")
+		return nil, errors.New("invalid TOS Service RPC call timeout")
 	}
 	if config.Now == nil {
 		config.Now = time.Now
@@ -70,7 +70,7 @@ func Open(config Config) (*Server, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), config.CallTimeout)
 	defer cancel()
 	if err := server.checkReady(ctx); err != nil {
-		return nil, fmtError("atos_native_v1 is not ready", err)
+		return nil, fmtError("tos_service_v1 is not ready", err)
 	}
 	return server, nil
 }
@@ -80,7 +80,7 @@ func (s *Server) Close() error { return nil }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	options := []connect.HandlerOption{connect.WithReadMaxBytes(s.maxMessageBytes), connect.WithSendMaxBytes(s.maxMessageBytes)}
-	path, handler := atosnativev1connect.NewNativeServiceHandler(s, options...)
+	path, handler := tosservicev1connect.NewNativeServiceHandler(s, options...)
 	mux.Handle(path, handler)
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { jsonStatus(w, http.StatusOK, `{"status":"ok"}`) })
 	ready := func(w http.ResponseWriter, r *http.Request) {

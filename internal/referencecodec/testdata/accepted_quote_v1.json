@@ -1,5 +1,5 @@
 {
-  "schema": "atos.accepted-quote.v1.vector",
+  "schema": "tos.service.accepted-quote.v1.vector",
   "network": {"network_id": "tos-local-gate-c-20260814", "genesis_root_hash": "sha256:fbd138d37f7e8e83ecb8fa66cca54dae657e362ea16ead259b6a1876e37cfc2c", "genesis_file_hash": "sha256:bdd806fc091bb3c96cc657fecc160a987ef41acf2e36cdfdc19e14723e0683d8"},
   "quote": {
     "proposal_id": "non-canonical-gateway-id", "capability_id": "cap_c17458247d4699cd745d76dd3d20df7dafd56cbff23e85956af1259b77d9e657", "capability_version": "1.1.0", "provider_agent_id": "agent_5ad89bcf2d25bd5e7a53e36e976851fd1b937d70c2f0db80a18f7cbafcca1be4",

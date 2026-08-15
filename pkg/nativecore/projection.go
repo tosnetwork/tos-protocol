@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"errors"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/codec"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/codec"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 

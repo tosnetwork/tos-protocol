@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/internal/referencecodec"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/referencecodec"
 )
 
 func TestGatewayProposalBecomesCanonicalOnlyThroughTermsCommitment(t *testing.T) {

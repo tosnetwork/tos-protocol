@@ -16,7 +16,7 @@ func TestIndependentAcceptedQuoteVector(t *testing.T) {
 	if err := json.Unmarshal(data, &vector); err != nil {
 		t.Fatal(err)
 	}
-	if vector.Schema != "atos.accepted-quote.v1.vector" {
+	if vector.Schema != "tos.service.accepted-quote.v1.vector" {
 		t.Fatal("wrong quote vector schema")
 	}
 	root, commitment, err := ComputeAcceptedQuote(vector)

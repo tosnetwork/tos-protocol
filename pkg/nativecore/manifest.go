@@ -16,7 +16,7 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-const SoftwareWorkManifestProtocolV1 = "atos.software-work-manifest.v1"
+const SoftwareWorkManifestProtocolV1 = "tos.service.software-work-manifest.v1"
 
 var (
 	manifestVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)

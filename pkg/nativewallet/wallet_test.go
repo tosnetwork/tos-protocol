@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 )
 
 func TestLoadReviewConfirmAndSign(t *testing.T) {
@@ -21,7 +21,7 @@ func TestLoadReviewConfirmAndSign(t *testing.T) {
 	for i := range seed {
 		seed[i] = byte(i + 1)
 	}
-	content := `{"schema":"atos.native.wallet-key.v1","private_seed_hex":"` + hex.EncodeToString(seed) + `"}`
+	content := `{"schema":"tos.service.wallet-key.v1","private_seed_hex":"` + hex.EncodeToString(seed) + `"}`
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestLoadReviewConfirmAndSign(t *testing.T) {
 
 func TestKeyFileAndConfirmationFailClosed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "controller.json")
-	if err := os.WriteFile(path, []byte(`{"schema":"atos.native.wallet-key.v1","private_seed_hex":"`+strings.Repeat("11", 32)+`"}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"schema":"tos.service.wallet-key.v1","private_seed_hex":"`+strings.Repeat("11", 32)+`"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadKey(path); err == nil {

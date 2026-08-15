@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
-	"github.com/tosnetwork/tos-protocol/pkg/chainactionpublisher"
-	"github.com/tosnetwork/tos-protocol/pkg/nativecore"
-	"github.com/tosnetwork/tos-protocol/pkg/toschain"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/pkg/chainactionpublisher"
+	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
+	"github.com/tosnetwork/tos-service-protocol/pkg/toschain"
 )
 
 type nativeV1GatewayConfig struct {
@@ -46,15 +46,15 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		return nil, nil, nil, nil
 	}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return nil, nil, nil, errors.New("atos_native_v1 config path must be absolute and clean")
+		return nil, nil, nil, errors.New("tos_service_v1 config path must be absolute and clean")
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, nil, nil, errors.New("atos_native_v1 config file is unavailable")
+		return nil, nil, nil, errors.New("tos_service_v1 config file is unavailable")
 	}
 	stat, ownerOK := info.Sys().(*syscall.Stat_t)
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || !ownerOK || stat.Uid != uint32(os.Geteuid()) || info.Size() <= 0 || info.Size() > 2<<20 {
-		return nil, nil, nil, errors.New("atos_native_v1 config file is outside bounds")
+		return nil, nil, nil, errors.New("tos_service_v1 config file is outside bounds")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -68,7 +68,7 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return nil, nil, nil, errors.New("atos_native_v1 config contains trailing JSON")
+		return nil, nil, nil, errors.New("tos_service_v1 config contains trailing JSON")
 	}
 	if config.Protocol != nativecore.Protocol || config.Network == nil || config.Network.NetworkId == "" || config.ContractCodeBOCBase64 == "" || config.ContractCodeHash == "" ||
 		!filepath.IsAbs(config.StateDirectory) || filepath.Clean(config.StateDirectory) != config.StateDirectory ||
@@ -80,7 +80,7 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		config.RecoverySafetySeconds > uint64(nativecore.MaximumRecoveryRelaySafety/time.Second) ||
 		config.Sender.Network != config.Network.NetworkId || !matchesNativeGenesis(config.Sender.GenesisRootHash, config.Network.GenesisRootHash) ||
 		!matchesNativeGenesis(config.Sender.GenesisFileHash, config.Network.GenesisFileHash) {
-		return nil, nil, nil, errors.New("invalid atos_native_v1 config")
+		return nil, nil, nil, errors.New("invalid tos_service_v1 config")
 	}
 	chain, err := toschain.New(toschain.Config{Network: config.Network.NetworkId, Endpoints: config.Endpoints, Quorum: config.Quorum,
 		QueryTimeout: time.Duration(config.QueryTimeoutMillis) * time.Millisecond, MaxResponseBytes: config.MaxResponseBytes})

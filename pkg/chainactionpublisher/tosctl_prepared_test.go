@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tosnetwork/tos-protocol/pkg/chain"
+	"github.com/tosnetwork/tos-service-protocol/pkg/chain"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 

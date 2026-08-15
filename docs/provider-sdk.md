@@ -19,7 +19,7 @@ Create the authority-neutral gateway client and provider SDK:
 ```go
 gateway, err := nativeclient.New(nativeclient.Config{
     BaseURL: "https://gateway.example",
-    BearerToken: os.Getenv("ATOS_NATIVE_RELAY_TOKEN"),
+    BearerToken: os.Getenv("TOS_SERVICE_RELAY_TOKEN"),
 })
 if err != nil { /* fail closed */ }
 defer gateway.Close()
@@ -44,7 +44,7 @@ if err != nil { /* reject the manifest */ }
 
 Persist `prepared.ManifestCBOR` under `prepared.ManifestDigest`. Serialize
 `prepared.Action` with protobuf JSON and inspect `prepared.ActionHash`. Sign
-that exact action through the reviewed `atos-native-wallet`/`tosctl` custody
+that exact action through the reviewed `tos-service-wallet`/`tosctl` custody
 flow. The SDK deliberately has no private-key option.
 
 After loading the resulting `authority_signatures`, publish with a durable,

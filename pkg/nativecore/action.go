@@ -1,4 +1,4 @@
-// Package nativecore implements the single-mode atos_native_v1 execution
+// Package nativecore implements the single-mode tos_service_v1 execution
 // envelope. It is independent of gateway-owned state and per-action contracts.
 package nativecore
 
@@ -11,12 +11,12 @@ import (
 	"sort"
 	"strings"
 
-	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
 const (
-	Protocol = "atos_native_v1"
+	Protocol = "tos_service_v1"
 
 	actionMagic = 0x4e564131 // NVA1
 	policyMagic = 0x4e565031 // NVP1
