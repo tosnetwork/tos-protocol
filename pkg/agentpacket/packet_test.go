@@ -1,7 +1,10 @@
 package agentpacket
 
 import (
+	"context"
 	"crypto/ed25519"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -78,6 +81,37 @@ func TestJSONWireRoundTripAndStrictParsing(t *testing.T) {
 		if _, err := DecodeJSON(mutation); err == nil {
 			t.Fatal("non-strict wire accepted")
 		}
+	}
+}
+
+type receiveStub struct{ count int }
+
+func (r *receiveStub) Receive(context.Context, Packet) error { r.count++; return nil }
+
+func TestHTTPHandlerVerifiesBeforeDeliveryAndPostDisablesRedirects(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	private := ed25519.NewKeyFromSeed(seed)
+	sender, recipient := "agent_"+repeatHex("aa"), "agent_"+repeatHex("bb")
+	packet, err := Sign(Packet{SenderAgentID: sender, RecipientAgentID: recipient, CapabilityID: "cap_" + repeatHex("cc"), Sequence: 1, CreatedAtUnix: uint64(time.Now().Unix()), Payload: []byte("hello")}, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiver := &receiveStub{}
+	server := httptest.NewServer(Handler(resolver{sender: &nativev1.AgentStateV1{AgentId: sender, Policy: &nativev1.ControllerPolicyV1{Controllers: []*nativev1.ControllerV1{{Ed25519PublicKey: private.Public().(ed25519.PublicKey)}}}}, recipient: &nativev1.AgentStateV1{AgentId: recipient}}, &ReplayGuard{}, receiver))
+	defer server.Close()
+	if err := Post(context.Background(), server.Client(), server.URL, packet); err != nil {
+		t.Fatal(err)
+	}
+	if receiver.count != 1 {
+		t.Fatalf("received=%d", receiver.count)
+	}
+	if err := Post(context.Background(), server.Client(), server.URL, packet); err == nil {
+		t.Fatal("replay was delivered")
+	}
+	redirect := httptest.NewServer(http.RedirectHandler(server.URL, http.StatusTemporaryRedirect))
+	defer redirect.Close()
+	if err := Post(context.Background(), redirect.Client(), redirect.URL, packet); err == nil {
+		t.Fatal("redirect accepted")
 	}
 }
 
