@@ -34,3 +34,44 @@ The protobuf exposes this derived boundary as a separate
 Consumers must compare retrieved manifest bytes with the exact digest in a
 fresh Capability resolution or Accepted Quote. Discovery order, inclusion,
 availability, and search ranking are never protocol facts.
+
+## Public-interface example
+
+`cmd/atos-native-discovery` exercises the catalog exclusively through its
+public Connect API. It has no catalog-directory flag and cannot edit gateway
+storage. The bearer credential is read only from `ATOS_NATIVE_TOKEN`, keeping
+it out of shell history and process arguments.
+
+After the provider SDK has finalized the Capability and written its reviewed
+canonical CBOR, publish it through the relay-scoped endpoint:
+
+```bash
+export ATOS_NATIVE_TOKEN='<relay token>'
+go run ./cmd/atos-native-discovery publish \
+  --gateway 'https://gateway.example' \
+  --caller-id 'agent_<provider>' \
+  --capability-id 'cap_<id>' \
+  --manifest-cbor '/absolute/provider/publication/manifest.cbor' \
+  --idempotency-key 'provider-publication-001'
+```
+
+Then switch to a read-scoped credential and discover or retrieve the same
+digest without any operator database change:
+
+```bash
+export ATOS_NATIVE_TOKEN='<read token>'
+go run ./cmd/atos-native-discovery search \
+  --gateway 'https://gateway.example' \
+  --caller-id 'buyer-discovery' \
+  --query 'deterministic test'
+
+go run ./cmd/atos-native-discovery get \
+  --gateway 'https://gateway.example' \
+  --caller-id 'buyer-discovery' \
+  --manifest-digest 'sha256:<digest>'
+```
+
+For loopback development only, use an `http://127.0.0.1` URL with
+`--insecure`. Public use remains HTTPS by default. Search output places the
+fresh finalized Registry envelope under `capability`; only manifest projection
+and score appear under `gateway_local`.
