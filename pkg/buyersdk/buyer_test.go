@@ -49,18 +49,28 @@ func (f *escrowFake) ResolveFinalized(_ context.Context, _ string) (*toschain.Fi
 }
 
 type fundingFake struct {
-	escrow *escrowFake
-	calls  int
-	fail   bool
+	escrow       *escrowFake
+	prepareCalls int
+	calls        int
+	prepareFail  bool
+	fail         bool
 }
 
-func (f *fundingFake) SendStablecoinFunding(_ context.Context, intent FundingIntent) error {
+func (f *fundingFake) PrepareStablecoinFunding(_ context.Context, intent FundingIntent) (*PreparedFunding, error) {
+	f.prepareCalls++
+	if f.prepareFail {
+		return nil, errors.New("injected preparation failure")
+	}
+	return &PreparedFunding{Intent: intent, MessageBOCBase64: "prepared", MessageHash: "tvm-cell-sha256:" + strings.Repeat("99", 32)}, nil
+}
+
+func (f *fundingFake) BroadcastStablecoinFunding(_ context.Context, prepared *PreparedFunding) error {
 	f.calls++
 	if f.fail {
 		return errors.New("injected wallet ambiguity")
 	}
 	f.escrow.state.State.Status = nativecore.EscrowStatusFunded
-	f.escrow.state.State.FundedAtomicAmount = intent.AmountAtomic
+	f.escrow.state.State.FundedAtomicAmount = prepared.Intent.AmountAtomic
 	return nil
 }
 
@@ -137,6 +147,27 @@ func TestBuyerPreparedCrashRemainsSafelyRecoverable(t *testing.T) {
 	}
 	if fixture.sender.calls != 1 {
 		t.Fatal("prepared crash state did not grant one recoverable lease")
+	}
+}
+
+func TestBuyerPreparationFailureDoesNotConsumeBroadcastLease(t *testing.T) {
+	fixture := newBuyerFixture(t, BudgetLimits{Window: time.Hour, MaxPurchases: 2,
+		MaxPerPurchaseAtomic: "100", MaxTotalAtomic: "200"})
+	prepared, _ := fixture.buyer.PreparePurchase(context.Background(), fixture.input)
+	installEscrow(t, fixture, prepared)
+	fixture.sender.prepareFail = true
+	if _, err := fixture.buyer.FundPurchase(context.Background(), prepared, "retryable-preparation"); err == nil {
+		t.Fatal("injected preparation failure was ignored")
+	}
+	if fixture.sender.calls != 0 {
+		t.Fatal("preparation failure reached broadcast")
+	}
+	fixture.sender.prepareFail = false
+	if _, err := fixture.buyer.FundPurchase(context.Background(), prepared, "retryable-preparation"); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.sender.prepareCalls != 2 || fixture.sender.calls != 1 {
+		t.Fatal("prepared journal state did not retain exactly one recoverable broadcast lease")
 	}
 }
 

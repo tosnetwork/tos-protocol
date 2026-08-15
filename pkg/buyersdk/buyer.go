@@ -49,13 +49,24 @@ type FundingIntent struct {
 	EscrowAddress   string
 	QuoteCommitment string
 	Asset           *nativev1.TOSAssetIdentityV1
+	BuyerAddress    string
 	BuyerWallet     string
 	AmountAtomic    string
 	QueryID         uint64
 }
 
 type FundingSender interface {
-	SendStablecoinFunding(context.Context, FundingIntent) error
+	PrepareStablecoinFunding(context.Context, FundingIntent) (*PreparedFunding, error)
+	BroadcastStablecoinFunding(context.Context, *PreparedFunding) error
+}
+
+// PreparedFunding binds the exact signed external message to its reviewed
+// semantic intent. The buyer acquires its one-way broadcast lease only after
+// this object has been constructed and verified.
+type PreparedFunding struct {
+	Intent           FundingIntent
+	MessageBOCBase64 string
+	MessageHash      string
 }
 
 type Config struct {
@@ -235,6 +246,19 @@ func (b *Buyer) FundPurchase(ctx context.Context, purchase *PreparedPurchase, re
 		}
 		return nil, errors.New("stablecoin funding outcome is ambiguous; refusing to rebroadcast")
 	}
+	fundingRequest := FundingIntent{
+		NetworkID: intent.NetworkID, EscrowAddress: intent.EscrowAddress,
+		QuoteCommitment: intent.QuoteCommitment, Asset: proto.Clone(purchase.Proposal.MaximumPrice.Asset).(*nativev1.TOSAssetIdentityV1),
+		BuyerAddress: b.buyerAddress, BuyerWallet: intent.BuyerWallet,
+		AmountAtomic: intent.AmountAtomic, QueryID: intent.QueryID,
+	}
+	funding, err := b.fundingSender.PrepareStablecoinFunding(ctx, fundingRequest)
+	if err != nil {
+		return nil, err
+	}
+	if funding == nil || !equalFundingIntent(funding.Intent, fundingRequest) {
+		return nil, errors.New("prepared stablecoin funding changed the reviewed intent")
+	}
 	acquired, phase, err := b.journal.acquire(intent)
 	if err != nil {
 		return nil, err
@@ -242,17 +266,20 @@ func (b *Buyer) FundPurchase(ctx context.Context, purchase *PreparedPurchase, re
 	if !acquired {
 		return nil, fmt.Errorf("buyer funding lease unavailable in phase %s", phase)
 	}
-	if err := b.fundingSender.SendStablecoinFunding(ctx, FundingIntent{
-		NetworkID: intent.NetworkID, EscrowAddress: intent.EscrowAddress,
-		QuoteCommitment: intent.QuoteCommitment, Asset: proto.Clone(purchase.Proposal.MaximumPrice.Asset).(*nativev1.TOSAssetIdentityV1),
-		BuyerWallet: intent.BuyerWallet, AmountAtomic: intent.AmountAtomic, QueryID: intent.QueryID,
-	}); err != nil {
+	if err := b.fundingSender.BroadcastStablecoinFunding(ctx, funding); err != nil {
 		return nil, err
 	}
 	if err := b.journal.complete(intent); err != nil {
 		return nil, err
 	}
 	return b.waitFunded(ctx, purchase)
+}
+
+func equalFundingIntent(left, right FundingIntent) bool {
+	return left.NetworkID == right.NetworkID && left.EscrowAddress == right.EscrowAddress &&
+		left.QuoteCommitment == right.QuoteCommitment && proto.Equal(left.Asset, right.Asset) &&
+		left.BuyerAddress == right.BuyerAddress && left.BuyerWallet == right.BuyerWallet &&
+		left.AmountAtomic == right.AmountAtomic && left.QueryID == right.QueryID
 }
 
 func (b *Buyer) revalidatePurchase(ctx context.Context, purchase *PreparedPurchase) (*toschain.FinalizedEscrowV1, error) {

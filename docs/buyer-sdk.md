@@ -41,6 +41,26 @@ buyer, err := buyersdk.New(buyersdk.Config{
 })
 ```
 
+For local `tosctl` custody, construct the production sender with pinned,
+owner-controlled absolute paths:
+
+```go
+custodySender, err := buyersdk.NewTOSCTLFundingSender(
+    buyersdk.TOSCTLFundingSenderConfig{
+        BinaryPath: "/opt/tos/bin/tosctl",
+        ConfigPath: "/var/lib/atos-buyer/tosctl.json",
+        WalletName: "buyer",
+        AttachedNanoTOS: 100_000_000,
+        ForwardNanoTOS: 50_000_000,
+    },
+)
+if err != nil { /* fail closed */ }
+```
+
+The executable must be a non-writable regular executable owned by root or the
+current user. The config must be an owner-only regular file owned by the
+current user. The sender never receives mnemonic or private-key material.
+
 The directory must already exist, be owned by the process user, and have mode
 `0700`. Journal records are owner-only regular files. The limits use exact
 base-10 atomic units and are enforced per exact TOS stablecoin identity.
@@ -90,7 +110,11 @@ resolved read-only and never rebroadcast automatically. Operators must
 reconcile an ambiguous payment from finalized chain state; deleting or editing
 journal files is not a recovery procedure.
 
-The first production integration must keep wallet signing in the existing
-`tosctl` custody boundary. A gateway, Quote service, index, or relayer may
-transport bytes, but none may override the SDK's finalized-state checks or
-budget journal.
+`TOSCTLFundingSender` builds the exact stablecoin transfer body and asks
+`tosctl wallet send --build-only` to construct and sign one external message.
+It verifies the payer, stablecoin wallet, attached nanoTOS, body hash, absence
+of StateInit, and complete signed-message BOC before the journal grants its
+one-way broadcast lease. It then submits those exact bytes with
+`tosctl wallet broadcast-prepared`; it does not rebuild or re-sign after the
+lease. A gateway, Quote service, index, or relayer may transport bytes, but
+none may override the SDK's finalized-state checks or budget journal.
