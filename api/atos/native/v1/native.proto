@@ -72,4 +72,17 @@ message TOSAssetIdentityV1 {
 message MoneyV1 { TOSAssetIdentityV1 asset = 1; string atomic_amount = 2; }
 message QuoteProposalV1 { string proposal_id = 1; string capability_id = 2; string capability_version = 3; string provider_agent_id = 4; string manifest_digest = 5; string transport_binding_digest = 6; MoneyV1 maximum_price = 7; string escrow_terms_digest = 8; string dispute_policy_digest = 9; uint64 expires_at_unix_seconds = 10; }
 message AcceptedQuoteV1 { string protocol = 1; string quote_commitment = 2; QuoteProposalV1 proposal = 3; string execution_signer_authorization = 4; ChainReference reference = 5; NetworkDomain network = 6; }
+// Discovery is derived and may be incomplete. Returned states are fresh
+// finalized Native resolutions and are never index authority.
+message ListCapabilitiesRequest { RequestContext context = 1; uint32 page_size = 2; string after_capability_id = 3; }
+message ListCapabilitiesResponse { repeated NativeStateV1 capabilities = 1; string next_after_capability_id = 2; }
+message PublishSoftwareWorkManifestRequest { RequestContext context = 1; string capability_id = 2; bytes canonical_cbor = 3; }
+message PublishSoftwareWorkManifestResponse { string manifest_digest = 1; NativeStateV1 capability = 2; }
+message GetSoftwareWorkManifestRequest { RequestContext context = 1; string manifest_digest = 2; }
+message GetSoftwareWorkManifestResponse { string manifest_digest = 1; bytes canonical_cbor = 2; }
 service NativeService { rpc SubmitNativeAction(SubmitNativeActionRequest) returns (SubmitNativeActionResponse); rpc ResolveNativeState(ResolveNativeStateRequest) returns (ResolveNativeStateResponse); }
+service CapabilityDiscoveryService {
+  rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
+  rpc PublishSoftwareWorkManifest(PublishSoftwareWorkManifestRequest) returns (PublishSoftwareWorkManifestResponse);
+  rpc GetSoftwareWorkManifest(GetSoftwareWorkManifestRequest) returns (GetSoftwareWorkManifestResponse);
+}

@@ -89,6 +89,27 @@ func DecodeSoftwareWorkManifestJSON(data []byte) (SoftwareWorkManifestV1, error)
 	return manifest, nil
 }
 
+// DecodeCanonicalSoftwareWorkManifestCBOR accepts only the exact deterministic
+// representation produced by CanonicalSoftwareWorkManifest. This prevents a
+// content store from serving alternate encodings for one semantic manifest.
+func DecodeCanonicalSoftwareWorkManifestCBOR(data []byte) (SoftwareWorkManifestV1, error) {
+	if len(data) == 0 || len(data) > 1<<20 {
+		return SoftwareWorkManifestV1{}, errors.New("software-work manifest CBOR is empty or oversized")
+	}
+	var manifest SoftwareWorkManifestV1
+	if err := cbor.Unmarshal(data, &manifest); err != nil {
+		return SoftwareWorkManifestV1{}, err
+	}
+	canonical, _, err := CanonicalSoftwareWorkManifest(manifest)
+	if err != nil {
+		return SoftwareWorkManifestV1{}, err
+	}
+	if !bytes.Equal(data, canonical) {
+		return SoftwareWorkManifestV1{}, errors.New("software-work manifest CBOR is not canonical")
+	}
+	return manifest, nil
+}
+
 func CanonicalSoftwareWorkManifest(manifest SoftwareWorkManifestV1) ([]byte, string, error) {
 	if err := ValidateSoftwareWorkManifest(manifest); err != nil {
 		return nil, "", err

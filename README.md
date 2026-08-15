@@ -17,6 +17,8 @@ The normative product and protocol design lives in
   decoding.
 - `pkg/nativeclient`, `pkg/providersdk`, and `pkg/buyersdk` — public Gate E
   building blocks for canonical publication and bounded stablecoin purchases.
+- `pkg/capabilitycatalog` — bounded, incomplete discovery IDs plus immutable
+  digest-addressed manifests; all listed state is freshly resolved from TOS.
 - `pkg/chainactionpublisher` — hardened `tosctl` transport for exact signed TVM
   message cells. It pays relay fees but has no semantic authority.
 - `pkg/atosrpc` and `cmd/tos-atos-rpc` — private authenticated Connect service
@@ -53,6 +55,11 @@ and grants one crash-safe funding lease; an ambiguous broadcast is resolved
 from finalized chain state and is never paid again automatically. Wallet keys
 remain behind an injected custody sender. See
 [`docs/buyer-sdk.md`](docs/buyer-sdk.md).
+
+The separate derived discovery boundary is documented in
+[`docs/capability-catalog.md`](docs/capability-catalog.md). Catalog inclusion is
+not registration, and manifest retrieval is always checked against a fresh
+Capability or Accepted Quote digest.
 
 Frozen registry vectors are checked twice: `pkg/nativecore` is the production
 encoder, while `internal/referencecodec` is an independent conformance encoder

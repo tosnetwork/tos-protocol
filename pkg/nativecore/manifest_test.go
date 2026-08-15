@@ -54,6 +54,28 @@ func TestSoftwareWorkManifestCanonicalEncoding(t *testing.T) {
 	}
 }
 
+func TestSoftwareWorkManifestCanonicalCBORDecoder(t *testing.T) {
+	manifest := testSoftwareWorkManifest()
+	encoded, _, err := CanonicalSoftwareWorkManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeCanonicalSoftwareWorkManifestCBOR(encoded)
+	if err != nil || decoded.Version != manifest.Version {
+		t.Fatalf("canonical CBOR decode failed: %v", err)
+	}
+	// Replace the canonical definite-length map header with an indefinite map
+	// and break. It has identical semantics but a forbidden alternate encoding.
+	if encoded[0] != 0xb4 {
+		t.Fatalf("unexpected manifest map header: %x", encoded[0])
+	}
+	nonCanonical := append([]byte{0xbf}, encoded[1:]...)
+	nonCanonical = append(nonCanonical, 0xff)
+	if _, err := DecodeCanonicalSoftwareWorkManifestCBOR(nonCanonical); err == nil {
+		t.Fatal("non-canonical manifest CBOR accepted")
+	}
+}
+
 func TestSoftwareWorkManifestRejectsCircularCapabilityID(t *testing.T) {
 	manifest := testSoftwareWorkManifest()
 	encoded, err := json.Marshal(manifest)

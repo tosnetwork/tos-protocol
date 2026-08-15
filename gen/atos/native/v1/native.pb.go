@@ -2379,6 +2379,336 @@ func (x *AcceptedQuoteV1) GetNetwork() *NetworkDomain {
 	return nil
 }
 
+// Discovery is derived and may be incomplete. Returned states are fresh
+// finalized Native resolutions and are never index authority.
+type ListCapabilitiesRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Context           *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	PageSize          uint32                 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	AfterCapabilityId string                 `protobuf:"bytes,3,opt,name=after_capability_id,json=afterCapabilityId,proto3" json:"after_capability_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ListCapabilitiesRequest) Reset() {
+	*x = ListCapabilitiesRequest{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCapabilitiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCapabilitiesRequest) ProtoMessage() {}
+
+func (x *ListCapabilitiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCapabilitiesRequest.ProtoReflect.Descriptor instead.
+func (*ListCapabilitiesRequest) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListCapabilitiesRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListCapabilitiesRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListCapabilitiesRequest) GetAfterCapabilityId() string {
+	if x != nil {
+		return x.AfterCapabilityId
+	}
+	return ""
+}
+
+type ListCapabilitiesResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Capabilities          []*NativeStateV1       `protobuf:"bytes,1,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	NextAfterCapabilityId string                 `protobuf:"bytes,2,opt,name=next_after_capability_id,json=nextAfterCapabilityId,proto3" json:"next_after_capability_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *ListCapabilitiesResponse) Reset() {
+	*x = ListCapabilitiesResponse{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCapabilitiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCapabilitiesResponse) ProtoMessage() {}
+
+func (x *ListCapabilitiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCapabilitiesResponse.ProtoReflect.Descriptor instead.
+func (*ListCapabilitiesResponse) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ListCapabilitiesResponse) GetCapabilities() []*NativeStateV1 {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *ListCapabilitiesResponse) GetNextAfterCapabilityId() string {
+	if x != nil {
+		return x.NextAfterCapabilityId
+	}
+	return ""
+}
+
+type PublishSoftwareWorkManifestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	CapabilityId  string                 `protobuf:"bytes,2,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	CanonicalCbor []byte                 `protobuf:"bytes,3,opt,name=canonical_cbor,json=canonicalCbor,proto3" json:"canonical_cbor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishSoftwareWorkManifestRequest) Reset() {
+	*x = PublishSoftwareWorkManifestRequest{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishSoftwareWorkManifestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishSoftwareWorkManifestRequest) ProtoMessage() {}
+
+func (x *PublishSoftwareWorkManifestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishSoftwareWorkManifestRequest.ProtoReflect.Descriptor instead.
+func (*PublishSoftwareWorkManifestRequest) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *PublishSoftwareWorkManifestRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *PublishSoftwareWorkManifestRequest) GetCapabilityId() string {
+	if x != nil {
+		return x.CapabilityId
+	}
+	return ""
+}
+
+func (x *PublishSoftwareWorkManifestRequest) GetCanonicalCbor() []byte {
+	if x != nil {
+		return x.CanonicalCbor
+	}
+	return nil
+}
+
+type PublishSoftwareWorkManifestResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ManifestDigest string                 `protobuf:"bytes,1,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"`
+	Capability     *NativeStateV1         `protobuf:"bytes,2,opt,name=capability,proto3" json:"capability,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PublishSoftwareWorkManifestResponse) Reset() {
+	*x = PublishSoftwareWorkManifestResponse{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishSoftwareWorkManifestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishSoftwareWorkManifestResponse) ProtoMessage() {}
+
+func (x *PublishSoftwareWorkManifestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishSoftwareWorkManifestResponse.ProtoReflect.Descriptor instead.
+func (*PublishSoftwareWorkManifestResponse) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *PublishSoftwareWorkManifestResponse) GetManifestDigest() string {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return ""
+}
+
+func (x *PublishSoftwareWorkManifestResponse) GetCapability() *NativeStateV1 {
+	if x != nil {
+		return x.Capability
+	}
+	return nil
+}
+
+type GetSoftwareWorkManifestRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Context        *RequestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ManifestDigest string                 `protobuf:"bytes,2,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetSoftwareWorkManifestRequest) Reset() {
+	*x = GetSoftwareWorkManifestRequest{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSoftwareWorkManifestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSoftwareWorkManifestRequest) ProtoMessage() {}
+
+func (x *GetSoftwareWorkManifestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSoftwareWorkManifestRequest.ProtoReflect.Descriptor instead.
+func (*GetSoftwareWorkManifestRequest) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *GetSoftwareWorkManifestRequest) GetContext() *RequestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetSoftwareWorkManifestRequest) GetManifestDigest() string {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return ""
+}
+
+type GetSoftwareWorkManifestResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ManifestDigest string                 `protobuf:"bytes,1,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"`
+	CanonicalCbor  []byte                 `protobuf:"bytes,2,opt,name=canonical_cbor,json=canonicalCbor,proto3" json:"canonical_cbor,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetSoftwareWorkManifestResponse) Reset() {
+	*x = GetSoftwareWorkManifestResponse{}
+	mi := &file_atos_native_v1_native_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSoftwareWorkManifestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSoftwareWorkManifestResponse) ProtoMessage() {}
+
+func (x *GetSoftwareWorkManifestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atos_native_v1_native_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSoftwareWorkManifestResponse.ProtoReflect.Descriptor instead.
+func (*GetSoftwareWorkManifestResponse) Descriptor() ([]byte, []int) {
+	return file_atos_native_v1_native_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *GetSoftwareWorkManifestResponse) GetManifestDigest() string {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return ""
+}
+
+func (x *GetSoftwareWorkManifestResponse) GetCanonicalCbor() []byte {
+	if x != nil {
+		return x.CanonicalCbor
+	}
+	return nil
+}
+
 var File_atos_native_v1_native_proto protoreflect.FileDescriptor
 
 const file_atos_native_v1_native_proto_rawDesc = "" +
@@ -2567,7 +2897,29 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"\bproposal\x18\x03 \x01(\v2\x1f.atos.native.v1.QuoteProposalV1R\bproposal\x12D\n" +
 	"\x1eexecution_signer_authorization\x18\x04 \x01(\tR\x1cexecutionSignerAuthorization\x12<\n" +
 	"\treference\x18\x05 \x01(\v2\x1e.atos.native.v1.ChainReferenceR\treference\x127\n" +
-	"\anetwork\x18\x06 \x01(\v2\x1d.atos.native.v1.NetworkDomainR\anetwork*\xf0\x04\n" +
+	"\anetwork\x18\x06 \x01(\v2\x1d.atos.native.v1.NetworkDomainR\anetwork\"\xa0\x01\n" +
+	"\x17ListCapabilitiesRequest\x128\n" +
+	"\acontext\x18\x01 \x01(\v2\x1e.atos.native.v1.RequestContextR\acontext\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\rR\bpageSize\x12.\n" +
+	"\x13after_capability_id\x18\x03 \x01(\tR\x11afterCapabilityId\"\x96\x01\n" +
+	"\x18ListCapabilitiesResponse\x12A\n" +
+	"\fcapabilities\x18\x01 \x03(\v2\x1d.atos.native.v1.NativeStateV1R\fcapabilities\x127\n" +
+	"\x18next_after_capability_id\x18\x02 \x01(\tR\x15nextAfterCapabilityId\"\xaa\x01\n" +
+	"\"PublishSoftwareWorkManifestRequest\x128\n" +
+	"\acontext\x18\x01 \x01(\v2\x1e.atos.native.v1.RequestContextR\acontext\x12#\n" +
+	"\rcapability_id\x18\x02 \x01(\tR\fcapabilityId\x12%\n" +
+	"\x0ecanonical_cbor\x18\x03 \x01(\fR\rcanonicalCbor\"\x8d\x01\n" +
+	"#PublishSoftwareWorkManifestResponse\x12'\n" +
+	"\x0fmanifest_digest\x18\x01 \x01(\tR\x0emanifestDigest\x12=\n" +
+	"\n" +
+	"capability\x18\x02 \x01(\v2\x1d.atos.native.v1.NativeStateV1R\n" +
+	"capability\"\x83\x01\n" +
+	"\x1eGetSoftwareWorkManifestRequest\x128\n" +
+	"\acontext\x18\x01 \x01(\v2\x1e.atos.native.v1.RequestContextR\acontext\x12'\n" +
+	"\x0fmanifest_digest\x18\x02 \x01(\tR\x0emanifestDigest\"q\n" +
+	"\x1fGetSoftwareWorkManifestResponse\x12'\n" +
+	"\x0fmanifest_digest\x18\x01 \x01(\tR\x0emanifestDigest\x12%\n" +
+	"\x0ecanonical_cbor\x18\x02 \x01(\fR\rcanonicalCbor*\xf0\x04\n" +
 	"\x11NativeErrorCodeV1\x12$\n" +
 	" NATIVE_ERROR_CODE_V1_UNSPECIFIED\x10\x00\x12%\n" +
 	" NATIVE_ERROR_CODE_V1_BAD_MESSAGE\x10\x98\x11\x12'\n" +
@@ -2586,7 +2938,11 @@ const file_atos_native_v1_native_proto_rawDesc = "" +
 	"(NATIVE_ERROR_CODE_V1_DUPLICATE_SIGNATURE\x10\xa5\x112\xe9\x01\n" +
 	"\rNativeService\x12k\n" +
 	"\x12SubmitNativeAction\x12).atos.native.v1.SubmitNativeActionRequest\x1a*.atos.native.v1.SubmitNativeActionResponse\x12k\n" +
-	"\x12ResolveNativeState\x12).atos.native.v1.ResolveNativeStateRequest\x1a*.atos.native.v1.ResolveNativeStateResponseBDZBgithub.com/tosnetwork/tos-protocol/gen/atos/native/v1;atosnativev1b\x06proto3"
+	"\x12ResolveNativeState\x12).atos.native.v1.ResolveNativeStateRequest\x1a*.atos.native.v1.ResolveNativeStateResponse2\x88\x03\n" +
+	"\x1aCapabilityDiscoveryService\x12e\n" +
+	"\x10ListCapabilities\x12'.atos.native.v1.ListCapabilitiesRequest\x1a(.atos.native.v1.ListCapabilitiesResponse\x12\x86\x01\n" +
+	"\x1bPublishSoftwareWorkManifest\x122.atos.native.v1.PublishSoftwareWorkManifestRequest\x1a3.atos.native.v1.PublishSoftwareWorkManifestResponse\x12z\n" +
+	"\x17GetSoftwareWorkManifest\x12..atos.native.v1.GetSoftwareWorkManifestRequest\x1a/.atos.native.v1.GetSoftwareWorkManifestResponseBDZBgithub.com/tosnetwork/tos-protocol/gen/atos/native/v1;atosnativev1b\x06proto3"
 
 var (
 	file_atos_native_v1_native_proto_rawDescOnce sync.Once
@@ -2601,41 +2957,47 @@ func file_atos_native_v1_native_proto_rawDescGZIP() []byte {
 }
 
 var file_atos_native_v1_native_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_atos_native_v1_native_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_atos_native_v1_native_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_atos_native_v1_native_proto_goTypes = []any{
-	(NativeErrorCodeV1)(0),             // 0: atos.native.v1.NativeErrorCodeV1
-	(*RequestContext)(nil),             // 1: atos.native.v1.RequestContext
-	(*NativeErrorV1)(nil),              // 2: atos.native.v1.NativeErrorV1
-	(*NetworkDomain)(nil),              // 3: atos.native.v1.NetworkDomain
-	(*ChainReference)(nil),             // 4: atos.native.v1.ChainReference
-	(*ControllerV1)(nil),               // 5: atos.native.v1.ControllerV1
-	(*ControllerPolicyV1)(nil),         // 6: atos.native.v1.ControllerPolicyV1
-	(*SignatureV1)(nil),                // 7: atos.native.v1.SignatureV1
-	(*CapabilityVersionV1)(nil),        // 8: atos.native.v1.CapabilityVersionV1
-	(*RegisterAgentV1)(nil),            // 9: atos.native.v1.RegisterAgentV1
-	(*UpdateAgentPolicyV1)(nil),        // 10: atos.native.v1.UpdateAgentPolicyV1
-	(*DelegateAgentV1)(nil),            // 11: atos.native.v1.DelegateAgentV1
-	(*InitiateRecoveryV1)(nil),         // 12: atos.native.v1.InitiateRecoveryV1
-	(*CompleteRecoveryV1)(nil),         // 13: atos.native.v1.CompleteRecoveryV1
-	(*RevokeAgentV1)(nil),              // 14: atos.native.v1.RevokeAgentV1
-	(*RegisterCapabilityV1)(nil),       // 15: atos.native.v1.RegisterCapabilityV1
-	(*AddCapabilityVersionV1)(nil),     // 16: atos.native.v1.AddCapabilityVersionV1
-	(*TransferCapabilityV1)(nil),       // 17: atos.native.v1.TransferCapabilityV1
-	(*RevokeCapabilityV1)(nil),         // 18: atos.native.v1.RevokeCapabilityV1
-	(*NativeActionV1)(nil),             // 19: atos.native.v1.NativeActionV1
-	(*SignedNativeActionV1)(nil),       // 20: atos.native.v1.SignedNativeActionV1
-	(*AgentStateV1)(nil),               // 21: atos.native.v1.AgentStateV1
-	(*CapabilityStateV1)(nil),          // 22: atos.native.v1.CapabilityStateV1
-	(*NativeStateV1)(nil),              // 23: atos.native.v1.NativeStateV1
-	(*SubmitNativeActionRequest)(nil),  // 24: atos.native.v1.SubmitNativeActionRequest
-	(*SubmitNativeActionResponse)(nil), // 25: atos.native.v1.SubmitNativeActionResponse
-	(*ResolveNativeStateRequest)(nil),  // 26: atos.native.v1.ResolveNativeStateRequest
-	(*ResolveNativeStateResponse)(nil), // 27: atos.native.v1.ResolveNativeStateResponse
-	(*TOSContractIdentityV1)(nil),      // 28: atos.native.v1.TOSContractIdentityV1
-	(*TOSAssetIdentityV1)(nil),         // 29: atos.native.v1.TOSAssetIdentityV1
-	(*MoneyV1)(nil),                    // 30: atos.native.v1.MoneyV1
-	(*QuoteProposalV1)(nil),            // 31: atos.native.v1.QuoteProposalV1
-	(*AcceptedQuoteV1)(nil),            // 32: atos.native.v1.AcceptedQuoteV1
+	(NativeErrorCodeV1)(0),                      // 0: atos.native.v1.NativeErrorCodeV1
+	(*RequestContext)(nil),                      // 1: atos.native.v1.RequestContext
+	(*NativeErrorV1)(nil),                       // 2: atos.native.v1.NativeErrorV1
+	(*NetworkDomain)(nil),                       // 3: atos.native.v1.NetworkDomain
+	(*ChainReference)(nil),                      // 4: atos.native.v1.ChainReference
+	(*ControllerV1)(nil),                        // 5: atos.native.v1.ControllerV1
+	(*ControllerPolicyV1)(nil),                  // 6: atos.native.v1.ControllerPolicyV1
+	(*SignatureV1)(nil),                         // 7: atos.native.v1.SignatureV1
+	(*CapabilityVersionV1)(nil),                 // 8: atos.native.v1.CapabilityVersionV1
+	(*RegisterAgentV1)(nil),                     // 9: atos.native.v1.RegisterAgentV1
+	(*UpdateAgentPolicyV1)(nil),                 // 10: atos.native.v1.UpdateAgentPolicyV1
+	(*DelegateAgentV1)(nil),                     // 11: atos.native.v1.DelegateAgentV1
+	(*InitiateRecoveryV1)(nil),                  // 12: atos.native.v1.InitiateRecoveryV1
+	(*CompleteRecoveryV1)(nil),                  // 13: atos.native.v1.CompleteRecoveryV1
+	(*RevokeAgentV1)(nil),                       // 14: atos.native.v1.RevokeAgentV1
+	(*RegisterCapabilityV1)(nil),                // 15: atos.native.v1.RegisterCapabilityV1
+	(*AddCapabilityVersionV1)(nil),              // 16: atos.native.v1.AddCapabilityVersionV1
+	(*TransferCapabilityV1)(nil),                // 17: atos.native.v1.TransferCapabilityV1
+	(*RevokeCapabilityV1)(nil),                  // 18: atos.native.v1.RevokeCapabilityV1
+	(*NativeActionV1)(nil),                      // 19: atos.native.v1.NativeActionV1
+	(*SignedNativeActionV1)(nil),                // 20: atos.native.v1.SignedNativeActionV1
+	(*AgentStateV1)(nil),                        // 21: atos.native.v1.AgentStateV1
+	(*CapabilityStateV1)(nil),                   // 22: atos.native.v1.CapabilityStateV1
+	(*NativeStateV1)(nil),                       // 23: atos.native.v1.NativeStateV1
+	(*SubmitNativeActionRequest)(nil),           // 24: atos.native.v1.SubmitNativeActionRequest
+	(*SubmitNativeActionResponse)(nil),          // 25: atos.native.v1.SubmitNativeActionResponse
+	(*ResolveNativeStateRequest)(nil),           // 26: atos.native.v1.ResolveNativeStateRequest
+	(*ResolveNativeStateResponse)(nil),          // 27: atos.native.v1.ResolveNativeStateResponse
+	(*TOSContractIdentityV1)(nil),               // 28: atos.native.v1.TOSContractIdentityV1
+	(*TOSAssetIdentityV1)(nil),                  // 29: atos.native.v1.TOSAssetIdentityV1
+	(*MoneyV1)(nil),                             // 30: atos.native.v1.MoneyV1
+	(*QuoteProposalV1)(nil),                     // 31: atos.native.v1.QuoteProposalV1
+	(*AcceptedQuoteV1)(nil),                     // 32: atos.native.v1.AcceptedQuoteV1
+	(*ListCapabilitiesRequest)(nil),             // 33: atos.native.v1.ListCapabilitiesRequest
+	(*ListCapabilitiesResponse)(nil),            // 34: atos.native.v1.ListCapabilitiesResponse
+	(*PublishSoftwareWorkManifestRequest)(nil),  // 35: atos.native.v1.PublishSoftwareWorkManifestRequest
+	(*PublishSoftwareWorkManifestResponse)(nil), // 36: atos.native.v1.PublishSoftwareWorkManifestResponse
+	(*GetSoftwareWorkManifestRequest)(nil),      // 37: atos.native.v1.GetSoftwareWorkManifestRequest
+	(*GetSoftwareWorkManifestResponse)(nil),     // 38: atos.native.v1.GetSoftwareWorkManifestResponse
 }
 var file_atos_native_v1_native_proto_depIdxs = []int32{
 	0,  // 0: atos.native.v1.NativeErrorV1.code:type_name -> atos.native.v1.NativeErrorCodeV1
@@ -2677,15 +3039,26 @@ var file_atos_native_v1_native_proto_depIdxs = []int32{
 	31, // 36: atos.native.v1.AcceptedQuoteV1.proposal:type_name -> atos.native.v1.QuoteProposalV1
 	4,  // 37: atos.native.v1.AcceptedQuoteV1.reference:type_name -> atos.native.v1.ChainReference
 	3,  // 38: atos.native.v1.AcceptedQuoteV1.network:type_name -> atos.native.v1.NetworkDomain
-	24, // 39: atos.native.v1.NativeService.SubmitNativeAction:input_type -> atos.native.v1.SubmitNativeActionRequest
-	26, // 40: atos.native.v1.NativeService.ResolveNativeState:input_type -> atos.native.v1.ResolveNativeStateRequest
-	25, // 41: atos.native.v1.NativeService.SubmitNativeAction:output_type -> atos.native.v1.SubmitNativeActionResponse
-	27, // 42: atos.native.v1.NativeService.ResolveNativeState:output_type -> atos.native.v1.ResolveNativeStateResponse
-	41, // [41:43] is the sub-list for method output_type
-	39, // [39:41] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	1,  // 39: atos.native.v1.ListCapabilitiesRequest.context:type_name -> atos.native.v1.RequestContext
+	23, // 40: atos.native.v1.ListCapabilitiesResponse.capabilities:type_name -> atos.native.v1.NativeStateV1
+	1,  // 41: atos.native.v1.PublishSoftwareWorkManifestRequest.context:type_name -> atos.native.v1.RequestContext
+	23, // 42: atos.native.v1.PublishSoftwareWorkManifestResponse.capability:type_name -> atos.native.v1.NativeStateV1
+	1,  // 43: atos.native.v1.GetSoftwareWorkManifestRequest.context:type_name -> atos.native.v1.RequestContext
+	24, // 44: atos.native.v1.NativeService.SubmitNativeAction:input_type -> atos.native.v1.SubmitNativeActionRequest
+	26, // 45: atos.native.v1.NativeService.ResolveNativeState:input_type -> atos.native.v1.ResolveNativeStateRequest
+	33, // 46: atos.native.v1.CapabilityDiscoveryService.ListCapabilities:input_type -> atos.native.v1.ListCapabilitiesRequest
+	35, // 47: atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest:input_type -> atos.native.v1.PublishSoftwareWorkManifestRequest
+	37, // 48: atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest:input_type -> atos.native.v1.GetSoftwareWorkManifestRequest
+	25, // 49: atos.native.v1.NativeService.SubmitNativeAction:output_type -> atos.native.v1.SubmitNativeActionResponse
+	27, // 50: atos.native.v1.NativeService.ResolveNativeState:output_type -> atos.native.v1.ResolveNativeStateResponse
+	34, // 51: atos.native.v1.CapabilityDiscoveryService.ListCapabilities:output_type -> atos.native.v1.ListCapabilitiesResponse
+	36, // 52: atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest:output_type -> atos.native.v1.PublishSoftwareWorkManifestResponse
+	38, // 53: atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest:output_type -> atos.native.v1.GetSoftwareWorkManifestResponse
+	49, // [49:54] is the sub-list for method output_type
+	44, // [44:49] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_atos_native_v1_native_proto_init() }
@@ -2715,9 +3088,9 @@ func file_atos_native_v1_native_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atos_native_v1_native_proto_rawDesc), len(file_atos_native_v1_native_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   32,
+			NumMessages:   38,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_atos_native_v1_native_proto_goTypes,
 		DependencyIndexes: file_atos_native_v1_native_proto_depIdxs,

@@ -23,6 +23,9 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// NativeServiceName is the fully-qualified name of the NativeService service.
 	NativeServiceName = "atos.native.v1.NativeService"
+	// CapabilityDiscoveryServiceName is the fully-qualified name of the CapabilityDiscoveryService
+	// service.
+	CapabilityDiscoveryServiceName = "atos.native.v1.CapabilityDiscoveryService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -39,6 +42,15 @@ const (
 	// NativeServiceResolveNativeStateProcedure is the fully-qualified name of the NativeService's
 	// ResolveNativeState RPC.
 	NativeServiceResolveNativeStateProcedure = "/atos.native.v1.NativeService/ResolveNativeState"
+	// CapabilityDiscoveryServiceListCapabilitiesProcedure is the fully-qualified name of the
+	// CapabilityDiscoveryService's ListCapabilities RPC.
+	CapabilityDiscoveryServiceListCapabilitiesProcedure = "/atos.native.v1.CapabilityDiscoveryService/ListCapabilities"
+	// CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure is the fully-qualified name of the
+	// CapabilityDiscoveryService's PublishSoftwareWorkManifest RPC.
+	CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure = "/atos.native.v1.CapabilityDiscoveryService/PublishSoftwareWorkManifest"
+	// CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure is the fully-qualified name of the
+	// CapabilityDiscoveryService's GetSoftwareWorkManifest RPC.
+	CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure = "/atos.native.v1.CapabilityDiscoveryService/GetSoftwareWorkManifest"
 )
 
 // NativeServiceClient is a client for the atos.native.v1.NativeService service.
@@ -135,4 +147,129 @@ func (UnimplementedNativeServiceHandler) SubmitNativeAction(context.Context, *co
 
 func (UnimplementedNativeServiceHandler) ResolveNativeState(context.Context, *connect.Request[v1.ResolveNativeStateRequest]) (*connect.Response[v1.ResolveNativeStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.NativeService.ResolveNativeState is not implemented"))
+}
+
+// CapabilityDiscoveryServiceClient is a client for the atos.native.v1.CapabilityDiscoveryService
+// service.
+type CapabilityDiscoveryServiceClient interface {
+	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
+	PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error)
+	GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error)
+}
+
+// NewCapabilityDiscoveryServiceClient constructs a client for the
+// atos.native.v1.CapabilityDiscoveryService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewCapabilityDiscoveryServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CapabilityDiscoveryServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	capabilityDiscoveryServiceMethods := v1.File_atos_native_v1_native_proto.Services().ByName("CapabilityDiscoveryService").Methods()
+	return &capabilityDiscoveryServiceClient{
+		listCapabilities: connect.NewClient[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse](
+			httpClient,
+			baseURL+CapabilityDiscoveryServiceListCapabilitiesProcedure,
+			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("ListCapabilities")),
+			connect.WithClientOptions(opts...),
+		),
+		publishSoftwareWorkManifest: connect.NewClient[v1.PublishSoftwareWorkManifestRequest, v1.PublishSoftwareWorkManifestResponse](
+			httpClient,
+			baseURL+CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure,
+			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("PublishSoftwareWorkManifest")),
+			connect.WithClientOptions(opts...),
+		),
+		getSoftwareWorkManifest: connect.NewClient[v1.GetSoftwareWorkManifestRequest, v1.GetSoftwareWorkManifestResponse](
+			httpClient,
+			baseURL+CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure,
+			connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("GetSoftwareWorkManifest")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// capabilityDiscoveryServiceClient implements CapabilityDiscoveryServiceClient.
+type capabilityDiscoveryServiceClient struct {
+	listCapabilities            *connect.Client[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse]
+	publishSoftwareWorkManifest *connect.Client[v1.PublishSoftwareWorkManifestRequest, v1.PublishSoftwareWorkManifestResponse]
+	getSoftwareWorkManifest     *connect.Client[v1.GetSoftwareWorkManifestRequest, v1.GetSoftwareWorkManifestResponse]
+}
+
+// ListCapabilities calls atos.native.v1.CapabilityDiscoveryService.ListCapabilities.
+func (c *capabilityDiscoveryServiceClient) ListCapabilities(ctx context.Context, req *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
+	return c.listCapabilities.CallUnary(ctx, req)
+}
+
+// PublishSoftwareWorkManifest calls
+// atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest.
+func (c *capabilityDiscoveryServiceClient) PublishSoftwareWorkManifest(ctx context.Context, req *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error) {
+	return c.publishSoftwareWorkManifest.CallUnary(ctx, req)
+}
+
+// GetSoftwareWorkManifest calls atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest.
+func (c *capabilityDiscoveryServiceClient) GetSoftwareWorkManifest(ctx context.Context, req *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error) {
+	return c.getSoftwareWorkManifest.CallUnary(ctx, req)
+}
+
+// CapabilityDiscoveryServiceHandler is an implementation of the
+// atos.native.v1.CapabilityDiscoveryService service.
+type CapabilityDiscoveryServiceHandler interface {
+	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
+	PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error)
+	GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error)
+}
+
+// NewCapabilityDiscoveryServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewCapabilityDiscoveryServiceHandler(svc CapabilityDiscoveryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	capabilityDiscoveryServiceMethods := v1.File_atos_native_v1_native_proto.Services().ByName("CapabilityDiscoveryService").Methods()
+	capabilityDiscoveryServiceListCapabilitiesHandler := connect.NewUnaryHandler(
+		CapabilityDiscoveryServiceListCapabilitiesProcedure,
+		svc.ListCapabilities,
+		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("ListCapabilities")),
+		connect.WithHandlerOptions(opts...),
+	)
+	capabilityDiscoveryServicePublishSoftwareWorkManifestHandler := connect.NewUnaryHandler(
+		CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure,
+		svc.PublishSoftwareWorkManifest,
+		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("PublishSoftwareWorkManifest")),
+		connect.WithHandlerOptions(opts...),
+	)
+	capabilityDiscoveryServiceGetSoftwareWorkManifestHandler := connect.NewUnaryHandler(
+		CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure,
+		svc.GetSoftwareWorkManifest,
+		connect.WithSchema(capabilityDiscoveryServiceMethods.ByName("GetSoftwareWorkManifest")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/atos.native.v1.CapabilityDiscoveryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case CapabilityDiscoveryServiceListCapabilitiesProcedure:
+			capabilityDiscoveryServiceListCapabilitiesHandler.ServeHTTP(w, r)
+		case CapabilityDiscoveryServicePublishSoftwareWorkManifestProcedure:
+			capabilityDiscoveryServicePublishSoftwareWorkManifestHandler.ServeHTTP(w, r)
+		case CapabilityDiscoveryServiceGetSoftwareWorkManifestProcedure:
+			capabilityDiscoveryServiceGetSoftwareWorkManifestHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedCapabilityDiscoveryServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedCapabilityDiscoveryServiceHandler struct{}
+
+func (UnimplementedCapabilityDiscoveryServiceHandler) ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.ListCapabilities is not implemented"))
+}
+
+func (UnimplementedCapabilityDiscoveryServiceHandler) PublishSoftwareWorkManifest(context.Context, *connect.Request[v1.PublishSoftwareWorkManifestRequest]) (*connect.Response[v1.PublishSoftwareWorkManifestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.PublishSoftwareWorkManifest is not implemented"))
+}
+
+func (UnimplementedCapabilityDiscoveryServiceHandler) GetSoftwareWorkManifest(context.Context, *connect.Request[v1.GetSoftwareWorkManifestRequest]) (*connect.Response[v1.GetSoftwareWorkManifestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("atos.native.v1.CapabilityDiscoveryService.GetSoftwareWorkManifest is not implemented"))
 }
