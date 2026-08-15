@@ -1,0 +1,31 @@
+package agentpacket
+
+import (
+	"crypto/ed25519"
+	"testing"
+	"time"
+
+	nativev1 "github.com/tosnetwork/tos-protocol/gen/atos/native/v1"
+)
+
+func TestContactCardIsFinalizedAndTimeBound(t *testing.T) {
+	private := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+	agent := "agent_" + repeatHex("ab")
+	network := &nativev1.NetworkDomain{NetworkId: "test", GenesisRootHash: "sha256:" + repeatHex("01"), GenesisFileHash: "sha256:" + repeatHex("02")}
+	now := time.Unix(1000, 0)
+	card, err := SignContact(ContactCard{AgentID: agent, Network: network, Endpoint: "https://agent.example/packet", Capabilities: []string{"cap_" + repeatHex("cd")}, ExpiresAtUnix: 1500}, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := &nativev1.AgentStateV1{AgentId: agent, Policy: &nativev1.ControllerPolicyV1{Controllers: []*nativev1.ControllerV1{{Ed25519PublicKey: private.Public().(ed25519.PublicKey)}}}}
+	if err := VerifyContact(resolver{agent: state}, card, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyContact(resolver{agent: state}, card, time.Unix(1500, 0)); err == nil {
+		t.Fatal("expired Contact Card accepted")
+	}
+	card.Endpoint = "http://public.example/packet"
+	if err := VerifyContact(resolver{agent: state}, card, now); err == nil {
+		t.Fatal("plaintext public endpoint accepted")
+	}
+}
