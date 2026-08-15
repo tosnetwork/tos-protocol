@@ -28,25 +28,36 @@ type connectionFlags struct {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fail(errors.New("usage: tos-service-discovery <publish|list|search|get> [flags]"))
+	if err := run(os.Args[1:]); err != nil {
+		fail(err)
+	}
+}
+
+func run(arguments []string) error {
+	if len(arguments) == 0 {
+		return errors.New("usage: tos-service-discovery <publish|list|search|get> [flags]")
+	}
+	if arguments[0] == "help" || arguments[0] == "-h" || arguments[0] == "--help" {
+		fmt.Fprintln(os.Stdout, "usage: tos-service-discovery <publish|list|search|get> [flags]")
+		return nil
 	}
 	var err error
-	switch os.Args[1] {
+	switch arguments[0] {
 	case "publish":
-		err = publish(os.Args[2:])
+		err = publish(arguments[1:])
 	case "list":
-		err = list(os.Args[2:])
+		err = list(arguments[1:])
 	case "search":
-		err = search(os.Args[2:])
+		err = search(arguments[1:])
 	case "get":
-		err = get(os.Args[2:])
+		err = get(arguments[1:])
 	default:
 		err = errors.New("unknown discovery command")
 	}
-	if err != nil {
-		fail(err)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
 	}
+	return err
 }
 
 func addConnectionFlags(set *flag.FlagSet) *connectionFlags {
@@ -83,7 +94,10 @@ func publish(arguments []string) error {
 	capability := set.String("capability-id", "", "finalized Capability ID")
 	manifest := set.String("manifest-cbor", "", "absolute canonical manifest CBOR path")
 	retry := set.String("idempotency-key", "", "durable publication retry key")
-	if err := set.Parse(arguments); err != nil || set.NArg() != 0 || *capability == "" || *retry == "" || len(*retry) > 256 {
+	if err := set.Parse(arguments); err != nil {
+		return err
+	}
+	if set.NArg() != 0 || *capability == "" || *retry == "" || len(*retry) > 256 {
 		return errors.New("invalid manifest publication flags")
 	}
 	raw, err := readBoundedRegular(*manifest, maxManifestBytes)
@@ -114,7 +128,10 @@ func list(arguments []string) error {
 	connection := addConnectionFlags(set)
 	pageSize := set.Uint("page-size", 20, "page size (maximum 100)")
 	after := set.String("after-capability-id", "", "local continuation Capability ID")
-	if err := set.Parse(arguments); err != nil || set.NArg() != 0 || *pageSize > 100 {
+	if err := set.Parse(arguments); err != nil {
+		return err
+	}
+	if set.NArg() != 0 || *pageSize > 100 {
 		return errors.New("invalid Capability listing flags")
 	}
 	client, contextValue, cancel, request, err := discoveryCall(connection, "")
@@ -137,7 +154,10 @@ func search(arguments []string) error {
 	query := set.String("query", "", "bounded local search query")
 	pageSize := set.Uint("page-size", 20, "page size (maximum 100)")
 	after := set.String("after-capability-id", "", "local continuation Capability ID")
-	if err := set.Parse(arguments); err != nil || set.NArg() != 0 || *query == "" || len(*query) > 128 || *pageSize > 100 {
+	if err := set.Parse(arguments); err != nil {
+		return err
+	}
+	if set.NArg() != 0 || *query == "" || len(*query) > 128 || *pageSize > 100 {
 		return errors.New("invalid Capability search flags")
 	}
 	client, contextValue, cancel, request, err := discoveryCall(connection, "")
@@ -159,7 +179,10 @@ func get(arguments []string) error {
 	set := flag.NewFlagSet("get", flag.ContinueOnError)
 	connection := addConnectionFlags(set)
 	digest := set.String("manifest-digest", "", "SHA-256 manifest digest")
-	if err := set.Parse(arguments); err != nil || set.NArg() != 0 || *digest == "" {
+	if err := set.Parse(arguments); err != nil {
+		return err
+	}
+	if set.NArg() != 0 || *digest == "" {
 		return errors.New("invalid manifest retrieval flags")
 	}
 	client, contextValue, cancel, request, err := discoveryCall(connection, "")

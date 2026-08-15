@@ -37,3 +37,11 @@ func TestManifestInputRequiresAbsoluteBoundedRegularFile(t *testing.T) {
 		t.Fatal("oversized manifest was accepted")
 	}
 }
+
+func TestHelpIsSuccessful(t *testing.T) {
+	for _, arguments := range [][]string{{"-h"}, {"--help"}, {"help"}, {"list", "-h"}} {
+		if err := run(arguments); err != nil {
+			t.Fatalf("run(%q) returned %v", arguments, err)
+		}
+	}
+}
