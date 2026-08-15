@@ -33,6 +33,15 @@ go test ./...
 go build ./cmd/tos-atos-rpc
 ```
 
+## Provider SDK
+
+Gate E provider onboarding starts with the public `pkg/nativeclient` and
+`pkg/providersdk` packages. They prepare a canonical software-work Capability,
+accept externally generated controller signatures, relay the exact reviewed
+action, and wait for matching finalized typed TOS state. They contain no
+private-key or gateway-database authority. See
+[`docs/provider-sdk.md`](docs/provider-sdk.md).
+
 Frozen registry vectors are checked twice: `pkg/nativecore` is the production
 encoder, while `internal/referencecodec` is an independent conformance encoder
 that does not import generated Native messages or `nativecore`. Reproduce its
