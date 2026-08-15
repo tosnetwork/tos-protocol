@@ -80,15 +80,18 @@ func DecodeContactJSON(raw []byte) (ContactCard, error) {
 }
 
 func SignContact(card ContactCard, privateKey ed25519.PrivateKey) (ContactCard, error) {
+	return SignContactAt(card, privateKey, time.Now())
+}
+
+// SignContactAt is deterministic-clock support for tests and controlled
+// issuance services. Production callers should use SignContact.
+func SignContactAt(card ContactCard, privateKey ed25519.PrivateKey, now time.Time) (ContactCard, error) {
 	card.Signature = nil
-	if len(privateKey) != ed25519.PrivateKeySize {
+	if now.IsZero() || len(privateKey) != ed25519.PrivateKeySize {
 		return ContactCard{}, errors.New("invalid Contact Card signing key")
 	}
 	card.PublicKey = append(ed25519.PublicKey(nil), privateKey.Public().(ed25519.PublicKey)...)
-	if card.ExpiresAtUnix == 0 {
-		return ContactCard{}, errors.New("invalid Contact Card expiry")
-	}
-	if err := validateContact(card, false, time.Unix(int64(card.ExpiresAtUnix-1), 0)); err != nil {
+	if err := validateContact(card, false, now); err != nil {
 		return ContactCard{}, err
 	}
 	card.Signature = ed25519.Sign(privateKey, contactBytes(card))
