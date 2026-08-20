@@ -6,7 +6,7 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/pkg/codec"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 // PortableProjection is an off-chain interchange view. It is never accepted

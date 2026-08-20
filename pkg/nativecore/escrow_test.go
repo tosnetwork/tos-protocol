@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
-	"github.com/xssnick/tonutils-go/address"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/address"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 func escrowDataWithRuntime(t *testing.T, original *cell.Cell, status uint8, funded, settled uint64, receipt []byte, pending uint64) *cell.Cell {
 	t.Helper()
-	s := original.BeginParse()
+	s := original.MustBeginParse()
 	s.MustLoadUInt(32)
 	s.MustLoadUInt(16)
 	s.MustLoadUInt(8)
@@ -24,7 +24,7 @@ func escrowDataWithRuntime(t *testing.T, original *cell.Cell, status uint8, fund
 	terms, _ := s.LoadRefCell()
 	authorization, _ := s.LoadRefCell()
 	oldRuntime, _ := s.LoadRefCell()
-	r := oldRuntime.BeginParse()
+	r := oldRuntime.MustBeginParse()
 	r.MustLoadUInt(32)
 	r.MustLoadUInt(16)
 	r.MustLoadBigUInt(128)
@@ -236,7 +236,7 @@ func TestEscrowDecoderRejectsForgedRootCommitment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := identity.Data.BeginParse()
+	s := identity.Data.MustBeginParse()
 	s.MustLoadUInt(32)
 	s.MustLoadUInt(16)
 	status := s.MustLoadUInt(8)

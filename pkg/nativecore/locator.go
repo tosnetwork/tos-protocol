@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const (
@@ -119,7 +119,10 @@ func (l *Locator) configCell() (*cell.Cell, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := domain.BeginParse()
+	s, err := domain.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Native domain cell")
+	}
 	root, _ := s.LoadSlice(256)
 	file, _ := s.LoadSlice(256)
 	networkHash, _ := s.LoadSlice(256)

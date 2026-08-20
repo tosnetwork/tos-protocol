@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 func validReceipt() SoftwareWorkReceiptV1 {
@@ -50,7 +50,7 @@ func TestSoftwareWorkReceiptAndSettlementIntentRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := body.BeginParse()
+	s := body.MustBeginParse()
 	op, _ := s.LoadUInt(32)
 	query, _ := s.LoadUInt(64)
 	if op != EscrowReleaseOpcode || query != 7 {

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-service-protocol/pkg/chain"
-	"github.com/xssnick/tonutils-go/address"
+	"github.com/tosnetwork/tosutils-go/address"
 )
 
 const (

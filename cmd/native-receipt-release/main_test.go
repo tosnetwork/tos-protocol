@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 func signatureFile(t *testing.T, value externalSignature) string {

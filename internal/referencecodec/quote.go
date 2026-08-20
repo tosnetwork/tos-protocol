@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/xssnick/tonutils-go/address"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/address"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const quoteMagic = 0x4e415131

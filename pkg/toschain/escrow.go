@@ -10,7 +10,7 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
-	"github.com/xssnick/tonutils-go/address"
+	"github.com/tosnetwork/tosutils-go/address"
 )
 
 // FinalizedEscrowV1 binds the typed escrow state to the exact finalized

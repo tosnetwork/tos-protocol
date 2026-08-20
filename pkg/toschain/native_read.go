@@ -12,8 +12,8 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
-	"github.com/xssnick/tonutils-go/tlb"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tlb"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 type blockID struct {
@@ -156,8 +156,12 @@ func verifyNativeLastTransactionTuple(ctx context.Context, node *rpcNode, addres
 	if err != nil || !bytes.Equal(root.Hash(), rawHash) {
 		return 0, errors.New("Native transaction BOC hash mismatch")
 	}
+	rootSlice, err := root.BeginParse()
+	if err != nil {
+		return 0, errors.New("invalid Native transaction cell")
+	}
 	var transaction tlb.Transaction
-	if err := tlb.LoadFromCell(&transaction, root.BeginParse()); err != nil {
+	if err := tlb.LoadFromCell(&transaction, rootSlice); err != nil {
 		return 0, err
 	}
 	lt, err := strconv.ParseUint(id.LT, 10, 64)

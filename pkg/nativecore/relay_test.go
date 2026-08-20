@@ -11,7 +11,7 @@ import (
 	"time"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 type senderStub struct {
@@ -300,7 +300,7 @@ func TestCapabilityRegistrationIsAuthorizedByCanonicalOwnerAgent(t *testing.T) {
 	}
 	bodyRaw, _ := base64.StdEncoding.DecodeString(sender.body)
 	body, _ := cell.FromBOC(bodyRaw)
-	opcode, _ := body.BeginParse().LoadUInt(32)
+	opcode, _ := body.MustBeginParse().LoadUInt(32)
 	if opcode != 0x4e560002 {
 		t.Fatalf("opcode = %x", opcode)
 	}

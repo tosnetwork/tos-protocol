@@ -23,7 +23,7 @@ import (
 	"github.com/tosnetwork/tos-service-protocol/internal/jsonstrict"
 	"github.com/tosnetwork/tos-service-protocol/pkg/chain"
 	"github.com/tosnetwork/tos-service-protocol/pkg/toschain"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 // TosctlBackendConfig is the concrete TOS wallet backend. Exact nanoTOS and

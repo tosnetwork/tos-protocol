@@ -7,7 +7,7 @@ import (
 	"math"
 	"math/big"
 
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const (
@@ -112,7 +112,10 @@ func DecodeSoftwareWorkReceiptCellV1(root *cell.Cell) (SoftwareWorkReceiptV1, er
 	if root == nil {
 		return SoftwareWorkReceiptV1{}, errors.New("missing Receipt")
 	}
-	s := root.BeginParse()
+	s, err := root.BeginParse()
+	if err != nil {
+		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != softwareWorkReceiptMagic {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt magic")
@@ -145,7 +148,10 @@ func DecodeSoftwareWorkReceiptCellV1(root *cell.Cell) (SoftwareWorkReceiptV1, er
 	if err != nil || s.BitsLeft() != 0 || s.RefsNum() != 0 {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt root shape")
 	}
-	b := binding.BeginParse()
+	b, err := binding.BeginParse()
+	if err != nil {
+		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt binding")
+	}
 	quote, err := b.LoadSlice(256)
 	if err != nil {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt Quote")
@@ -158,7 +164,10 @@ func DecodeSoftwareWorkReceiptCellV1(root *cell.Cell) (SoftwareWorkReceiptV1, er
 	if err != nil || b.BitsLeft() != 0 || b.RefsNum() != 0 {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt binding shape")
 	}
-	o := outcome.BeginParse()
+	o, err := outcome.BeginParse()
+	if err != nil {
+		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt outcome")
+	}
 	result, err := o.LoadSlice(256)
 	if err != nil {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt result")
@@ -171,7 +180,10 @@ func DecodeSoftwareWorkReceiptCellV1(root *cell.Cell) (SoftwareWorkReceiptV1, er
 	if err != nil || o.BitsLeft() != 0 || o.RefsNum() != 0 {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt outcome shape")
 	}
-	ev := evidence.BeginParse()
+	ev, err := evidence.BeginParse()
+	if err != nil {
+		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt evidence")
+	}
 	source, err := ev.LoadSlice(256)
 	if err != nil {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt source")
@@ -184,7 +196,10 @@ func DecodeSoftwareWorkReceiptCellV1(root *cell.Cell) (SoftwareWorkReceiptV1, er
 	if err != nil || ev.BitsLeft() != 0 || ev.RefsNum() != 0 {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt evidence shape")
 	}
-	ec := economic.BeginParse()
+	ec, err := economic.BeginParse()
+	if err != nil {
+		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt economics")
+	}
 	charged, err := ec.LoadBigUInt(128)
 	if err != nil || charged.Sign() <= 0 {
 		return SoftwareWorkReceiptV1{}, errors.New("invalid Receipt charge")

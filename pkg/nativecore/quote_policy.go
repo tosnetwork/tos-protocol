@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const (
@@ -79,7 +79,10 @@ func DecodeTransportBindingCellV1(root *cell.Cell) (TransportBindingV1, error) {
 	if root == nil {
 		return TransportBindingV1{}, errors.New("missing transport binding")
 	}
-	s := root.BeginParse()
+	s, err := root.BeginParse()
+	if err != nil {
+		return TransportBindingV1{}, errors.New("invalid transport binding cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != transportBindingMagic {
 		return TransportBindingV1{}, errors.New("invalid transport binding magic")
@@ -119,7 +122,10 @@ func ValidateObjectiveDisputePolicyCellV1(root *cell.Cell) error {
 	if root == nil {
 		return errors.New("missing objective dispute policy")
 	}
-	s := root.BeginParse()
+	s, err := root.BeginParse()
+	if err != nil {
+		return errors.New("invalid dispute policy cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != disputePolicyMagic {
 		return errors.New("invalid dispute policy magic")

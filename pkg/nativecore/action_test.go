@@ -200,7 +200,7 @@ func TestNativeActionHasNoAnchorOrPortableStateCommitment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := built.Cell.BeginParse()
+	s := built.Cell.MustBeginParse()
 	if s.RefsNum() != 2 {
 		t.Fatalf("action refs = %d, want domain+payload only", s.RefsNum())
 	}

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/xssnick/tonutils-go/address"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/address"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const (
@@ -206,7 +206,10 @@ func DecodeEscrowDataV1(data *cell.Cell) (*EscrowStateV1, error) {
 	if data == nil {
 		return nil, errors.New("missing escrow data")
 	}
-	s := data.BeginParse()
+	s, err := data.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid escrow data cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != escrowDataMagic {
 		return nil, errors.New("invalid escrow data magic")
@@ -266,7 +269,10 @@ func DecodeEscrowDataV1(data *cell.Cell) (*EscrowStateV1, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := runtime.BeginParse()
+	r, err := runtime.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid escrow runtime")
+	}
 	runtimeMagic, err := r.LoadUInt(32)
 	if err != nil || runtimeMagic != escrowRuntimeMagic {
 		return nil, errors.New("invalid escrow runtime magic")
@@ -345,7 +351,10 @@ func DecodeEscrowDataV1(data *cell.Cell) (*EscrowStateV1, error) {
 }
 
 func decodeEscrowTerms(value *cell.Cell) (EscrowTermsV1, error) {
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return EscrowTermsV1{}, errors.New("invalid escrow terms cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != escrowTermsMagic {
 		return EscrowTermsV1{}, errors.New("invalid escrow terms magic")
@@ -383,7 +392,10 @@ func DecodeEscrowTermsCellV1(value *cell.Cell) (EscrowTermsV1, error) {
 }
 
 func decodeEscrowAuthorization(value *cell.Cell) ([]byte, error) {
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid execution authorization cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != escrowAuthorizationMagic {
 		return nil, errors.New("invalid execution authorization magic")
@@ -400,7 +412,10 @@ func decodeEscrowAuthorization(value *cell.Cell) ([]byte, error) {
 }
 
 func decodeEscrowAssetRoute(value *cell.Cell) (string, []byte, *cell.Cell, error) {
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return "", nil, nil, errors.New("invalid escrow asset-route cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != escrowAssetRouteMagic {
 		return "", nil, nil, errors.New("invalid escrow asset-route magic")
@@ -449,7 +464,10 @@ func acceptedQuoteAssetRoute(quote *cell.Cell) (string, []byte, error) {
 	if quote == nil {
 		return "", nil, errors.New("missing Accepted Quote")
 	}
-	s := quote.BeginParse()
+	s, err := quote.BeginParse()
+	if err != nil {
+		return "", nil, errors.New("invalid Accepted Quote")
+	}
 	if _, err := s.LoadUInt(32); err != nil {
 		return "", nil, errors.New("invalid Accepted Quote")
 	}
@@ -466,7 +484,10 @@ func acceptedQuoteAssetRoute(quote *cell.Cell) (string, []byte, error) {
 	if err != nil {
 		return "", nil, errors.New("missing Quote economic terms")
 	}
-	e := economic.BeginParse()
+	e, err := economic.BeginParse()
+	if err != nil {
+		return "", nil, errors.New("invalid Quote economic terms")
+	}
 	if _, err := e.LoadSlice(256); err != nil {
 		return "", nil, errors.New("invalid Quote escrow terms")
 	}
@@ -477,7 +498,10 @@ func acceptedQuoteAssetRoute(quote *cell.Cell) (string, []byte, error) {
 	if err != nil {
 		return "", nil, errors.New("missing Quote asset")
 	}
-	as := asset.BeginParse()
+	as, err := asset.BeginParse()
+	if err != nil {
+		return "", nil, errors.New("invalid Quote asset")
+	}
 	wc, err := as.LoadInt(32)
 	if err != nil || wc != 0 {
 		return "", nil, errors.New("invalid Quote asset workchain")
@@ -498,7 +522,10 @@ func acceptedQuoteAssetRoute(quote *cell.Cell) (string, []byte, error) {
 }
 
 func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.Int, error) {
-	s := quote.BeginParse()
+	s, err := quote.BeginParse()
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Accepted Quote")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != acceptedQuoteMagic {
 		return nil, nil, 0, nil, errors.New("invalid Accepted Quote magic")
@@ -508,7 +535,11 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 		return nil, nil, 0, nil, errors.New("unsupported Accepted Quote schema")
 	}
 	network, err := s.LoadRefCell()
-	if err != nil || network.BeginParse().BitsLeft() != 768 || network.BeginParse().RefsNum() != 0 {
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Quote network")
+	}
+	networkSlice, err := network.BeginParse()
+	if err != nil || networkSlice.BitsLeft() != 768 || networkSlice.RefsNum() != 0 {
 		return nil, nil, 0, nil, errors.New("invalid Quote network")
 	}
 	identity, err := s.LoadRefCell()
@@ -523,7 +554,10 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 	if err != nil || s.BitsLeft() != 0 || s.RefsNum() != 0 {
 		return nil, nil, 0, nil, errors.New("invalid Accepted Quote shape")
 	}
-	i := identity.BeginParse()
+	i, err := identity.BeginParse()
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Quote identity")
+	}
 	capability, err := i.LoadSlice(256)
 	if err != nil {
 		return nil, nil, 0, nil, errors.New("invalid Quote Capability")
@@ -536,7 +570,10 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 	if err != nil || i.BitsLeft() != 0 || i.RefsNum() != 0 {
 		return nil, nil, 0, nil, errors.New("invalid Quote identity shape")
 	}
-	v := version.BeginParse()
+	v, err := version.BeginParse()
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Quote version")
+	}
 	versionHash, err := v.LoadSlice(256)
 	if err != nil {
 		return nil, nil, 0, nil, errors.New("invalid Quote version hash")
@@ -565,7 +602,10 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 	if !equalBytes(versionHash, computedVersion[:]) {
 		return nil, nil, 0, nil, errors.New("Quote version hash mismatch")
 	}
-	e := economic.BeginParse()
+	e, err := economic.BeginParse()
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Quote economic terms")
+	}
 	terms, err := e.LoadSlice(256)
 	if err != nil {
 		return nil, nil, 0, nil, errors.New("invalid Quote escrow digest")
@@ -582,7 +622,10 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 	if err != nil || e.BitsLeft() != 0 || e.RefsNum() != 0 {
 		return nil, nil, 0, nil, errors.New("invalid Quote economic shape")
 	}
-	as := asset.BeginParse()
+	as, err := asset.BeginParse()
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Quote asset")
+	}
 	wc, err := as.LoadInt(32)
 	if err != nil || wc != 0 {
 		return nil, nil, 0, nil, errors.New("invalid Quote asset workchain")
@@ -612,7 +655,10 @@ func acceptedQuoteBoundValues(quote *cell.Cell) ([]byte, []byte, uint64, *big.In
 	if !ok || maximum.Sign() <= 0 || maximum.BitLen() > 120 {
 		return nil, nil, 0, nil, errors.New("unsupported Quote amount")
 	}
-	a := authority.BeginParse()
+	a, err := authority.BeginParse()
+	if err != nil {
+		return nil, nil, 0, nil, errors.New("invalid Quote authority shape")
+	}
 	auth, err := a.LoadSlice(256)
 	if err != nil || equalBytes(auth, make([]byte, 32)) || a.BitsLeft() != 0 || a.RefsNum() != 0 {
 		return nil, nil, 0, nil, errors.New("invalid Quote authority shape")
@@ -624,7 +670,10 @@ func acceptedQuotePolicyDigests(quote *cell.Cell) ([]byte, []byte, error) {
 	if quote == nil {
 		return nil, nil, errors.New("missing Accepted Quote")
 	}
-	s := quote.BeginParse()
+	s, err := quote.BeginParse()
+	if err != nil {
+		return nil, nil, errors.New("invalid Accepted Quote")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != acceptedQuoteMagic {
 		return nil, nil, errors.New("invalid Accepted Quote magic")
@@ -644,7 +693,10 @@ func acceptedQuotePolicyDigests(quote *cell.Cell) ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, errors.New("missing Quote economic terms")
 	}
-	i := identity.BeginParse()
+	i, err := identity.BeginParse()
+	if err != nil {
+		return nil, nil, errors.New("invalid Quote identity")
+	}
 	if _, err := i.LoadSlice(256); err != nil {
 		return nil, nil, errors.New("invalid Quote Capability")
 	}
@@ -655,7 +707,10 @@ func acceptedQuotePolicyDigests(quote *cell.Cell) ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, errors.New("missing Quote version")
 	}
-	v := version.BeginParse()
+	v, err := version.BeginParse()
+	if err != nil {
+		return nil, nil, errors.New("invalid Quote version")
+	}
 	if _, err := v.LoadSlice(256); err != nil {
 		return nil, nil, errors.New("invalid Quote version hash")
 	}
@@ -666,7 +721,10 @@ func acceptedQuotePolicyDigests(quote *cell.Cell) ([]byte, []byte, error) {
 	if err != nil || equalBytes(transport, make([]byte, 32)) {
 		return nil, nil, errors.New("invalid Quote transport digest")
 	}
-	e := economic.BeginParse()
+	e, err := economic.BeginParse()
+	if err != nil {
+		return nil, nil, errors.New("invalid Quote economic terms")
+	}
 	if _, err := e.LoadSlice(256); err != nil {
 		return nil, nil, errors.New("invalid Quote escrow terms digest")
 	}

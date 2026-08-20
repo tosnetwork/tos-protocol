@@ -12,8 +12,8 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
-	"github.com/xssnick/tonutils-go/address"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/address"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -131,7 +131,10 @@ func decodeStablecoinMasterWalletCode(data *cell.Cell, expectedHash string) (*ce
 	if data == nil {
 		return nil, errors.New("missing stablecoin master data")
 	}
-	s := data.BeginParse()
+	s, err := data.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid stablecoin master data")
+	}
 	supply, err := s.LoadBigCoins()
 	if err != nil || supply.Sign() < 0 {
 		return nil, errors.New("invalid stablecoin total supply")
@@ -170,7 +173,10 @@ func decodeStablecoinWallet(data *cell.Cell, ownerAddress, masterAddress string)
 	if data == nil {
 		return "", errors.New("missing stablecoin wallet data")
 	}
-	s := data.BeginParse()
+	s, err := data.BeginParse()
+	if err != nil {
+		return "", errors.New("invalid stablecoin wallet data")
+	}
 	status, err := s.LoadUInt(4)
 	if err != nil || status != 0 {
 		return "", errors.New("buyer stablecoin wallet is frozen")

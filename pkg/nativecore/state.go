@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const stateMagic = 0x4e565331 // NVS1
@@ -23,7 +23,10 @@ func (l *Locator) DecodeData(data *cell.Cell, expectedObjectID string) (*nativev
 	if err != nil {
 		return nil, false, err
 	}
-	s := data.BeginParse()
+	s, err := data.BeginParse()
+	if err != nil {
+		return nil, false, errors.New("invalid simplified Native account data cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != dataMagic {
 		return nil, false, errors.New("invalid simplified Native data magic")
@@ -85,7 +88,10 @@ func (l *Locator) validateConfig(config *cell.Cell) error {
 }
 
 func decodeState(state *cell.Cell, object string, expectedKind uint8) (*nativev1.NativeStateV1, error) {
-	s := state.BeginParse()
+	s, err := state.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid simplified Native state cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != stateMagic {
 		return nil, errors.New("invalid simplified Native state magic")
@@ -176,7 +182,10 @@ func DecodePolicyCell(value *cell.Cell) (*nativev1.ControllerPolicyV1, error) {
 	if value == nil {
 		return nil, errors.New("missing Native policy")
 	}
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Native policy cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != policyMagic {
 		return nil, errors.New("invalid Native policy magic")
@@ -211,7 +220,10 @@ func DecodePolicyCell(value *cell.Cell) (*nativev1.ControllerPolicyV1, error) {
 	controllers := make([]*nativev1.ControllerV1, 0, count)
 	var previous []byte
 	for i := uint64(0); i < count; i++ {
-		cs := cursor.BeginParse()
+		cs, err := cursor.BeginParse()
+		if err != nil {
+			return nil, err
+		}
 		key, err := cs.LoadSlice(256)
 		if err != nil {
 			return nil, err
@@ -252,7 +264,10 @@ func DecodePolicyCell(value *cell.Cell) (*nativev1.ControllerPolicyV1, error) {
 }
 
 func decodeDelegations(value *cell.Cell) ([]string, error) {
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return nil, err
+	}
 	count, err := s.LoadUInt(16)
 	if err != nil || count > 128 {
 		return nil, errors.New("invalid Native delegation count")
@@ -285,7 +300,10 @@ func decodeDelegations(value *cell.Cell) ([]string, error) {
 }
 
 func decodeRecovery(value *cell.Cell) (uint64, string, string, *nativev1.ControllerPolicyV1, error) {
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return 0, "", "", nil, err
+	}
 	pending, err := s.LoadBoolBit()
 	if err != nil {
 		return 0, "", "", nil, err
@@ -320,7 +338,10 @@ func decodeRecovery(value *cell.Cell) (uint64, string, string, *nativev1.Control
 }
 
 func decodeVersions(value *cell.Cell) ([]*nativev1.CapabilityVersionV1, error) {
-	s := value.BeginParse()
+	s, err := value.BeginParse()
+	if err != nil {
+		return nil, err
+	}
 	count, err := s.LoadUInt(16)
 	if err != nil || count == 0 || count > 256 {
 		return nil, errors.New("invalid Native version count")
@@ -377,7 +398,10 @@ func decodeProtocolText(value *cell.Cell, limit int) (string, error) {
 	}
 	var out []byte
 	for current := value; current != nil; {
-		s := current.BeginParse()
+		s, err := current.BeginParse()
+		if err != nil {
+			return "", err
+		}
 		bits, refs := s.BitsLeft(), s.RefsNum()
 		if bits%8 != 0 || refs > 1 || len(out)+int(bits/8) > limit || refs == 1 && bits != 1016 {
 			return "", errors.New("non-canonical protocol text")

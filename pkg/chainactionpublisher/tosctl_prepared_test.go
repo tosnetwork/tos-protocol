@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/tosnetwork/tos-service-protocol/pkg/chain"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 func TestBroadcastPreparedContractCellValidatesTOSStatus(t *testing.T) {

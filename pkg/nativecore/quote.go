@@ -8,7 +8,7 @@ import (
 	"regexp"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -89,7 +89,10 @@ func DecodeAcceptedQuoteV1(root *cell.Cell, network *nativev1.NetworkDomain) (*A
 	if err != nil {
 		return nil, err
 	}
-	s := root.BeginParse()
+	s, err := root.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Accepted Quote cell")
+	}
 	magic, err := s.LoadUInt(32)
 	if err != nil || magic != acceptedQuoteMagic {
 		return nil, errors.New("invalid Accepted Quote magic")
@@ -115,7 +118,10 @@ func DecodeAcceptedQuoteV1(root *cell.Cell, network *nativev1.NetworkDomain) (*A
 		return nil, errors.New("invalid Accepted Quote shape")
 	}
 
-	i := identity.BeginParse()
+	i, err := identity.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Quote identity")
+	}
 	capability, err := i.LoadSlice(256)
 	if err != nil {
 		return nil, errors.New("invalid Quote Capability")
@@ -128,7 +134,10 @@ func DecodeAcceptedQuoteV1(root *cell.Cell, network *nativev1.NetworkDomain) (*A
 	if err != nil || i.BitsLeft() != 0 || i.RefsNum() != 0 {
 		return nil, errors.New("invalid Quote identity shape")
 	}
-	v := versionCell.BeginParse()
+	v, err := versionCell.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Quote version")
+	}
 	versionHash, err := v.LoadSlice(256)
 	if err != nil {
 		return nil, errors.New("invalid Quote version hash")
@@ -155,7 +164,10 @@ func DecodeAcceptedQuoteV1(root *cell.Cell, network *nativev1.NetworkDomain) (*A
 		return nil, errors.New("invalid Quote version text")
 	}
 
-	e := economic.BeginParse()
+	e, err := economic.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Quote economics")
+	}
 	escrowTerms, err := e.LoadSlice(256)
 	if err != nil {
 		return nil, errors.New("invalid Quote escrow terms")
@@ -172,7 +184,10 @@ func DecodeAcceptedQuoteV1(root *cell.Cell, network *nativev1.NetworkDomain) (*A
 	if err != nil || e.BitsLeft() != 0 || e.RefsNum() != 0 {
 		return nil, errors.New("invalid Quote economics shape")
 	}
-	as := assetCell.BeginParse()
+	as, err := assetCell.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Quote asset")
+	}
 	wc, err := as.LoadInt(32)
 	if err != nil {
 		return nil, errors.New("invalid Quote asset workchain")
@@ -197,7 +212,10 @@ func DecodeAcceptedQuoteV1(root *cell.Cell, network *nativev1.NetworkDomain) (*A
 	if err != nil {
 		return nil, errors.New("invalid Quote amount")
 	}
-	a := authority.BeginParse()
+	a, err := authority.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid Quote authority")
+	}
 	authorization, err := a.LoadSlice(256)
 	if err != nil || a.BitsLeft() != 0 || a.RefsNum() != 0 {
 		return nil, errors.New("invalid Quote authority")

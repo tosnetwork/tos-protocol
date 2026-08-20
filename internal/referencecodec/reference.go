@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xssnick/tonutils-go/tvm/cell"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 const (
@@ -332,7 +332,10 @@ func locate(v VectorSet, kind uint8, objectID []byte) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	s := domain.BeginParse()
+	s, err := domain.BeginParse()
+	if err != nil {
+		return "", "", errors.New("invalid identity domain cell")
+	}
 	root, _ := s.LoadSlice(256)
 	file, _ := s.LoadSlice(256)
 	networkHash, _ := s.LoadSlice(256)
@@ -422,7 +425,10 @@ func actionDomain(network Network, codeHash string) (*cell.Cell, error) {
 	if err != nil || zero(code) {
 		return nil, errors.New("invalid code hash")
 	}
-	s := domain.BeginParse()
+	s, err := domain.BeginParse()
+	if err != nil {
+		return nil, errors.New("invalid identity domain cell")
+	}
 	root, _ := s.LoadSlice(256)
 	file, _ := s.LoadSlice(256)
 	networkHash, _ := s.LoadSlice(256)
