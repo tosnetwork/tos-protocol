@@ -10,6 +10,7 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/internal/referencecodec"
+	"github.com/tosnetwork/tosutils-go/tvm/cell"
 )
 
 func TestGatewayProposalBecomesCanonicalOnlyThroughTermsCommitment(t *testing.T) {
@@ -47,6 +48,17 @@ func TestProductionAcceptedQuoteFrozenVector(t *testing.T) {
 	var vector referencecodec.QuoteVector
 	if err := json.Unmarshal(data, &vector); err != nil {
 		t.Fatal(err)
+	}
+	frozenBOC, err := base64.StdEncoding.DecodeString(vector.Expected.BOCBase64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozenRoot, err := cell.FromBOC(frozenBOC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := "tvm-cell-sha256:" + hex.EncodeToString(frozenRoot.Hash()); got != vector.Expected.Commitment {
+		t.Fatalf("stored vector bytes decode to %s, want the frozen commitment %s", got, vector.Expected.Commitment)
 	}
 	account, err := hex.DecodeString(vector.Quote.Asset.MasterAccountID)
 	if err != nil {
