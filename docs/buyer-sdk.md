@@ -128,6 +128,40 @@ stablecoin master, buyer wallet, and `AmountAtomic`. Deploy
 until the exact escrow is finalized in `awaiting_funding` state. Deployment and
 funding are intentionally separate review steps.
 
+For local `tosctl` custody, `TOSCTLEscrowDeployer` implements that deployment
+boundary without receiving a key. First ask custody to build and sign the exact
+message without broadcasting it:
+
+```go
+deployer, err := buyersdk.NewTOSCTLEscrowDeployer(
+    buyersdk.TOSCTLEscrowDeployerConfig{
+        BinaryPath: "/opt/tos/bin/tosctl",
+        ConfigPath: "/var/lib/tos-service-buyer/tosctl.json",
+        WalletName: "buyer",
+        BuyerAddress: buyerAddress,
+        AttachedNanoTOS: 100_000_000,
+    },
+)
+deployment, err := deployer.PrepareEscrowDeployment(ctx, prepared)
+// Display and persist deployment for owner review; do not broadcast yet.
+```
+
+The deployer independently parses the StateInit and requires the frozen shape:
+no split depth or special value, exactly one code and data reference, and no
+library or trailing data. It binds the code hash, embedded typed escrow data,
+buyer, Quote commitment, deterministic address, empty deploy body, attached TOS
+amount, and custody-produced signed-message hash. After review, a separate step
+submits only those exact signed bytes:
+
+```go
+err = deployer.BroadcastEscrowDeployment(ctx, deployment)
+```
+
+An uncertain broadcast result is reported as ambiguous and is never rebuilt or
+re-signed automatically. Resolve the deterministic escrow through finalized
+chain state; only the SDK's later `FundPurchase` call can accept it, and only in
+the exact `awaiting_funding` state.
+
 ## Fund once
 
 After deployment, fund with a durable request retry key:
