@@ -81,3 +81,22 @@ Capability publication does not start an executor or grant it signing
 authority. Deploy the provider-local runtime using the reviewed template under
 `tos-ai/deploy/provider`, keep raw containerd inaccessible to the gateway, and
 keep all signing keys in the separate `tosctl` custody boundary.
+
+## Restartable operator command
+
+`cmd/tos-service-provider-publish` wires the SDK into an operator workflow
+without moving controller keys into the provider runtime. `prepare` takes the
+reviewed manifest and two retained nonzero 32-byte nonces, prints the canonical
+`NativeActionV1` for `tos-service-wallet`, and reports its Capability ID,
+manifest digest and action hash on stderr. `apply` recomputes that publication,
+requires the returned `SignedNativeActionV1` to match byte-for-byte at the
+protobuf semantic layer, submits it with a durable retry key, waits for exact
+finalized Capability state, and then publishes the same immutable manifest
+under a separate retry key.
+
+The Gateway bearer token is read from an owner-private regular file. HTTPS is
+the default; plaintext requires the client's explicit loopback/development
+override. Unknown signed-action fields, counterparty signatures, action or
+manifest substitution, missing finality, and catalog/finalized-state mismatch
+all fail closed. Re-running `apply` with the same retained nonces and retry keys
+resumes the same publication instead of deriving a second Capability.
