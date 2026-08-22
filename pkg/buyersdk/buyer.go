@@ -348,21 +348,9 @@ func (b *Buyer) ValidateCapability(ctx context.Context, capabilityID, ownerAgent
 	if err != nil {
 		return err
 	}
-	if response == nil || !response.Found || response.State == nil || !proto.Equal(response.State.Network, b.network) ||
-		response.State.TvmStateHash == "" || response.State.Reference == nil ||
-		response.State.Reference.FinalizedCheckpoint == 0 || response.State.Reference.ContractCodeHash != b.registryCodeHash {
-		return errors.New("Capability is not available from finalized typed state")
-	}
-	capability := response.State.GetCapability()
-	if capability == nil || capability.CapabilityId != capabilityID || capability.OwnerAgentId != ownerAgentID || capability.Tombstoned {
-		return errors.New("Quote provider does not own the finalized Capability")
-	}
-	for _, capabilityVersion := range capability.Versions {
-		if capabilityVersion != nil && capabilityVersion.Version == version && capabilityVersion.ManifestDigest == manifestDigest && !capabilityVersion.Revoked {
-			return nil
-		}
-	}
-	return errors.New("Quote Capability version is absent or revoked")
+	return validateCapabilityResponse(response, b.network, b.registryCodeHash, CapabilityExpectation{
+		CapabilityID: capabilityID, OwnerAgentID: ownerAgentID, Version: version, ManifestDigest: manifestDigest,
+	})
 }
 
 func (b *Buyer) resolveAsset(ctx context.Context, proposal *nativev1.QuoteProposalV1) (*AssetObservation, error) {
