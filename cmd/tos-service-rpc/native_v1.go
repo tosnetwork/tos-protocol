@@ -15,6 +15,7 @@ import (
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/pkg/chainactionpublisher"
+	"github.com/tosnetwork/tos-service-protocol/pkg/dnsalias"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 	"github.com/tosnetwork/tos-service-protocol/pkg/toschain"
 )
@@ -40,35 +41,35 @@ type nativeV1GatewayConfig struct {
 	Sender                chainactionpublisher.TosctlBackendConfig `json:"sender"`
 }
 
-func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNativeResolver, func(), error) {
+func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNativeResolver, *dnsalias.Resolver, func(), error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return nil, nil, nil, errors.New("tos_service_v1 config path must be absolute and clean")
+		return nil, nil, nil, nil, errors.New("tos_service_v1 config path must be absolute and clean")
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, nil, nil, errors.New("tos_service_v1 config file is unavailable")
+		return nil, nil, nil, nil, errors.New("tos_service_v1 config file is unavailable")
 	}
 	stat, ownerOK := info.Sys().(*syscall.Stat_t)
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || !ownerOK || stat.Uid != uint32(os.Geteuid()) || info.Size() <= 0 || info.Size() > 2<<20 {
-		return nil, nil, nil, errors.New("tos_service_v1 config file is outside bounds")
+		return nil, nil, nil, nil, errors.New("tos_service_v1 config file is outside bounds")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	var config nativeV1GatewayConfig
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&config); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return nil, nil, nil, errors.New("tos_service_v1 config contains trailing JSON")
+		return nil, nil, nil, nil, errors.New("tos_service_v1 config contains trailing JSON")
 	}
 	if config.Protocol != nativecore.Protocol || config.Network == nil || config.Network.NetworkId == "" || config.ContractCodeBOCBase64 == "" || config.ContractCodeHash == "" ||
 		!filepath.IsAbs(config.StateDirectory) || filepath.Clean(config.StateDirectory) != config.StateDirectory ||
@@ -80,35 +81,35 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 		config.RecoverySafetySeconds > uint64(nativecore.MaximumRecoveryRelaySafety/time.Second) ||
 		config.Sender.Network != config.Network.NetworkId || !matchesNativeGenesis(config.Sender.GenesisRootHash, config.Network.GenesisRootHash) ||
 		!matchesNativeGenesis(config.Sender.GenesisFileHash, config.Network.GenesisFileHash) {
-		return nil, nil, nil, errors.New("invalid tos_service_v1 config")
+		return nil, nil, nil, nil, errors.New("invalid tos_service_v1 config")
 	}
 	chain, err := toschain.New(toschain.Config{Network: config.Network.NetworkId, Endpoints: config.Endpoints, Quorum: config.Quorum,
 		QueryTimeout: time.Duration(config.QueryTimeoutMillis) * time.Millisecond, MaxResponseBytes: config.MaxResponseBytes})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	locator, err := nativecore.NewLocator(config.Network, config.RegistryWorkchain, config.ContractCodeBOCBase64, config.ContractCodeHash)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	stateInfo, err := os.Lstat(config.StateDirectory)
 	if err != nil || !stateInfo.IsDir() || stateInfo.Mode().Perm()&0o077 != 0 {
-		return nil, nil, nil, errors.New("Native state directory must be owner-private")
+		return nil, nil, nil, nil, errors.New("Native state directory must be owner-private")
 	}
 	checkpointIdentity := sha256.Sum256([]byte(config.Network.NetworkId + "\x00" + config.Network.GenesisRootHash + "\x00" + config.Network.GenesisFileHash))
 	resolver, err := toschain.NewSimplifiedNativeResolver(chain, locator,
 		filepath.Join(config.StateDirectory, "finalized-checkpoint-"+hex.EncodeToString(checkpointIdentity[:])))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	sender, err := chainactionpublisher.NewTosctlBackend(config.Sender)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	journal, err := nativecore.NewFileRelayJournal(config.StateDirectory)
 	if err != nil {
 		_ = sender.Close()
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	limits := nativecore.RelaySpendLimits{Window: time.Duration(config.RelayWindowSeconds) * time.Second,
 		MaxActionsPerTarget: config.MaxActionsPerTarget, MaxFundingPerTargetNanoTOS: config.MaxFundingPerTarget,
@@ -116,7 +117,17 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 	relayer := &nativecore.Relayer{Locator: locator, Sender: sender, FundingNanoTOS: config.FundingNanoTOS,
 		Journal: journal, Resolver: resolver, Limits: limits,
 		RecoverySafety: time.Duration(config.RecoverySafetySeconds) * time.Second}
-	return relayer, resolver, func() { _ = sender.Close() }, nil
+	dnsChain, err := toschain.NewDNSResolver(chain)
+	if err != nil {
+		_ = sender.Close()
+		return nil, nil, nil, nil, err
+	}
+	dnsResolver, err := dnsalias.NewResolver(dnsChain, resolver, locator)
+	if err != nil {
+		_ = sender.Close()
+		return nil, nil, nil, nil, err
+	}
+	return relayer, resolver, dnsResolver, func() { _ = sender.Close() }, nil
 }
 
 func matchesNativeGenesis(chainBase64, nativeDigest string) bool {

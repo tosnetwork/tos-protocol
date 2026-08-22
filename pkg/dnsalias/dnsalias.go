@@ -116,7 +116,7 @@ func EncodeName(name string) ([]byte, error) {
 	return encoded, nil
 }
 
-func (r *Resolver) Resolve(ctx context.Context, request *nativev1.ResolveDNSAliasRequest) (*nativev1.ResolveDNSAliasResponse, error) {
+func (r *Resolver) ResolveDNSAlias(ctx context.Context, request *nativev1.ResolveDNSAliasRequest) (*nativev1.ResolveDNSAliasResponse, error) {
 	if r == nil || request == nil || request.Context == nil || request.Context.RequestId == "" || request.Context.CallerId == "" {
 		return nil, errors.New("complete DNS alias request context is required")
 	}

@@ -24,10 +24,15 @@ type Resolver interface {
 	ResolveState(context.Context, string, string) (*nativev1.NativeStateV1, bool, error)
 }
 
+type DNSAliasResolver interface {
+	ResolveDNSAlias(context.Context, *nativev1.ResolveDNSAliasRequest) (*nativev1.ResolveDNSAliasResponse, error)
+}
+
 type Config struct {
 	BearerToken      string
 	NativeV1Relayer  Relayer
 	NativeV1Resolver Resolver
+	DNSAliasResolver DNSAliasResolver
 	MaxMessageBytes  int
 	CallTimeout      time.Duration
 	Now              func() time.Time
@@ -37,6 +42,7 @@ type Server struct {
 	token            string
 	nativeV1Relayer  Relayer
 	nativeV1Resolver Resolver
+	dnsAliasResolver DNSAliasResolver
 	maxMessageBytes  int
 	callTimeout      time.Duration
 	now              func() time.Time
@@ -66,7 +72,7 @@ func Open(config Config) (*Server, error) {
 		config.Now = time.Now
 	}
 	server := &Server{token: config.BearerToken, nativeV1Relayer: config.NativeV1Relayer, nativeV1Resolver: config.NativeV1Resolver,
-		maxMessageBytes: config.MaxMessageBytes, callTimeout: config.CallTimeout, now: config.Now}
+		dnsAliasResolver: config.DNSAliasResolver, maxMessageBytes: config.MaxMessageBytes, callTimeout: config.CallTimeout, now: config.Now}
 	ctx, cancel := context.WithTimeout(context.Background(), config.CallTimeout)
 	defer cancel()
 	if err := server.checkReady(ctx); err != nil {
@@ -82,6 +88,10 @@ func (s *Server) Handler() http.Handler {
 	options := []connect.HandlerOption{connect.WithReadMaxBytes(s.maxMessageBytes), connect.WithSendMaxBytes(s.maxMessageBytes)}
 	path, handler := tosservicev1connect.NewNativeServiceHandler(s, options...)
 	mux.Handle(path, handler)
+	if s.dnsAliasResolver != nil {
+		dnsPath, dnsHandler := tosservicev1connect.NewDNSAliasServiceHandler(s, options...)
+		mux.Handle(dnsPath, dnsHandler)
+	}
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { jsonStatus(w, http.StatusOK, `{"status":"ok"}`) })
 	ready := func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), s.callTimeout)

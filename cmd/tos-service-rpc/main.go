@@ -29,13 +29,14 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	relayer, resolver, closeSender, err := buildNativeV1(*nativeConfig)
+	relayer, resolver, dnsResolver, closeSender, err := buildNativeV1(*nativeConfig)
 	if err != nil || relayer == nil || resolver == nil {
 		logger.Error("configure tos_service_v1", "error", err)
 		os.Exit(2)
 	}
 	defer closeSender()
-	server, err := servicerpc.Open(servicerpc.Config{BearerToken: *bearerToken, NativeV1Relayer: relayer, NativeV1Resolver: resolver})
+	server, err := servicerpc.Open(servicerpc.Config{BearerToken: *bearerToken, NativeV1Relayer: relayer,
+		NativeV1Resolver: resolver, DNSAliasResolver: dnsResolver})
 	if err != nil {
 		logger.Error("start Native RPC", "error", err)
 		os.Exit(1)

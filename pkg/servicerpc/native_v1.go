@@ -80,6 +80,26 @@ func (s *Server) ResolveNativeState(ctx context.Context, req *connect.Request[na
 	return connect.NewResponse(&nativev1.ResolveNativeStateResponse{Found: found, State: state}), nil
 }
 
+func (s *Server) ResolveDNSAlias(ctx context.Context, req *connect.Request[nativev1.ResolveDNSAliasRequest]) (*connect.Response[nativev1.ResolveDNSAliasResponse], error) {
+	if req == nil || req.Msg == nil {
+		return nil, publicerrors.New(publicerrors.BadRequest, errors.New("DNS alias resolution request is required"), 0)
+	}
+	if err := rejectUnknown(req.Msg); err != nil {
+		return nil, publicerrors.New(publicerrors.BadRequest, errors.New("unknown DNS alias v1 fields are not supported"), 0)
+	}
+	if err := validateNativeContext(req.Msg.Context, s.now(), false); err != nil {
+		return nil, err
+	}
+	if s.dnsAliasResolver == nil {
+		return nil, publicerrors.New(publicerrors.DependencyUnavailable, errors.New("TOS DNS alias resolver is not configured"), time.Second)
+	}
+	result, err := s.dnsAliasResolver.ResolveDNSAlias(ctx, req.Msg)
+	if err != nil {
+		return nil, nativeConnectError(connect.CodeFailedPrecondition, err, publicerrors.DependencyUnavailable)
+	}
+	return connect.NewResponse(result), nil
+}
+
 func validateNativeContext(value *nativev1.RequestContext, now time.Time, mutation bool) error {
 	if value == nil || value.RequestId == "" || value.CallerId == "" {
 		return publicerrors.New(publicerrors.BadRequest, errors.New("complete Native request context is required"), 0)

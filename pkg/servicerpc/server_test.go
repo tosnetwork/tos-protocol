@@ -20,6 +20,13 @@ type nativeStub struct {
 	resolved  int
 }
 
+type dnsAliasStub struct{ calls int }
+
+func (s *dnsAliasStub) ResolveDNSAlias(_ context.Context, request *nativev1.ResolveDNSAliasRequest) (*nativev1.ResolveDNSAliasResponse, error) {
+	s.calls++
+	return &nativev1.ResolveDNSAliasResponse{CanonicalName: request.Name, Kind: request.Kind}, nil
+}
+
 func TestNativeProtocolErrorsCarryStableTypedDetail(t *testing.T) {
 	cause := &nativecore.ProtocolError{Code: nativecore.ErrBadSequence, Message: "test diagnostic"}
 	err := nativeConnectError(connect.CodeFailedPrecondition, cause, publicerrors.AmbiguousOutcome)
@@ -84,5 +91,40 @@ func TestNativeRequestContextFailsClosed(t *testing.T) {
 	request := connect.NewRequest(&nativev1.ResolveNativeStateRequest{})
 	if _, err := server.ResolveNativeState(context.Background(), request); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestDNSAliasBoundaryRequiresAuthAndCompleteContext(t *testing.T) {
+	native := &nativeStub{}
+	dns := &dnsAliasStub{}
+	server, err := Open(Config{BearerToken: "secret", NativeV1Relayer: native, NativeV1Resolver: native, DNSAliasResolver: dns,
+		Now: func() time.Time { return time.Unix(100, 0) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := connect.NewRequest(&nativev1.ResolveDNSAliasRequest{Name: "alice.tos", Kind: nativev1.DNSAliasKindV1_DNS_ALIAS_KIND_V1_AGENT})
+	if _, err := server.ResolveDNSAlias(context.Background(), request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("incomplete context error = %v", err)
+	}
+	if dns.calls != 0 {
+		t.Fatal("invalid DNS request reached resolver")
+	}
+
+	path := "/tos.service.v1.DNSAliasService/ResolveDNSAlias"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated DNS RPC status = %d", response.Code)
+	}
+	if serverWithoutDNS, err := Open(Config{BearerToken: "secret", NativeV1Relayer: native, NativeV1Resolver: native}); err != nil {
+		t.Fatal(err)
+	} else {
+		response = httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set("Authorization", "Bearer secret")
+		serverWithoutDNS.Handler().ServeHTTP(response, req)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("unconfigured DNS service status = %d", response.Code)
+		}
 	}
 }

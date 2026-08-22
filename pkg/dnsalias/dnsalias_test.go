@@ -147,7 +147,7 @@ func TestResolveBindsAliasNativeStateAndOwnerToOneCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolver.now = func() time.Time { return time.Unix(2_000, 0) }
-	response, err := resolver.Resolve(context.Background(), &nativev1.ResolveDNSAliasRequest{
+	response, err := resolver.ResolveDNSAlias(context.Background(), &nativev1.ResolveDNSAliasRequest{
 		Context: &nativev1.RequestContext{RequestId: "r", CallerId: "c", DeadlineUnixMillis: 3_000_000},
 		Name:    "build.tos", Kind: nativev1.DNSAliasKindV1_DNS_ALIAS_KIND_V1_CAPABILITY,
 	})
@@ -156,7 +156,7 @@ func TestResolveBindsAliasNativeStateAndOwnerToOneCheckpoint(t *testing.T) {
 	}
 
 	ownerState.GetAgent().Tombstoned = true
-	if _, err := resolver.Resolve(context.Background(), &nativev1.ResolveDNSAliasRequest{
+	if _, err := resolver.ResolveDNSAlias(context.Background(), &nativev1.ResolveDNSAliasRequest{
 		Context: &nativev1.RequestContext{RequestId: "r2", CallerId: "c", DeadlineUnixMillis: 3_000_000},
 		Name:    "build.tos", Kind: nativev1.DNSAliasKindV1_DNS_ALIAS_KIND_V1_CAPABILITY,
 	}); err == nil {
