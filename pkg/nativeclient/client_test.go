@@ -21,6 +21,18 @@ type discoveryService struct {
 	testing *testing.T
 }
 
+type dnsService struct {
+	tosservicev1connect.UnimplementedDNSAliasServiceHandler
+	testing *testing.T
+}
+
+func (s dnsService) ResolveDNSAlias(_ context.Context, request *connect.Request[nativev1.ResolveDNSAliasRequest]) (*connect.Response[nativev1.ResolveDNSAliasResponse], error) {
+	if request.Header().Get("Authorization") != "Bearer relay-secret" {
+		s.testing.Fatal("DNS alias client omitted its bearer token")
+	}
+	return connect.NewResponse(&nativev1.ResolveDNSAliasResponse{CanonicalName: request.Msg.Name, NativeObjectId: "agent_verified"}), nil
+}
+
 func (s discoveryService) ListCapabilities(_ context.Context, request *connect.Request[nativev1.ListCapabilitiesRequest]) (*connect.Response[nativev1.ListCapabilitiesResponse], error) {
 	if request.Header().Get("Authorization") != "Bearer relay-secret" {
 		s.testing.Fatal("Native discovery client omitted its bearer token")
@@ -52,9 +64,11 @@ func (s nativeService) ResolveNativeState(_ context.Context, request *connect.Re
 func TestClientRequiresExplicitPlaintextAndAuthenticates(t *testing.T) {
 	path, handler := tosservicev1connect.NewNativeServiceHandler(nativeService{testing: t})
 	discoveryPath, discoveryHandler := tosservicev1connect.NewCapabilityDiscoveryServiceHandler(discoveryService{testing: t})
+	dnsPath, dnsHandler := tosservicev1connect.NewDNSAliasServiceHandler(dnsService{testing: t})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	mux.Handle(discoveryPath, discoveryHandler)
+	mux.Handle(dnsPath, dnsHandler)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	if _, err := New(Config{BaseURL: server.URL, BearerToken: "relay-secret"}); err == nil {
@@ -76,6 +90,10 @@ func TestClientRequiresExplicitPlaintextAndAuthenticates(t *testing.T) {
 	}
 	if _, err := client.RequestQuoteProposal(context.Background(), &nativev1.RequestQuoteProposalRequest{}); err != nil {
 		t.Fatal(err)
+	}
+	alias, err := client.ResolveDNSAlias(context.Background(), &nativev1.ResolveDNSAliasRequest{Name: "alice.tos"})
+	if err != nil || alias.NativeObjectId != "agent_verified" {
+		t.Fatalf("DNS alias = %+v, %v", alias, err)
 	}
 }
 

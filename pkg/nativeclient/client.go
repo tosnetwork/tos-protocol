@@ -43,6 +43,7 @@ type Client struct {
 	httpClient *http.Client
 	native     tosservicev1connect.NativeServiceClient
 	discovery  tosservicev1connect.CapabilityDiscoveryServiceClient
+	dns        tosservicev1connect.DNSAliasServiceClient
 }
 
 func New(config Config) (*Client, error) {
@@ -105,7 +106,8 @@ func New(config Config) (*Client, error) {
 	}
 	return &Client{token: config.BearerToken, timeout: config.Timeout, httpClient: httpClient,
 		native:    tosservicev1connect.NewNativeServiceClient(httpClient, config.BaseURL, options...),
-		discovery: tosservicev1connect.NewCapabilityDiscoveryServiceClient(httpClient, config.BaseURL, options...)}, nil
+		discovery: tosservicev1connect.NewCapabilityDiscoveryServiceClient(httpClient, config.BaseURL, options...),
+		dns:       tosservicev1connect.NewDNSAliasServiceClient(httpClient, config.BaseURL, options...)}, nil
 }
 
 func (c *Client) ListCapabilities(ctx context.Context, request *nativev1.ListCapabilitiesRequest) (*nativev1.ListCapabilitiesResponse, error) {
@@ -203,6 +205,22 @@ func (c *Client) ResolveNativeState(ctx context.Context, request *nativev1.Resol
 	req := connect.NewRequest(request)
 	req.Header().Set("Authorization", "Bearer "+c.token)
 	response, err := c.native.ResolveNativeState(callCtx, req)
+	if err != nil {
+		return nil, err
+	}
+	return response.Msg, nil
+}
+
+// ResolveDNSAlias resolves a human-readable discovery alias into a fully
+// verified Native object identity. Callers must use NativeObjectId (and the
+// returned finalized state) as authority; the input name is display metadata.
+func (c *Client) ResolveDNSAlias(ctx context.Context, request *nativev1.ResolveDNSAliasRequest) (*nativev1.ResolveDNSAliasResponse, error) {
+	if c == nil || c.dns == nil || request == nil {
+		return nil, errors.New("invalid DNS alias resolution request")
+	}
+	callCtx, cancel := c.callContext(ctx)
+	defer cancel()
+	response, err := c.dns.ResolveDNSAlias(callCtx, authorized(c, request))
 	if err != nil {
 		return nil, err
 	}
