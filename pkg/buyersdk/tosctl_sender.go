@@ -3,6 +3,7 @@ package buyersdk
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -64,8 +66,12 @@ func NewTOSCTLFundingSender(c TOSCTLFundingSenderConfig) (*TOSCTLFundingSender, 
 	if c.Timeout < time.Second || c.Timeout > 5*time.Minute {
 		return nil, errors.New("invalid tosctl sender timeout")
 	}
+	runner, err := newPinnedExecRunner(c.BinaryPath, c.ConfigPath)
+	if err != nil {
+		return nil, err
+	}
 	return &TOSCTLFundingSender{binary: c.BinaryPath, config: c.ConfigPath, wallet: c.WalletName,
-		attached: c.AttachedNanoTOS, forward: c.ForwardNanoTOS, timeout: c.Timeout, runner: execRunner{}}, nil
+		attached: c.AttachedNanoTOS, forward: c.ForwardNanoTOS, timeout: c.Timeout, runner: runner}, nil
 }
 
 // BuildStablecoinFundingBody builds the exact TOS-network stablecoin transfer
@@ -103,7 +109,7 @@ func (s *TOSCTLFundingSender) PrepareStablecoinFunding(ctx context.Context, inte
 	}
 	bodyBOC := base64.StdEncoding.EncodeToString(body.ToBOC())
 	bodyHash := fmt.Sprintf("tvm-cell-sha256:%x", body.Hash())
-	baseArgs := []string{"wallet", "--config", s.config, "send", "--from", s.wallet,
+	baseArgs := []string{"wallet", "send", "--from", s.wallet,
 		"--to", intent.BuyerWallet, "--amount-nanotos", fmt.Sprint(s.attached), "--body-boc", bodyBOC}
 
 	preparedRaw, err := s.run(ctx, append(baseArgs, "--build-only")...)
@@ -157,7 +163,7 @@ func (s *TOSCTLFundingSender) BroadcastStablecoinFunding(ctx context.Context, pr
 	if err != nil || fmt.Sprintf("tvm-cell-sha256:%x", message.Hash()) != prepared.MessageHash {
 		return errors.New("prepared stablecoin funding identity changed")
 	}
-	broadcastRaw, err := s.run(ctx, "wallet", "--config", s.config, "broadcast-prepared",
+	broadcastRaw, err := s.run(ctx, "wallet", "broadcast-prepared",
 		"--message-boc", prepared.MessageBOCBase64, "--yes")
 	if err != nil {
 		return errors.New("tosctl stablecoin funding broadcast outcome is ambiguous")
@@ -254,14 +260,119 @@ func secureConfigFile(path string) bool {
 		info.Mode().Perm()&0o077 == 0 && ok && stat.Uid == uint32(os.Geteuid())
 }
 
-type execRunner struct{}
+type executableIdentity struct {
+	device, inode uint64
+	size          int64
+	digest        [sha256.Size]byte
+}
 
-func (execRunner) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, binary, args...)
+type execRunner struct {
+	identity executableIdentity
+	config   []byte
+}
+
+func newPinnedExecRunner(binaryPath, configPath string) (*execRunner, error) {
+	if runtime.GOOS != "linux" {
+		return nil, errors.New("descriptor-pinned tosctl custody is supported only on Linux")
+	}
+	executable, identity, err := openAndIdentifyExecutable(binaryPath)
+	if err != nil {
+		return nil, err
+	}
+	_ = executable.Close()
+	config, err := os.ReadFile(configPath)
+	if err != nil || len(config) == 0 || len(config) > 2<<20 {
+		return nil, errors.New("read bounded tosctl custody configuration")
+	}
+	return &execRunner{identity: identity, config: append([]byte(nil), config...)}, nil
+}
+
+func (r *execRunner) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
+	if r == nil {
+		return nil, errors.New("tosctl custody runner is unavailable")
+	}
+	executable, identity, err := openAndIdentifyExecutable(binary)
+	if err != nil || identity != r.identity {
+		if executable != nil {
+			_ = executable.Close()
+		}
+		return nil, errors.New("enrolled tosctl executable identity changed")
+	}
+	defer executable.Close()
+	config, err := pinnedDescriptor(r.config)
+	if err != nil {
+		return nil, err
+	}
+	defer config.Close()
+	args = append(args, "--config-fd", "3", "--config-format", "json")
+	command := exec.CommandContext(ctx, "/proc/self/fd/4", args...)
+	command.ExtraFiles = []*os.File{config, executable}
+	// Custody must not inherit loader, proxy, HOME, PATH, certificate, or
+	// wallet-selection variables from the long-running OpenFox process.
+	command.Env = []string{}
 	output := cappedBuffer{limit: 1 << 20}
 	command.Stdout, command.Stderr = &output, &output
-	err := command.Run()
+	err = command.Run()
 	return output.Bytes(), err
+}
+
+func openAndIdentifyExecutable(path string) (*os.File, executableIdentity, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !filepath.IsAbs(path) || filepath.Clean(path) != path || !pathInfo.Mode().IsRegular() ||
+		pathInfo.Mode()&os.ModeSymlink != 0 || pathInfo.Mode().Perm()&0o111 == 0 || pathInfo.Mode().Perm()&0o022 != 0 {
+		return nil, executableIdentity{}, errors.New("invalid tosctl executable")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, executableIdentity{}, err
+	}
+	info, err := file.Stat()
+	stat, ok := infoSyscallStat(info)
+	if err != nil || !ok || !os.SameFile(pathInfo, info) || (stat.Uid != 0 && stat.Uid != uint32(os.Geteuid())) {
+		file.Close()
+		return nil, executableIdentity{}, errors.New("tosctl executable identity is untrusted")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		file.Close()
+		return nil, executableIdentity{}, err
+	}
+	var digest [sha256.Size]byte
+	copy(digest[:], hash.Sum(nil))
+	identity := executableIdentity{device: uint64(stat.Dev), inode: stat.Ino, size: info.Size(), digest: digest}
+	if _, err := file.Seek(0, 0); err != nil {
+		file.Close()
+		return nil, executableIdentity{}, err
+	}
+	return file, identity, nil
+}
+
+func pinnedDescriptor(raw []byte) (*os.File, error) {
+	file, err := os.CreateTemp("", "tosctl-custody-config-*")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Remove(file.Name()); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if _, err := file.Write(raw); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
 }
 
 type cappedBuffer struct {

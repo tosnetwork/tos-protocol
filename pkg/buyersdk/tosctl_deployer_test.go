@@ -72,7 +72,7 @@ func TestTOSCTLEscrowDeployerPreparesThenBroadcastsExactMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0][len(fake.calls[0])-1] != "--build-only" ||
-		fake.calls[1][3] != "broadcast-prepared" || fake.calls[1][len(fake.calls[1])-1] != "--yes" {
+		fake.calls[1][1] != "broadcast-prepared" || fake.calls[1][len(fake.calls[1])-1] != "--yes" {
 		t.Fatalf("calls = %v", fake.calls)
 	}
 }

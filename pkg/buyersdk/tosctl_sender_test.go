@@ -81,9 +81,38 @@ func TestTOSCTLSenderVerifiesPreparedMessageBeforeBroadcast(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0][len(fake.calls[0])-1] != "--build-only" ||
-		fake.calls[1][0] != "wallet" || fake.calls[1][3] != "broadcast-prepared" ||
+		fake.calls[1][0] != "wallet" || fake.calls[1][1] != "broadcast-prepared" ||
 		fake.calls[1][len(fake.calls[1])-1] != "--yes" {
 		t.Fatal("tosctl sender did not prepare then broadcast the exact message")
+	}
+}
+
+func TestPinnedTOSCTLRunnerRejectsExecutableSubstitutionAndPinsConfigBytes(t *testing.T) {
+	directory := t.TempDir()
+	binary := filepath.Join(directory, "tosctl")
+	config := filepath.Join(directory, "config.json")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(`{"network":"original"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runner, err := newPinnedExecRunner(binary, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(`{"network":"substituted"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if string(runner.config) != `{"network":"original"}` {
+		t.Fatal("custody runner did not pin configuration bytes")
+	}
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.run(context.Background(), binary, "wallet", "ls"); err == nil ||
+		!strings.Contains(err.Error(), "identity changed") {
+		t.Fatalf("substituted executable was not rejected: %v", err)
 	}
 }
 

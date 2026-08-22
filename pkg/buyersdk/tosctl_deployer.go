@@ -65,8 +65,12 @@ func NewTOSCTLEscrowDeployer(c TOSCTLEscrowDeployerConfig) (*TOSCTLEscrowDeploye
 	if c.Timeout < time.Second || c.Timeout > 5*time.Minute {
 		return nil, errors.New("invalid tosctl deployer timeout")
 	}
+	runner, err := newPinnedExecRunner(c.BinaryPath, c.ConfigPath)
+	if err != nil {
+		return nil, err
+	}
 	return &TOSCTLEscrowDeployer{binary: c.BinaryPath, config: c.ConfigPath, wallet: c.WalletName,
-		buyer: c.BuyerAddress, attached: c.AttachedNanoTOS, timeout: c.Timeout, runner: execRunner{}}, nil
+		buyer: c.BuyerAddress, attached: c.AttachedNanoTOS, timeout: c.Timeout, runner: runner}, nil
 }
 
 // PrepareEscrowDeployment asks custody to sign, but not broadcast, the exact
@@ -83,7 +87,7 @@ func (d *TOSCTLEscrowDeployer) PrepareEscrowDeployment(ctx context.Context, purc
 	if err != nil || state.BuyerAddress != d.buyer {
 		return nil, errors.New("prepared escrow buyer does not match custody payer")
 	}
-	args := []string{"wallet", "--config", d.config, "send", "--from", d.wallet,
+	args := []string{"wallet", "send", "--from", d.wallet,
 		"--to", purchase.Escrow.Address, "--amount-nanotos", fmt.Sprint(d.attached),
 		"--state-init-boc", stateInit, "--build-only"}
 	preparedRaw, err := d.run(ctx, args...)
@@ -148,7 +152,7 @@ func (d *TOSCTLEscrowDeployer) BroadcastEscrowDeployment(ctx context.Context, pr
 	if err != nil || cellHash(message) != prepared.MessageHash {
 		return errors.New("prepared escrow deployment message changed")
 	}
-	broadcastRaw, err := d.run(ctx, "wallet", "--config", d.config, "broadcast-prepared",
+	broadcastRaw, err := d.run(ctx, "wallet", "broadcast-prepared",
 		"--message-boc", prepared.MessageBOCBase64, "--yes")
 	if err != nil {
 		return errors.New("tosctl escrow deployment broadcast outcome is ambiguous")
