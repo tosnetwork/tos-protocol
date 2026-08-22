@@ -40,6 +40,7 @@ enum RetryDispositionV1 {
 message NativeErrorV1 { NativeErrorCodeV1 code = 1; string identifier = 2; RetryDispositionV1 retry_disposition = 3; uint32 retry_after_millis = 4; }
 message NetworkDomain { string network_id = 1; string genesis_root_hash = 2; string genesis_file_hash = 3; }
 message ChainReference { int32 workchain = 1; string account = 2; uint64 logical_time = 3; string transaction_hash = 4; string contract_code_hash = 5; uint64 finalized_checkpoint = 6; }
+message TOSAccountAddressV1 { int32 workchain = 1; bytes account_id = 2; }
 // key_id is exactly ed25519:<lowercase 32-byte-public-key-hex>.
 message ControllerV1 { string key_id = 1; bytes ed25519_public_key = 2; uint32 weight = 3; uint32 purpose_mask = 4; bool recovery = 5; }
 message ControllerPolicyV1 { uint32 threshold = 1; uint32 recovery_threshold = 2; uint64 recovery_timelock_seconds = 3; repeated ControllerV1 controllers = 4; }
@@ -74,6 +75,31 @@ message SubmitNativeActionRequest { RequestContext context = 1; SignedNativeActi
 message SubmitNativeActionResponse { string action_hash = 1; NativeStateV1 state = 2; reserved 3; bool relay_accepted = 4; }
 message ResolveNativeStateRequest { RequestContext context = 1; string object_id = 2; string expected_tvm_state_hash = 3; }
 message ResolveNativeStateResponse { bool found = 1; NativeStateV1 state = 2; }
+enum DNSAliasKindV1 {
+  DNS_ALIAS_KIND_V1_UNSPECIFIED = 0;
+  DNS_ALIAS_KIND_V1_AGENT = 1;
+  DNS_ALIAS_KIND_V1_CAPABILITY = 2;
+  DNS_ALIAS_KIND_V1_MESSENGER = 3;
+}
+enum DNSProvenanceV1 {
+  DNS_PROVENANCE_V1_UNSPECIFIED = 0;
+  DNS_PROVENANCE_V1_QUORUM_AGREED = 1;
+}
+message DNSCheckpointV1 { int32 workchain = 1; int64 shard = 2; uint64 sequence = 3; bytes root_hash = 4; bytes file_hash = 5; uint64 generation_unix_seconds = 6; }
+message DNSLifecycleV1 { uint64 auction_end_unix_seconds = 1; uint64 last_fill_up_unix_seconds = 2; uint64 renewal_deadline_unix_seconds = 3; }
+message ResolveDNSAliasRequest { RequestContext context = 1; string name = 2; DNSAliasKindV1 kind = 3; }
+message ResolveDNSAliasResponse {
+  string canonical_name = 1;
+  DNSAliasKindV1 kind = 2;
+  string category_hash = 3;
+  TOSAccountAddressV1 resolved_account = 4;
+  string native_object_id = 5;
+  NativeStateV1 native_state = 6;
+  DNSCheckpointV1 checkpoint = 7;
+  DNSLifecycleV1 lifecycle = 8;
+  DNSProvenanceV1 provenance = 9;
+  repeated TOSAccountAddressV1 resolver_path = 10;
+}
 // Contract identities are network-relative. The surrounding NetworkDomain
 // supplies the network/genesis binding; workchain + account_id identify the
 // account and code_hash prevents a different implementation being treated as
@@ -111,6 +137,7 @@ message RequestQuoteProposalRequest { RequestContext context = 1; string capabil
 message QuoteProposalPackageV1 { QuoteProposalV1 proposal = 1; bytes canonical_manifest_cbor = 2; bytes escrow_terms_boc = 3; bytes transport_binding_boc = 4; bytes dispute_policy_boc = 5; }
 message RequestQuoteProposalResponse { QuoteProposalPackageV1 package = 1; }
 service NativeService { rpc SubmitNativeAction(SubmitNativeActionRequest) returns (SubmitNativeActionResponse); rpc ResolveNativeState(ResolveNativeStateRequest) returns (ResolveNativeStateResponse); }
+service DNSAliasService { rpc ResolveDNSAlias(ResolveDNSAliasRequest) returns (ResolveDNSAliasResponse); }
 service CapabilityDiscoveryService {
   rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
   rpc SearchCapabilities(SearchCapabilitiesRequest) returns (SearchCapabilitiesResponse);

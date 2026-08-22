@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// NativeServiceName is the fully-qualified name of the NativeService service.
 	NativeServiceName = "tos.service.v1.NativeService"
+	// DNSAliasServiceName is the fully-qualified name of the DNSAliasService service.
+	DNSAliasServiceName = "tos.service.v1.DNSAliasService"
 	// CapabilityDiscoveryServiceName is the fully-qualified name of the CapabilityDiscoveryService
 	// service.
 	CapabilityDiscoveryServiceName = "tos.service.v1.CapabilityDiscoveryService"
@@ -42,6 +44,9 @@ const (
 	// NativeServiceResolveNativeStateProcedure is the fully-qualified name of the NativeService's
 	// ResolveNativeState RPC.
 	NativeServiceResolveNativeStateProcedure = "/tos.service.v1.NativeService/ResolveNativeState"
+	// DNSAliasServiceResolveDNSAliasProcedure is the fully-qualified name of the DNSAliasService's
+	// ResolveDNSAlias RPC.
+	DNSAliasServiceResolveDNSAliasProcedure = "/tos.service.v1.DNSAliasService/ResolveDNSAlias"
 	// CapabilityDiscoveryServiceListCapabilitiesProcedure is the fully-qualified name of the
 	// CapabilityDiscoveryService's ListCapabilities RPC.
 	CapabilityDiscoveryServiceListCapabilitiesProcedure = "/tos.service.v1.CapabilityDiscoveryService/ListCapabilities"
@@ -153,6 +158,76 @@ func (UnimplementedNativeServiceHandler) SubmitNativeAction(context.Context, *co
 
 func (UnimplementedNativeServiceHandler) ResolveNativeState(context.Context, *connect.Request[v1.ResolveNativeStateRequest]) (*connect.Response[v1.ResolveNativeStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.service.v1.NativeService.ResolveNativeState is not implemented"))
+}
+
+// DNSAliasServiceClient is a client for the tos.service.v1.DNSAliasService service.
+type DNSAliasServiceClient interface {
+	ResolveDNSAlias(context.Context, *connect.Request[v1.ResolveDNSAliasRequest]) (*connect.Response[v1.ResolveDNSAliasResponse], error)
+}
+
+// NewDNSAliasServiceClient constructs a client for the tos.service.v1.DNSAliasService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewDNSAliasServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DNSAliasServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	dNSAliasServiceMethods := v1.File_tos_service_v1_native_proto.Services().ByName("DNSAliasService").Methods()
+	return &dNSAliasServiceClient{
+		resolveDNSAlias: connect.NewClient[v1.ResolveDNSAliasRequest, v1.ResolveDNSAliasResponse](
+			httpClient,
+			baseURL+DNSAliasServiceResolveDNSAliasProcedure,
+			connect.WithSchema(dNSAliasServiceMethods.ByName("ResolveDNSAlias")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// dNSAliasServiceClient implements DNSAliasServiceClient.
+type dNSAliasServiceClient struct {
+	resolveDNSAlias *connect.Client[v1.ResolveDNSAliasRequest, v1.ResolveDNSAliasResponse]
+}
+
+// ResolveDNSAlias calls tos.service.v1.DNSAliasService.ResolveDNSAlias.
+func (c *dNSAliasServiceClient) ResolveDNSAlias(ctx context.Context, req *connect.Request[v1.ResolveDNSAliasRequest]) (*connect.Response[v1.ResolveDNSAliasResponse], error) {
+	return c.resolveDNSAlias.CallUnary(ctx, req)
+}
+
+// DNSAliasServiceHandler is an implementation of the tos.service.v1.DNSAliasService service.
+type DNSAliasServiceHandler interface {
+	ResolveDNSAlias(context.Context, *connect.Request[v1.ResolveDNSAliasRequest]) (*connect.Response[v1.ResolveDNSAliasResponse], error)
+}
+
+// NewDNSAliasServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewDNSAliasServiceHandler(svc DNSAliasServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	dNSAliasServiceMethods := v1.File_tos_service_v1_native_proto.Services().ByName("DNSAliasService").Methods()
+	dNSAliasServiceResolveDNSAliasHandler := connect.NewUnaryHandler(
+		DNSAliasServiceResolveDNSAliasProcedure,
+		svc.ResolveDNSAlias,
+		connect.WithSchema(dNSAliasServiceMethods.ByName("ResolveDNSAlias")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/tos.service.v1.DNSAliasService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case DNSAliasServiceResolveDNSAliasProcedure:
+			dNSAliasServiceResolveDNSAliasHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedDNSAliasServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedDNSAliasServiceHandler struct{}
+
+func (UnimplementedDNSAliasServiceHandler) ResolveDNSAlias(context.Context, *connect.Request[v1.ResolveDNSAliasRequest]) (*connect.Response[v1.ResolveDNSAliasResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tos.service.v1.DNSAliasService.ResolveDNSAlias is not implemented"))
 }
 
 // CapabilityDiscoveryServiceClient is a client for the tos.service.v1.CapabilityDiscoveryService
