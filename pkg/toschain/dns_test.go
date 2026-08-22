@@ -20,6 +20,15 @@ func dnsStackCell(t *testing.T, kind string, value *cell.Cell) json.RawMessage {
 	return raw
 }
 
+func dnsStackNum(t *testing.T, value string) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal([]any{"num", value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
 func TestDNSRecordParsersAreExact(t *testing.T) {
 	addr := address.MustParseRawAddr("0:" + strings.Repeat("11", 32))
 	next := cell.BeginCell().MustStoreUInt(0xba93, 16).MustStoreAddr(addr).EndCell()
@@ -72,6 +81,34 @@ func TestDNSStackParsingRejectsAmbiguity(t *testing.T) {
 	}
 }
 
+func TestDNSHTTPStackIsTopFirst(t *testing.T) {
+	value := cell.BeginCell().MustStoreUInt(0xba93, 16).EndCell()
+	// FunC dnsresolve returns (consumed_bits, value), while runGetMethod JSON is
+	// [value, consumed_bits]. Keep this fixture transport-shaped so an accidental
+	// copy of the bottom-first toslib indices fails loudly.
+	stack := []json.RawMessage{dnsStackCell(t, "cell", value), dnsStackNum(t, "32")}
+	gotCell, nilValue, err := stackCell(stack, 0)
+	if err != nil || nilValue || string(gotCell.Hash()) != string(value.Hash()) {
+		t.Fatalf("top cell = %v, nil=%v, err=%v", gotCell, nilValue, err)
+	}
+	gotBits, err := stackInt(stack, 1)
+	if err != nil || gotBits.Uint64() != 32 {
+		t.Fatalf("bottom consumed bits = %v, %v", gotBits, err)
+	}
+	// The same rule fixes get_nft_data and get_auction_info indices.
+	identity := []json.RawMessage{
+		dnsStackCell(t, "cell", value), dnsStackCell(t, "slice", value),
+		dnsStackCell(t, "slice", value), dnsStackNum(t, "99"), dnsStackNum(t, "-1"),
+	}
+	if index, err := stackInt(identity, 3); err != nil || index.Uint64() != 99 {
+		t.Fatalf("top-first NFT index = %v, %v", index, err)
+	}
+	auction := []json.RawMessage{dnsStackNum(t, "123"), dnsStackNum(t, "7"), dnsStackCell(t, "slice", value)}
+	if end, err := stackInt(auction, 0); err != nil || end.Uint64() != 123 {
+		t.Fatalf("top-first auction end = %v, %v", end, err)
+	}
+}
+
 func TestDNSCheckpointBindsFullBlockIdentity(t *testing.T) {
 	id := blockID{Type: "tos.blockIdExt", Workchain: -1, Shard: "-9223372036854775808", Seqno: 42,
 		RootHash: base64.StdEncoding.EncodeToString(make([]byte, 32)), FileHash: base64.StdEncoding.EncodeToString(make([]byte, 32))}
@@ -107,5 +144,19 @@ func TestSecondLevelLabel(t *testing.T) {
 		if got := secondLevelLabel(name); got != want {
 			t.Fatalf("label(%q) = %q", name, got)
 		}
+	}
+}
+
+func TestDNSComponentBoundaryMatchesTONContracts(t *testing.T) {
+	// Root consumes "tos" (3 bytes) and leaves the separator for Collection;
+	// consuming the separator (4 bytes) is also a valid resolver boundary.
+	query := []byte("tos\x00alice\x00")
+	for _, consumed := range []int{3, 4, len(query)} {
+		if !dnsComponentBoundary(consumed, query) {
+			t.Fatalf("valid boundary %d rejected", consumed)
+		}
+	}
+	if dnsComponentBoundary(2, query) {
+		t.Fatal("inside-component boundary accepted")
 	}
 }

@@ -97,7 +97,10 @@ func (r *DNSResolver) ResolveDNSAtFinalizedCheckpoint(ctx context.Context, name,
 		} else if !sameDNSBlock(checkpoint, result.BlockID) {
 			return nil, errors.New("DNS getter checkpoint changed")
 		}
-		bits, err := stackInt(result.Stack, 0)
+		// The HTTP JSON-RPC serializes vm::Stack::at(i), i.e. top first.
+		// FunC (int, cell) is therefore [cell, int] on this transport. This is
+		// intentionally different from toslib's bottom-first vector API.
+		bits, err := stackInt(result.Stack, 1)
 		if err != nil || !bits.IsUint64() {
 			return nil, errors.New("invalid DNS consumed-bit count")
 		}
@@ -106,10 +109,10 @@ func (r *DNSResolver) ResolveDNSAtFinalizedCheckpoint(ctx context.Context, name,
 			return nil, errors.New("invalid DNS consumed-bit boundary")
 		}
 		consumedBytes := int(consumed / 8)
-		if consumedBytes < len(remaining) && remaining[consumedBytes-1] != 0 {
+		if !dnsComponentBoundary(consumedBytes, remaining) {
 			return nil, errors.New("DNS resolver stopped inside a component")
 		}
-		data, nilValue, err := stackCell(result.Stack, 1)
+		data, nilValue, err := stackCell(result.Stack, 0)
 		if err != nil || nilValue {
 			return nil, errors.New("DNS record not found")
 		}
@@ -144,6 +147,11 @@ func (r *DNSResolver) ResolveDNSAtFinalizedCheckpoint(ctx context.Context, name,
 	deadline := uint64(lastFill) + dnsalias.LeaseSeconds
 	return &dnsalias.ChainResult{CanonicalName: name, CategoryHash: categoryHash, Resolved: resolved,
 		Checkpoint: checkpoint, Lifecycle: &nativev1.DNSLifecycleV1{AuctionEndUnixSeconds: uint64(auctionEnd), LastFillUpUnixSeconds: uint64(lastFill), RenewalDeadlineUnixSeconds: deadline}, ResolverPath: path}, nil
+}
+
+func dnsComponentBoundary(consumed int, query []byte) bool {
+	return consumed == len(query) || consumed > 0 && consumed < len(query) &&
+		(query[consumed-1] == 0 || query[consumed] == 0)
 }
 
 func dnsRootAt(ctx context.Context, nodes []*rpcNode, quorum int, seqno uint64) (string, error) {
@@ -313,7 +321,9 @@ func verifyDomainItem(ctx context.Context, nodes []*rpcNode, quorum int, seqno u
 	if err != nil || !sameDNSBlock(checkpoint, identity.BlockID) || len(identity.Stack) != 5 {
 		return 0, 0, errors.New("cannot verify DNS Domain Item identity")
 	}
-	index, err := stackInt(identity.Stack, 1)
+	// (init,index,collection,owner,content) => top-first
+	// [content,owner,collection,index,init].
+	index, err := stackInt(identity.Stack, 3)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -337,7 +347,8 @@ func verifyDomainItem(ctx context.Context, nodes []*rpcNode, quorum int, seqno u
 	if err != nil || !sameDNSBlock(checkpoint, auction.BlockID) || len(auction.Stack) != 3 {
 		return 0, 0, errors.New("cannot read DNS auction")
 	}
-	end, err := stackInt(auction.Stack, 2)
+	// (bidder,amount,end) => top-first [end,amount,bidder].
+	end, err := stackInt(auction.Stack, 0)
 	if err != nil || !end.IsInt64() {
 		return 0, 0, errors.New("invalid DNS auction end")
 	}
