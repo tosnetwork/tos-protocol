@@ -48,6 +48,10 @@ func TestLocatorAndAgentTypedStateRoundTrip(t *testing.T) {
 	if err != nil || !found || decoded.GetAgent().GetAgentId() != id || decoded.GetAgent().GetPolicy().GetControllers()[0].GetKeyId() != policy.Controllers[0].KeyId {
 		t.Fatalf("decode Agent: found=%v err=%v state=%v", found, err, decoded)
 	}
+	anyState, anyFound, anyID, err := l.DecodeDataAny(data)
+	if err != nil || !anyFound || anyID != id || anyState.GetAgent().GetAgentId() != id {
+		t.Fatalf("decode address-selected Agent: id=%q found=%v err=%v", anyID, anyFound, err)
+	}
 	first, found, err := l.DecodePortable(data, id)
 	if err != nil || !found {
 		t.Fatal(err)
@@ -86,6 +90,10 @@ func TestCapabilityTypedStatePreservesVersionName(t *testing.T) {
 	decoded, found, err := l.DecodeData(data, id)
 	if err != nil || !found || len(decoded.GetCapability().GetVersions()) != 1 || decoded.GetCapability().GetVersions()[0].GetVersion() != version.Version {
 		t.Fatalf("decode Capability: found=%v err=%v state=%v", found, err, decoded)
+	}
+	anyState, anyFound, anyID, err := l.DecodeDataAny(data)
+	if err != nil || !anyFound || anyID != id || anyState.GetCapability().GetCapabilityId() != id {
+		t.Fatalf("decode address-selected Capability: id=%q found=%v err=%v", anyID, anyFound, err)
 	}
 }
 

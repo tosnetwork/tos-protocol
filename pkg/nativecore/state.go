@@ -76,6 +76,42 @@ func (l *Locator) DecodeData(data *cell.Cell, expectedObjectID string) (*nativev
 	return result, true, nil
 }
 
+// DecodeDataAny recovers the object ID committed by an authenticated Registry
+// account before applying the ordinary expected-ID decoder. It is intended for
+// DNS aliases, where the account address is known before its Native object ID.
+func (l *Locator) DecodeDataAny(data *cell.Cell) (*nativev1.NativeStateV1, bool, string, error) {
+	if l == nil || data == nil {
+		return nil, false, "", errors.New("missing simplified Native account data")
+	}
+	s, err := data.BeginParse()
+	if err != nil {
+		return nil, false, "", errors.New("invalid simplified Native account data cell")
+	}
+	magic, err := s.LoadUInt(32)
+	if err != nil || magic != dataMagic {
+		return nil, false, "", errors.New("invalid simplified Native data magic")
+	}
+	schema, err := s.LoadUInt(16)
+	if err != nil || schema != 1 {
+		return nil, false, "", errors.New("invalid simplified Native data schema")
+	}
+	kind, err := s.LoadUInt(8)
+	if err != nil || (kind != 1 && kind != 2) {
+		return nil, false, "", errors.New("invalid simplified Native object kind")
+	}
+	rawID, err := s.LoadSlice(256)
+	if err != nil || equalBytes(rawID, make([]byte, 32)) {
+		return nil, false, "", errors.New("invalid simplified Native object identity")
+	}
+	prefix := "agent_"
+	if kind == 2 {
+		prefix = "cap_"
+	}
+	objectID := prefix + hex.EncodeToString(rawID)
+	state, found, err := l.DecodeData(data, objectID)
+	return state, found, objectID, err
+}
+
 func (l *Locator) validateConfig(config *cell.Cell) error {
 	want, err := l.configCell()
 	if err != nil {

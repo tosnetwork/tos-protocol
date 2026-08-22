@@ -48,6 +48,65 @@ func (r *SimplifiedNativeResolver) ResolveState(ctx context.Context, objectID, e
 	return state, found, err
 }
 
+// ResolveNativeAtCheckpoint resolves an address-selected Native object at the
+// exact DNS checkpoint. It rejects both checkpoint substitution and an account
+// whose embedded object ID does not reproduce the supplied address.
+func (r *SimplifiedNativeResolver) ResolveNativeAtCheckpoint(ctx context.Context, account string, checkpoint *nativev1.DNSCheckpointV1) (*nativev1.NativeStateV1, bool, error) {
+	if r == nil || ctx == nil || checkpoint == nil || checkpoint.Workchain != -1 || checkpoint.Sequence == 0 ||
+		len(checkpoint.RootHash) != 32 || len(checkpoint.FileHash) != 32 {
+		return nil, false, errors.New("invalid DNS Native checkpoint request")
+	}
+	canonical, err := CanonicalAddress(account)
+	if err != nil {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadAction, "invalid DNS Native account", err)
+	}
+	r.mu.Lock()
+	if checkpoint.Sequence < r.highWater {
+		r.mu.Unlock()
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadSequence, "DNS Native checkpoint regressed", nil)
+	}
+	r.mu.Unlock()
+	vote, _, err := quorumRead(ctx, r.chain.nodes, r.chain.quorum, func(ctx context.Context, node *rpcNode) (nativeAccountVote, error) {
+		return readNativeAccountAt(ctx, node, canonical, checkpoint.Sequence, r.network, r.locator.CodeHash)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if vote.BlockRoot != "sha256:"+hex.EncodeToString(checkpoint.RootHash) ||
+		vote.BlockFile != "sha256:"+hex.EncodeToString(checkpoint.FileHash) {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadSequence, "DNS and Native checkpoint hashes differ", nil)
+	}
+	if !vote.Found {
+		if err := r.commitCheckpoint(checkpoint.Sequence); err != nil {
+			return nil, false, err
+		}
+		return nil, false, nil
+	}
+	data, err := decodeCellBOC(vote.Data)
+	if err != nil {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid DNS Native account data BOC", err)
+	}
+	state, found, objectID, err := r.locator.DecodeDataAny(data)
+	if err != nil || !found {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid DNS Native typed state", err)
+	}
+	identity, err := r.locator.Locate(objectID)
+	if err != nil || identity.Address != canonical {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrWrongContract, "DNS Native address derivation mismatch", err)
+	}
+	lt, txHash, err := transactionTuple(vote)
+	if err != nil {
+		return nil, false, err
+	}
+	state.Reference = &nativev1.ChainReference{Workchain: r.locator.Workchain, Account: canonical,
+		LogicalTime: lt, TransactionHash: "sha256:" + hex.EncodeToString(txHash), ContractCodeHash: identity.CodeHash,
+		FinalizedCheckpoint: checkpoint.Sequence}
+	if err := r.commitCheckpoint(checkpoint.Sequence); err != nil {
+		return nil, false, err
+	}
+	return state, true, nil
+}
+
 // ResolveFinalizedState returns the chain-authored unix time from the same
 // quorum-finalized masterchain observation used for the typed account read.
 // Relayers use it for contract-time preflight and must not substitute host time.
