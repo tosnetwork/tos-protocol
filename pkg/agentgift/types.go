@@ -38,6 +38,10 @@ const (
 	MaxAmountDigits        = 20
 	MaxDisplayMessageBytes = 512
 	MaxPaddingBytes        = 4096
+	// The frozen Agent Account external body stores a 512-bit signature and
+	// the payload inline in one 1023-bit cell. Coins values above 48 bits do
+	// not fit once controller_epoch is included.
+	MaxAgentAccountActionAtomic uint64 = (1 << 48) - 1
 	// Leave deterministic space for the canonical offer fields and padding so
 	// the complete object always fits Messenger's 64 KiB application limit.
 	MaxSignedBOCBytes     = 56 << 10
@@ -97,6 +101,8 @@ type OwnerAuthorizationV1 struct {
 	SenderAgentAccount    string `json:"sender_agent_account"`
 	OwnerWallet           string `json:"owner_wallet"`
 	ControllerKeyID       string `json:"controller_key_id"`
+	DeploymentID          string `json:"deployment_id"`
+	ControllerEpoch       uint64 `json:"controller_epoch"`
 	DestinationAddress    string `json:"destination_address"`
 	AmountAtomic          string `json:"amount_atomic"`
 	Seqno                 uint32 `json:"seqno"`
@@ -110,6 +116,8 @@ type UnsignedTransferV1 struct {
 	Network            string `json:"network"`
 	GlobalID           int32  `json:"global_id"`
 	SenderAgentAccount string `json:"sender_agent_account"`
+	DeploymentID       string `json:"deployment_id"`
+	ControllerEpoch    uint64 `json:"controller_epoch"`
 	Seqno              uint32 `json:"seqno"`
 	ValidUntil         uint32 `json:"valid_until"`
 	DestinationAddress string `json:"destination_address"`
@@ -125,6 +133,8 @@ type OwnerCancellationAuthorizationV1 struct {
 	SignedGiftID          string `json:"signed_gift_id"`
 	RecipientAgentID      string `json:"recipient_agent_id"`
 	SenderAgentAccount    string `json:"sender_agent_account"`
+	DeploymentID          string `json:"deployment_id"`
+	ControllerEpoch       uint64 `json:"controller_epoch"`
 	DestinationAddress    string `json:"destination_address"`
 	AmountAtomic          string `json:"amount_atomic"`
 	Seqno                 uint32 `json:"seqno"`
@@ -247,13 +257,13 @@ func Validate(value any) error {
 }
 
 func (v OwnerCancellationAuthorizationV1) Validate() error {
-	if !validNetwork(v.Network) || v.GlobalID == 0 || !hex256Pattern.MatchString(v.GiftIntentID) || !digestPattern.MatchString(v.SignedGiftID) || !validAgent(v.RecipientAgentID) || v.ValidUntil == 0 {
+	if !validNetwork(v.Network) || v.GlobalID == 0 || !hex256Pattern.MatchString(v.GiftIntentID) || !digestPattern.MatchString(v.SignedGiftID) || !digestPattern.MatchString(v.DeploymentID) || !validAgent(v.RecipientAgentID) || v.ValidUntil == 0 {
 		return errors.New("invalid owner cancellation identity")
 	}
 	if validateAddress(v.SenderAgentAccount) != nil || validateAddress(v.DestinationAddress) != nil {
 		return errors.New("invalid owner cancellation address")
 	}
-	if _, err := ParseAmount(v.AmountAtomic); err != nil {
+	if _, err := ParseActionAmount(v.AmountAtomic); err != nil {
 		return err
 	}
 	if !digestPattern.MatchString(v.AddressRequestDigest) || !digestPattern.MatchString(v.AddressResponseDigest) {
@@ -339,10 +349,10 @@ func (v OwnerAuthorizationV1) Validate() error {
 	if err := validateAddress(v.DestinationAddress); err != nil {
 		return err
 	}
-	if v.ControllerKeyID == "" || len(v.ControllerKeyID) > 128 || v.ValidUntil == 0 {
+	if v.ControllerKeyID == "" || len(v.ControllerKeyID) > 128 || !digestPattern.MatchString(v.DeploymentID) || v.ValidUntil == 0 {
 		return errors.New("invalid owner authorization controller or validity")
 	}
-	if _, err := ParseAmount(v.AmountAtomic); err != nil {
+	if _, err := ParseActionAmount(v.AmountAtomic); err != nil {
 		return err
 	}
 	if _, err := ParseAmount(v.FeeReserveAtomic); err != nil {
@@ -355,7 +365,7 @@ func (v OwnerAuthorizationV1) Validate() error {
 }
 
 func (v UnsignedTransferV1) Validate() error {
-	if !validNetwork(v.Network) || v.GlobalID == 0 || v.ValidUntil == 0 || v.SendMode != 3 || v.Bounce {
+	if !validNetwork(v.Network) || v.GlobalID == 0 || !digestPattern.MatchString(v.DeploymentID) || v.ValidUntil == 0 || v.SendMode != 3 || v.Bounce {
 		return errors.New("invalid native transfer profile")
 	}
 	if err := validateAddress(v.SenderAgentAccount); err != nil {
@@ -364,7 +374,7 @@ func (v UnsignedTransferV1) Validate() error {
 	if err := validateAddress(v.DestinationAddress); err != nil {
 		return err
 	}
-	_, err := ParseAmount(v.AmountAtomic)
+	_, err := ParseActionAmount(v.AmountAtomic)
 	return err
 }
 
@@ -406,6 +416,17 @@ func ParseAmount(value string) (uint64, error) {
 	amount, err := strconv.ParseUint(value, 10, 64)
 	if err != nil || amount == 0 {
 		return 0, errors.New("amount_atomic exceeds uint64 or is zero")
+	}
+	return amount, nil
+}
+
+func ParseActionAmount(value string) (uint64, error) {
+	amount, err := ParseAmount(value)
+	if err != nil {
+		return 0, err
+	}
+	if amount > MaxAgentAccountActionAtomic {
+		return 0, errors.New("amount_atomic exceeds Agent Account signed-action wire limit")
 	}
 	return amount, nil
 }
@@ -462,7 +483,7 @@ func validateCommon(network, intent, sender, recipient, asset, amount string) er
 	if !validNetwork(network) || !hex256Pattern.MatchString(intent) || !validAgent(sender) || !validAgent(recipient) || asset != AssetNativeTOS {
 		return errors.New("invalid Gift request identity or asset")
 	}
-	_, err := ParseAmount(amount)
+	_, err := ParseActionAmount(amount)
 	return err
 }
 func validNetwork(v string) bool {

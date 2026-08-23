@@ -21,7 +21,7 @@ func buildNativeBOC(t *testing.T, opcode uint64, globalID int32, seqno, validUnt
 	if err != nil {
 		t.Fatal(err)
 	}
-	payloadBuilder := cell.BeginCell().MustStoreUInt(opcode, 32).MustStoreInt(int64(globalID), 32).MustStoreUInt(uint64(seqno), 32).MustStoreUInt(uint64(validUntil), 32).MustStoreAddr(destinationAddress).MustStoreCoins(amount)
+	payloadBuilder := cell.BeginCell().MustStoreUInt(opcode, 32).MustStoreInt(int64(globalID), 32).MustStoreUInt(0, 64).MustStoreUInt(uint64(seqno), 32).MustStoreUInt(uint64(validUntil), 32).MustStoreAddr(destinationAddress).MustStoreCoins(amount)
 	if trailing {
 		payloadBuilder.MustStoreUInt(1, 1)
 	}
@@ -48,7 +48,7 @@ func buildCancelBOC(t *testing.T, globalID int32, seqno, validUntil uint32, acco
 	if err != nil {
 		t.Fatal(err)
 	}
-	payloadBuilder := cell.BeginCell().MustStoreUInt(AgentCancelSeqnoOpcode, 32).MustStoreInt(int64(globalID), 32).MustStoreUInt(uint64(seqno), 32).MustStoreUInt(uint64(validUntil), 32)
+	payloadBuilder := cell.BeginCell().MustStoreUInt(AgentCancelSeqnoOpcode, 32).MustStoreInt(int64(globalID), 32).MustStoreUInt(0, 64).MustStoreUInt(uint64(seqno), 32).MustStoreUInt(uint64(validUntil), 32)
 	if trailing {
 		payloadBuilder.MustStoreUInt(1, 1)
 	}
@@ -185,6 +185,7 @@ func TestVerifyRejectsIdentityPolicyBalanceAndSignatureSubstitution(t *testing.T
 		"code":      func(v *VerifyNativeSendInput) { v.Account.CodeHash = "tvm-cell-sha256:" + strings.Repeat("0", 64) },
 		"TVM":       func(v *VerifyNativeSendInput) { v.Account.TVMVersion = MinimumAgentAccountTVMVersion - 1 },
 		"network":   func(v *VerifyNativeSendInput) { v.Account.GlobalID++ },
+		"epoch":     func(v *VerifyNativeSendInput) { v.Account.ControllerEpoch++ },
 		"seqno":     func(v *VerifyNativeSendInput) { v.Account.Seqno++ },
 		"balance":   func(v *VerifyNativeSendInput) { v.Account.BalanceAtomic = 1 },
 		"timeout":   func(v *VerifyNativeSendInput) { v.Account.DefaultTaskTimeoutSecs = 1 },
@@ -229,6 +230,11 @@ func TestFinalizedResolverRequiresExactCreditAndFinalizedTime(t *testing.T) {
 	rotation := base
 	rotation.ControllerCurrentlyMatches = false
 	if got, _ := ResolveFinalizedGift(rotation); got != ResolutionCurrentlyUnexecutable {
+		t.Fatal(got)
+	}
+	rotatedEpoch := base
+	rotatedEpoch.CurrentControllerEpoch++
+	if got, _ := ResolveFinalizedGift(rotatedEpoch); got != ResolutionInvalidatedUnpaid {
 		t.Fatal(got)
 	}
 	paid := base

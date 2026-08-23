@@ -20,6 +20,8 @@ type FinalizedGiftObservation struct {
 	FinalizedChainTime       uint32
 	ExpectedDeploymentID     string
 	CurrentDeploymentID      string
+	ExpectedControllerEpoch  uint64
+	CurrentControllerEpoch   uint64
 	SignedSeqno              uint32
 	CurrentSeqno             uint32
 	ValidUntil               uint32
@@ -56,8 +58,11 @@ func ResolveFinalizedGift(v FinalizedGiftObservation) (Resolution, error) {
 	if !v.ExecutionFinalityKnown {
 		return ResolutionFinalityUnknown, nil
 	}
-	if v.CurrentDeploymentID != v.ExpectedDeploymentID || v.CurrentSeqno > v.SignedSeqno {
+	if v.CurrentDeploymentID != v.ExpectedDeploymentID || v.CurrentControllerEpoch > v.ExpectedControllerEpoch || v.CurrentSeqno > v.SignedSeqno {
 		return ResolutionInvalidatedUnpaid, nil
+	}
+	if v.CurrentControllerEpoch < v.ExpectedControllerEpoch || v.CurrentSeqno < v.SignedSeqno {
+		return ResolutionFinalityUnknown, nil
 	}
 	if v.FinalizedChainTime > v.ValidUntil {
 		return ResolutionExpiredUnpaid, nil

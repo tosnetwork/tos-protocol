@@ -16,7 +16,7 @@ import (
 const (
 	AgentNativeSendOpcode             = 0x41475004
 	AgentCancelSeqnoOpcode            = 0x41475005
-	AgentAccountCodeHash              = "tvm-cell-sha256:299c060b66635574c8bd482639bff02012b2e2de52cf58cedf0ef82d3fcf2229"
+	AgentAccountCodeHash              = "tvm-cell-sha256:e1f436e4cc26b88cad0b06f804380eda7d715c7499d789f85ac83e6f60b4b679"
 	AgentControllerSignatureDomainHex = "ede715a9852fbba2c3c234ed0d27329ae34d6263a82cfb6215da87c91683b471"
 	MinimumAgentAccountTVMVersion     = 4
 	AgentNativeSendMode               = 3
@@ -27,6 +27,7 @@ type ParsedNativeSend struct {
 	SignedGiftID       string
 	SenderAgentAccount string
 	GlobalID           int32
+	ControllerEpoch    uint64
 	Seqno              uint32
 	ValidUntil         uint32
 	DestinationAddress string
@@ -39,6 +40,7 @@ type ParsedCancelSeqno struct {
 	ExactBOCDigest     string
 	SenderAgentAccount string
 	GlobalID           int32
+	ControllerEpoch    uint64
 	Seqno              uint32
 	ValidUntil         uint32
 	Signature          [64]byte
@@ -54,6 +56,7 @@ type FinalizedAgentAccount struct {
 	GlobalID               int32
 	TVMVersion             uint32
 	ControllerPublicKey    ed25519.PublicKey
+	ControllerEpoch        uint64
 	Seqno                  uint32
 	BalanceAtomic          uint64
 	MaxPerTxAtomic         uint64
@@ -125,6 +128,10 @@ func ParseAgentCancelSeqnoBOC(boc []byte) (ParsedCancelSeqno, error) {
 	if err != nil {
 		return out, errors.New("invalid cancellation global ID")
 	}
+	controllerEpoch, err := body.LoadUInt(64)
+	if err != nil {
+		return out, errors.New("invalid cancellation controller epoch")
+	}
 	seqno, err := body.LoadUInt(32)
 	if err != nil {
 		return out, errors.New("invalid cancellation seqno")
@@ -136,6 +143,7 @@ func ParseAgentCancelSeqnoBOC(boc []byte) (ParsedCancelSeqno, error) {
 	out.ExactBOCDigest = ExactSignedBOCDigest(boc)
 	out.SenderAgentAccount = external.DstAddr.StringRaw()
 	out.GlobalID = int32(globalID)
+	out.ControllerEpoch = controllerEpoch
 	out.Seqno = uint32(seqno)
 	out.ValidUntil = uint32(validUntil)
 	return out, nil
@@ -148,7 +156,7 @@ func VerifyAgentCancelSeqno(input VerifyCancelSeqnoInput) (ParsedCancelSeqno, er
 		return zero, err
 	}
 	account := input.Account
-	if !account.Active || account.CodeHash != AgentAccountCodeHash || account.TVMVersion < MinimumAgentAccountTVMVersion || account.Address != parsed.SenderAgentAccount || account.GlobalID != input.ExpectedGlobalID || parsed.GlobalID != input.ExpectedGlobalID || parsed.Seqno != input.ExpectedSeqno || account.Seqno != input.ExpectedSeqno || parsed.ValidUntil != input.ExpectedValidUntil || parsed.ValidUntil <= input.FinalizedChainTime || account.DefaultTaskTimeoutSecs == 0 || uint64(parsed.ValidUntil-input.FinalizedChainTime) > account.DefaultTaskTimeoutSecs || len(account.ControllerPublicKey) != ed25519.PublicKeySize {
+	if !account.Active || account.CodeHash != AgentAccountCodeHash || account.TVMVersion < MinimumAgentAccountTVMVersion || account.Address != parsed.SenderAgentAccount || account.GlobalID != input.ExpectedGlobalID || parsed.GlobalID != input.ExpectedGlobalID || parsed.ControllerEpoch != account.ControllerEpoch || parsed.Seqno != input.ExpectedSeqno || account.Seqno != input.ExpectedSeqno || parsed.ValidUntil != input.ExpectedValidUntil || parsed.ValidUntil <= input.FinalizedChainTime || account.DefaultTaskTimeoutSecs == 0 || uint64(parsed.ValidUntil-input.FinalizedChainTime) > account.DefaultTaskTimeoutSecs || len(account.ControllerPublicKey) != ed25519.PublicKeySize {
 		return zero, errors.New("cancellation conflicts with finalized Agent Account authority")
 	}
 	bindingHash, err := controllerBindingHash(account.Address, parsed.GlobalID, parsed.PayloadHash)
@@ -211,6 +219,10 @@ func ParseAgentNativeSendBOC(boc []byte) (ParsedNativeSend, error) {
 	if err != nil {
 		return out, errors.New("invalid signed global ID")
 	}
+	controllerEpoch, err := body.LoadUInt(64)
+	if err != nil {
+		return out, errors.New("invalid signed controller epoch")
+	}
 	seqno, err := body.LoadUInt(32)
 	if err != nil {
 		return out, errors.New("invalid signed seqno")
@@ -234,6 +246,7 @@ func ParseAgentNativeSendBOC(boc []byte) (ParsedNativeSend, error) {
 	out.SignedGiftID = SignedGiftID(boc)
 	out.SenderAgentAccount = external.DstAddr.StringRaw()
 	out.GlobalID = int32(globalID)
+	out.ControllerEpoch = controllerEpoch
 	out.Seqno = uint32(seqno)
 	out.ValidUntil = uint32(validUntil)
 	out.DestinationAddress = destination.StringRaw()
@@ -257,10 +270,10 @@ func VerifyAgentNativeSend(input VerifyNativeSendInput) (ParsedNativeSend, error
 		return zero, errors.New("SignedGiftID mismatch")
 	}
 	account := input.Account
-	if !account.Active || account.CodeHash != AgentAccountCodeHash || account.TVMVersion < MinimumAgentAccountTVMVersion || account.Address != input.Request.SenderAgentAccount || parsed.SenderAgentAccount != account.Address || account.GlobalID != input.Request.GlobalID || parsed.GlobalID != account.GlobalID || account.DefaultTaskTimeoutSecs == 0 {
+	if !account.Active || account.CodeHash != AgentAccountCodeHash || account.TVMVersion < MinimumAgentAccountTVMVersion || account.Address != input.Request.SenderAgentAccount || parsed.SenderAgentAccount != account.Address || account.GlobalID != input.Request.GlobalID || parsed.GlobalID != account.GlobalID || account.DefaultTaskTimeoutSecs == 0 || account.MaxPerTxAtomic > MaxAgentAccountActionAtomic {
 		return zero, errors.New("finalized Agent Account identity or network mismatch")
 	}
-	if len(account.ControllerPublicKey) != ed25519.PublicKeySize || parsed.Seqno != account.Seqno {
+	if len(account.ControllerPublicKey) != ed25519.PublicKeySize || parsed.ControllerEpoch != account.ControllerEpoch || parsed.Seqno != account.Seqno {
 		return zero, errors.New("controller or finalized seqno mismatch")
 	}
 	if parsed.ValidUntil > input.Request.RequestedValidUntil || parsed.ValidUntil > input.Response.ResponseNotAfter || parsed.ValidUntil <= input.FinalizedChainTime || parsed.ValidUntil-input.FinalizedChainTime < input.MinimumInclusionMargin {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -176,6 +177,12 @@ func TestAmountsBindingsAndBOCIdentityFailClosed(t *testing.T) {
 		if _, err := ParseAmount(bad); err == nil {
 			t.Fatalf("accepted amount %q", bad)
 		}
+	}
+	if _, err := ParseActionAmount(strconv.FormatUint(MaxAgentAccountActionAtomic, 10)); err != nil {
+		t.Fatalf("rejected maximum signed action amount: %v", err)
+	}
+	if _, err := ParseActionAmount(strconv.FormatUint(MaxAgentAccountActionAtomic+1, 10)); err == nil {
+		t.Fatal("accepted amount above the Agent Account signed-action wire limit")
 	}
 	req := testRequest()
 	response := testResponse(t)

@@ -53,6 +53,7 @@ func (r *AgentGiftReader) resolveFinalizedGift(ctx context.Context, accountAddre
 	if err != nil || parsed.SenderAgentAccount != accountAddress || parsed.DestinationAddress != destination || parsed.Seqno != signedSeqno || parsed.ValidUntil != validUntil {
 		return base, errors.New("finalized Gift request conflicts with exact BOC")
 	}
+	base.ExpectedControllerEpoch = parsed.ControllerEpoch
 	observation, nodes, err := r.chain.consensus(ctx)
 	if err != nil {
 		return base, err
@@ -64,11 +65,12 @@ func (r *AgentGiftReader) resolveFinalizedGift(ctx context.Context, accountAddre
 	base.Available = true
 	base.FinalizedChainTime = uint32(observation.observedAt.Unix())
 	base.CurrentDeploymentID = current.DeploymentID
+	base.CurrentControllerEpoch = current.ControllerEpoch
 	base.CurrentSeqno = current.Seqno
 	base.BalanceAtomic = current.BalanceAtomic
 	base.AmountAtomic = parsed.AmountAtomic
 	base.FeeReserveAtomic = feeReserveAtomic
-	base.ControllerCurrentlyMatches = current.DeploymentID == expectedDeployment
+	base.ControllerCurrentlyMatches = current.DeploymentID == expectedDeployment && current.ControllerEpoch == parsed.ControllerEpoch
 	base.PolicyCurrentlyAllows = parsed.AmountAtomic <= current.MaxPerTxAtomic && parsed.AmountAtomic <= current.DailyRemainingAtomic
 	externalRoot, err := cell.FromBOC(exactBOC)
 	if err != nil {
@@ -371,6 +373,10 @@ func decodeAgentAccountData(encoded, account string, balance uint64, globalID in
 	if err != nil || len(deploymentID) != 32 || bytes.Equal(deploymentID, make([]byte, 32)) {
 		return agentgift.FinalizedAgentAccount{}, errors.New("invalid Agent Account deployment ID")
 	}
+	controllerEpoch, err := s.LoadUInt(64)
+	if err != nil {
+		return agentgift.FinalizedAgentAccount{}, errors.New("invalid Agent Account controller epoch")
+	}
 	seqno, err := s.LoadUInt(32)
 	if err != nil {
 		return agentgift.FinalizedAgentAccount{}, err
@@ -390,6 +396,9 @@ func decodeAgentAccountData(encoded, account string, balance uint64, globalID in
 	maxPerTx, err := policy.LoadCoins()
 	if err != nil {
 		return agentgift.FinalizedAgentAccount{}, err
+	}
+	if maxPerTx > agentgift.MaxAgentAccountActionAtomic {
+		return agentgift.FinalizedAgentAccount{}, errors.New("Agent Account max_per_tx exceeds signed-action wire limit")
 	}
 	dailyLimit, err := policy.LoadCoins()
 	if err != nil {
@@ -420,5 +429,5 @@ func decodeAgentAccountData(encoded, account string, balance uint64, globalID in
 	if spentToday < dailyLimit {
 		remaining = dailyLimit - spentToday
 	}
-	return agentgift.FinalizedAgentAccount{Active: true, Address: account, OwnerAddress: owner.StringRaw(), CodeHash: agentgift.AgentAccountCodeHash, DeploymentID: "sha256:" + hex.EncodeToString(deploymentID), GlobalID: globalID, TVMVersion: agentgift.MinimumAgentAccountTVMVersion, ControllerPublicKey: append(ed25519.PublicKey(nil), controller...), Seqno: uint32(seqno), BalanceAtomic: balance, MaxPerTxAtomic: maxPerTx, DailyRemainingAtomic: remaining, DefaultTaskTimeoutSecs: defaultTaskTimeout}, nil
+	return agentgift.FinalizedAgentAccount{Active: true, Address: account, OwnerAddress: owner.StringRaw(), CodeHash: agentgift.AgentAccountCodeHash, DeploymentID: "sha256:" + hex.EncodeToString(deploymentID), GlobalID: globalID, TVMVersion: agentgift.MinimumAgentAccountTVMVersion, ControllerPublicKey: append(ed25519.PublicKey(nil), controller...), ControllerEpoch: controllerEpoch, Seqno: uint32(seqno), BalanceAtomic: balance, MaxPerTxAtomic: maxPerTx, DailyRemainingAtomic: remaining, DefaultTaskTimeoutSecs: defaultTaskTimeout}, nil
 }

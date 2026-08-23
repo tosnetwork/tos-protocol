@@ -63,13 +63,13 @@ func TestDecodeFinalizedAgentAccountDataAndDailyReset(t *testing.T) {
 		MustStoreUInt(3600, 64).MustStoreBoolBit(false).MustStoreBoolBit(false).EndCell()
 	data := cell.BeginCell().MustStoreAddr(owner).MustStoreSlice([]byte(strings.Repeat("c", 32)), 256).
 		MustStoreSlice([]byte(strings.Repeat("d", 32)), 256).
-		MustStoreUInt(7, 32).MustStoreUInt(1, 32).MustStoreCoins(2_000_000_000).MustStoreRef(policy).EndCell()
+		MustStoreUInt(9, 64).MustStoreUInt(7, 32).MustStoreUInt(1, 32).MustStoreCoins(2_000_000_000).MustStoreRef(policy).EndCell()
 	encoded := base64.StdEncoding.EncodeToString(data.ToBOCWithFlags(false))
 	account, err := decodeAgentAccountData(encoded, "-1:"+strings.Repeat("2", 64), 9_000_000_000, 42, 2*86400)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if account.OwnerAddress != owner.StringRaw() || account.Seqno != 7 || account.MaxPerTxAtomic != 5_000_000_000 || account.DailyRemainingAtomic != 6_000_000_000 || account.GlobalID != 42 || account.DeploymentID == "" {
+	if account.OwnerAddress != owner.StringRaw() || account.ControllerEpoch != 9 || account.Seqno != 7 || account.MaxPerTxAtomic != 5_000_000_000 || account.DailyRemainingAtomic != 6_000_000_000 || account.GlobalID != 42 || account.DeploymentID == "" {
 		t.Fatalf("wrong Agent Account state: %+v", account)
 	}
 	sameDay, err := decodeAgentAccountData(encoded, account.Address, 9_000_000_000, 42, 86400)
@@ -84,7 +84,7 @@ func TestDecodeAgentAccountRejectsHiddenStateData(t *testing.T) {
 		MustStoreBoolBit(false).MustStoreBoolBit(false).MustStoreUInt(1, 1).EndCell()
 	data := cell.BeginCell().MustStoreAddr(owner).MustStoreSlice(make([]byte, 32), 256).
 		MustStoreSlice([]byte(strings.Repeat("d", 32)), 256).
-		MustStoreUInt(0, 32).MustStoreUInt(0, 32).MustStoreCoins(0).MustStoreRef(policy).EndCell()
+		MustStoreUInt(0, 64).MustStoreUInt(0, 32).MustStoreUInt(0, 32).MustStoreCoins(0).MustStoreRef(policy).EndCell()
 	if _, err := decodeAgentAccountData(base64.StdEncoding.EncodeToString(data.ToBOCWithFlags(false)), "-1:"+strings.Repeat("2", 64), 1, 42, 1); err == nil {
 		t.Fatal("hidden Agent Account policy data was accepted")
 	}
