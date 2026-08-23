@@ -57,6 +57,7 @@ type rawTransaction struct {
 
 type nativeAccountVote struct {
 	Found           bool   `json:"found"`
+	Balance         uint64 `json:"balance"`
 	Code            string `json:"code"`
 	Data            string `json:"data"`
 	LT              string `json:"lt"`
@@ -115,11 +116,15 @@ func readNativeAccountAt(ctx context.Context, node *rpcNode, address string, seq
 	if info.Code == "" || info.Data == "" {
 		return nativeAccountVote{}, errors.New("Native account has incomplete state")
 	}
+	balance, err := strconv.ParseUint(info.Balance, 10, 64)
+	if err != nil {
+		return nativeAccountVote{}, errors.New("Native account balance is invalid")
+	}
 	code, err := decodeCellBOC(info.Code)
 	if err != nil || "tvm-cell-sha256:"+hex.EncodeToString(code.Hash()) != allowedCodeHash {
 		return nativeAccountVote{}, nativecore.NewProtocolError(nativecore.ErrWrongContract, "Native account code hash mismatch", err)
 	}
-	vote.Found, vote.Code, vote.Data = true, info.Code, info.Data
+	vote.Found, vote.Balance, vote.Code, vote.Data = true, balance, info.Code, info.Data
 	vote.LT, vote.TransactionHash = info.LastTransactionID.LT, info.LastTransactionID.Hash
 	vote.TransactionTime, err = verifyNativeLastTransactionTuple(ctx, node, address, info.LastTransactionID)
 	if err != nil {

@@ -1,0 +1,11 @@
+{
+  "schema": "tos.agent-gift.rust-fixture.v1",
+  "account": "-1:1514a9c441d3e58050014054046f0cf6bd81596044e4bbf2c8a8ffda4a7ad54c",
+  "controller_public_key": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+  "target": "0:2222222222222222222222222222222222222222222222222222222222222222",
+  "global_id": 42,
+  "seqno": 0,
+  "valid_until": 2000000000,
+  "amount_atomic": "1000000000",
+  "exact_signed_boc": "te6ccgEBAgEAngABRYn+KilTiIOnywCgAoCoCN4Z7XsCssCJyXflkVH/tJT1qpgMAQDraBHWua8LFa3hp88GhvnJDugSt7nnpk8/Xdmt4rCU2q4Qt9iyCefqc46FM/rqhfM9wZ5YJtYcff4PfNl/2YxYAkFHUAQAAAAqAAAAAHc1lACABERERERERERERERERERERERERERERERERERERERERERIdzWUAQ=="
+}
