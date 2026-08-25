@@ -10,9 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 )
 
@@ -218,16 +218,7 @@ func (s *fileStore) manifestPath(digest string) (string, error) {
 }
 
 func (s *fileStore) withLock(fn func() error) error {
-	lock, err := os.OpenFile(filepath.Join(s.directory, ".capability-catalog.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	return fn()
+	return osguard.WithExclusiveFileLock(filepath.Join(s.directory, ".capability-catalog.lock"), 0o600, fn)
 }
 
 func (s *fileStore) atomicCreate(path string, raw []byte) (bool, error) {
@@ -303,8 +294,7 @@ func readOwnerFile(path string, maximum int64) ([]byte, error) {
 }
 
 func ownedByProcess(info os.FileInfo) bool {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && stat.Uid == uint32(os.Geteuid())
+	return osguard.CurrentUserOwns(info)
 }
 
 func syncDirectory(path string) error {

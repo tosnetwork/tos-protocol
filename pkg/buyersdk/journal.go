@@ -10,8 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 )
 
 type BudgetLimits struct {
@@ -58,8 +59,7 @@ func NewFileBudgetJournal(directory string) (*FileBudgetJournal, error) {
 		return nil, errors.New("buyer budget directory must be absolute and clean")
 	}
 	info, err := os.Lstat(directory)
-	stat, ok := infoSyscallStat(info)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ok || stat.Uid != uint32(os.Geteuid()) {
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !osguard.CurrentUserOwns(info) {
 		return nil, errors.New("buyer budget directory must be owner-private")
 	}
 	return &FileBudgetJournal{directory: directory}, nil
@@ -257,9 +257,8 @@ func readStrict(path string, target any) error {
 	if err != nil {
 		return err
 	}
-	stat, owned := infoSyscallStat(before)
-	if !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 || !owned ||
-		stat.Uid != uint32(os.Geteuid()) || before.Size() <= 0 || before.Size() > 64<<10 {
+	if !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 || !osguard.CurrentUserOwns(before) ||
+		before.Size() <= 0 || before.Size() > 64<<10 {
 		return errors.New("buyer budget record is not an owner-private regular file")
 	}
 	file, err := os.Open(path)
@@ -284,16 +283,7 @@ func readStrict(path string, target any) error {
 }
 
 func (j *FileBudgetJournal) withLock(fn func() error) error {
-	lock, err := os.OpenFile(filepath.Join(j.directory, ".buyer-budget.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	return fn()
+	return osguard.WithExclusiveFileLock(filepath.Join(j.directory, ".buyer-budget.lock"), 0o600, fn)
 }
 
 func (j *FileBudgetJournal) atomicCreate(path string, raw []byte) (bool, error) {
@@ -362,12 +352,4 @@ func syncDirectory(path string) error {
 	}
 	defer directory.Close()
 	return directory.Sync()
-}
-
-func infoSyscallStat(info os.FileInfo) (*syscall.Stat_t, bool) {
-	if info == nil {
-		return nil, false
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return stat, ok
 }

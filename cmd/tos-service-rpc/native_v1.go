@@ -10,10 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 	"github.com/tosnetwork/tos-service-protocol/pkg/chainactionpublisher"
 	"github.com/tosnetwork/tos-service-protocol/pkg/dnsalias"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
@@ -53,8 +53,7 @@ func buildNativeV1(path string) (*nativecore.Relayer, *toschain.SimplifiedNative
 	if err != nil {
 		return nil, nil, nil, nil, errors.New("tos_service_v1 config file is unavailable")
 	}
-	stat, ownerOK := info.Sys().(*syscall.Stat_t)
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || !ownerOK || stat.Uid != uint32(os.Geteuid()) || info.Size() <= 0 || info.Size() > 2<<20 {
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || !osguard.CurrentUserOwns(info) || info.Size() <= 0 || info.Size() > 2<<20 {
 		return nil, nil, nil, nil, errors.New("tos_service_v1 config file is outside bounds")
 	}
 	raw, err := os.ReadFile(path)

@@ -45,14 +45,21 @@ type accountInformation struct {
 }
 
 type rawTransaction struct {
-	Type          string        `json:"@type"`
-	BlockID       blockID       `json:"block_id"`
-	Data          string        `json:"data"`
-	Fee           string        `json:"fee"`
-	InMsgHash     string        `json:"in_msg_hash"`
-	Utime         uint32        `json:"utime"`
-	TransactionID transactionID `json:"transaction_id"`
-	Account       string        `json:"account"`
+	Type            string          `json:"@type"`
+	Aborted         bool            `json:"aborted"`
+	BlockID         blockID         `json:"block_id"`
+	Action          json.RawMessage `json:"action"`
+	Compute         json.RawMessage `json:"compute"`
+	Data            string          `json:"data"`
+	Destroyed       bool            `json:"destroyed"`
+	Fee             string          `json:"fee"`
+	InMsg           json.RawMessage `json:"in_msg"`
+	InMsgHash       string          `json:"in_msg_hash"`
+	OutMsgs         json.RawMessage `json:"out_msgs"`
+	TransactionType string          `json:"transaction_type"`
+	Utime           uint32          `json:"utime"`
+	TransactionID   transactionID   `json:"transaction_id"`
+	Account         string          `json:"account"`
 }
 
 type nativeAccountVote struct {

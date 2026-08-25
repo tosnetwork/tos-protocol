@@ -25,7 +25,10 @@ const (
 	maxClockSkew            = 2 * time.Minute
 )
 
-var networkPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+// Network IDs are protocol identifiers, not DNS labels. Released TOS profiles
+// use URI-like names such as "tos:local-three-node", so a colon is valid while
+// whitespace, path separators, query syntax and control bytes remain barred.
+var networkPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 type Config struct {
 	Network          string

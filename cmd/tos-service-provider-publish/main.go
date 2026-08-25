@@ -14,10 +14,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativeclient"
 	"github.com/tosnetwork/tos-service-protocol/pkg/providersdk"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -170,20 +170,11 @@ func readBoundedRegular(path string, private bool) ([]byte, error) {
 		return nil, errors.New("publication input path must be absolute and clean")
 	}
 	info, err := os.Lstat(path)
-	stat, owned := infoSyscallStat(info)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maxPublicationFile ||
-		(private && (info.Mode().Perm()&0o077 != 0 || !owned || stat.Uid != uint32(os.Geteuid()))) {
+		(private && (info.Mode().Perm()&0o077 != 0 || !osguard.CurrentUserOwns(info))) {
 		return nil, errors.New("publication input must be a bounded regular file")
 	}
 	return os.ReadFile(path)
-}
-
-func infoSyscallStat(info os.FileInfo) (*syscall.Stat_t, bool) {
-	if info == nil {
-		return nil, false
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return stat, ok
 }
 
 func nonce(value string) ([]byte, error) {

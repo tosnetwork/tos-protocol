@@ -165,6 +165,7 @@ func finalizedTransactionHistory(ctx context.Context, node *rpcNode, address str
 		if slice == nil || tlb.LoadFromCell(&transaction, slice) != nil || parseErr != nil || transaction.LT != lt {
 			return nil, errors.New("invalid finalized Gift transaction BOC")
 		}
+		transaction.Hash = append([]byte(nil), hash...)
 		if previous != nil && (previous.PrevTxLT != transaction.LT || !bytes.Equal(previous.PrevTxHash, hash)) {
 			return nil, errors.New("discontinuous finalized Gift transaction history")
 		}

@@ -6,6 +6,7 @@ require (
 	connectrpc.com/connect v1.19.1
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/tosnetwork/tosutils-go v1.18.1
+	golang.org/x/sys v0.46.0
 	google.golang.org/protobuf v1.36.11
 )
 

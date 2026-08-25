@@ -8,7 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
+
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 )
 
 type record struct {
@@ -174,21 +175,11 @@ func stringsCapabilityID(v string) bool {
 }
 
 func (s *store) lock(fn func() error) error {
-	f, err := os.OpenFile(filepath.Join(s.dir, ".execution-gate.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	return fn()
+	return osguard.WithExclusiveFileLock(filepath.Join(s.dir, ".execution-gate.lock"), 0600, fn)
 }
 
 func owned(i os.FileInfo) bool {
-	v, ok := i.Sys().(*syscall.Stat_t)
-	return ok && v.Uid == uint32(os.Geteuid())
+	return osguard.CurrentUserOwns(i)
 }
 
 func syncDir(path string) error {

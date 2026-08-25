@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
 	"github.com/tosnetwork/tos-service-protocol/internal/jsonstrict"
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 	"github.com/tosnetwork/tos-service-protocol/pkg/nativecore"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -68,8 +68,7 @@ func LoadKey(path string) (*Key, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || info.Size() <= 0 || info.Size() > 4096 {
 		return nil, errors.New("Native wallet key must be an owner-private regular file")
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(os.Geteuid()) {
+	if !osguard.CurrentUserOwns(info) {
 		return nil, errors.New("Native wallet key owner mismatch")
 	}
 	raw, err := os.ReadFile(path)

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	nativev1 "github.com/tosnetwork/tos-service-protocol/gen/tos/service/v1"
+	"github.com/tosnetwork/tos-service-protocol/internal/osguard"
 	"github.com/tosnetwork/tosutils-go/address"
 	"github.com/tosnetwork/tosutils-go/tvm/cell"
 	"google.golang.org/protobuf/proto"
@@ -33,6 +34,7 @@ type TOSCTLFundingSenderConfig struct {
 	AttachedNanoTOS uint64
 	ForwardNanoTOS  uint64
 	Timeout         time.Duration
+	VaultURL        string
 }
 
 type commandRunner interface {
@@ -66,7 +68,7 @@ func NewTOSCTLFundingSender(c TOSCTLFundingSenderConfig) (*TOSCTLFundingSender, 
 	if c.Timeout < time.Second || c.Timeout > 5*time.Minute {
 		return nil, errors.New("invalid tosctl sender timeout")
 	}
-	runner, err := newPinnedExecRunner(c.BinaryPath, c.ConfigPath)
+	runner, err := newPinnedExecRunnerWithVault(c.BinaryPath, c.ConfigPath, c.VaultURL)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +109,7 @@ func (s *TOSCTLFundingSender) PrepareStablecoinFunding(ctx context.Context, inte
 	if err != nil {
 		return nil, err
 	}
-	bodyBOC := base64.StdEncoding.EncodeToString(body.ToBOC())
+	bodyBOC := base64.StdEncoding.EncodeToString(body.ToBOCWithOptions(cell.BOCSerializeOptions{}))
 	bodyHash := fmt.Sprintf("tvm-cell-sha256:%x", body.Hash())
 	baseArgs := []string{"wallet", "send", "--from", s.wallet,
 		"--to", intent.BuyerWallet, "--amount-nanotos", fmt.Sprint(s.attached), "--body-boc", bodyBOC}
@@ -247,31 +249,33 @@ func parseAnyAddress(value string) (*address.Address, error) {
 
 func secureExecutable(path string) bool {
 	info, err := os.Lstat(path)
-	stat, ok := infoSyscallStat(info)
 	return err == nil && filepath.IsAbs(path) && filepath.Clean(path) == path && info.Mode().IsRegular() &&
-		info.Mode().Perm()&0o022 == 0 && info.Mode().Perm()&0o111 != 0 && ok &&
-		(stat.Uid == 0 || stat.Uid == uint32(os.Geteuid()))
+		info.Mode().Perm()&0o022 == 0 && info.Mode().Perm()&0o111 != 0 && osguard.TrustedExecutableOwner(info)
 }
 
 func secureConfigFile(path string) bool {
 	info, err := os.Lstat(path)
-	stat, ok := infoSyscallStat(info)
 	return err == nil && filepath.IsAbs(path) && filepath.Clean(path) == path && info.Mode().IsRegular() &&
-		info.Mode().Perm()&0o077 == 0 && ok && stat.Uid == uint32(os.Geteuid())
+		info.Mode().Perm()&0o077 == 0 && osguard.CurrentUserOwns(info)
 }
 
 type executableIdentity struct {
-	device, inode uint64
-	size          int64
-	digest        [sha256.Size]byte
+	size   int64
+	digest [sha256.Size]byte
 }
 
 type execRunner struct {
-	identity executableIdentity
-	config   []byte
+	identity    executableIdentity
+	config      []byte
+	environment []string
+	extraArgs   []string
 }
 
 func newPinnedExecRunner(binaryPath, configPath string) (*execRunner, error) {
+	return newPinnedExecRunnerWithVault(binaryPath, configPath, "")
+}
+
+func newPinnedExecRunnerWithVault(binaryPath, configPath, vaultURL string) (*execRunner, error) {
 	if runtime.GOOS != "linux" {
 		return nil, errors.New("descriptor-pinned tosctl custody is supported only on Linux")
 	}
@@ -284,7 +288,15 @@ func newPinnedExecRunner(binaryPath, configPath string) (*execRunner, error) {
 	if err != nil || len(config) == 0 || len(config) > 2<<20 {
 		return nil, errors.New("read bounded tosctl custody configuration")
 	}
-	return &execRunner{identity: identity, config: append([]byte(nil), config...)}, nil
+	environment := []string{}
+	if vaultURL != "" {
+		if len(vaultURL) > 4096 || strings.ContainsRune(vaultURL, '\x00') ||
+			(!strings.HasPrefix(vaultURL, "file://") && !strings.HasPrefix(vaultURL, "hashicorp://")) {
+			return nil, errors.New("invalid bounded tosctl vault URL")
+		}
+		environment = []string{"VAULT_URL=" + vaultURL}
+	}
+	return &execRunner{identity: identity, config: append([]byte(nil), config...), environment: environment}, nil
 }
 
 func (r *execRunner) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
@@ -304,12 +316,13 @@ func (r *execRunner) run(ctx context.Context, binary string, args ...string) ([]
 		return nil, err
 	}
 	defer config.Close()
+	args = append(args, r.extraArgs...)
 	args = append(args, "--config-fd", "3", "--config-format", "json")
 	command := exec.CommandContext(ctx, "/proc/self/fd/4", args...)
 	command.ExtraFiles = []*os.File{config, executable}
 	// Custody must not inherit loader, proxy, HOME, PATH, certificate, or
 	// wallet-selection variables from the long-running OpenFox process.
-	command.Env = []string{}
+	command.Env = append([]string(nil), r.environment...)
 	output := cappedBuffer{limit: 1 << 20}
 	command.Stdout, command.Stderr = &output, &output
 	err = command.Run()
@@ -327,8 +340,7 @@ func openAndIdentifyExecutable(path string) (*os.File, executableIdentity, error
 		return nil, executableIdentity{}, err
 	}
 	info, err := file.Stat()
-	stat, ok := infoSyscallStat(info)
-	if err != nil || !ok || !os.SameFile(pathInfo, info) || (stat.Uid != 0 && stat.Uid != uint32(os.Geteuid())) {
+	if err != nil || !os.SameFile(pathInfo, info) || !osguard.TrustedExecutableOwner(info) {
 		file.Close()
 		return nil, executableIdentity{}, errors.New("tosctl executable identity is untrusted")
 	}
@@ -339,7 +351,7 @@ func openAndIdentifyExecutable(path string) (*os.File, executableIdentity, error
 	}
 	var digest [sha256.Size]byte
 	copy(digest[:], hash.Sum(nil))
-	identity := executableIdentity{device: uint64(stat.Dev), inode: stat.Ino, size: info.Size(), digest: digest}
+	identity := executableIdentity{size: info.Size(), digest: digest}
 	if _, err := file.Seek(0, 0); err != nil {
 		file.Close()
 		return nil, executableIdentity{}, err

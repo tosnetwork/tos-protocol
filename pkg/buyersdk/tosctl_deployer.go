@@ -25,6 +25,7 @@ type TOSCTLEscrowDeployerConfig struct {
 	BuyerAddress    string
 	AttachedNanoTOS uint64
 	Timeout         time.Duration
+	VaultURL        string
 }
 
 // PreparedEscrowDeployment binds the reviewed StateInit to the exact signed
@@ -65,7 +66,7 @@ func NewTOSCTLEscrowDeployer(c TOSCTLEscrowDeployerConfig) (*TOSCTLEscrowDeploye
 	if c.Timeout < time.Second || c.Timeout > 5*time.Minute {
 		return nil, errors.New("invalid tosctl deployer timeout")
 	}
-	runner, err := newPinnedExecRunner(c.BinaryPath, c.ConfigPath)
+	runner, err := newPinnedExecRunnerWithVault(c.BinaryPath, c.ConfigPath, c.VaultURL)
 	if err != nil {
 		return nil, err
 	}

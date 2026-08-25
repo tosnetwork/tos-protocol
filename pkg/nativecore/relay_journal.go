@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -97,19 +96,10 @@ func NewFileRelayJournal(directory string) (*FileRelayJournal, error) {
 		return nil, errors.New("Native relay journal directory must be absolute and clean")
 	}
 	info, err := os.Lstat(directory)
-	stat, owned := infoSyscallStat(info)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !owned || stat.Uid != uint32(os.Geteuid()) {
+	if err != nil || !relayJournalDirectoryIsPrivate(info) {
 		return nil, errors.New("Native relay journal directory must be owner-private")
 	}
 	return &FileRelayJournal{directory: directory}, nil
-}
-
-func infoSyscallStat(info os.FileInfo) (*syscall.Stat_t, bool) {
-	if info == nil {
-		return nil, false
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return stat, ok
 }
 
 func (j *FileRelayJournal) requestPath(key string) string {
@@ -329,16 +319,7 @@ func (j *FileRelayJournal) enforceSpendLimits(intent RelayIntent, limits RelaySp
 
 func (j *FileRelayJournal) withExclusiveLock(fn func() error) error {
 	path := filepath.Join(j.directory, ".relay-journal.lock")
-	lock, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	return fn()
+	return withRelayJournalFileLock(path, fn)
 }
 
 func (j *FileRelayJournal) readSlot(identity string) (relaySlotRecord, bool, error) {

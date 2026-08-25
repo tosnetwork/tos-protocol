@@ -21,6 +21,12 @@ type FinalizedEscrowV1 struct {
 	FinalizedAt time.Time
 }
 
+type FinalizedEscrowV2 struct {
+	State       *nativecore.EscrowStateV2
+	Reference   *nativev1.ChainReference
+	FinalizedAt time.Time
+}
+
 // EscrowResolver reads a fixed escrow code identity from the same quorum and
 // rollback-protected finalized checkpoint model as the Native Registry.
 type EscrowResolver struct {
@@ -119,7 +125,78 @@ func (r *EscrowResolver) ResolveFinalized(ctx context.Context, escrowAddress str
 	if err := r.commitCheckpoint(observation.seqno); err != nil {
 		return nil, false, err
 	}
-	return &FinalizedEscrowV1{State: state, Reference: reference, FinalizedAt: observation.observedAt}, true, nil
+	return &FinalizedEscrowV1{State: state, Reference: reference,
+		FinalizedAt: time.Unix(int64(vote.TransactionTime), 0).UTC()}, true, nil
+}
+
+// ResolveFinalizedV2 authenticates the additive Paid Demand escrow successor.
+// The resolver instance must be pinned to the released V2 code hash; a V1
+// resolver and V2 resolver therefore cannot reinterpret each other's state.
+func (r *EscrowResolver) ResolveFinalizedV2(ctx context.Context, escrowAddress string) (*FinalizedEscrowV2, bool, error) {
+	if r == nil || ctx == nil {
+		return nil, false, errors.New("invalid escrow V2 resolution request")
+	}
+	parsed, err := address.ParseRawAddr(escrowAddress)
+	if err != nil || parsed == nil || parsed.Type() != address.StdAddress || parsed.Workchain() != 0 || parsed.StringRaw() != escrowAddress {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid escrow V2 address", err)
+	}
+	observation, nodes, err := r.chain.consensus(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := r.chain.validateObservationTime(observation, time.Now()); err != nil {
+		return nil, false, err
+	}
+	r.mu.Lock()
+	if observation.seqno == 0 || observation.seqno < r.highWater {
+		r.mu.Unlock()
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadSequence, "escrow V2 finalized checkpoint regressed", nil)
+	}
+	r.mu.Unlock()
+	vote, _, err := quorumRead(ctx, nodes, r.chain.quorum, func(ctx context.Context, node *rpcNode) (nativeAccountVote, error) {
+		return readNativeAccountAt(ctx, node, escrowAddress, observation.seqno, r.network, r.codeHash)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if !vote.Found {
+		if err := r.commitCheckpoint(observation.seqno); err != nil {
+			return nil, false, err
+		}
+		return nil, false, nil
+	}
+	data, err := decodeCellBOC(vote.Data)
+	if err != nil {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid escrow V2 data BOC", err)
+	}
+	state, err := nativecore.DecodeEscrowDataV2(data, r.network)
+	if err != nil {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid typed escrow V2 state", err)
+	}
+	code, err := decodeCellBOC(vote.Code)
+	if err != nil {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrBadMessage, "invalid escrow V2 code BOC", err)
+	}
+	identity, err := nativecore.BuildEscrowStateInitV2(0, code, nativecore.EscrowInitV2{Network: r.network,
+		AcceptedQuote: state.AcceptedQuote, Terms: nativecore.EscrowTermsV1{BuyerAddress: state.BuyerAddress,
+			ProviderAddress: state.ProviderAddress, FundingDeadline: state.FundingDeadline, RefundAvailableAt: state.RefundAvailableAt},
+		ExecutionSignerEd25519: state.ExecutionSignerEd25519, TransportBinding: state.TransportBinding,
+		AssetMasterAddress: state.AssetMasterAddress, AssetWalletCode: state.AssetWalletCode})
+	if err != nil || identity.Address != escrowAddress {
+		return nil, false, nativecore.NewProtocolError(nativecore.ErrWrongContract, "escrow V2 account does not match canonical StateInit", err)
+	}
+	lt, transactionHash, err := transactionTuple(vote)
+	if err != nil {
+		return nil, false, err
+	}
+	reference := &nativev1.ChainReference{Workchain: 0, Account: escrowAddress, LogicalTime: lt,
+		TransactionHash: "sha256:" + hex.EncodeToString(transactionHash), ContractCodeHash: r.codeHash,
+		FinalizedCheckpoint: observation.seqno}
+	if err := r.commitCheckpoint(observation.seqno); err != nil {
+		return nil, false, err
+	}
+	return &FinalizedEscrowV2{State: state, Reference: reference,
+		FinalizedAt: time.Unix(int64(vote.TransactionTime), 0).UTC()}, true, nil
 }
 
 func (r *EscrowResolver) commitCheckpoint(value uint64) error {
