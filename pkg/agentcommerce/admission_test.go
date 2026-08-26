@@ -35,7 +35,16 @@ func TestOperationAdmissionBindsCarrierActorAudienceAndResources(t *testing.T) {
 	if err := VerifyOperationAdmission(proof, public, "agent:test", "publication.publish", "public:indexable", 4097, resource, now); err == nil {
 		t.Fatal("undersized admission proof was accepted")
 	}
-	proof.Counter++
+	// More than one counter can legitimately satisfy the same proof-of-work
+	// challenge. Select a counter that is known not to satisfy the challenge so
+	// this mutation check is deterministic instead of failing with probability
+	// 1/2^DifficultyBits.
+	for {
+		proof.Counter++
+		if !admissionWorkValid(proof.ChallengeDigest, proof.Counter, proof.Challenge.Body.DifficultyBits) {
+			break
+		}
+	}
 	if err := VerifyOperationAdmission(proof, public, "agent:test", "publication.publish", "public:indexable", 4096, resource, now); err == nil {
 		t.Fatal("changed proof work was accepted")
 	}

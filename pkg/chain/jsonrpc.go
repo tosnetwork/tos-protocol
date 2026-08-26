@@ -43,7 +43,10 @@ func NewClient(endpoint string, timeout time.Duration, maxBody int64) (*Client, 
 		dialTimeout = 10 * time.Second
 	}
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		// Chain endpoints are an owner-pinned authority boundary. Ambient proxy
+		// variables must not silently redirect signed transactions, account
+		// state, or finality reads to another origin.
+		Proxy:                 nil,
 		DialContext:           (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          16,

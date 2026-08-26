@@ -84,6 +84,26 @@ type VerifyCancelSeqnoInput struct {
 	FinalizedChainTime uint32
 }
 
+// VerifyNativeSendAuthorityInput validates the chain-generic Agent Account
+// authority and exposure of one exact native-send BOC without assigning Gift,
+// payment, relay, or other business semantics to it.
+type VerifyNativeSendAuthorityInput struct {
+	ExactSignedBOC        []byte
+	Account               FinalizedAgentAccount
+	ExpectedGlobalID      int32
+	ExpectedSourceAccount string
+	ExpectedSequence      uint32
+	MaximumValidUntil     uint32
+	FeeReserveAtomic      uint64
+	// PermittedIncomingCreditAtomic is zero for normal verification. A relay
+	// admission may set it to the exact Agreement-bound gas sponsorship that
+	// must finalize before broadcast. Broadcast-time verification sets it back
+	// to zero and checks the real finalized balance.
+	PermittedIncomingCreditAtomic uint64
+	FinalizedChainTime            uint32
+	MinimumInclusionMargin        uint32
+}
+
 func ParseAgentCancelSeqnoBOC(boc []byte) (ParsedCancelSeqno, error) {
 	var out ParsedCancelSeqno
 	if len(boc) == 0 || len(boc) > MaxSignedBOCBytes {
@@ -262,34 +282,53 @@ func VerifyAgentNativeSend(input VerifyNativeSendInput) (ParsedNativeSend, error
 	if err := BindResponse(input.Request, input.Response); err != nil {
 		return zero, err
 	}
-	parsed, err := ParseAgentNativeSendBOC(input.ExactSignedBOC)
+	parsed, err := VerifyAgentNativeSendAuthority(VerifyNativeSendAuthorityInput{ExactSignedBOC: input.ExactSignedBOC,
+		Account: input.Account, ExpectedGlobalID: input.Request.GlobalID, ExpectedSourceAccount: input.Request.SenderAgentAccount,
+		ExpectedSequence: input.Account.Seqno, MaximumValidUntil: input.Response.ResponseNotAfter,
+		FeeReserveAtomic: input.FeeReserveAtomic, FinalizedChainTime: input.FinalizedChainTime,
+		MinimumInclusionMargin: input.MinimumInclusionMargin})
 	if err != nil {
 		return zero, err
 	}
 	if input.ExpectedSignedGiftID == "" || parsed.SignedGiftID != input.ExpectedSignedGiftID {
 		return zero, errors.New("SignedGiftID mismatch")
 	}
-	account := input.Account
-	if !account.Active || account.CodeHash != AgentAccountCodeHash || account.TVMVersion < MinimumAgentAccountTVMVersion || account.Address != input.Request.SenderAgentAccount || parsed.SenderAgentAccount != account.Address || account.GlobalID != input.Request.GlobalID || parsed.GlobalID != account.GlobalID || account.DefaultTaskTimeoutSecs == 0 || account.MaxPerTxAtomic > MaxAgentAccountActionAtomic {
-		return zero, errors.New("finalized Agent Account identity or network mismatch")
-	}
-	if len(account.ControllerPublicKey) != ed25519.PublicKeySize || parsed.ControllerEpoch != account.ControllerEpoch || parsed.Seqno != account.Seqno {
-		return zero, errors.New("controller or finalized seqno mismatch")
-	}
-	if parsed.ValidUntil > input.Request.RequestedValidUntil || parsed.ValidUntil > input.Response.ResponseNotAfter || parsed.ValidUntil <= input.FinalizedChainTime || parsed.ValidUntil-input.FinalizedChainTime < input.MinimumInclusionMargin {
+	if parsed.ValidUntil > input.Request.RequestedValidUntil {
 		return zero, errors.New("signed validity is outside the authorized finalized-time bounds")
-	}
-	if account.DefaultTaskTimeoutSecs < uint64(parsed.ValidUntil-input.FinalizedChainTime) {
-		return zero, errors.New("signed validity exceeds the Agent Account on-chain timeout")
 	}
 	wantAmount, _ := ParseAmount(input.Request.AmountAtomic)
 	if parsed.AmountAtomic != wantAmount || parsed.DestinationAddress != input.Response.DestinationAddress {
 		return zero, errors.New("native send destination or amount substitution")
 	}
+	return parsed, nil
+}
+
+func VerifyAgentNativeSendAuthority(input VerifyNativeSendAuthorityInput) (ParsedNativeSend, error) {
+	var zero ParsedNativeSend
+	parsed, err := ParseAgentNativeSendBOC(input.ExactSignedBOC)
+	if err != nil {
+		return zero, err
+	}
+	account := input.Account
+	if !account.Active || account.CodeHash != AgentAccountCodeHash || account.TVMVersion < MinimumAgentAccountTVMVersion ||
+		account.Address != input.ExpectedSourceAccount || parsed.SenderAgentAccount != account.Address ||
+		account.GlobalID != input.ExpectedGlobalID || parsed.GlobalID != account.GlobalID || account.DefaultTaskTimeoutSecs == 0 ||
+		account.MaxPerTxAtomic > MaxAgentAccountActionAtomic || len(account.ControllerPublicKey) != ed25519.PublicKeySize ||
+		parsed.ControllerEpoch != account.ControllerEpoch || parsed.Seqno != input.ExpectedSequence || account.Seqno != input.ExpectedSequence ||
+		parsed.ValidUntil > input.MaximumValidUntil || parsed.ValidUntil <= input.FinalizedChainTime ||
+		parsed.ValidUntil-input.FinalizedChainTime < input.MinimumInclusionMargin ||
+		account.DefaultTaskTimeoutSecs < uint64(parsed.ValidUntil-input.FinalizedChainTime) {
+		return zero, errors.New("native send conflicts with finalized Agent Account authority")
+	}
 	if parsed.AmountAtomic > account.MaxPerTxAtomic || parsed.AmountAtomic > account.DailyRemainingAtomic {
 		return zero, errors.New("native send exceeds finalized Agent Account policy")
 	}
-	if input.FeeReserveAtomic > math.MaxUint64-parsed.AmountAtomic || account.BalanceAtomic < parsed.AmountAtomic+input.FeeReserveAtomic {
+	if input.FeeReserveAtomic > math.MaxUint64-parsed.AmountAtomic {
+		return zero, errors.New("native send amount plus fee reserve overflows")
+	}
+	requiredBalance := parsed.AmountAtomic + input.FeeReserveAtomic
+	if input.PermittedIncomingCreditAtomic > math.MaxUint64-account.BalanceAtomic ||
+		account.BalanceAtomic+input.PermittedIncomingCreditAtomic < requiredBalance {
 		return zero, errors.New("insufficient finalized balance plus fee reserve")
 	}
 	bindingHash, err := controllerBindingHash(account.Address, parsed.GlobalID, parsed.PayloadHash)

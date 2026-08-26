@@ -18,6 +18,46 @@ func (r fixedFenceResolver) AuthorizeFenceKey(_ string, key ed25519.PublicKey, _
 	return nil
 }
 
+type fixedCurrentFenceResolver struct {
+	fixedFenceResolver
+	current WriterFenceBody
+	err     error
+}
+
+func (r fixedCurrentFenceResolver) ConfirmCurrentWriterFence(fence WriterFence, _ time.Time) error {
+	if r.err != nil {
+		return r.err
+	}
+	if fence.Body.OwnerID != r.current.OwnerID || fence.Body.AgentID != r.current.AgentID ||
+		fence.Body.InstanceID != r.current.InstanceID || fence.Body.LeaseID != r.current.LeaseID ||
+		fence.Body.WriterGeneration != r.current.WriterGeneration || fence.Body.AuthorityID != r.current.AuthorityID {
+		return errors.New("writer generation was superseded")
+	}
+	return nil
+}
+
+func TestConfirmCurrentWriterFenceFailsClosedAfterTakeover(t *testing.T) {
+	now := time.Unix(2_000_000_000, 0).UTC()
+	old := WriterFence{Body: WriterFenceBody{OwnerID: "owner:test", AgentID: "agent:test", InstanceID: "instance:old",
+		LeaseID: "lease:old", WriterGeneration: 7, AuthorityID: "authority:test", ExpiresAtUnix: uint64(now.Add(time.Hour).Unix())}}
+	current := old.Body
+	current.InstanceID = "instance:new"
+	current.LeaseID = "lease:new"
+	current.WriterGeneration++
+	resolver := fixedCurrentFenceResolver{current: current}
+	if err := ConfirmCurrentWriterFence(old, resolver, now); err == nil {
+		t.Fatal("unexpired but superseded writer fence was accepted")
+	}
+	if err := ConfirmCurrentWriterFence(old, nil, now); err == nil {
+		t.Fatal("missing current-writer authority was accepted")
+	}
+	currentFence := old
+	currentFence.Body = current
+	if err := ConfirmCurrentWriterFence(currentFence, resolver, now); err != nil {
+		t.Fatalf("current writer fence was rejected: %v", err)
+	}
+}
+
 func TestWriterFenceAndAuthorizedAction(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -45,6 +85,13 @@ func TestWriterFenceAndAuthorizedAction(t *testing.T) {
 	}
 	if err := VerifyAuthorizedAction(action, fields, request, fence, fixedFenceResolver{key: publicKey}, now); err != nil {
 		t.Fatal(err)
+	}
+	wrongPrincipalFields := map[string]SemanticValue{"owner_id": ID("owner:other"), "agent_id": ID("agent:test"),
+		"agreement_body_digest": Digest32("sha256:" + strings.Repeat("1", 64)),
+		"recipient_set_digest":  Digest32("sha256:" + strings.Repeat("2", 64))}
+	if _, err := BuildAuthorizedAction("owner:test", "agent:test", "agreement.propose", wrongPrincipalFields, request, fence, 7,
+		"sha256:"+strings.Repeat("3", 64), "", "none", uint64(now.Add(30*time.Second).Unix())); err == nil {
+		t.Fatal("semantic owner different from AuthorizedAction owner was accepted")
 	}
 	mutated := append([]byte(nil), request...)
 	mutated[0] = 'C'

@@ -156,3 +156,14 @@ func TestClientStrictlyDecodesResult(t *testing.T) {
 		t.Fatal("ambiguous JSON-RPC result accepted")
 	}
 }
+
+func TestClientDoesNotUseAmbientProxy(t *testing.T) {
+	client, err := NewClient("https://chain.example.invalid", time.Second, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok || transport.Proxy != nil {
+		t.Fatal("owner-pinned chain RPC client permits ambient proxy redirection")
+	}
+}

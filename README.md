@@ -21,6 +21,15 @@ The normative product and protocol design lives in
   digest-addressed manifests; all listed state is freshly resolved from TOS.
 - `pkg/chainactionpublisher` — hardened `tosctl` transport for exact signed TVM
   message cells. It pays relay fees but has no semantic authority.
+- `pkg/agentrelay` — canonical gas-sponsorship and exact-transaction relay
+  profiles, signed quotes, Agreement bindings, recovery state, and the
+  provider service boundary. It preserves the underlying economic action ID
+  across provider failover and never exposes a transaction signing key. The
+  service mode is independent from the signed assurance level
+  (`trusted-local`, `authorized-single-provider`, or
+  `autonomous-decentralized`); a deployment certification is not a wire-level
+  prerequisite, while network binding, idempotency, spend caps, and ambiguous
+  write handling remain mandatory at every level.
 - `pkg/servicerpc` and `cmd/tos-service-rpc` — private authenticated Connect service
   used by the public TOS Service Gateway.
 

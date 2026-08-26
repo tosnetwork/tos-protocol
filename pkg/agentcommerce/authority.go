@@ -34,6 +34,43 @@ type FenceAuthorityResolver interface {
 	AuthorizeFenceKey(authorityID string, publicKey ed25519.PublicKey, at time.Time) error
 }
 
+// CurrentWriterFenceResolver adds a live, fail-closed lease check to the
+// cryptographic FenceAuthorityResolver contract. Signature/key authorization
+// proves that a fence was issued by an authority; it does not prove that the
+// same lease and generation are still the authority's current writer after a
+// takeover.
+//
+// Implementations must resolve currentness from the linearizable writer
+// authority for the fence's owner/Agent and compare the complete lease
+// identity, including InstanceID, LeaseID, WriterGeneration and AuthorityID.
+// An unavailable, ambiguous, rolled-back, superseded, or expired authority
+// view must return an error. Cached positive results must not outlive the
+// authority's stated lease/currentness bound.
+//
+// This interface is intentionally separate from FenceAuthorityResolver so
+// existing read-only and non-relay signature verification callers do not gain
+// a new operational dependency.
+type CurrentWriterFenceResolver interface {
+	FenceAuthorityResolver
+	ConfirmCurrentWriterFence(fence WriterFence, at time.Time) error
+}
+
+// ConfirmCurrentWriterFence invokes the live writer-authority check and fails
+// closed when no currentness resolver is configured.
+func ConfirmCurrentWriterFence(fence WriterFence, resolver CurrentWriterFenceResolver, at time.Time) error {
+	if resolver == nil {
+		return errors.New("current writer fence resolver is unavailable")
+	}
+	at = at.UTC()
+	if !at.Before(time.Unix(int64(fence.Body.ExpiresAtUnix), 0).UTC()) {
+		return errors.New("current writer fence is expired")
+	}
+	if err := resolver.ConfirmCurrentWriterFence(fence, at); err != nil {
+		return fmt.Errorf("writer fence is not current: %w", err)
+	}
+	return nil
+}
+
 type AuthorizedAction struct {
 	SchemaVersion      uint16 `json:"schema_version"`
 	OwnerID            string `json:"owner_id"`
@@ -110,11 +147,20 @@ func SignWriterFence(body WriterFenceBody, privateKey ed25519.PrivateKey) (Write
 }
 
 func VerifyWriterFence(fence WriterFence, resolver FenceAuthorityResolver, now time.Time, actionKind string) error {
+	return verifyWriterFenceAtAuthorityTime(fence, resolver, now, now, actionKind)
+}
+
+func verifyWriterFenceAtAuthorityTime(fence WriterFence, resolver FenceAuthorityResolver,
+	validityAt, authorityAt time.Time, actionKind string) error {
 	if err := validateWriterFenceBody(fence.Body); err != nil {
 		return err
 	}
-	if resolver == nil || !now.UTC().Before(time.Unix(int64(fence.Body.ExpiresAtUnix), 0).UTC()) ||
-		now.UTC().Before(time.Unix(int64(fence.Body.IssuedAtUnix), 0).UTC().Add(-MaxIntentClockSkew)) ||
+	issuedAt := time.Unix(int64(fence.Body.IssuedAtUnix), 0).UTC()
+	expiresAt := time.Unix(int64(fence.Body.ExpiresAtUnix), 0).UTC()
+	validityAt = validityAt.UTC()
+	authorityAt = authorityAt.UTC()
+	if resolver == nil || !validityAt.Before(expiresAt) || validityAt.Before(issuedAt.Add(-MaxIntentClockSkew)) ||
+		authorityAt.Before(issuedAt.Add(-MaxIntentClockSkew)) || !authorityAt.Before(expiresAt) ||
 		!containsSorted(fence.Body.Scope, actionKind) {
 		return errors.New("writer fence is expired, premature, or out of scope")
 	}
@@ -122,7 +168,7 @@ func VerifyWriterFence(fence WriterFence, resolver FenceAuthorityResolver, now t
 	if err != nil {
 		return err
 	}
-	if err := resolver.AuthorizeFenceKey(fence.Body.AuthorityID, publicKey, now); err != nil {
+	if err := resolver.AuthorizeFenceKey(fence.Body.AuthorityID, publicKey, authorityAt); err != nil {
 		return err
 	}
 	proof, err := parseEd25519Signature(fence.Proof)
@@ -143,9 +189,23 @@ func WriterFenceDigest(fence WriterFence) (string, error) {
 	return codec.Digest("tos.writer-fence-envelope.v1", fence)
 }
 
+// AuthorizedActionDigest commits the complete signed authorization envelope.
+// It is used by downstream admission receipts so replacing a policy, mandate,
+// approval, writer generation, authority key, or proof cannot preserve an
+// already-issued side-effect admission.
+func AuthorizedActionDigest(action AuthorizedAction) (string, error) {
+	if err := validateAuthorizedActionShape(action); err != nil || action.AuthorityPublicKey == "" {
+		return "", errors.New("authorized action envelope is invalid")
+	}
+	return codec.Digest("tos.authorized-action-envelope.v1", action)
+}
+
 func BuildAuthorizedAction(ownerID, agentID, actionKind string, semanticFields map[string]SemanticValue,
 	canonicalRequest []byte, fence WriterFence, policyRevision uint64, mandateDigest, approvalDigest,
 	expectedPriorState string, expiresAt uint64) (AuthorizedAction, error) {
+	if err := validateSemanticActionPrincipals(ownerID, agentID, semanticFields); err != nil {
+		return AuthorizedAction{}, err
+	}
 	stableID, _, err := DeriveStableActionID(actionKind, semanticFields)
 	if err != nil {
 		return AuthorizedAction{}, err
@@ -188,21 +248,35 @@ func SignAuthorizedAction(action AuthorizedAction, privateKey ed25519.PrivateKey
 
 func VerifyAuthorizedAction(action AuthorizedAction, semanticFields map[string]SemanticValue, canonicalRequest []byte,
 	fence WriterFence, resolver FenceAuthorityResolver, now time.Time) error {
+	return VerifyAuthorizedActionAtAuthorityTime(action, semanticFields, canonicalRequest, fence, resolver, now, now)
+}
+
+// VerifyAuthorizedActionAtAuthorityTime keeps all signed validity windows live
+// at validityAt while resolving the authority key at authorityAt. A downstream
+// sink uses the authenticated side-effect admission receipt's issuance instant
+// as authorityAt, so an already-issued action can drain after a legitimate key
+// rotation without reviving an expired action or writer lease.
+func VerifyAuthorizedActionAtAuthorityTime(action AuthorizedAction, semanticFields map[string]SemanticValue,
+	canonicalRequest []byte, fence WriterFence, resolver FenceAuthorityResolver,
+	validityAt, authorityAt time.Time) error {
 	if err := validateAuthorizedActionShape(action); err != nil {
 		return err
 	}
+	if err := validateSemanticActionPrincipals(action.OwnerID, action.AgentID, semanticFields); err != nil {
+		return err
+	}
 	if action.OwnerID != fence.Body.OwnerID || action.AgentID != fence.Body.AgentID || action.WriterGeneration != fence.Body.WriterGeneration ||
-		action.ExpiresAtUnix > fence.Body.ExpiresAtUnix || !now.UTC().Before(time.Unix(int64(action.ExpiresAtUnix), 0).UTC()) {
+		action.ExpiresAtUnix > fence.Body.ExpiresAtUnix || !validityAt.UTC().Before(time.Unix(int64(action.ExpiresAtUnix), 0).UTC()) {
 		return errors.New("authorized action does not match the current writer fence")
 	}
-	if err := VerifyWriterFence(fence, resolver, now, action.ActionKind); err != nil {
+	if err := verifyWriterFenceAtAuthorityTime(fence, resolver, validityAt, authorityAt, action.ActionKind); err != nil {
 		return err
 	}
 	if action.AuthorityID != fence.Body.AuthorityID || action.AuthorityPublicKey != fence.PublicKey {
 		return errors.New("authorized action authority differs from the writer fence")
 	}
 	authorityKey, err := parseEd25519PublicKey(action.AuthorityPublicKey)
-	if err != nil || resolver.AuthorizeFenceKey(action.AuthorityID, authorityKey, now.UTC()) != nil {
+	if err != nil || resolver.AuthorizeFenceKey(action.AuthorityID, authorityKey, authorityAt.UTC()) != nil {
 		return errors.New("authorized action authority key is not authorized")
 	}
 	authorizationProof, err := parseEd25519Signature(action.AuthorizationProof)
@@ -221,6 +295,16 @@ func VerifyAuthorizedAction(action AuthorizedAction, semanticFields map[string]S
 	requestDigest, err := ExactRequestDigest(canonicalRequest)
 	if err != nil || requestDigest != action.ExactRequestDigest {
 		return errors.New("authorized action request digest mismatch")
+	}
+	return nil
+}
+
+func validateSemanticActionPrincipals(ownerID, agentID string, fields map[string]SemanticValue) error {
+	owner, ownerFound := fields["owner_id"]
+	agent, agentFound := fields["agent_id"]
+	if !ownerFound || !agentFound || owner.typeOf != SemanticID || agent.typeOf != SemanticID ||
+		string(owner.bytes) != ownerID || string(agent.bytes) != agentID {
+		return errors.New("semantic action principals differ from the authorized action")
 	}
 	return nil
 }

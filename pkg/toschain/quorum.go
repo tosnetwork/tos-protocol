@@ -58,10 +58,17 @@ func (a *Adapter) consensus(ctx context.Context) (consensusObservation, []*rpcNo
 	if err != nil {
 		return consensusObservation{}, nil, fmt.Errorf("resolve TOS consensus quorum: %w", err)
 	}
-	return consensusObservation{
+	observation := consensusObservation{
 		seqno:      result.ConsensusBlock,
 		observedAt: time.Unix(result.LastBlockUtime, 0).UTC(),
-	}, nodes, nil
+	}
+	// Every caller of consensus consumes this position for authorization,
+	// finality, expiry, or balance decisions. A readiness-only check at startup
+	// is insufficient because endpoint clocks and liveness can change later.
+	if err := a.validateObservationTime(observation, a.currentTime()); err != nil {
+		return consensusObservation{}, nil, err
+	}
+	return observation, nodes, nil
 }
 
 func quorumRead[T any](

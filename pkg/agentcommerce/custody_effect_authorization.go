@@ -21,30 +21,31 @@ var custodyNoStateInit = "sha256:" + strings.Repeat("0", 64)
 // without granting custody permission to interpret chat, Intent, Agreement or
 // model output. BodyHash and StateInitHashOrZero commit the exact TVM cells.
 type CustodyEffectAuthorization struct {
-	SchemaVersion        uint16 `json:"schema_version"`
-	AuthorityID          string `json:"authority_id"`
-	OwnerID              string `json:"owner_id"`
-	AgentID              string `json:"agent_id"`
-	SourceAccount        string `json:"source_account"`
-	NetworkID            string `json:"network_id"`
-	NetworkGlobalID      int32  `json:"network_global_id"`
-	ActionKind           string `json:"action_kind"`
-	StableActionID       string `json:"stable_action_id"`
-	ExactRequestDigest   string `json:"exact_request_digest"`
-	WriterGeneration     uint64 `json:"writer_generation"`
-	WriterFenceDigest    string `json:"writer_fence_digest"`
-	PolicyRevision       uint64 `json:"policy_revision"`
-	MandateDigest        string `json:"mandate_digest"`
-	ApprovalDigestOrZero string `json:"approval_digest_or_zero"`
-	AgreementBodyDigest  string `json:"agreement_body_digest"`
-	ObligationID         string `json:"obligation_id"`
-	Destination          string `json:"destination"`
-	AmountNanoTOS        uint64 `json:"amount_nanotos"`
-	BodyHash             string `json:"body_hash"`
-	StateInitHashOrZero  string `json:"state_init_hash_or_zero"`
-	ExpiresAtUnix        uint64 `json:"expires_at_unix"`
-	PublicKey            string `json:"public_key"`
-	Proof                string `json:"proof"`
+	SchemaVersion        uint16                `json:"schema_version"`
+	AuthorityID          string                `json:"authority_id"`
+	OwnerID              string                `json:"owner_id"`
+	AgentID              string                `json:"agent_id"`
+	SourceAccount        string                `json:"source_account"`
+	NetworkID            string                `json:"network_id"`
+	NetworkGlobalID      int32                 `json:"network_global_id"`
+	NetworkDomain        *CustodyNetworkDomain `json:"network_domain,omitempty"`
+	ActionKind           string                `json:"action_kind"`
+	StableActionID       string                `json:"stable_action_id"`
+	ExactRequestDigest   string                `json:"exact_request_digest"`
+	WriterGeneration     uint64                `json:"writer_generation"`
+	WriterFenceDigest    string                `json:"writer_fence_digest"`
+	PolicyRevision       uint64                `json:"policy_revision"`
+	MandateDigest        string                `json:"mandate_digest"`
+	ApprovalDigestOrZero string                `json:"approval_digest_or_zero"`
+	AgreementBodyDigest  string                `json:"agreement_body_digest"`
+	ObligationID         string                `json:"obligation_id"`
+	Destination          string                `json:"destination"`
+	AmountNanoTOS        uint64                `json:"amount_nanotos"`
+	BodyHash             string                `json:"body_hash"`
+	StateInitHashOrZero  string                `json:"state_init_hash_or_zero"`
+	ExpiresAtUnix        uint64                `json:"expires_at_unix"`
+	PublicKey            string                `json:"public_key"`
+	Proof                string                `json:"proof"`
 }
 
 func SignCustodyEffectAuthorization(body CustodyEffectAuthorization, privateKey ed25519.PrivateKey) (CustodyEffectAuthorization, error) {
@@ -91,15 +92,26 @@ func VerifyCustodyEffectAuthorization(value CustodyEffectAuthorization, resolver
 	return nil
 }
 
+// VerifyRelayCustodyEffectAuthorization rejects legacy V1 at every production
+// relay/escrow effect boundary. V2 binds the exact genesis and target workchain.
+func VerifyRelayCustodyEffectAuthorization(value CustodyEffectAuthorization,
+	resolver CustodyAuthorityResolver, now time.Time) error {
+	if value.SchemaVersion != 2 || value.NetworkDomain == nil {
+		return errors.New("relay custody effect authorization requires schema v2 and a full network domain")
+	}
+	return VerifyCustodyEffectAuthorization(value, resolver, now)
+}
+
 func CustodyEffectAuthorizationPreimage(value CustodyEffectAuthorization) ([]byte, error) {
 	value.PublicKey, value.Proof = "", ""
 	return custodyEffectPreimage(value)
 }
 
 func custodyEffectPreimage(body CustodyEffectAuthorization) ([]byte, error) {
-	if body.SchemaVersion != 1 || !boundedIdentifier(body.AuthorityID, 256) || !boundedIdentifier(body.OwnerID, 256) ||
+	if (body.SchemaVersion != 1 && body.SchemaVersion != 2) || !boundedIdentifier(body.AuthorityID, 256) || !boundedIdentifier(body.OwnerID, 256) ||
 		!boundedIdentifier(body.AgentID, 256) || !boundedIdentifier(body.SourceAccount, 256) || !boundedIdentifier(body.NetworkID, 128) ||
-		body.NetworkGlobalID == 0 || !canonicalLowerToken(body.ActionKind) || !canonicalDigestPattern.MatchString(body.StableActionID) ||
+		validateCustodyAuthorizationNetwork(body.SchemaVersion, body.NetworkID, body.NetworkGlobalID, body.NetworkDomain) != nil ||
+		!canonicalLowerToken(body.ActionKind) || !canonicalDigestPattern.MatchString(body.StableActionID) ||
 		!canonicalDigestPattern.MatchString(body.ExactRequestDigest) || body.WriterGeneration == 0 ||
 		!canonicalDigestPattern.MatchString(body.WriterFenceDigest) || body.PolicyRevision == 0 ||
 		!canonicalDigestPattern.MatchString(body.MandateDigest) || !canonicalDigestOrZero(body.ApprovalDigestOrZero) ||
@@ -115,6 +127,9 @@ func custodyEffectPreimage(body CustodyEffectAuthorization) ([]byte, error) {
 		writeLP32String(&output, value)
 	}
 	_ = binary.Write(&output, binary.BigEndian, body.NetworkGlobalID)
+	if body.SchemaVersion == 2 {
+		writeCustodyNetworkDomain(&output, *body.NetworkDomain)
+	}
 	for _, value := range []string{body.ActionKind, body.StableActionID, body.ExactRequestDigest} {
 		writeLP32String(&output, value)
 	}

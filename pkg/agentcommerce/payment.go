@@ -8,23 +8,27 @@ import (
 )
 
 type AgreementPaymentRequest struct {
-	SchemaVersion         uint16          `json:"schema_version"`
-	OwnerID               string          `json:"owner_id"`
-	AgentID               string          `json:"agent_id"`
-	AgreementBodyDigest   string          `json:"agreement_body_digest"`
-	AgreementObligationID string          `json:"agreement_obligation_id"`
-	ObligationInstanceID  string          `json:"obligation_instance_id"`
-	PayerAgentID          string          `json:"payer_agent_id"`
-	PayeeAgentID          string          `json:"payee_agent_id"`
-	NetworkID             string          `json:"network_id"`
-	Amount                AgreementAmount `json:"amount"`
-	Destination           []byte          `json:"destination"`
-	SettlementAdapterURI  string          `json:"settlement_adapter_uri"`
-	SemanticActionKind    string          `json:"semantic_action_kind,omitempty"`
-	AdapterProfileDigest  string          `json:"adapter_profile_digest,omitempty"`
-	ExternalSystemID      string          `json:"external_system_id,omitempty"`
-	StableActionID        string          `json:"stable_action_id"`
-	ExpiresAtUnix         uint64          `json:"expires_at_unix"`
+	SchemaVersion         uint16 `json:"schema_version"`
+	OwnerID               string `json:"owner_id"`
+	AgentID               string `json:"agent_id"`
+	AgreementBodyDigest   string `json:"agreement_body_digest"`
+	AgreementObligationID string `json:"agreement_obligation_id"`
+	ObligationInstanceID  string `json:"obligation_instance_id"`
+	PayerAgentID          string `json:"payer_agent_id"`
+	PayeeAgentID          string `json:"payee_agent_id"`
+	NetworkID             string `json:"network_id"`
+	// NetworkDomainDigest is optional for legacy/non-chain Adapters, but any
+	// bearer-executable relay profile MUST require it. It commits the complete
+	// owner-pinned chain domain rather than a reusable display NetworkID.
+	NetworkDomainDigest  string          `json:"network_domain_digest,omitempty"`
+	Amount               AgreementAmount `json:"amount"`
+	Destination          []byte          `json:"destination"`
+	SettlementAdapterURI string          `json:"settlement_adapter_uri"`
+	SemanticActionKind   string          `json:"semantic_action_kind,omitempty"`
+	AdapterProfileDigest string          `json:"adapter_profile_digest,omitempty"`
+	ExternalSystemID     string          `json:"external_system_id,omitempty"`
+	StableActionID       string          `json:"stable_action_id"`
+	ExpiresAtUnix        uint64          `json:"expires_at_unix"`
 }
 
 type AgreementPaymentEvidence struct {
@@ -44,15 +48,31 @@ type PaymentEvidenceVerifier interface {
 
 func BuildAgreementPaymentRequest(ownerID, agentID, networkID string, destination []byte,
 	obligation SettlementObligation) (AgreementPaymentRequest, error) {
-	return BuildAgreementPaymentRequestAmount(ownerID, agentID, networkID, destination, obligation, obligation.Amount)
+	return buildAgreementPaymentRequestAmount(ownerID, agentID, networkID, "", destination, obligation, obligation.Amount)
+}
+
+// BuildDomainBoundAgreementPaymentRequest creates AgreementPaymentRequestV3,
+// the only direct-payment
+// request eligible for bearer-executable transaction relay. networkDomainDigest
+// must identify the complete chain domain, including genesis coordinates.
+func BuildDomainBoundAgreementPaymentRequest(ownerID, agentID, networkID, networkDomainDigest string,
+	destination []byte, obligation SettlementObligation) (AgreementPaymentRequest, error) {
+	return buildAgreementPaymentRequestAmount(ownerID, agentID, networkID, networkDomainDigest,
+		destination, obligation, obligation.Amount)
 }
 
 // BuildAgreementPaymentRequestAmount supports an exact partial payment while
 // preserving the obligation's asset identity and never exceeding its amount.
 func BuildAgreementPaymentRequestAmount(ownerID, agentID, networkID string, destination []byte,
 	obligation SettlementObligation, requested AgreementAmount) (AgreementPaymentRequest, error) {
+	return buildAgreementPaymentRequestAmount(ownerID, agentID, networkID, "", destination, obligation, requested)
+}
+
+func buildAgreementPaymentRequestAmount(ownerID, agentID, networkID, networkDomainDigest string,
+	destination []byte, obligation SettlementObligation, requested AgreementAmount) (AgreementPaymentRequest, error) {
 	if err := ValidateSettlementObligation(obligation); err != nil || !boundedIdentifier(ownerID, 256) || !boundedIdentifier(agentID, 256) ||
 		!boundedIdentifier(networkID, 128) || len(destination) == 0 || len(destination) > 64<<10 || obligation.Amount.AmountAtomic == "" ||
+		networkDomainDigest != "" && !canonicalDigestPattern.MatchString(networkDomainDigest) ||
 		validateAgreementAmount(requested) != nil || requested.AssetNamespace != obligation.Amount.AssetNamespace ||
 		requested.AssetIdentifier != obligation.Amount.AssetIdentifier || requested.Unit != obligation.Amount.Unit || requested.AmountAtomic == "" ||
 		compareAmounts(requested, obligation.Amount) > 0 || amountIsZero(requested) {
@@ -66,11 +86,8 @@ func BuildAgreementPaymentRequestAmount(ownerID, agentID, networkID string, dest
 	if err != nil {
 		return AgreementPaymentRequest{}, err
 	}
-	destinationDigest, err := codec.Digest("tos.agreement-payment-destination.v1", struct {
-		NetworkID   string `json:"network_id"`
-		AdapterURI  string `json:"adapter_uri"`
-		Destination []byte `json:"destination"`
-	}{networkID, obligation.SettlementAdapterURI, destination})
+	destinationDigest, err := agreementPaymentDestinationDigest(networkID, networkDomainDigest,
+		obligation.SettlementAdapterURI, destination)
 	if err != nil {
 		return AgreementPaymentRequest{}, err
 	}
@@ -82,9 +99,14 @@ func BuildAgreementPaymentRequestAmount(ownerID, agentID, networkID string, dest
 	if err != nil {
 		return AgreementPaymentRequest{}, err
 	}
-	request := AgreementPaymentRequest{SchemaVersion: 1, OwnerID: ownerID, AgentID: agentID, AgreementBodyDigest: obligation.AgreementBodyDigest,
+	schemaVersion := uint16(1)
+	if networkDomainDigest != "" {
+		schemaVersion = 3
+	}
+	request := AgreementPaymentRequest{SchemaVersion: schemaVersion, OwnerID: ownerID, AgentID: agentID, AgreementBodyDigest: obligation.AgreementBodyDigest,
 		AgreementObligationID: obligation.AgreementObligationID, ObligationInstanceID: obligation.ObligationInstanceID,
-		PayerAgentID: obligation.PayerAgentID, PayeeAgentID: obligation.PayeeAgentID, NetworkID: networkID, Amount: requested,
+		PayerAgentID: obligation.PayerAgentID, PayeeAgentID: obligation.PayeeAgentID, NetworkID: networkID,
+		NetworkDomainDigest: networkDomainDigest, Amount: requested,
 		Destination: append([]byte(nil), destination...), SettlementAdapterURI: obligation.SettlementAdapterURI,
 		StableActionID: actionID, ExpiresAtUnix: obligation.ExpiresAtUnix}
 	if request.ExpiresAtUnix == 0 {
@@ -142,17 +164,24 @@ func AgreementPaymentRequestDigest(request AgreementPaymentRequest) (string, err
 }
 
 func ValidateAgreementPaymentRequest(request AgreementPaymentRequest) error {
-	if (request.SchemaVersion != 1 && request.SchemaVersion != 2) || !boundedIdentifier(request.OwnerID, 256) || !boundedIdentifier(request.AgentID, 256) ||
+	if (request.SchemaVersion != 1 && request.SchemaVersion != 2 && request.SchemaVersion != 3) ||
+		!boundedIdentifier(request.OwnerID, 256) || !boundedIdentifier(request.AgentID, 256) ||
 		!canonicalDigestPattern.MatchString(request.AgreementBodyDigest) || !boundedIdentifier(request.AgreementObligationID, 128) ||
 		!canonicalDigestPattern.MatchString(request.ObligationInstanceID) || !boundedIdentifier(request.PayerAgentID, 256) ||
-		!boundedIdentifier(request.PayeeAgentID, 256) || !boundedIdentifier(request.NetworkID, 128) || validateAgreementAmount(request.Amount) != nil ||
+		!boundedIdentifier(request.PayeeAgentID, 256) || !boundedIdentifier(request.NetworkID, 128) ||
+		request.NetworkDomainDigest != "" && !canonicalDigestPattern.MatchString(request.NetworkDomainDigest) ||
+		validateAgreementAmount(request.Amount) != nil ||
 		request.Amount.AmountAtomic == "" || len(request.Destination) == 0 || len(request.Destination) > 64<<10 ||
 		!boundedIdentifier(request.SettlementAdapterURI, 256) || !canonicalDigestPattern.MatchString(request.StableActionID) || request.ExpiresAtUnix == 0 {
 		return errors.New("Agreement payment request is invalid")
 	}
-	if request.SchemaVersion == 1 && (request.SemanticActionKind != "" || request.AdapterProfileDigest != "" || request.ExternalSystemID != "") ||
+	if request.SchemaVersion == 1 && (request.NetworkDomainDigest != "" || request.SemanticActionKind != "" ||
+		request.AdapterProfileDigest != "" || request.ExternalSystemID != "") ||
 		request.SchemaVersion == 2 && (request.SemanticActionKind != "settlement.external" ||
-			!canonicalDigestPattern.MatchString(request.AdapterProfileDigest) || !boundedIdentifier(request.ExternalSystemID, 256)) {
+			!canonicalDigestPattern.MatchString(request.AdapterProfileDigest) || !boundedIdentifier(request.ExternalSystemID, 256) ||
+			request.NetworkDomainDigest != "") ||
+		request.SchemaVersion == 3 && (!canonicalDigestPattern.MatchString(request.NetworkDomainDigest) ||
+			request.SemanticActionKind != "" || request.AdapterProfileDigest != "" || request.ExternalSystemID != "") {
 		return errors.New("Agreement payment action profile is invalid")
 	}
 	assetDigest, _ := codec.Digest("tos.agreement-payment-asset.v1", struct {
@@ -160,17 +189,14 @@ func ValidateAgreementPaymentRequest(request AgreementPaymentRequest) error {
 		Identifier string `json:"identifier"`
 		Unit       string `json:"unit"`
 	}{request.Amount.AssetNamespace, request.Amount.AssetIdentifier, request.Amount.Unit})
-	destinationDigest, _ := codec.Digest("tos.agreement-payment-destination.v1", struct {
-		NetworkID   string `json:"network_id"`
-		AdapterURI  string `json:"adapter_uri"`
-		Destination []byte `json:"destination"`
-	}{request.NetworkID, request.SettlementAdapterURI, request.Destination})
+	destinationDigest, _ := agreementPaymentDestinationDigest(request.NetworkID, request.NetworkDomainDigest,
+		request.SettlementAdapterURI, request.Destination)
 	fields := map[string]SemanticValue{"owner_id": ID(request.OwnerID), "agent_id": ID(request.AgentID),
 		"agreement_body_digest": Digest32(request.AgreementBodyDigest), "obligation_instance_id": Digest32(request.ObligationInstanceID),
 		"payer_id": ID(request.PayerAgentID), "payee_id": ID(request.PayeeAgentID), "asset_digest": Digest32(assetDigest),
 		"destination_digest": Digest32(destinationDigest)}
 	kind := "payment.direct"
-	if request.SchemaVersion == 1 {
+	if request.SchemaVersion == 1 || request.SchemaVersion == 3 {
 		fields["network_id"] = ID(request.NetworkID)
 		fields["amount_atomic"] = ID(request.Amount.AmountAtomic)
 	} else {
@@ -198,16 +224,13 @@ func PaymentAuthorizationMaterial(request AgreementPaymentRequest) ([]byte, map[
 		Identifier string `json:"identifier"`
 		Unit       string `json:"unit"`
 	}{request.Amount.AssetNamespace, request.Amount.AssetIdentifier, request.Amount.Unit})
-	destinationDigest, _ := codec.Digest("tos.agreement-payment-destination.v1", struct {
-		NetworkID   string `json:"network_id"`
-		AdapterURI  string `json:"adapter_uri"`
-		Destination []byte `json:"destination"`
-	}{request.NetworkID, request.SettlementAdapterURI, request.Destination})
+	destinationDigest, _ := agreementPaymentDestinationDigest(request.NetworkID, request.NetworkDomainDigest,
+		request.SettlementAdapterURI, request.Destination)
 	fields := map[string]SemanticValue{"owner_id": ID(request.OwnerID), "agent_id": ID(request.AgentID),
 		"agreement_body_digest": Digest32(request.AgreementBodyDigest), "obligation_instance_id": Digest32(request.ObligationInstanceID),
 		"payer_id": ID(request.PayerAgentID), "payee_id": ID(request.PayeeAgentID),
 		"asset_digest": Digest32(assetDigest), "destination_digest": Digest32(destinationDigest)}
-	if request.SchemaVersion == 1 {
+	if request.SchemaVersion == 1 || request.SchemaVersion == 3 {
 		fields["network_id"] = ID(request.NetworkID)
 		fields["amount_atomic"] = ID(request.Amount.AmountAtomic)
 	} else {
@@ -240,6 +263,24 @@ func paymentComponentDigests(networkID, adapterURI string, destination []byte,
 		Destination []byte `json:"destination"`
 	}{networkID, adapterURI, destination})
 	return assetDigest, amountDigest, destinationDigest, err
+}
+
+func agreementPaymentDestinationDigest(networkID, networkDomainDigest, adapterURI string,
+	destination []byte) (string, error) {
+	if networkDomainDigest == "" {
+		// Preserve the released legacy preimage for non-relay callers.
+		return codec.Digest("tos.agreement-payment-destination.v1", struct {
+			NetworkID   string `json:"network_id"`
+			AdapterURI  string `json:"adapter_uri"`
+			Destination []byte `json:"destination"`
+		}{networkID, adapterURI, destination})
+	}
+	return codec.Digest("tos.agreement-payment-destination.v1", struct {
+		NetworkID           string `json:"network_id"`
+		NetworkDomainDigest string `json:"network_domain_digest"`
+		AdapterURI          string `json:"adapter_uri"`
+		Destination         []byte `json:"destination"`
+	}{networkID, networkDomainDigest, adapterURI, destination})
 }
 
 func VerifyAgreementPaymentEvidence(request AgreementPaymentRequest, evidence AgreementPaymentEvidence,

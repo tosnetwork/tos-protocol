@@ -31,26 +31,57 @@ const (
 var networkPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 type Config struct {
-	Network          string
-	Endpoints        []string
-	Quorum           int
-	QueryTimeout     time.Duration
-	MaxResponseBytes int64
-	ReadinessMaxAge  time.Duration
+	Network string
+	// PinnedNetworkDomain is optional for legacy read adapters, but mandatory
+	// for any bearer-executable relay write. It prevents a display Network ID
+	// from selecting a chain with different genesis or execution coordinates.
+	PinnedNetworkDomain *PinnedNetworkDomain
+	Endpoints           []string
+	Quorum              int
+	QueryTimeout        time.Duration
+	MaxResponseBytes    int64
+	ReadinessMaxAge     time.Duration
+	// Now is an injectable clock used at every authorization/finality read.
+	// Production callers normally leave it nil and use the system UTC clock.
+	Now func() time.Time
+}
+
+// PinnedNetworkDomain is the owner-configured TOS chain identity. It mirrors
+// the relay profile without importing an application package into the common
+// chain adapter.
+type PinnedNetworkDomain struct {
+	NetworkID         string
+	GlobalID          int32
+	ZeroStateRootHash string
+	ZeroStateFileHash string
+	WorkchainID       int32
 }
 
 type rpcNode struct{ client *chain.Client }
 
 type Adapter struct {
 	network      string
+	pinnedDomain *PinnedNetworkDomain
+	endpoints    []string
 	nodes        []*rpcNode
 	quorum       int
+	queryTimeout time.Duration
+	maxBody      int64
 	readinessAge time.Duration
+	now          func() time.Time
 }
 
 func New(config Config) (*Adapter, error) {
 	if !networkPattern.MatchString(config.Network) {
 		return nil, errors.New("invalid TOS chain network")
+	}
+	var pinnedDomain *PinnedNetworkDomain
+	if config.PinnedNetworkDomain != nil {
+		if config.PinnedNetworkDomain.NetworkID != config.Network {
+			return nil, errors.New("pinned TOS network domain conflicts with the configured network")
+		}
+		copyDomain := *config.PinnedNetworkDomain
+		pinnedDomain = &copyDomain
 	}
 	if len(config.Endpoints) < 3 || len(config.Endpoints) > maxEndpoints {
 		return nil, errors.New("TOS chain endpoint count is outside bounds")
@@ -101,7 +132,21 @@ func New(config Config) (*Adapter, error) {
 		seenEndpoints[endpoint], seenAuthorities[authority] = struct{}{}, struct{}{}
 		nodes = append(nodes, &rpcNode{client: client})
 	}
-	return &Adapter{network: config.Network, nodes: nodes, quorum: config.Quorum, readinessAge: config.ReadinessMaxAge}, nil
+	clock := config.Now
+	if clock == nil {
+		clock = time.Now
+	}
+	return &Adapter{network: config.Network, pinnedDomain: pinnedDomain,
+		endpoints: append([]string(nil), config.Endpoints...), nodes: nodes, quorum: config.Quorum,
+		queryTimeout: config.QueryTimeout, maxBody: config.MaxResponseBytes,
+		readinessAge: config.ReadinessMaxAge, now: clock}, nil
+}
+
+func (a *Adapter) currentTime() time.Time {
+	if a != nil && a.now != nil {
+		return a.now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 func loopbackHost(host string) bool {
