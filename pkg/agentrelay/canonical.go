@@ -145,14 +145,64 @@ func RelayAbsenceProofBundleDigest(bundle []byte) (string, error) {
 	if len(bundle) == 0 || len(bundle) > MaxRelayProofBundleBytes {
 		return "", errors.New("relay absence proof bundle byte length is invalid")
 	}
+	// Decode the canonical map once before the typed projection so absence is
+	// distinguishable from an explicitly encoded null or empty array. Go slices
+	// alone collapse those wire states, but V1 uses field presence to bind the
+	// proof scope and forbids an inapplicable component field altogether.
+	var fields map[string]interface{}
+	if err := codec.Unmarshal(bundle, &fields); err != nil {
+		return "", err
+	}
 	var decoded RelayAbsenceProofBundleV1
 	if err := codec.Unmarshal(bundle, &decoded); err != nil {
+		return "", err
+	}
+	if err := validateRelayAbsenceProofBundleFieldPresence(fields, decoded.ProofScope); err != nil {
 		return "", err
 	}
 	if err := validateRelayAbsenceProofBundle(decoded); err != nil {
 		return "", err
 	}
 	return codec.DigestCanonical(RelayAbsenceProofBundleDomainV1, bundle)
+}
+
+func validateRelayAbsenceProofBundleFieldPresence(fields map[string]interface{}, scope RelayAbsenceProofScope) error {
+	presentNonemptyArray := func(name string) (bool, error) {
+		value, present := fields[name]
+		if !present {
+			return false, nil
+		}
+		items, ok := value.([]interface{})
+		if !ok || len(items) == 0 {
+			return false, errors.New("relay absence proof bundle component must be a non-empty array")
+		}
+		return true, nil
+	}
+	hasSponsorship, err := presentNonemptyArray("sponsorship_absence_observations")
+	if err != nil {
+		return err
+	}
+	hasTransaction, err := presentNonemptyArray("transaction_absence_observations")
+	if err != nil {
+		return err
+	}
+	switch scope {
+	case RelayAbsenceProofSponsorshipOnly:
+		if !hasSponsorship || hasTransaction {
+			return errors.New("sponsorship-only proof bundle has invalid component field presence")
+		}
+	case RelayAbsenceProofTransactionOnly:
+		if hasSponsorship || !hasTransaction {
+			return errors.New("transaction-only proof bundle has invalid component field presence")
+		}
+	case RelayAbsenceProofDual:
+		if !hasSponsorship || !hasTransaction {
+			return errors.New("dual proof bundle has invalid component field presence")
+		}
+	default:
+		return errors.New("relay absence proof bundle scope is unknown")
+	}
+	return nil
 }
 
 func RelaySponsorshipCreditObservationDigest(observation RelaySponsorshipCreditObservation) (string, error) {
@@ -714,8 +764,9 @@ func parsePublicKey(value string) (ed25519.PublicKey, error) {
 	if !strings.HasPrefix(value, "ed25519:") {
 		return nil, errors.New("relay public key scheme is invalid")
 	}
-	decoded, err := hex.DecodeString(strings.TrimPrefix(value, "ed25519:"))
-	if err != nil || len(decoded) != ed25519.PublicKeySize {
+	encoded := strings.TrimPrefix(value, "ed25519:")
+	decoded, err := hex.DecodeString(encoded)
+	if err != nil || len(decoded) != ed25519.PublicKeySize || hex.EncodeToString(decoded) != encoded {
 		return nil, errors.New("relay public key is invalid")
 	}
 	return ed25519.PublicKey(decoded), nil
@@ -725,8 +776,10 @@ func parseSignature(value string) ([]byte, error) {
 	if !strings.HasPrefix(value, "ed25519:") {
 		return nil, errors.New("relay signature scheme is invalid")
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, "ed25519:"))
-	if err != nil || len(decoded) != ed25519.SignatureSize {
+	encoded := strings.TrimPrefix(value, "ed25519:")
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(decoded) != ed25519.SignatureSize ||
+		base64.RawURLEncoding.EncodeToString(decoded) != encoded {
 		return nil, errors.New("relay signature is invalid")
 	}
 	return decoded, nil

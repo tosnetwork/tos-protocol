@@ -194,8 +194,9 @@ func parseHexEd25519Signature(value string) ([]byte, error) {
 	if len(value) != len(prefix)+ed25519.SignatureSize*2 || value[:len(prefix)] != prefix {
 		return nil, errors.New("Ed25519 proof is malformed")
 	}
-	decoded, err := hex.DecodeString(value[len(prefix):])
-	if err != nil || len(decoded) != ed25519.SignatureSize {
+	encoded := value[len(prefix):]
+	decoded, err := hex.DecodeString(encoded)
+	if err != nil || len(decoded) != ed25519.SignatureSize || hex.EncodeToString(decoded) != encoded {
 		return nil, errors.New("Ed25519 proof is malformed")
 	}
 	return decoded, nil

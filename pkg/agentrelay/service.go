@@ -229,13 +229,19 @@ type IndependentFinalityEvidenceSource interface {
 }
 
 type ProviderService struct {
-	Profile                        RelayServiceProfile
-	SigningKey                     ed25519.PrivateKey
-	AgentResolver                  AgentKeyResolver
-	FenceResolver                  agentcommerce.CurrentWriterFenceResolver
-	Inspector                      TransactionInspector
-	ActionBinder                   ActionTransactionBinder
-	AgreementVerifier              agentcommerce.AgreementEvidenceVerifier
+	Profile           RelayServiceProfile
+	SigningKey        ed25519.PrivateKey
+	AgentResolver     AgentKeyResolver
+	FenceResolver     agentcommerce.CurrentWriterFenceResolver
+	Inspector         TransactionInspector
+	ActionBinder      ActionTransactionBinder
+	AgreementVerifier agentcommerce.AgreementEvidenceVerifier
+	// AdmissionAuthority is the owner-side authoritative receipt registry.
+	// A locally valid signature is not enough for a first Provider admission:
+	// the exact receipt must still be the Authority's current persisted answer
+	// for this lookup. Already-admitted byte-identical retries drain exclusively
+	// from the Provider journal and deliberately do not depend on this service.
+	AdmissionAuthority             RelaySideEffectAdmissionAuthority
 	QuotePolicy                    QuotePolicy
 	Journal                        Journal
 	Sponsorship                    SponsorshipProcessor
@@ -471,6 +477,26 @@ func (service ProviderService) Submit(ctx context.Context, request RelayExecutio
 	}
 	if err := VerifyRelayRemainingValidity(request, now, initialStage); err != nil {
 		return Record{}, err
+	}
+	if !alreadyAdmitted {
+		if service.AdmissionAuthority == nil {
+			return Record{}, errors.New("relay side-effect admission authority is unavailable")
+		}
+		descriptor, descriptorErr := buildRelaySideEffectAdmissionDescriptorForRoute(request,
+			request.AdmissionReceipt.Body.AuthenticatedPrincipal, request.AdmissionReceipt.Body.RouteAttempt,
+			request.AdmissionReceipt.Body.PredecessorReceiptDigest)
+		if descriptorErr != nil {
+			return Record{}, descriptorErr
+		}
+		authoritative, resolveErr := service.AdmissionAuthority.ResolveRelaySideEffectAdmission(ctx,
+			descriptor.Lookup())
+		if resolveErr != nil {
+			return Record{}, errors.New("resolve authoritative relay side-effect admission: " + resolveErr.Error())
+		}
+		equal, equalErr := equalCanonicalRelayAdmissionReceipts(authoritative, request.AdmissionReceipt)
+		if equalErr != nil || !equal {
+			return Record{}, errors.New("authoritative relay side-effect admission conflicts with the submitted receipt")
+		}
 	}
 	record, created, err := service.Journal.Admit(request, now)
 	if err != nil {
@@ -765,6 +791,14 @@ func (service ProviderService) Resolve(ctx context.Context, stableActionID, exac
 	if err != nil {
 		return record, err
 	}
+	if (record.State == agentcommerce.ActionSubmitted || record.State == agentcommerce.ActionAccepted) &&
+		(resolved.State == agentcommerce.ActionRejected || resolved.State == agentcommerce.ActionConflict) {
+		// The first-write boundary was crossed before SUBMITTED was persisted.
+		// A later Adapter rejection cannot prove non-execution and must not release
+		// an obligation or collapse a combined action to sponsorship-only. Only
+		// exact success or typed, independently verified absence can terminalize it.
+		return record, errors.New("post-submit relay rejection is not proof of non-execution; outcome remains unresolved")
+	}
 	if pendingSponsorshipAbsence && resolved.State == agentcommerce.ActionTerminal &&
 		safeTerminalAbsenceOutcome(resolved.TerminalOutcome) {
 		aggregator, ok := service.Sponsorship.(CombinedRelayDualAbsenceResolver)
@@ -891,8 +925,7 @@ func (service ProviderService) Resolve(ctx context.Context, stableActionID, exac
 				record.ExecutionRequest().QuoteRequest.Body.RelayTerminalEvidenceClass,
 				record.SponsorshipTransactionEvidence)
 		} else if resolved.TerminalOutcome != OutcomeCorroboratedSuccess {
-			resolved.TerminalOutcome = sponsorshipOnlyOutcomeForEvidence(record.SponsorshipTransactionEvidence)
-			resolved.TransactionReference = record.SponsorshipTransferReference
+			return record, errors.New("combined post-submit relay result lacks success or typed transaction absence")
 		}
 	}
 	if resolved.State == agentcommerce.ActionTerminal && record.SponsorshipTransferReference == "" &&
@@ -1011,6 +1044,11 @@ func exactRelayAdmissionMatches(record Record, request RelayExecutionRequest) er
 	receiptDigest, err := RelaySideEffectAdmissionReceiptDigest(request.AdmissionReceipt)
 	if err != nil || receiptDigest != record.AdmissionReceiptDigest ||
 		request.QuoteRequest.Body.SignedTransactionDigest != record.SignedTransactionDigest {
+		return ErrRelayConflict
+	}
+	equal, err := equalCanonicalRelayAdmissionReceipts(record.ExecutionRequest().AdmissionReceipt,
+		request.AdmissionReceipt)
+	if err != nil || !equal {
 		return ErrRelayConflict
 	}
 	return nil

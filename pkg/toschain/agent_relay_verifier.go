@@ -411,7 +411,8 @@ func (verifier *TOSRelayFinalityVerifier) VerifyRelayFinality(ctx context.Contex
 	}
 	if localRelayOutcome == agentrelay.OutcomeCorroboratedSuccess {
 		if signed.Body.RelayTerminalEvidenceClass != agentrelay.RelayTerminalProviderCorroborated ||
-			signed.Body.RelayValidatorAuthenticatedPortableProof ||
+			signed.Body.RelayValidatorAuthenticatedPortableProof == nil ||
+			*signed.Body.RelayValidatorAuthenticatedPortableProof ||
 			observed.CheckpointSequence < signed.Body.RelayFinalizedCheckpointSequence {
 			return errors.New("client TOS quorum disagrees with the Provider relay success predicate")
 		}

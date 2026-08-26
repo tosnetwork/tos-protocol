@@ -567,8 +567,9 @@ func parseEd25519PublicKey(value string) (ed25519.PublicKey, error) {
 	if !strings.HasPrefix(value, "ed25519:") {
 		return nil, errors.New("public key scheme is invalid")
 	}
-	decoded, err := hex.DecodeString(strings.TrimPrefix(value, "ed25519:"))
-	if err != nil || len(decoded) != ed25519.PublicKeySize {
+	encoded := strings.TrimPrefix(value, "ed25519:")
+	decoded, err := hex.DecodeString(encoded)
+	if err != nil || len(decoded) != ed25519.PublicKeySize || hex.EncodeToString(decoded) != encoded {
 		return nil, errors.New("public key is invalid")
 	}
 	return ed25519.PublicKey(decoded), nil
@@ -578,8 +579,10 @@ func parseEd25519Signature(value string) ([]byte, error) {
 	if !strings.HasPrefix(value, "ed25519:") {
 		return nil, errors.New("signature scheme is invalid")
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, "ed25519:"))
-	if err != nil || len(decoded) != ed25519.SignatureSize {
+	encoded := strings.TrimPrefix(value, "ed25519:")
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(decoded) != ed25519.SignatureSize ||
+		base64.RawURLEncoding.EncodeToString(decoded) != encoded {
 		return nil, errors.New("signature is invalid")
 	}
 	return decoded, nil

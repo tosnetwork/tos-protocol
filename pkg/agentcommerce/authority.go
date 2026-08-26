@@ -186,6 +186,15 @@ func verifyWriterFenceAtAuthorityTime(fence WriterFence, resolver FenceAuthority
 }
 
 func WriterFenceDigest(fence WriterFence) (string, error) {
+	if err := validateWriterFenceBody(fence.Body); err != nil {
+		return "", err
+	}
+	if _, err := parseEd25519PublicKey(fence.PublicKey); err != nil {
+		return "", errors.New("writer fence public key encoding is invalid")
+	}
+	if _, err := parseEd25519Signature(fence.Proof); err != nil {
+		return "", errors.New("writer fence proof encoding is invalid")
+	}
 	return codec.Digest("tos.writer-fence-envelope.v1", fence)
 }
 

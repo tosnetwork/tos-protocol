@@ -671,6 +671,24 @@ func RelaySideEffectAdmissionReceiptDigest(receipt SignedRelaySideEffectAdmissio
 	return RelaySideEffectAdmissionReceiptBodyDigest(receipt.Body)
 }
 
+func equalCanonicalRelayAdmissionReceipts(left, right SignedRelaySideEffectAdmissionReceipt) (bool, error) {
+	if err := validateRelaySideEffectAdmissionReceiptShape(left); err != nil {
+		return false, err
+	}
+	if err := validateRelaySideEffectAdmissionReceiptShape(right); err != nil {
+		return false, err
+	}
+	leftCanonical, err := codec.Marshal(left)
+	if err != nil {
+		return false, err
+	}
+	rightCanonical, err := codec.Marshal(right)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(leftCanonical, rightCanonical), nil
+}
+
 // RelaySideEffectAdmissionReceiptBodyDigest is the released receipt identity.
 // The Provider stores the complete signed receipt alongside this body digest;
 // signatures and public-key wrappers are evidence over, not alternate

@@ -629,6 +629,33 @@ func TestRelayServiceProfileAssuranceLevelsAreCanonical(t *testing.T) {
 	}
 }
 
+func TestLowerAssuranceFinalityClassesHaveExactProfileURIs(t *testing.T) {
+	fixture := newRelayFixture(t)
+	for _, test := range []struct {
+		name  string
+		class TerminalEvidenceClass
+		uri   string
+	}{
+		{name: "relay provider corroborated", class: RelayTerminalProviderCorroborated,
+			uri: ProviderCorroboratedTerminalProfileURI},
+		{name: "sponsorship client corroborated", class: SponsorshipTerminalClientCorroborated,
+			uri: ClientCorroboratedTerminalProfileURI},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profile := fixture.profile.FinalityProfiles[0]
+			profile.TerminalEvidenceClass = test.class
+			profile.ProfileURI = test.uri
+			if err := validateFinalityProfile(profile); err != nil {
+				t.Fatalf("released lower-assurance URI was rejected: %v", err)
+			}
+			profile.ProfileURI = "tos.attacker.chosen-lower-assurance.v1"
+			if err := validateFinalityProfile(profile); err == nil {
+				t.Fatal("lower-assurance class accepted an implementation-defined URI")
+			}
+		})
+	}
+}
+
 func TestSponsorshipReleaseProfileIsSignedAndCannotBeDowngraded(t *testing.T) {
 	fixture := newRelayFixture(t)
 	profile := sponsorshipProfile(fixture.profile, "50", "100")
@@ -779,7 +806,7 @@ func TestRelayFinalityEvidenceUsesHistoricalObservationAuthority(t *testing.T) {
 		TransactionValidUntilUnix: fixture.request.Body.TransactionValidUntilUnix,
 		SourceAccount:             fixture.request.Body.SourceAccount, SourceSequence: fixture.request.Body.SourceSequence,
 		RelayTerminalEvidenceClass:               RelayTerminalValidatorFinality,
-		RelayValidatorAuthenticatedPortableProof: true,
+		RelayValidatorAuthenticatedPortableProof: relayBoolPointer(true),
 		RelayFinalizedCheckpointID:               "checkpoint:historical", RelayFinalizedCheckpointSequence: 100,
 		RelayFinalizedCheckpointUnix: uint64(observedAt.Unix()),
 		RelayConfirmationDepth:       fixture.profile.FinalityProfiles[0].MinimumConfirmationDepth,
@@ -811,6 +838,48 @@ func TestRelayFinalityEvidenceUsesHistoricalObservationAuthority(t *testing.T) {
 	resolver.at = time.Time{}
 	if err := VerifyRelayFinalityEvidence(future, resolver, observedAt); err == nil || !resolver.at.IsZero() {
 		t.Fatalf("future-dated evidence reached key authorization: at=%s err=%v", resolver.at, err)
+	}
+}
+
+func TestRelayFinalityPortableProofBooleanHasExplicitPresence(t *testing.T) {
+	fixture := newRelayFixture(t)
+	observedAt := fixture.now
+	profile := fixture.profile.FinalityProfiles[0]
+	profile.ProfileURI = ProviderCorroboratedTerminalProfileURI
+	profile.ProfileDigest = digest("7")
+	profile.TerminalEvidenceClass = RelayTerminalProviderCorroborated
+	body := RelayFinalityEvidenceBody{SchemaVersion: 1, ProviderAgentID: fixture.profile.ProviderAgentID,
+		Network: fixture.request.Body.Network, AssuranceLevel: AssuranceAuthorizedSingleProvider,
+		StableActionID: fixture.request.Body.StableActionID, ExactRequestDigest: fixture.request.Body.ExactRequestDigest,
+		RelayExecutionDigest: digest("8"), SignedTransactionDigest: fixture.request.Body.SignedTransactionDigest,
+		SignedTransactionCellHash: fixture.request.Body.SignedTransactionCellHash,
+		TransactionValidUntilUnix: fixture.request.Body.TransactionValidUntilUnix,
+		SourceAccount:             fixture.request.Body.SourceAccount, SourceSequence: fixture.request.Body.SourceSequence,
+		RelayTerminalEvidenceClass:               RelayTerminalProviderCorroborated,
+		RelayValidatorAuthenticatedPortableProof: relayBoolPointer(false),
+		RelayFinalizedCheckpointID:               "checkpoint:corroborated", RelayFinalizedCheckpointSequence: 100,
+		RelayFinalizedCheckpointUnix: uint64(observedAt.Unix()), RelayConfirmationDepth: profile.MinimumConfirmationDepth,
+		RelayFinalityProfile: &profile, RelayObservationDigests: []string{digest("1"), digest("2"), digest("3")},
+		Outcome: OutcomeCorroboratedExpired, ObservedAtUnix: uint64(observedAt.Unix()),
+		SigningAuthorityAtUnix: uint64(observedAt.Unix())}
+	if _, err := SignRelayFinalityEvidence(body, fixture.providerKey); err != nil {
+		t.Fatalf("explicit false lower-assurance predicate was rejected: %v", err)
+	}
+	canonical, err := codec.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]interface{}
+	if err := codec.Unmarshal(canonical, &fields); err != nil {
+		t.Fatal(err)
+	}
+	value, present := fields["relay_validator_authenticated_portable_proof"]
+	if !present || value != false {
+		t.Fatalf("explicit false proof predicate was omitted or changed: present=%v value=%v", present, value)
+	}
+	body.RelayValidatorAuthenticatedPortableProof = nil
+	if _, err := SignRelayFinalityEvidence(body, fixture.providerKey); err == nil {
+		t.Fatal("applicable relay finality omitted its proof-authentication predicate")
 	}
 }
 
@@ -1431,6 +1500,90 @@ func TestRelayAdmissionPreflightRejectsUnexpiredSupersededWriter(t *testing.T) {
 	}
 }
 
+func TestProviderFirstAdmissionRequiresCurrentAuthoritativeReceiptAndStoredRetryDoesNot(t *testing.T) {
+	prepare := func(t *testing.T) (*relayFixture, agentcommerce.AgentAgreement, *recordingBroadcaster) {
+		t.Helper()
+		fixture := newRelayFixture(t)
+		quote, err := fixture.service.Quote(t.Context(), fixture.request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixture.execution.ProviderQuote = quote
+		agreement := fixture.agreement(t, quote)
+		fixture.execution.AgreementBodyDigest, _ = agentcommerce.AgreementBodyDigest(agreement.Body)
+		fixture.execution.AgreementExpiresAtUnix = agreement.Body.ExpiresAtUnix
+		fixture.execution = fixture.withAdmission(t, fixture.execution)
+		broadcaster := &recordingBroadcaster{result: BroadcastResult{Status: BroadcastAccepted,
+			TransactionReference: "tx:authoritative"}}
+		fixture.service.Broadcaster = broadcaster
+		return fixture, agreement, broadcaster
+	}
+
+	t.Run("revoked or unavailable", func(t *testing.T) {
+		fixture, agreement, broadcaster := prepare(t)
+		fixture.admissionAuthority.err = ErrRelayUnknown
+		if _, err := fixture.service.Submit(t.Context(), fixture.execution, agreement); err == nil {
+			t.Fatal("locally valid but no-longer-authoritative receipt was admitted")
+		}
+		if broadcaster.submits != 0 {
+			t.Fatal("receipt revocation was discovered after the side effect")
+		}
+		if _, err := fixture.service.Journal.Resolve(fixture.execution.AuthorizedAction.StableActionID,
+			fixture.execution.AuthorizedAction.ExactRequestDigest); !errors.Is(err, ErrRelayUnknown) {
+			t.Fatalf("revoked receipt created a local admission: %v", err)
+		}
+	})
+
+	t.Run("rollback or backdated answer", func(t *testing.T) {
+		fixture, agreement, broadcaster := prepare(t)
+		descriptor, err := buildRelaySideEffectAdmissionDescriptorForRoute(fixture.execution,
+			fixture.execution.AdmissionReceipt.Body.AuthenticatedPrincipal,
+			fixture.execution.AdmissionReceipt.Body.RouteAttempt,
+			fixture.execution.AdmissionReceipt.Body.PredecessorReceiptDigest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lookupDigest, _ := RelaySideEffectAdmissionLookupDigest(descriptor.Lookup())
+		olderBody := fixture.execution.AdmissionReceipt.Body
+		olderBody.IssuedAtUnix--
+		older, err := SignRelaySideEffectAdmissionReceipt(olderBody, fixture.authorityKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixture.admissionAuthority.mu.Lock()
+		fixture.admissionAuthority.receipts[lookupDigest] = older
+		fixture.admissionAuthority.mu.Unlock()
+		if _, err := fixture.service.Submit(t.Context(), fixture.execution, agreement); err == nil {
+			t.Fatal("rollback-conflicting authoritative receipt was admitted")
+		}
+		if broadcaster.submits != 0 {
+			t.Fatal("rollback conflict was discovered after the side effect")
+		}
+	})
+
+	t.Run("byte-identical stored retry", func(t *testing.T) {
+		fixture, agreement, broadcaster := prepare(t)
+		broadcaster.result = BroadcastResult{Status: BroadcastUnknown}
+		broadcaster.submitErr = errors.New("ambiguous transport close")
+		first, err := fixture.service.Submit(t.Context(), fixture.execution, agreement)
+		if err == nil || first.State != agentcommerce.ActionSubmitted || broadcaster.submits != 1 {
+			t.Fatalf("first ambiguous admission was not persisted: state=%s submits=%d err=%v",
+				first.State, broadcaster.submits, err)
+		}
+		fixture.admissionAuthority.err = errors.New("authority temporarily unavailable")
+		retried, err := fixture.service.Submit(t.Context(), fixture.execution, agreement)
+		if err != nil || retried.State != agentcommerce.ActionSubmitted || broadcaster.submits != 1 {
+			t.Fatalf("stored byte-identical retry depended on remote lookup or rewrote bytes: state=%s submits=%d err=%v",
+				retried.State, broadcaster.submits, err)
+		}
+		mutated := fixture.execution
+		mutated.AdmissionReceipt.Signature = fixture.request.Signature
+		if _, err := fixture.service.Submit(t.Context(), mutated, agreement); !errors.Is(err, ErrRelayConflict) {
+			t.Fatalf("stored retry accepted a different signed receipt wrapper: %v", err)
+		}
+	})
+}
+
 func TestProviderDrainsAdmittedBroadcastAfterWriterTakeover(t *testing.T) {
 	fixture := newRelayFixture(t)
 	quote, err := fixture.service.Quote(context.Background(), fixture.request)
@@ -1705,6 +1858,20 @@ func TestCombinedUnauthenticatedBroadcastRejectionRemainsAmbiguous(t *testing.T)
 	}
 	if processor.calls != 1 || broadcaster.submits != 1 {
 		t.Fatalf("combined rejection side effects are wrong: sponsor_calls=%d broadcasts=%d", processor.calls, broadcaster.submits)
+	}
+	for _, unsafeState := range []agentcommerce.ActionResolutionState{
+		agentcommerce.ActionRejected, agentcommerce.ActionConflict,
+	} {
+		broadcaster.resolution = ChainResolution{State: unsafeState}
+		if _, err := fixture.service.Resolve(t.Context(), record.StableActionID, record.ExactRequestDigest); err == nil {
+			t.Fatalf("post-submit %s terminalized an ambiguous combined relay", unsafeState)
+		}
+		stored, resolveErr := fixture.service.Journal.Resolve(record.StableActionID, record.ExactRequestDigest)
+		if resolveErr != nil || stored.State != agentcommerce.ActionSubmitted || stored.TerminalOutcome != "" ||
+			stored.SponsorshipTransferReference != "sponsorship:final" {
+			t.Fatalf("post-submit %s released or rewrote the combined action: %+v err=%v",
+				unsafeState, stored, resolveErr)
+		}
 	}
 }
 
@@ -2498,7 +2665,7 @@ func TestSponsorOnlyTerminalEvidenceCannotBeRelabelledAsCombinedSuccess(t *testi
 	mutatedBody.SubmittedTransactionHash = "tx:invented-relay"
 	mutatedBody.SourceExecutionReference = "chain:invented-relay"
 	mutatedBody.RelayTerminalEvidenceClass = RelayTerminalProviderCorroborated
-	mutatedBody.RelayValidatorAuthenticatedPortableProof = false
+	mutatedBody.RelayValidatorAuthenticatedPortableProof = relayBoolPointer(false)
 	mutatedBody.RelayFinalizedCheckpointID = "checkpoint:invented-relay"
 	mutatedBody.RelayFinalizedCheckpointSequence = 1
 	mutatedBody.RelayFinalizedCheckpointUnix = uint64(fixture.now.Add(time.Minute).Unix())
@@ -2877,16 +3044,67 @@ func TestRebroadcastRejectionCannotEraseAnAmbiguousPriorWrite(t *testing.T) {
 }
 
 type relayFixture struct {
-	now          time.Time
-	clientKey    ed25519.PrivateKey
-	providerKey  ed25519.PrivateKey
-	authorityKey ed25519.PrivateKey
-	resolver     relayResolver
-	profile      RelayServiceProfile
-	request      SignedRelayQuoteRequest
-	inspector    fixedInspector
-	execution    RelayExecutionRequest
-	service      ProviderService
+	now                time.Time
+	clientKey          ed25519.PrivateKey
+	providerKey        ed25519.PrivateKey
+	authorityKey       ed25519.PrivateKey
+	resolver           relayResolver
+	admissionAuthority *testRelayAdmissionAuthority
+	profile            RelayServiceProfile
+	request            SignedRelayQuoteRequest
+	inspector          fixedInspector
+	execution          RelayExecutionRequest
+	service            ProviderService
+}
+
+type testRelayAdmissionAuthority struct {
+	mu       sync.Mutex
+	receipts map[string]SignedRelaySideEffectAdmissionReceipt
+	err      error
+}
+
+func newTestRelayAdmissionAuthority() *testRelayAdmissionAuthority {
+	return &testRelayAdmissionAuthority{receipts: make(map[string]SignedRelaySideEffectAdmissionReceipt)}
+}
+
+func (authority *testRelayAdmissionAuthority) AdmitRelaySideEffects(context.Context,
+	RelaySideEffectAdmissionDescriptor) (SignedRelaySideEffectAdmissionReceipt, error) {
+	return SignedRelaySideEffectAdmissionReceipt{}, errors.New("test authority does not issue receipts")
+}
+
+func (authority *testRelayAdmissionAuthority) ResolveRelaySideEffectAdmission(_ context.Context,
+	lookup RelaySideEffectAdmissionLookup) (SignedRelaySideEffectAdmissionReceipt, error) {
+	authority.mu.Lock()
+	defer authority.mu.Unlock()
+	if authority.err != nil {
+		return SignedRelaySideEffectAdmissionReceipt{}, authority.err
+	}
+	digest, err := RelaySideEffectAdmissionLookupDigest(lookup)
+	if err != nil {
+		return SignedRelaySideEffectAdmissionReceipt{}, err
+	}
+	receipt, found := authority.receipts[digest]
+	if !found {
+		return SignedRelaySideEffectAdmissionReceipt{}, ErrRelayUnknown
+	}
+	return receipt, nil
+}
+
+func (authority *testRelayAdmissionAuthority) remember(t *testing.T, request RelayExecutionRequest) {
+	t.Helper()
+	descriptor, err := buildRelaySideEffectAdmissionDescriptorForRoute(request,
+		request.AdmissionReceipt.Body.AuthenticatedPrincipal, request.AdmissionReceipt.Body.RouteAttempt,
+		request.AdmissionReceipt.Body.PredecessorReceiptDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := RelaySideEffectAdmissionLookupDigest(descriptor.Lookup())
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority.mu.Lock()
+	authority.receipts[digest] = request.AdmissionReceipt
+	authority.mu.Unlock()
 }
 
 func newRelayFixture(t *testing.T) *relayFixture {
@@ -2898,6 +3116,7 @@ func newRelayFixture(t *testing.T) *relayFixture {
 	resolver := relayResolver{agents: map[string]ed25519.PublicKey{
 		"agent:client": clientKey.Public().(ed25519.PublicKey), "agent:provider": providerKey.Public().(ed25519.PublicKey)},
 		authority: authorityKey.Public().(ed25519.PublicKey), current: &relayCurrentFenceState{}}
+	admissionAuthority := newTestRelayAdmissionAuthority()
 	network := NetworkDomain{NetworkID: "tos:testnet", GlobalID: 42, ZeroStateRootHash: digest("1"),
 		ZeroStateFileHash: digest("2"), WorkchainID: 0}
 	transactionProfile := TransactionProfile{ProfileURI: "tos.signed-external-boc.v1", ProfileDigest: digest("3"),
@@ -2978,7 +3197,7 @@ func newRelayFixture(t *testing.T) *relayFixture {
 		MaximumNetworkFeeAtomic: "90", MaximumTransactionValueAtomic: "25"}}
 	service := ProviderService{Profile: profile, SigningKey: providerKey, AgentResolver: resolver, FenceResolver: resolver,
 		Inspector: inspector, ActionBinder: fixedActionBinder{}, AgreementVerifier: agentcommerce.AgentSignatureEvidenceVerifier{Resolver: resolver},
-		QuotePolicy: fixedQuotePolicy{body: quoteBody}, Journal: NewMemoryJournal(),
+		AdmissionAuthority: admissionAuthority, QuotePolicy: fixedQuotePolicy{body: quoteBody}, Journal: NewMemoryJournal(),
 		EvidenceSource:                 fixedEvidenceSource{},
 		SponsorshipObservationVerifier: acceptingSponsorshipObservationVerifier{}, Now: func() time.Time { return now }}
 	signedQuote, err := SignProviderRelayQuote(quoteBody, providerKey)
@@ -2993,11 +3212,15 @@ func newRelayFixture(t *testing.T) *relayFixture {
 		SemanticFields: wireFields, AuthorizedAction: action, WriterFence: fence, CreatedAtUnix: uint64(now.Unix()),
 		ExpiresAtUnix: uint64(now.Add(3 * time.Minute).Unix())}
 	execution = attachRelayTestAdmission(t, execution, authorityKey, now, 1)
+	admissionAuthority.remember(t, execution)
 	return &relayFixture{now: now, clientKey: clientKey, providerKey: providerKey, authorityKey: authorityKey,
-		resolver: resolver, profile: profile, request: signedRequest, inspector: inspector, execution: execution, service: service}
+		resolver: resolver, admissionAuthority: admissionAuthority, profile: profile, request: signedRequest,
+		inspector: inspector, execution: execution, service: service}
 }
 
 func finalityPointer(profile FinalityProfile) *FinalityProfile { return &profile }
+
+func relayBoolPointer(value bool) *bool { return &value }
 
 func attachRelayTestAdmission(t *testing.T, request RelayExecutionRequest, authorityKey ed25519.PrivateKey,
 	issuedAt time.Time, sequence uint64) RelayExecutionRequest {
@@ -3025,7 +3248,9 @@ func attachRelayTestAdmission(t *testing.T, request RelayExecutionRequest, autho
 
 func (fixture *relayFixture) withAdmission(t *testing.T, request RelayExecutionRequest) RelayExecutionRequest {
 	t.Helper()
-	return attachRelayTestAdmission(t, request, fixture.authorityKey, fixture.now, 1)
+	request = attachRelayTestAdmission(t, request, fixture.authorityKey, fixture.now, 1)
+	fixture.admissionAuthority.remember(t, request)
+	return request
 }
 
 func cloneRelayAgreementBody(body agentcommerce.AgentAgreementBody) agentcommerce.AgentAgreementBody {
@@ -3558,8 +3783,8 @@ func relaySuccessEvidence(record Record, observedAt time.Time) RelayFinalityEvid
 		SubmittedTransactionHash:   record.TransactionReference,
 		SourceExecutionReference:   "chain:execution:durable",
 		RelayTerminalEvidenceClass: request.QuoteRequest.Body.RelayTerminalEvidenceClass,
-		RelayValidatorAuthenticatedPortableProof: request.QuoteRequest.Body.RelayTerminalEvidenceClass ==
-			RelayTerminalValidatorFinality,
+		RelayValidatorAuthenticatedPortableProof: relayBoolPointer(request.QuoteRequest.Body.RelayTerminalEvidenceClass ==
+			RelayTerminalValidatorFinality),
 		RelayFinalizedCheckpointID:       "checkpoint:relay-success",
 		RelayFinalizedCheckpointSequence: 1,
 		RelayFinalizedCheckpointUnix:     uint64(observedAt.Unix()),
@@ -3571,7 +3796,7 @@ func relaySuccessEvidence(record Record, observedAt time.Time) RelayFinalityEvid
 		body.RelayConfirmationDepth = request.ProviderQuote.Body.RelayFinalityProfile.MinimumConfirmationDepth
 	} else {
 		body.RelayTerminalEvidenceClass = ""
-		body.RelayValidatorAuthenticatedPortableProof = false
+		body.RelayValidatorAuthenticatedPortableProof = nil
 		body.RelayFinalizedCheckpointID = ""
 		body.RelayFinalizedCheckpointSequence = 0
 		body.RelayFinalizedCheckpointUnix = 0
@@ -3810,5 +4035,85 @@ func TestRelayEvidenceSetDigestBindsTheCanonicalObservationSet(t *testing.T) {
 				t.Fatal("invalid evidence set was accepted")
 			}
 		})
+	}
+}
+
+func TestRelayAbsenceBundleRejectsNullEmptyAndInapplicableComponentFields(t *testing.T) {
+	fixture := newRelayFixture(t)
+	profile := sponsorshipProfile(fixture.profile, "50", "50")
+	request, quote := sponsorshipQuotePair(t, fixture, profile, "request:presence", "quote:presence", "50",
+		fixture.now.Add(4*time.Minute))
+	execution := sponsorshipExecution(fixture.execution, request, quote)
+	recovery := sponsorshipRecoveryHandle(execution, "presence-recovery")
+	sponsorship, transaction := absenceObservationReferences(execution, recovery, OutcomeFinalizedAbsent)
+	_, canonical := testAbsenceProofBundle(sponsorship, nil)
+	if len(canonical) == 0 {
+		t.Fatal("valid sponsorship-only absence bundle was not encoded")
+	}
+	if _, err := RelayAbsenceProofBundleDigest(canonical); err != nil {
+		t.Fatalf("valid sponsorship-only absence bundle was rejected: %v", err)
+	}
+	var base map[string]interface{}
+	if err := codec.Unmarshal(canonical, &base); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := base["transaction_absence_observations"]; present {
+		t.Fatal("inapplicable transaction component was encoded in sponsorship-only bundle")
+	}
+	for name, mutate := range map[string]func(map[string]interface{}){
+		"applicable null": func(fields map[string]interface{}) {
+			fields["sponsorship_absence_observations"] = nil
+		},
+		"applicable empty": func(fields map[string]interface{}) {
+			fields["sponsorship_absence_observations"] = []interface{}{}
+		},
+		"inapplicable null": func(fields map[string]interface{}) {
+			fields["transaction_absence_observations"] = nil
+		},
+		"inapplicable empty": func(fields map[string]interface{}) {
+			fields["transaction_absence_observations"] = []interface{}{}
+		},
+		"inapplicable populated": func(fields map[string]interface{}) {
+			fields["transaction_absence_observations"] = transaction
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fields := make(map[string]interface{}, len(base)+1)
+			for key, value := range base {
+				fields[key] = value
+			}
+			mutate(fields)
+			encoded, err := codec.Marshal(fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := RelayAbsenceProofBundleDigest(encoded); err == nil {
+				t.Fatal("invalid component field presence was accepted")
+			}
+		})
+	}
+}
+
+func TestRelayEd25519TextEncodingIsCanonical(t *testing.T) {
+	fixture := newRelayFixture(t)
+	upperKey := "ed25519:" + strings.ToUpper(strings.TrimPrefix(fixture.request.PublicKey, "ed25519:"))
+	if _, err := parsePublicKey(upperKey); err == nil {
+		t.Fatal("uppercase Ed25519 public key text was accepted")
+	}
+	encoded := strings.TrimPrefix(fixture.request.Signature, "ed25519:")
+	alphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	last := strings.IndexByte(alphabet, encoded[len(encoded)-1])
+	if last < 0 {
+		t.Fatal("test signature is not base64url")
+	}
+	// A 64-byte signature leaves two unused bits in the last base64url
+	// character. Flip only those bits so permissive decoders recover the same
+	// bytes; exact re-encoding must nevertheless reject the alternate spelling.
+	alternate := encoded[:len(encoded)-1] + string(alphabet[(last&^3)|((last+1)&3)])
+	if alternate == encoded {
+		t.Fatal("failed to construct alternate base64url spelling")
+	}
+	if _, err := parseSignature("ed25519:" + alternate); err == nil {
+		t.Fatal("non-canonical Ed25519 signature text was accepted")
 	}
 }

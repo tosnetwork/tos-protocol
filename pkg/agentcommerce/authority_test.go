@@ -1,8 +1,10 @@
 package agentcommerce
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -113,6 +115,100 @@ func TestWriterFenceAndAuthorizedAction(t *testing.T) {
 	if err := VerifyAuthorizedAction(action, fields, request, tampered, fixedFenceResolver{key: publicKey}, now); err == nil {
 		t.Fatal("tampered writer generation was accepted")
 	}
+}
+
+func TestWriterFenceAndAuthorizedActionRejectEd25519TextAliases(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(2_000_000_000, 0).UTC()
+	fence, err := SignWriterFence(WriterFenceBody{SchemaVersion: 1, OwnerID: "owner:test", AgentID: "agent:test",
+		InstanceID: "instance:one", LeaseID: "lease:one", WriterGeneration: 3, IssuedAtUnix: uint64(now.Unix()),
+		ExpiresAtUnix: uint64(now.Add(time.Minute).Unix()), AuthorityID: "authority:test",
+		Scope: []string{"agreement.propose"}}, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := map[string]SemanticValue{"owner_id": ID("owner:test"), "agent_id": ID("agent:test"),
+		"agreement_body_digest": Digest32("sha256:" + strings.Repeat("1", 64)),
+		"recipient_set_digest":  Digest32("sha256:" + strings.Repeat("2", 64))}
+	request := []byte("canonical-request")
+	action, err := BuildAuthorizedAction("owner:test", "agent:test", "agreement.propose", fields, request, fence, 7,
+		"sha256:"+strings.Repeat("3", 64), "", "none", uint64(now.Add(30*time.Second).Unix()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	action, err = SignAuthorizedAction(action, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := fixedFenceResolver{key: publicKey}
+
+	uppercaseKey := "ed25519:" + strings.ToUpper(strings.TrimPrefix(fence.PublicKey, "ed25519:"))
+	trailingAlias := ed25519TrailingBitAlias(t, fence.Proof)
+	for name, mutate := range map[string]func(*WriterFence){
+		"uppercase key hex": func(value *WriterFence) { value.PublicKey = uppercaseKey },
+		"key CRLF":          func(value *WriterFence) { value.PublicKey += "\r\n" },
+		"proof CRLF":        func(value *WriterFence) { value.Proof += "\r\n" },
+		"proof trailing bits": func(value *WriterFence) {
+			value.Proof = trailingAlias
+		},
+	} {
+		t.Run("writer fence "+name, func(t *testing.T) {
+			mutated := fence
+			mutate(&mutated)
+			if err := VerifyWriterFence(mutated, resolver, now, "agreement.propose"); err == nil {
+				t.Fatal("writer fence accepted a non-canonical Ed25519 spelling")
+			}
+			if _, err := WriterFenceDigest(mutated); err == nil {
+				t.Fatal("writer fence digest accepted a non-canonical Ed25519 spelling")
+			}
+		})
+	}
+
+	actionUppercaseKey := "ed25519:" + strings.ToUpper(strings.TrimPrefix(action.AuthorityPublicKey, "ed25519:"))
+	actionTrailingAlias := ed25519TrailingBitAlias(t, action.AuthorizationProof)
+	for name, mutate := range map[string]func(*AuthorizedAction){
+		"uppercase key hex": func(value *AuthorizedAction) { value.AuthorityPublicKey = actionUppercaseKey },
+		"key CRLF":          func(value *AuthorizedAction) { value.AuthorityPublicKey += "\r\n" },
+		"proof CRLF":        func(value *AuthorizedAction) { value.AuthorizationProof += "\r\n" },
+		"proof trailing bits": func(value *AuthorizedAction) {
+			value.AuthorizationProof = actionTrailingAlias
+		},
+	} {
+		t.Run("authorized action "+name, func(t *testing.T) {
+			mutated := action
+			mutate(&mutated)
+			if _, err := AuthorizedActionDigest(mutated); err == nil {
+				t.Fatal("AuthorizedAction digest accepted a non-canonical Ed25519 spelling")
+			}
+			if err := VerifyAuthorizedAction(mutated, fields, request, fence, resolver, now); err == nil {
+				t.Fatal("AuthorizedAction accepted a non-canonical Ed25519 spelling")
+			}
+		})
+	}
+}
+
+func ed25519TrailingBitAlias(t *testing.T, value string) string {
+	t.Helper()
+	const prefix = "ed25519:"
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	encoded := strings.TrimPrefix(value, prefix)
+	if len(encoded) == len(value) || len(encoded) == 0 {
+		t.Fatal("test Ed25519 value has no scheme or payload")
+	}
+	index := strings.IndexByte(alphabet, encoded[len(encoded)-1])
+	if index < 0 {
+		t.Fatal("test Ed25519 value is not base64url")
+	}
+	alternate := encoded[:len(encoded)-1] + string(alphabet[(index&^3)|((index+1)&3)])
+	originalBytes, originalErr := base64.RawURLEncoding.DecodeString(encoded)
+	alternateBytes, alternateErr := base64.RawURLEncoding.DecodeString(alternate)
+	if originalErr != nil || alternateErr != nil || !bytes.Equal(originalBytes, alternateBytes) || alternate == encoded {
+		t.Fatal("failed to construct an equivalent non-canonical base64url spelling")
+	}
+	return prefix + alternate
 }
 
 func TestAuthorityInstanceIdentityIsRecoverable(t *testing.T) {

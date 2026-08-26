@@ -899,6 +899,8 @@ func validateRelayFinalityEvidenceBody(body RelayFinalityEvidenceBody) error {
 	hasTransactionAbsence := len(body.TransactionAbsenceObservations) != 0
 	hasAnyAbsence := hasSponsorshipAbsence || hasTransactionAbsence
 	hasSponsorshipTransactionEvidence := body.SponsorshipTransactionEvidence != nil
+	relayPortableProofPresent := body.RelayValidatorAuthenticatedPortableProof != nil
+	relayPortableProofAuthenticated := relayPortableProofPresent && *body.RelayValidatorAuthenticatedPortableProof
 	if body.SchemaVersion != 1 || !identifier(body.ProviderAgentID, 256) || validateNetworkDomain(body.Network) != nil ||
 		!validAssuranceLevel(body.AssuranceLevel) ||
 		!digestPattern.MatchString(body.StableActionID) || !digestPattern.MatchString(body.ExactRequestDigest) ||
@@ -921,7 +923,7 @@ func validateRelayFinalityEvidenceBody(body RelayFinalityEvidenceBody) error {
 		return err
 	}
 	hasRelayTerminal := body.RelayTerminalEvidenceClass != "" ||
-		body.RelayValidatorAuthenticatedPortableProof || body.RelayFinalizedCheckpointID != "" ||
+		relayPortableProofPresent || body.RelayFinalizedCheckpointID != "" ||
 		body.RelayFinalizedCheckpointSequence != 0 || body.RelayFinalizedCheckpointUnix != 0 ||
 		body.RelayConfirmationDepth != 0 || len(body.RelayObservationDigests) != 0 ||
 		body.SubmittedTransactionHash != "" || body.SourceExecutionReference != "" ||
@@ -936,9 +938,9 @@ func validateRelayFinalityEvidenceBody(body RelayFinalityEvidenceBody) error {
 	if hasRelayTerminal {
 		profile := *body.RelayFinalityProfile
 		validClass := body.RelayTerminalEvidenceClass == RelayTerminalValidatorFinality &&
-			body.RelayValidatorAuthenticatedPortableProof ||
+			relayPortableProofPresent && relayPortableProofAuthenticated ||
 			body.RelayTerminalEvidenceClass == RelayTerminalProviderCorroborated &&
-				!body.RelayValidatorAuthenticatedPortableProof &&
+				relayPortableProofPresent && !relayPortableProofAuthenticated &&
 				body.AssuranceLevel != AssuranceAutonomousDecentralized
 		if !validClass || profile.TerminalEvidenceClass != body.RelayTerminalEvidenceClass ||
 			!identifier(body.RelayFinalizedCheckpointID, 1024) || body.RelayFinalizedCheckpointSequence == 0 ||
@@ -1080,7 +1082,7 @@ func validateRelayFinalityEvidenceBody(body RelayFinalityEvidenceBody) error {
 		}
 	case OutcomeFinalizedRelayOnly, OutcomeCorroboratedRelayOnly:
 		allValidator := body.RelayTerminalEvidenceClass == RelayTerminalValidatorFinality &&
-			body.RelayValidatorAuthenticatedPortableProof && hasSponsorshipAbsence &&
+			relayPortableProofAuthenticated && hasSponsorshipAbsence &&
 			body.SponsorshipAbsenceObservations[0].TerminalEvidenceClass == SponsorshipTerminalValidatorFinality
 		if body.AssuranceLevel == AssuranceAutonomousDecentralized && !allValidator ||
 			!hasSponsorshipAbsence || hasTransactionAbsence || body.SponsorshipTransferReference != "" ||
@@ -1228,6 +1230,16 @@ func validateFinalityProfile(profile FinalityProfile) error {
 		profile.MinimumOperatorDomains > profile.MinimumObservers || profile.MaximumResolutionSeconds == 0 ||
 		profile.MaximumResolutionSeconds > 24*60*60 || profile.ReorgWindowSeconds > profile.MaximumResolutionSeconds {
 		return errors.New("relay finality profile is invalid")
+	}
+	switch profile.TerminalEvidenceClass {
+	case RelayTerminalProviderCorroborated:
+		if profile.ProfileURI != ProviderCorroboratedTerminalProfileURI {
+			return errors.New("provider-corroborated relay profile URI is invalid")
+		}
+	case SponsorshipTerminalClientCorroborated:
+		if profile.ProfileURI != ClientCorroboratedTerminalProfileURI {
+			return errors.New("client-corroborated sponsorship profile URI is invalid")
+		}
 	}
 	return nil
 }

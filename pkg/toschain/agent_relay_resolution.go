@@ -23,7 +23,7 @@ import (
 )
 
 const TOSRelayRPCObservationProfileURI = "tos.relay.rpc-checkpoint-observation.v1"
-const TOSRelayProviderCorroboratedTerminalProfileURI = "tos.relay.provider-corroborated-terminal.v1"
+const TOSRelayProviderCorroboratedTerminalProfileURI = agentrelay.ProviderCorroboratedTerminalProfileURI
 
 type tosRelayRPCObservationProfileDescriptor struct {
 	ProfileURI                   string `json:"profile_uri"`
@@ -531,6 +531,7 @@ func (source *TOSExactRelayResolutionSource) Evidence(ctx context.Context,
 	// Comparing it with today's moving high-water would incorrectly reject old
 	// valid evidence after any newer action advances the fence. Only a newly
 	// observed chain checkpoint in ResolveExactRelay may advance monotonic CAS.
+	relayPortableProof := false
 	body := agentrelay.RelayFinalityEvidenceBody{SchemaVersion: 1,
 		ProviderAgentID: record.ProviderAgentID, Network: source.network, AssuranceLevel: quoted.AssuranceLevel,
 		StableActionID: record.StableActionID, ExactRequestDigest: record.ExactRequestDigest,
@@ -542,7 +543,7 @@ func (source *TOSExactRelayResolutionSource) Evidence(ctx context.Context,
 		SponsorshipValidUntilUnix:                record.SponsorshipValidUntilUnix,
 		SponsorshipTransferReference:             record.SponsorshipTransferReference,
 		RelayTerminalEvidenceClass:               agentrelay.RelayTerminalProviderCorroborated,
-		RelayValidatorAuthenticatedPortableProof: false,
+		RelayValidatorAuthenticatedPortableProof: &relayPortableProof,
 		RelayFinalizedCheckpointID:               first.FinalizedCheckpointID,
 		RelayFinalizedCheckpointSequence:         first.FinalizedCheckpointSequence,
 		RelayFinalizedCheckpointUnix:             first.ObservedAtUnix,

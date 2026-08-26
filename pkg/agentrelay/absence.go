@@ -80,8 +80,8 @@ type RelayAbsenceProofBundleV1 struct {
 	ProofProfileDigest             string                             `json:"proof_profile_digest"`
 	ProofPayloadDigest             string                             `json:"proof_payload_digest"`
 	ProofPayload                   []byte                             `json:"proof_payload"`
-	SponsorshipAbsenceObservations []RelayAbsenceObservationReference `json:"sponsorship_absence_observations"`
-	TransactionAbsenceObservations []RelayAbsenceObservationReference `json:"transaction_absence_observations"`
+	SponsorshipAbsenceObservations []RelayAbsenceObservationReference `json:"sponsorship_absence_observations,omitempty"`
+	TransactionAbsenceObservations []RelayAbsenceObservationReference `json:"transaction_absence_observations,omitempty"`
 }
 
 func RelayAbsenceObservationReferenceDigest(reference RelayAbsenceObservationReference) (string, error) {
@@ -123,6 +123,12 @@ func validateRelayAbsenceProofBundle(bundle RelayAbsenceProofBundleV1) error {
 	}
 	hasSponsorship := len(bundle.SponsorshipAbsenceObservations) != 0
 	hasTransaction := len(bundle.TransactionAbsenceObservations) != 0
+	// A non-nil empty slice would encode an explicitly present empty array.
+	// Inapplicable arrays must be nil so omitempty removes them entirely.
+	if bundle.SponsorshipAbsenceObservations != nil && !hasSponsorship ||
+		bundle.TransactionAbsenceObservations != nil && !hasTransaction {
+		return errors.New("relay absence proof bundle has an empty component array")
+	}
 	switch bundle.ProofScope {
 	case RelayAbsenceProofSponsorshipOnly:
 		if !hasSponsorship || hasTransaction {
@@ -140,9 +146,7 @@ func validateRelayAbsenceProofBundle(bundle RelayAbsenceProofBundleV1) error {
 		return errors.New("relay absence proof bundle scope is unknown")
 	}
 	if hasSponsorship && !sortedRequiredDigests(relayAbsenceObservationReferenceDigests(bundle.SponsorshipAbsenceObservations), 1) ||
-		!hasSponsorship && len(bundle.SponsorshipAbsenceObservations) != 0 ||
-		hasTransaction && !sortedRequiredDigests(relayAbsenceObservationReferenceDigests(bundle.TransactionAbsenceObservations), 1) ||
-		!hasTransaction && len(bundle.TransactionAbsenceObservations) != 0 {
+		hasTransaction && !sortedRequiredDigests(relayAbsenceObservationReferenceDigests(bundle.TransactionAbsenceObservations), 1) {
 		return errors.New("relay absence proof bundle reference arrays are invalid")
 	}
 	return nil

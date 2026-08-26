@@ -36,6 +36,11 @@ const (
 	// are signed before either party authorizes an Agreement, so an older
 	// observed-only Agreement cannot be upgraded after a transfer is observed.
 	ClientCorroboratedTerminalProfileURI = "tos.sponsorship.client-corroborated-terminal.v1"
+	// ProviderCorroboratedTerminalProfileURI is the one released URI for a
+	// lower-assurance relay predicate.  A terminal evidence class is not enough
+	// to identify its rules: accepting an arbitrary URI would let two
+	// implementations assign different semantics to the same class.
+	ProviderCorroboratedTerminalProfileURI = "tos.relay.provider-corroborated-terminal.v1"
 
 	ObligationRelayDelivery   = "transaction_relay"
 	ObligationSponsorDelivery = "gas_sponsorship"
@@ -557,21 +562,25 @@ type RelayFinalityEvidenceBody struct {
 	// manifest. It is mandatory for every absence result, including portable
 	// validator profiles, so an independent verifier can bind the observation
 	// references to the exact signed effects before it performs fresh queries.
-	AbsenceProofBundle                       []byte                     `json:"absence_proof_bundle,omitempty"`
-	SponsorshipTerminalProfile               *FinalityProfile           `json:"sponsorship_terminal_profile,omitempty"`
-	SubmittedTransactionHash                 string                     `json:"submitted_transaction_hash,omitempty"`
-	SourceExecutionReference                 string                     `json:"source_execution_reference,omitempty"`
-	DestinationCreditReferences              []string                   `json:"destination_credit_references,omitempty"`
-	RelayTerminalEvidenceClass               RelayTerminalEvidenceClass `json:"relay_terminal_evidence_class,omitempty"`
-	RelayValidatorAuthenticatedPortableProof bool                       `json:"relay_validator_authenticated_portable_proof,omitempty"`
-	RelayFinalizedCheckpointID               string                     `json:"relay_finalized_checkpoint_id,omitempty"`
-	RelayFinalizedCheckpointSequence         uint64                     `json:"relay_finalized_checkpoint_sequence,omitempty"`
-	RelayFinalizedCheckpointUnix             uint64                     `json:"relay_finalized_checkpoint_unix,omitempty"`
-	RelayConfirmationDepth                   uint32                     `json:"relay_confirmation_depth,omitempty"`
-	RelayFinalityProfile                     *FinalityProfile           `json:"relay_finality_profile,omitempty"`
-	RelayObservationDigests                  []string                   `json:"relay_observation_digests,omitempty"`
-	Outcome                                  TerminalOutcome            `json:"outcome"`
-	ObservedAtUnix                           uint64                     `json:"observed_at_unix"`
+	AbsenceProofBundle          []byte                     `json:"absence_proof_bundle,omitempty"`
+	SponsorshipTerminalProfile  *FinalityProfile           `json:"sponsorship_terminal_profile,omitempty"`
+	SubmittedTransactionHash    string                     `json:"submitted_transaction_hash,omitempty"`
+	SourceExecutionReference    string                     `json:"source_execution_reference,omitempty"`
+	DestinationCreditReferences []string                   `json:"destination_credit_references,omitempty"`
+	RelayTerminalEvidenceClass  RelayTerminalEvidenceClass `json:"relay_terminal_evidence_class,omitempty"`
+	// RelayValidatorAuthenticatedPortableProof is presence-sensitive. Relay
+	// terminal evidence must explicitly commit true for validator-authenticated
+	// proof and false for the selected provider-corroborated predicate. It is
+	// omitted only when no relay terminal component is present.
+	RelayValidatorAuthenticatedPortableProof *bool            `json:"relay_validator_authenticated_portable_proof,omitempty"`
+	RelayFinalizedCheckpointID               string           `json:"relay_finalized_checkpoint_id,omitempty"`
+	RelayFinalizedCheckpointSequence         uint64           `json:"relay_finalized_checkpoint_sequence,omitempty"`
+	RelayFinalizedCheckpointUnix             uint64           `json:"relay_finalized_checkpoint_unix,omitempty"`
+	RelayConfirmationDepth                   uint32           `json:"relay_confirmation_depth,omitempty"`
+	RelayFinalityProfile                     *FinalityProfile `json:"relay_finality_profile,omitempty"`
+	RelayObservationDigests                  []string         `json:"relay_observation_digests,omitempty"`
+	Outcome                                  TerminalOutcome  `json:"outcome"`
+	ObservedAtUnix                           uint64           `json:"observed_at_unix"`
 	// SigningAuthorityAtUnix selects the Provider key-authorization epoch.
 	// It is distinct from ObservedAtUnix, which is chain evidence time and may
 	// predate a Provider key rotation by an arbitrary interval.

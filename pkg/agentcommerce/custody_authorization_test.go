@@ -42,6 +42,11 @@ func TestCustodyActionAuthorizationV2BindsFullNetworkDomain(t *testing.T) {
 	if err := VerifyRelayCustodyActionAuthorization(signed, resolver, now); err != nil {
 		t.Fatal(err)
 	}
+	uppercaseProof := signed
+	uppercaseProof.Proof = "ed25519:" + strings.ToUpper(strings.TrimPrefix(signed.Proof, "ed25519:"))
+	if err := VerifyRelayCustodyActionAuthorization(uppercaseProof, resolver, now); err == nil {
+		t.Fatal("custody authorization accepted a non-canonical uppercase Ed25519 proof")
+	}
 	preimage, err := CustodyActionAuthorizationPreimage(signed)
 	if err != nil {
 		t.Fatal(err)
