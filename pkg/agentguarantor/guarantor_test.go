@@ -3,6 +3,7 @@ package agentguarantor
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -193,6 +194,24 @@ func TestObjectAuthorizationBindsExactBody(t *testing.T) {
 	if VerifyObjectAuthorization(authorization, statement.AuthorizedObjectKind, testDigest("3"),
 		"tos.test.signature.v1", allowAuthorityResolver{}, now) == nil {
 		t.Fatal("authorization was replayed onto another body")
+	}
+}
+
+func TestObjectAuthorizationRejectsUnixTimestampWraparound(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statement := AuthorizationStatementV1{SchemaVersion: 1, AuthoritySubject: "agent:guarantor",
+		ProfileURI: "tos.test.authority.v1", ProfileVersion: 1, ProfileDigest: testDigest("1"),
+		AuthorizedObjectKind: "firm-coverage-offer", AuthorizedBodyDigest: testDigest("2"),
+		ValidationTimeUnix: uint64(math.MaxInt64) + 1}
+	if _, err := SignObjectAuthorization(statement, "tos.test.signature.v1", key, []byte("historical-proof")); err == nil {
+		t.Fatal("authorization timestamp above MaxInt64 was accepted")
+	}
+	if validUnixTimestampV1(0) || validUnixTimestampV1(uint64(math.MaxInt64)+1) ||
+		!validUnixTimestampV1(uint64(math.MaxInt64)) {
+		t.Fatal("Guarantor signed Unix timestamp boundary is inconsistent")
 	}
 }
 

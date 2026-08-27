@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -246,10 +247,19 @@ func validateAuthorizationStatement(statement AuthorizationStatementV1) error {
 	if statement.SchemaVersion != 1 || !validID(statement.AuthoritySubject) || !validID(statement.ProfileURI) ||
 		statement.ProfileVersion == 0 || !digestPattern.MatchString(statement.ProfileDigest) ||
 		!validToken(statement.AuthorizedObjectKind, 128) || !digestPattern.MatchString(statement.AuthorizedBodyDigest) ||
-		statement.ValidationTimeUnix == 0 {
+		!validUnixTimestampV1(statement.ValidationTimeUnix) {
 		return errors.New("Guarantor authorization statement is invalid")
 	}
 	return nil
+}
+
+// validUnixTimestampV1 is the common boundary for protocol timestamps that
+// are converted to time.Time. The wire representation is uint64, while Go's
+// Unix conversion accepts int64. Rejecting the non-overlapping half of the
+// wire domain prevents a crafted in-memory value from wrapping into the past
+// before policy or historical-authority validation.
+func validUnixTimestampV1(value uint64) bool {
+	return value > 0 && value <= math.MaxInt64
 }
 
 func validID(value string) bool { return validToken(value, MaxObjectIDBytes) }

@@ -27,7 +27,8 @@ func ValidateServiceProfile(profile ServiceProfileV1, now time.Time) error {
 		len(profile.PayoutAdapterProfiles) == 0 || len(profile.PayoutAdapterProfiles) > MaxPayoutAdapters ||
 		!validID(profile.ExposureAuthorityID) || agentcommerce.ValidateProfileRefV1(profile.ExposureAuthorizationProfile) != nil ||
 		!validID(profile.LifecycleAuthorityID) || agentcommerce.ValidateProfileRefV1(profile.LifecycleAuthorizationProfile) != nil ||
-		profile.PolicyRevision == 0 || profile.CreatedAtUnix == 0 || profile.ExpiresAtUnix <= profile.CreatedAtUnix ||
+		profile.PolicyRevision == 0 || !validUnixTimestampV1(profile.CreatedAtUnix) ||
+		!validUnixTimestampV1(profile.ExpiresAtUnix) || profile.ExpiresAtUnix <= profile.CreatedAtUnix ||
 		profile.ExpiresAtUnix-profile.CreatedAtUnix > uint64((90*24*time.Hour)/time.Second) ||
 		profile.CreatedAtUnix > uint64(now.UTC().Add(5*time.Minute).Unix()) || uint64(now.UTC().Unix()) >= profile.ExpiresAtUnix {
 		return errors.New("Guarantor service profile is invalid")
