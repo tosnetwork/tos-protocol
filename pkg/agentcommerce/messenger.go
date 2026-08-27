@@ -56,7 +56,7 @@ func ValidateMessengerEffectRequest(request MessengerEffectRequestV1) error {
 			return errors.New("Messenger text effect is not UTF-8")
 		}
 	case "intent.application", "agreement.propose", "agreement.accept", "agreement.evidence", "agreement.withdraw", "agreement.delivery",
-		"agreement.provider-offer":
+		"agreement.provider-offer", "commerce.profile-event":
 	default:
 		return errors.New("Messenger effect event kind is not economic-safe")
 	}

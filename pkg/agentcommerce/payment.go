@@ -93,9 +93,18 @@ func buildAgreementPaymentRequestAmount(ownerID, agentID, networkID, networkDoma
 	}
 	fields := map[string]SemanticValue{"owner_id": ID(ownerID), "agent_id": ID(agentID),
 		"agreement_body_digest": Digest32(obligation.AgreementBodyDigest), "obligation_instance_id": Digest32(obligation.ObligationInstanceID),
-		"payer_id": ID(obligation.PayerAgentID), "payee_id": ID(obligation.PayeeAgentID), "network_id": ID(networkID),
+		"payer_id": ID(obligation.PayerAgentID), "payee_id": ID(obligation.PayeeAgentID),
 		"asset_digest": Digest32(assetDigest), "amount_atomic": ID(requested.AmountAtomic), "destination_digest": Digest32(destinationDigest)}
-	actionID, _, err := DeriveStableActionID("payment.direct", fields)
+	if networkDomainDigest == "" {
+		fields["network_id"] = ID(networkID)
+	} else {
+		fields["network_domain_digest"] = Digest32(networkDomainDigest)
+	}
+	actionKind := "payment.direct"
+	if networkDomainDigest != "" {
+		actionKind = "payment.domain-bound"
+	}
+	actionID, _, err := DeriveStableActionID(actionKind, fields)
 	if err != nil {
 		return AgreementPaymentRequest{}, err
 	}
@@ -195,9 +204,13 @@ func ValidateAgreementPaymentRequest(request AgreementPaymentRequest) error {
 		"agreement_body_digest": Digest32(request.AgreementBodyDigest), "obligation_instance_id": Digest32(request.ObligationInstanceID),
 		"payer_id": ID(request.PayerAgentID), "payee_id": ID(request.PayeeAgentID), "asset_digest": Digest32(assetDigest),
 		"destination_digest": Digest32(destinationDigest)}
-	kind := "payment.direct"
+	kind := PaymentActionKind(request)
 	if request.SchemaVersion == 1 || request.SchemaVersion == 3 {
-		fields["network_id"] = ID(request.NetworkID)
+		if request.SchemaVersion == 1 {
+			fields["network_id"] = ID(request.NetworkID)
+		} else {
+			fields["network_domain_digest"] = Digest32(request.NetworkDomainDigest)
+		}
 		fields["amount_atomic"] = ID(request.Amount.AmountAtomic)
 	} else {
 		kind = request.SemanticActionKind
@@ -211,6 +224,17 @@ func ValidateAgreementPaymentRequest(request AgreementPaymentRequest) error {
 		return errors.New("Agreement payment semantic identity mismatch")
 	}
 	return nil
+}
+
+func PaymentActionKind(request AgreementPaymentRequest) string {
+	switch request.SchemaVersion {
+	case 2:
+		return "settlement.external"
+	case 3:
+		return "payment.domain-bound"
+	default:
+		return "payment.direct"
+	}
 }
 
 // PaymentAuthorizationMaterial returns the exact request and semantic fields
@@ -231,7 +255,11 @@ func PaymentAuthorizationMaterial(request AgreementPaymentRequest) ([]byte, map[
 		"payer_id": ID(request.PayerAgentID), "payee_id": ID(request.PayeeAgentID),
 		"asset_digest": Digest32(assetDigest), "destination_digest": Digest32(destinationDigest)}
 	if request.SchemaVersion == 1 || request.SchemaVersion == 3 {
-		fields["network_id"] = ID(request.NetworkID)
+		if request.SchemaVersion == 1 {
+			fields["network_id"] = ID(request.NetworkID)
+		} else {
+			fields["network_domain_digest"] = Digest32(request.NetworkDomainDigest)
+		}
 		fields["amount_atomic"] = ID(request.Amount.AmountAtomic)
 	} else {
 		amountDigest, _ := codec.Digest("tos.agreement-payment-amount.v1", request.Amount)

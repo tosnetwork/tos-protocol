@@ -26,7 +26,9 @@ const (
 	MaxNestedLevels    = 16
 	MaxCollectionItems = 4096
 	MaxTotalItems      = 16_384
-	MaxStringBytes     = 256 << 10
+	// A portable evidence envelope may embed one complete canonical request.
+	// The enclosing value is still bounded by MaxCanonicalBytes.
+	MaxStringBytes = 1 << 20
 )
 
 var (

@@ -111,8 +111,8 @@ func TestExactRequestDigestBindsLengthAndBytes(t *testing.T) {
 
 func TestRegistryContainsEveryReleasedKind(t *testing.T) {
 	registry := SemanticActionRegistry()
-	if len(registry) != 31 {
-		t.Fatalf("registry has %d entries, want 31", len(registry))
+	if len(registry) != 42 {
+		t.Fatalf("registry has %d entries, want 42", len(registry))
 	}
 	for kind, candidate := range registry {
 		if candidate.ActionKind != kind || candidate.DomainTag != "tos.semantic-action."+kind+".v1" || len(candidate.Fields) == 0 {

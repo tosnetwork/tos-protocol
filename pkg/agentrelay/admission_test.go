@@ -562,29 +562,29 @@ func TestRelayAdmissionCrossLanguageRequestAndReceiptVectors(t *testing.T) {
 		Amount: agentcommerce.AgreementAmount{AssetNamespace: "tos.native", AssetIdentifier: "tos:testnet",
 			AmountAtomic: "25", Unit: "nanotos"},
 		Destination: []byte("0:" + strings.Repeat("2", 64)), SettlementAdapterURI: "tos.payment.direct.v1",
-		StableActionID: "sha256:f951d5db1f4a955b156164b9985a9be3e965e2959ca6dce6db2436147662e0ae",
+		StableActionID: "sha256:81ee1e20e2dc9135975343ca3433116e73477f3edd9c876d49941c54451ad0fa",
 		ExpiresAtUnix:  1_800_000_480}
 	underlying, semanticMap, err := agentcommerce.PaymentAuthorizationMaterial(payment)
 	if err != nil {
 		t.Fatal(err)
 	}
-	semanticFields, err := agentcommerce.ExportSemanticFields("payment.direct", semanticMap)
+	semanticFields, err := agentcommerce.ExportSemanticFields("payment.domain-bound", semanticMap)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fence := agentcommerce.WriterFence{Body: agentcommerce.WriterFenceBody{SchemaVersion: 1,
 		OwnerID: "owner:client", AgentID: "agent:client", InstanceID: "instance:client", LeaseID: "lease:client",
 		WriterGeneration: 1, IssuedAtUnix: 1_799_999_940, ExpiresAtUnix: 1_800_000_600,
-		AuthorityID: "authority:client", Scope: []string{"payment.direct"}},
+		AuthorityID: "authority:client", Scope: []string{"payment.domain-bound"}},
 		PublicKey: "ed25519:17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
-		Proof:     "ed25519:5ekeg0lwJ5Gw4fGd9yLfldKh5S-yAUCCpzUD1g7o8nbdETy6m-Ewrsr_8_5LniXWwlTRCIV0nvn6lMTFYexpAQ"}
+		Proof:     "ed25519:PxvAJJKKcEX_7OJG8zVDRk4Q0jEnY0AXHjm9GOizPDIJ4lpU7kyHfxs27tNdyidev-qh6-H8_ksoOUNrPGeCBA"}
 	action := agentcommerce.AuthorizedAction{SchemaVersion: 1, OwnerID: "owner:client", AgentID: "agent:client",
-		ActionKind: "payment.direct", StableActionID: payment.StableActionID,
-		ExactRequestDigest: "sha256:f218789c7750655634f28dc6607798d0004537aa63528e63b921fb9ea96c1039",
-		WriterGeneration:   1, WriterFenceDigest: "sha256:8a16195806d954cd32cf55d2e14e467a3d9226824e923245e18a6fc597d705b9",
+		ActionKind: "payment.domain-bound", StableActionID: payment.StableActionID,
+		ExactRequestDigest: "sha256:c16ad477c999b08ea3fefece7ec62fd4f8bee1805a1fc76f45a45623c3a6a294",
+		WriterGeneration:   1, WriterFenceDigest: "sha256:c798f9edd3883480b8e87e7e1cfe2b2834fc398de26c18232be0599b69ae0020",
 		PolicyRevision: 1, MandateDigest: digest("c"), ExpectedPriorState: "unknown", ExpiresAtUnix: 1_800_000_480,
 		AuthorityID: "authority:client", AuthorityPublicKey: fence.PublicKey,
-		AuthorizationProof: "ed25519:jQM98O0D_LEAzGrESPocGJc35MPc5K1JSMHGcJxQGU5Wn2CYuPXNGrRMOSpg9ghbH91slFW25r62mLnkbNwdAw"}
+		AuthorizationProof: "ed25519:t-3hbvDEroZZAtwYIuhTO1wfGw4yftPVud40xGNSW0hs1sMOTuj0A7iVL4a__e8pVkLHCGFP-C_ldrdScrwVAg"}
 	wire := RelaySideEffectAdmissionRequest{SchemaVersion: 1, OwnerID: "owner:client", AgentID: "agent:client",
 		AuthenticatedPrincipal: "principal:openfox-client", ProviderAgentID: "agent:provider",
 		ServiceProfileDigest:      "sha256:434777cea11e97002fac9923772e10bb314dd2a17ea2804d682b7719222f51b9",
@@ -605,7 +605,7 @@ func TestRelayAdmissionCrossLanguageRequestAndReceiptVectors(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonicalHash := sha256.Sum256(canonical)
-	if got, want := hex.EncodeToString(canonicalHash[:]), "8845f40dffa0206a7ae8fe85d5dcf98776097498e95289511b5caa7d9ece56be"; got != want {
+	if got, want := hex.EncodeToString(canonicalHash[:]), "160c75b01f41928160b9385376b1a872dc26d60ab1d4f424d69e2b413def521b"; got != want {
 		t.Fatalf("cross-language admission request bytes changed: got=%s want=%s", got, want)
 	}
 
@@ -618,16 +618,16 @@ func TestRelayAdmissionCrossLanguageRequestAndReceiptVectors(t *testing.T) {
 		StageMask:      append([]SideEffectStage(nil), wire.StageMask...), RouteAttempt: 1,
 		StableActionID: wire.StableActionID, ExactRequestDigest: wire.ExactRequestDigest,
 		RelayExecutionDigest:   wire.RelayExecutionDigest,
-		AuthorizedActionDigest: "sha256:d24a37880bd885b9f8b96d93af584901665093798ca6b9674dea9a80ceb1c21e",
+		AuthorizedActionDigest: "sha256:1e698bf952d46cf52146486147a4ace0f3b854d2bcf4690f48e1f044bc31efe6",
 		WriterFenceDigest:      action.WriterFenceDigest, WriterLeaseID: "lease:client", WriterGeneration: 1,
 		PolicyRevision: 1, MandateDigest: digest("c"), AdmissionSequence: 1,
 		IssuedAtUnix: 1_800_000_000, StartNotAfterUnix: 1_800_000_030}
 	if got, err := RelaySideEffectAdmissionReceiptBodyDigest(body); err != nil ||
-		got != "sha256:a88c2cc70c131f6724c9f19183be19147d07bf41422603b308588733de8752e2" {
+		got != "sha256:d9f0de29b8c178e1bdd1303eb790c441dbfec19d58ab5ce1d68dac9f9b0d5bbd" {
 		t.Fatalf("cross-language admission receipt digest changed: got=%s err=%v", got, err)
 	}
 	signed := SignedRelaySideEffectAdmissionReceipt{Body: body, PublicKey: fence.PublicKey,
-		Signature: "ed25519:cbjUUrpkzEvnqPIGAxNLdwE9YHXzfuBsp_yt7NxLqEwVqdNUkDHhYsjZCA5ZWz3cosuCPWnvUMCO9y3I5so2Bw"}
+		Signature: "ed25519:-_FtPS66t_yNOVPnqtov4P1faXXsf1Yf4tiBhJjZA4xYuTYN0QcZ_qeNMd8koye0JqetUNXuewpPmQY4M80jCw"}
 	if err := VerifyRelaySideEffectAdmissionReceiptSignature(signed); err != nil {
 		t.Fatal(err)
 	}

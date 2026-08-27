@@ -366,40 +366,46 @@ func ValidateIntentBody(body AgentIntentBody, now time.Time) error {
 	} else if !canonicalDigestPattern.MatchString(body.PredecessorDigest) {
 		return errors.New("intent successor has no canonical predecessor")
 	}
-	if err := validateDiscoveryCard(body.Payload.DiscoveryCard); err != nil {
+	return ValidateAgentIntentPayload(body.Payload)
+}
+
+// ValidateAgentIntentPayload validates the exact reusable PUBLICATION/POST
+// payload independently of a legacy SignedAgentIntent envelope.
+func ValidateAgentIntentPayload(payload AgentIntentPayload) error {
+	if err := validateDiscoveryCard(payload.DiscoveryCard); err != nil {
 		return err
 	}
-	if err := validateContentDescriptor(body.Payload.DetailDescriptor, true); err != nil {
+	if err := validateContentDescriptor(payload.DetailDescriptor, true); err != nil {
 		return err
 	}
-	if body.Payload.PublicAttachmentDescriptor != nil {
-		if err := validateContentDescriptor(*body.Payload.PublicAttachmentDescriptor, false); err != nil {
+	if payload.PublicAttachmentDescriptor != nil {
+		if err := validateContentDescriptor(*payload.PublicAttachmentDescriptor, false); err != nil {
 			return err
 		}
 	}
-	if len(body.Payload.ReplyRoutes) == 0 || len(body.Payload.ReplyRoutes) > MaxIntentReplyRoutes {
+	if len(payload.ReplyRoutes) == 0 || len(payload.ReplyRoutes) > MaxIntentReplyRoutes {
 		return errors.New("intent reply routes are invalid")
 	}
-	for _, route := range body.Payload.ReplyRoutes {
+	for _, route := range payload.ReplyRoutes {
 		if !boundedIdentifier(route.ProfileURI, 256) || !boundedIdentifier(route.AgentID, 256) || len(route.Endpoint) > 2048 {
 			return errors.New("intent reply route is invalid")
 		}
 	}
-	if len(body.Payload.SettlementPreferences) > MaxIntentSettlementProfiles {
+	if len(payload.SettlementPreferences) > MaxIntentSettlementProfiles {
 		return errors.New("too many settlement preferences")
 	}
-	for _, preference := range body.Payload.SettlementPreferences {
+	for _, preference := range payload.SettlementPreferences {
 		if !boundedIdentifier(preference.AdapterURI, 256) || len(preference.Parameters) > 4096 {
 			return errors.New("settlement preference is invalid")
 		}
 	}
-	if err := validateSortedStrings(body.Payload.RequiredExtensions, 64, 256); err != nil {
+	if err := validateSortedStrings(payload.RequiredExtensions, 64, 256); err != nil {
 		return fmt.Errorf("required extensions: %w", err)
 	}
-	if len(body.Payload.OptionalExtensions) > 64 {
+	if len(payload.OptionalExtensions) > 64 {
 		return errors.New("too many optional extensions")
 	}
-	for name, value := range body.Payload.OptionalExtensions {
+	for name, value := range payload.OptionalExtensions {
 		if !boundedIdentifier(name, 256) || len(value) > MaxIntentInlineDetailBytes {
 			return errors.New("optional extension is invalid")
 		}

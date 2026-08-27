@@ -94,9 +94,9 @@ func TestDomainBoundAgreementPaymentCrossLanguageRelayVectors(t *testing.T) {
 			obligationInstanceID:  "sha256:" + strings.Repeat("6", 64),
 			payerAgentID:          "agent:client", payeeAgentID: "agent:merchant", amount: "25",
 			destination: "0:" + strings.Repeat("2", 64), expiresAtUnix: 1_800_000_480,
-			wantStableActionID:       "sha256:f951d5db1f4a955b156164b9985a9be3e965e2959ca6dce6db2436147662e0ae",
-			wantPaymentRequestDigest: "sha256:bebcfeeaefba55c1a468eab68c01a91904ea62145716cd66dc6ce81473821004",
-			wantExactRequestDigest:   "sha256:f218789c7750655634f28dc6607798d0004537aa63528e63b921fb9ea96c1039",
+			wantStableActionID:       "sha256:81ee1e20e2dc9135975343ca3433116e73477f3edd9c876d49941c54451ad0fa",
+			wantPaymentRequestDigest: "sha256:bc5ae55dcbc7b3f45ac4014b6973c8ca55879464b260d1157b167a8a906d2c34",
+			wantExactRequestDigest:   "sha256:c16ad477c999b08ea3fefece7ec62fd4f8bee1805a1fc76f45a45623c3a6a294",
 		},
 		{
 			name: "sponsorship", ownerID: "owner:provider", agentID: "agent:provider",
@@ -105,9 +105,9 @@ func TestDomainBoundAgreementPaymentCrossLanguageRelayVectors(t *testing.T) {
 			obligationInstanceID:  "sha256:" + strings.Repeat("1", 64),
 			payerAgentID:          "agent:provider", payeeAgentID: "agent:client", amount: "50",
 			destination: "0:" + strings.Repeat("1", 64), expiresAtUnix: 1_800_000_100,
-			wantStableActionID:       "sha256:63376b35343ff6bd7bf2973fe21c906606b1b90aea68571fe94b88a11d5b77f1",
-			wantPaymentRequestDigest: "sha256:01a3bfbd898518c5fda6770cb102118a7129c6453ac0900397ad25876c892f8a",
-			wantExactRequestDigest:   "sha256:e32961bbde8f8489bbb216de7c5547918927aab67e353f339d51d1b625abc79d",
+			wantStableActionID:       "sha256:2e662b496bdad77a6816a182bad86a70255fa5c1594ba53e39ff45f22c2feb42",
+			wantPaymentRequestDigest: "sha256:79b6567e848f66dfb46283ac7c5651ba74a4070e97027112ffdfdc20fd17f5ea",
+			wantExactRequestDigest:   "sha256:afeb5b08ca097a4ffedefab91d8c649c9355fe16c9d3f66dda4d150be93584aa",
 		},
 	}
 	for _, test := range tests {

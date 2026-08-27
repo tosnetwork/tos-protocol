@@ -1,0 +1,1261 @@
+{
+  "schema": "tos.service.agent-guarantor-conformance-fixture.v1",
+  "profile_uri": "tos.agent-service.guarantor.v1",
+  "commerce_profile_event_content_type": "application/vnd.tos.service.commerce-profile-event.v1+cbor",
+  "commerce_carriage_registry": [
+    {
+      "object_kind": "quote-request",
+      "registry_kind": "quote-request",
+      "content_type": "application/vnd.tos.service.agent-guarantor-quote-request.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-quote-request-envelope.v1"
+    },
+    {
+      "object_kind": "firm-offer",
+      "registry_kind": "firm-offer",
+      "content_type": "application/vnd.tos.service.agent-guarantor-firm-offer.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-firm-offer-envelope.v1"
+    },
+    {
+      "object_kind": "offer-non-acceptance-evidence",
+      "registry_kind": "offer-non-acceptance",
+      "content_type": "application/vnd.tos.service.agent-guarantor-offer-non-acceptance.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-offer-non-acceptance-envelope.v1"
+    },
+    {
+      "object_kind": "pre-acceptance-exposure-release-receipt",
+      "registry_kind": "pre-acceptance-exposure-release",
+      "content_type": "application/vnd.tos.service.agent-guarantor-pre-acceptance-release-receipt.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-pre-acceptance-release-receipt-envelope.v1"
+    },
+    {
+      "object_kind": "acceptance-request",
+      "registry_kind": "acceptance-request",
+      "content_type": "application/vnd.tos.service.agent-guarantor-acceptance-request.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-acceptance-request-envelope.v1"
+    },
+    {
+      "object_kind": "acceptance-receipt",
+      "registry_kind": "acceptance-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-acceptance-receipt.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-acceptance-receipt-envelope.v1"
+    },
+    {
+      "object_kind": "activation-evidence",
+      "registry_kind": "activation-evidence",
+      "content_type": "application/vnd.tos.service.agent-guarantor-activation-evidence.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-activation-evidence-envelope.v1"
+    },
+    {
+      "object_kind": "non-activation-evidence",
+      "registry_kind": "non-activation-evidence",
+      "content_type": "application/vnd.tos.service.agent-guarantor-non-activation-evidence.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-non-activation-evidence-envelope.v1"
+    },
+    {
+      "object_kind": "cancellation-request",
+      "registry_kind": "cancellation-request",
+      "content_type": "application/vnd.tos.service.agent-guarantor-cancellation-request.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-cancellation-request-envelope.v1"
+    },
+    {
+      "object_kind": "cancellation-receipt",
+      "registry_kind": "cancellation-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-cancellation-receipt.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-cancellation-receipt-envelope.v1"
+    },
+    {
+      "object_kind": "collateral-control-evidence",
+      "registry_kind": "collateral-control-evidence",
+      "content_type": "application/vnd.tos.service.agent-guarantor-collateral-control-evidence.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-collateral-control-evidence-envelope.v1"
+    },
+    {
+      "object_kind": "collateral-evidence",
+      "registry_kind": "collateral-evidence",
+      "content_type": "application/vnd.tos.service.agent-guarantor-collateral-evidence.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-collateral-evidence-envelope.v1"
+    },
+    {
+      "object_kind": "claim",
+      "registry_kind": "claim",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-envelope.v1"
+    },
+    {
+      "object_kind": "claim-ingress-receipt",
+      "registry_kind": "claim-ingress-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim-ingress-receipt.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-ingress-receipt-envelope.v1"
+    },
+    {
+      "object_kind": "claim-admission-receipt",
+      "registry_kind": "claim-admission-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim-admission.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-admission-envelope.v1"
+    },
+    {
+      "object_kind": "claim-filing-close-receipt",
+      "registry_kind": "claim-filing-close-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim-filing-close.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-filing-close-envelope.v1"
+    },
+    {
+      "object_kind": "claim-decision",
+      "registry_kind": "claim-decision",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim-decision.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-decision-envelope.v1"
+    },
+    {
+      "object_kind": "claim-decision-admission-receipt",
+      "registry_kind": "claim-decision-admission-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim-decision-admission.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-decision-admission-envelope.v1"
+    },
+    {
+      "object_kind": "claim-decision-application-receipt",
+      "registry_kind": "claim-decision-application-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-decision-application.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-decision-application-envelope.v1"
+    },
+    {
+      "object_kind": "claim-state-transition-receipt",
+      "registry_kind": "claim-state-transition-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-claim-state-transition.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-claim-state-transition-envelope.v1"
+    },
+    {
+      "object_kind": "terminal-claim-set",
+      "registry_kind": "terminal-claim-set",
+      "content_type": "application/vnd.tos.service.agent-guarantor-terminal-claim-set.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-terminal-claim-set-evidence.v1"
+    },
+    {
+      "object_kind": "exposure-release-receipt",
+      "registry_kind": "exposure-release-receipt",
+      "content_type": "application/vnd.tos.service.agent-guarantor-exposure-release-receipt.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-exposure-release-receipt-envelope.v1"
+    },
+    {
+      "object_kind": "coverage-resolution",
+      "registry_kind": "coverage-resolution",
+      "content_type": "application/vnd.tos.service.agent-guarantor-resolution.v1+cbor",
+      "envelope_domain": "tos.service.agent-guarantor-resolution-envelope.v1"
+    }
+  ],
+  "object_registry": {
+    "schema_version": 1,
+    "registry_version": 1,
+    "entries": [
+      {
+        "object_kind": "service-profile-revision-artifact",
+        "canonical_type": "GuarantorServiceProfileRevisionArtifactV1",
+        "digest_or_envelope_binding": "embedded in GuarantorServiceProfileArtifactV1.revisions[]",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.service-profile-revision.v1"
+      },
+      {
+        "object_kind": "service-profile-artifact",
+        "canonical_type": "GuarantorServiceProfileArtifactV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-service-profile-artifact.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.service-profile-artifact.v1"
+      },
+      {
+        "object_kind": "service-profile",
+        "canonical_type": "GuarantorServiceProfileV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-service-profile.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.service-profile.v1"
+      },
+      {
+        "object_kind": "collateral-profile",
+        "canonical_type": "GuarantorCollateralProfileV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-profile.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-profile.v1"
+      },
+      {
+        "object_kind": "collateral-transition-profile",
+        "canonical_type": "CollateralTransitionProfileV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-transition-profile.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-transition-profile.v1"
+      },
+      {
+        "object_kind": "claim-profile",
+        "canonical_type": "GuarantorClaimProfileV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-profile.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-profile.v1"
+      },
+      {
+        "object_kind": "claim-closure-capacity",
+        "canonical_type": "ClaimClosureCapacityV1",
+        "digest_or_envelope_binding": "embedded in requested and accepted coverage terms",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-closure-capacity.v1"
+      },
+      {
+        "object_kind": "stage-action-admission-body",
+        "canonical_type": "PortableStageActionAdmissionBodyV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-stage-action-admission.v1; embedded in its evidence envelope",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.stage-action-admission-body.v1"
+      },
+      {
+        "object_kind": "stage-action-admission-evidence",
+        "canonical_type": "PortableStageActionAdmissionEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-stage-action-admission-evidence.v1; embedded exactly once in each stage result at every assurance level",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.stage-action-admission-evidence.v1"
+      },
+      {
+        "object_kind": "payout-execution-evidence",
+        "canonical_type": "AuthorizedGuarantorPayoutExecutionEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-payout-execution-evidence.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.payout-execution-evidence.v1"
+      },
+      {
+        "object_kind": "payout-destination",
+        "canonical_type": "PayoutDestinationV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-payout-destination.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.payout-destination.v1"
+      },
+      {
+        "object_kind": "coverage-end-commitment",
+        "canonical_type": "CoverageEndCommitmentV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-coverage-end-commitment.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.coverage-end-commitment.v1"
+      },
+      {
+        "object_kind": "stage-operation-binding",
+        "canonical_type": "GuarantorStageOperationBindingV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-stage-operation-binding.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.stage-operation-binding.v1"
+      },
+      {
+        "object_kind": "collateral-control-disclosure",
+        "canonical_type": "CollateralControlDisclosureV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-control-disclosure.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-control-disclosure.v1"
+      },
+      {
+        "object_kind": "collateral-control-evidence",
+        "canonical_type": "AuthorizedCollateralControlEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-control-evidence-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-control-evidence.v1"
+      },
+      {
+        "object_kind": "operational-independence-terms",
+        "canonical_type": "GuarantorOperationalIndependenceTermsV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-operational-independence-terms.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.operational-independence-terms.v1"
+      },
+      {
+        "object_kind": "operational-independence-evidence",
+        "canonical_type": "AuthorizedGuarantorOperationalIndependenceEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-operational-independence-evidence-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.operational-independence-evidence.v1"
+      },
+      {
+        "object_kind": "requested-coverage-terms",
+        "canonical_type": "RequestedCoverageTermsV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-requested-coverage-terms.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.requested-coverage-terms.v1"
+      },
+      {
+        "object_kind": "quote-request",
+        "canonical_type": "AuthorizedCoverageQuoteRequestV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-quote-request-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.quote-request.v1"
+      },
+      {
+        "object_kind": "coverage-terms",
+        "canonical_type": "GuarantorCoverageTermsV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-coverage-terms.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.coverage-terms.v1"
+      },
+      {
+        "object_kind": "cancellation-policy",
+        "canonical_type": "CoverageCancellationPolicyV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-cancellation-policy.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.cancellation-policy.v1"
+      },
+      {
+        "object_kind": "coverage-agreement",
+        "canonical_type": "AgentAgreementBodyV1 plus profile-qualified evidence",
+        "digest_or_envelope_binding": "released generic Agreement domains",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.coverage-agreement.v1"
+      },
+      {
+        "object_kind": "agreement-authorization-set",
+        "canonical_type": "GuarantorAgreementAuthorizationEvidenceSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-agreement-authorization-evidence-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.agreement-authorization-set.v1"
+      },
+      {
+        "object_kind": "authority-admission-proof",
+        "canonical_type": "AuthorityAdmissionEligibilityProofV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-authority-admission-eligibility-proof.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.authority-admission-proof.v1"
+      },
+      {
+        "object_kind": "authority-admission-proof-set",
+        "canonical_type": "AuthorityAdmissionEligibilityProofSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-authority-admission-eligibility-proof-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.authority-admission-proof-set.v1"
+      },
+      {
+        "object_kind": "firm-offer-agreement-evidence",
+        "canonical_type": "GuarantorFirmOfferAgreementEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-firm-offer-agreement-evidence.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.firm-offer-agreement-evidence.v1"
+      },
+      {
+        "object_kind": "guarantor-evidence-set",
+        "canonical_type": "CanonicalGuarantorEvidenceSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-evidence-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.evidence-set.v1"
+      },
+      {
+        "object_kind": "exposure-admission-descriptor",
+        "canonical_type": "ProviderExposureAdmissionDescriptorV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-exposure-admission.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.exposure-admission-descriptor.v1"
+      },
+      {
+        "object_kind": "firm-offer-recipient-set",
+        "canonical_type": "FirmOfferRecipientSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-firm-offer-recipient-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.firm-offer-recipient-set.v1"
+      },
+      {
+        "object_kind": "exposure-reservation-scope",
+        "canonical_type": "ProviderExposureReservationScopeV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-reservation-scope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.exposure-reservation-scope.v1"
+      },
+      {
+        "object_kind": "firm-offer-authority-instance-effect",
+        "canonical_type": "FirmOfferAuthorityInstanceEffectV1",
+        "digest_or_envelope_binding": "embedded in FirmOfferIssuanceActionBodyV1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.firm-offer-authority-effect.v1"
+      },
+      {
+        "object_kind": "exposure-admission-receipt",
+        "canonical_type": "AuthorizedProviderExposureAdmissionReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-exposure-receipt-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.exposure-admission-receipt.v1"
+      },
+      {
+        "object_kind": "firm-offer",
+        "canonical_type": "AuthorizedFirmCoverageOfferV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-firm-offer-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.firm-offer.v1"
+      },
+      {
+        "object_kind": "offer-non-acceptance",
+        "canonical_type": "AuthorizedOfferNonAcceptanceEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-offer-non-acceptance-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.offer-non-acceptance.v1"
+      },
+      {
+        "object_kind": "pre-acceptance-exposure-release",
+        "canonical_type": "AuthorizedPreAcceptanceExposureReleaseReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-pre-acceptance-release-receipt-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.pre-acceptance-release.v1"
+      },
+      {
+        "object_kind": "acceptance-request",
+        "canonical_type": "AuthorizedCoverageAcceptanceRequestV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-acceptance-request-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.acceptance-request.v1"
+      },
+      {
+        "object_kind": "acceptance-receipt",
+        "canonical_type": "AuthorizedCoverageAcceptanceReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-acceptance-receipt-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.acceptance-receipt.v1"
+      },
+      {
+        "object_kind": "activation-admission-cut",
+        "canonical_type": "ActivationAdmissionCutProofV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-activation-cut-proof.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.activation-admission-cut.v1"
+      },
+      {
+        "object_kind": "activation-evidence",
+        "canonical_type": "AuthorizedCoverageActivationEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-activation-evidence-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.activation-evidence.v1"
+      },
+      {
+        "object_kind": "non-activation-evidence",
+        "canonical_type": "AuthorizedCoverageNonActivationEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-non-activation-evidence-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.non-activation-evidence.v1"
+      },
+      {
+        "object_kind": "non-activation-exposure-release",
+        "canonical_type": "AuthorizedNonActivationExposureReleaseReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-non-activation-exposure-release-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.non-activation-exposure-release.v1"
+      },
+      {
+        "object_kind": "cancellation-request",
+        "canonical_type": "AuthorizedCoverageCancellationRequestV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-cancellation-request-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.cancellation-request.v1"
+      },
+      {
+        "object_kind": "cancellation-receipt",
+        "canonical_type": "AuthorizedCoverageCancellationReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-cancellation-receipt-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.cancellation-receipt.v1"
+      },
+      {
+        "object_kind": "collateral-terms",
+        "canonical_type": "CollateralTermsV1",
+        "digest_or_envelope_binding": "embedded in the accepted coverage Agreement",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-terms.v1"
+      },
+      {
+        "object_kind": "collateral-position-state",
+        "canonical_type": "CollateralPositionStateV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-position-state.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-position-state.v1"
+      },
+      {
+        "object_kind": "collateral-adapter-request",
+        "canonical_type": "CollateralAdapterRequestV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-adapter-request.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-adapter-request.v1"
+      },
+      {
+        "object_kind": "collateral-adapter-evidence",
+        "canonical_type": "CollateralAdapterEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-adapter-evidence.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-adapter-evidence.v1"
+      },
+      {
+        "object_kind": "collateral-evidence",
+        "canonical_type": "AuthorizedCollateralEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-evidence-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-evidence.v1"
+      },
+      {
+        "object_kind": "collateral-payout-payment-evidence-projection",
+        "canonical_type": "CollateralPayoutPaymentEvidenceProjectionV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-collateral-payout-payment-evidence.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.collateral-payout-payment-evidence.v1"
+      },
+      {
+        "object_kind": "triggered-obligation-set",
+        "canonical_type": "TriggeredObligationSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-triggered-obligation-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.triggered-obligation-set.v1"
+      },
+      {
+        "object_kind": "claim-evidence-manifest",
+        "canonical_type": "ClaimEvidenceManifestV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-evidence-manifest.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-evidence-manifest.v1"
+      },
+      {
+        "object_kind": "other-recovery-declaration",
+        "canonical_type": "OtherRecoveryDeclarationV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-other-recovery-declaration.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.other-recovery-declaration.v1"
+      },
+      {
+        "object_kind": "claim",
+        "canonical_type": "AuthorizedCoverageClaimV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim.v1"
+      },
+      {
+        "object_kind": "claim-ingress-receipt",
+        "canonical_type": "AuthorizedClaimSubmissionIngressReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-ingress-receipt-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-ingress-receipt.v1"
+      },
+      {
+        "object_kind": "claim-ingress-cut",
+        "canonical_type": "ClaimIngressAdmissionCutProofV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-ingress-cut-proof.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-ingress-cut.v1"
+      },
+      {
+        "object_kind": "claim-submission-authority-instance-effect",
+        "canonical_type": "ClaimSubmissionAuthorityInstanceEffectV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-submission-authority-instance-effect.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-submission-authority-effect.v1"
+      },
+      {
+        "object_kind": "claim-admission-receipt",
+        "canonical_type": "AuthorizedClaimAdmissionReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-admission-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-admission-receipt.v1"
+      },
+      {
+        "object_kind": "claim-filing-close-receipt",
+        "canonical_type": "AuthorizedClaimFilingCloseReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-filing-close-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-filing-close-receipt.v1"
+      },
+      {
+        "object_kind": "claim-decision",
+        "canonical_type": "AuthorizedClaimDecisionV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-decision-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-decision.v1"
+      },
+      {
+        "object_kind": "claim-revision-epoch-expectation",
+        "canonical_type": "ClaimRevisionEpochExpectationV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-revision-epoch-expectation.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-revision-epoch-expectation.v1"
+      },
+      {
+        "object_kind": "claim-decision-admission-receipt",
+        "canonical_type": "AuthorizedClaimDecisionAdmissionReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-decision-admission-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-decision-admission-receipt.v1"
+      },
+      {
+        "object_kind": "claim-decision-admission-receipt-seal",
+        "canonical_type": "ClaimDecisionAdmissionReceiptSealBodyV1 plus authorization",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-decision-admission-receipt-seal.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-decision-admission-receipt-seal.v1"
+      },
+      {
+        "object_kind": "claim-decision-admission-receipt-proof",
+        "canonical_type": "ClaimDecisionAdmissionReceiptProofV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-decision-admission-receipt-proof.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-decision-admission-receipt-proof.v1"
+      },
+      {
+        "object_kind": "decision-application-token",
+        "canonical_type": "DecisionApplicationTokenV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-decision-application-token.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.decision-application-token.v1"
+      },
+      {
+        "object_kind": "claim-decision-application-receipt",
+        "canonical_type": "AuthorizedClaimDecisionApplicationReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-decision-application-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-decision-application-receipt.v1"
+      },
+      {
+        "object_kind": "decision-application-receipt-seal",
+        "canonical_type": "DecisionApplicationReceiptSealBodyV1 plus authorization",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-decision-application-receipt-seal.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.decision-application-receipt-seal.v1"
+      },
+      {
+        "object_kind": "decision-application-receipt-proof",
+        "canonical_type": "DecisionApplicationReceiptProofV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-decision-application-receipt-proof.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.decision-application-receipt-proof.v1"
+      },
+      {
+        "object_kind": "claim-admission-receipt-proof",
+        "canonical_type": "ClaimAdmissionReceiptProofV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-admission-receipt-proof.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-admission-receipt-proof.v1"
+      },
+      {
+        "object_kind": "claim-admission-receipt-seal",
+        "canonical_type": "ClaimAdmissionReceiptSealBodyV1 plus authorization",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-admission-receipt-seal.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-admission-receipt-seal.v1"
+      },
+      {
+        "object_kind": "claim-state-transition-receipt",
+        "canonical_type": "AuthorizedClaimStateTransitionReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-state-transition-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-state-transition-receipt.v1"
+      },
+      {
+        "object_kind": "conditional-settlement-template",
+        "canonical_type": "ConditionalSettlementTemplateV1",
+        "digest_or_envelope_binding": "embedded in the accepted coverage Agreement",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.conditional-settlement-template.v1"
+      },
+      {
+        "object_kind": "settlement-parameters",
+        "canonical_type": "ProfileQualifiedSettlementParametersV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-settlement-parameters.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.settlement-parameters.v1"
+      },
+      {
+        "object_kind": "claim-payout-line",
+        "canonical_type": "ClaimPayoutLineV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-payout-line.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-payout-line.v1"
+      },
+      {
+        "object_kind": "materialized-payout-line",
+        "canonical_type": "MaterializedPayoutLineV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-materialized-payout-line.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.materialized-payout-line.v1"
+      },
+      {
+        "object_kind": "materialized-payout-set",
+        "canonical_type": "MaterializedPayoutObligationSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-payout-obligation-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.materialized-payout-set.v1"
+      },
+      {
+        "object_kind": "terminal-payout-set",
+        "canonical_type": "TerminalPayoutEvidenceSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-terminal-payout-evidence-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.terminal-payout-set.v1"
+      },
+      {
+        "object_kind": "coverage-terminal-payout-set",
+        "canonical_type": "CoverageTerminalPayoutEvidenceSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-coverage-terminal-payout-evidence-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.coverage-terminal-payout-set.v1"
+      },
+      {
+        "object_kind": "claim-terminal-resolution-ref-set",
+        "canonical_type": "ClaimTerminalResolutionRefSetV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-claim-resolution-set.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.claim-resolution-ref-set.v1"
+      },
+      {
+        "object_kind": "coverage-closure-context",
+        "canonical_type": "CoverageClosureEvidenceContextV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-coverage-closure-context.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.coverage-closure-context.v1"
+      },
+      {
+        "object_kind": "terminal-claim-set",
+        "canonical_type": "AuthorizedTerminalClaimSetEvidenceV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-terminal-claim-set-evidence.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.terminal-claim-set.v1"
+      },
+      {
+        "object_kind": "exposure-disposition",
+        "canonical_type": "ExposureDispositionComputationV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-exposure-disposition.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.exposure-disposition.v1"
+      },
+      {
+        "object_kind": "exposure-release-receipt",
+        "canonical_type": "AuthorizedExposureReleaseReceiptV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-exposure-release-receipt-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.exposure-release-receipt.v1"
+      },
+      {
+        "object_kind": "coverage-resolution",
+        "canonical_type": "AuthorizedCoverageResolutionV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-resolution-envelope.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.coverage-resolution.v1"
+      },
+      {
+        "object_kind": "transition-evidence-projection",
+        "canonical_type": "TransitionEvidenceProjectionV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-transition-evidence-projection.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.transition-evidence-projection.v1"
+      },
+      {
+        "object_kind": "pre-acceptance-release-projection",
+        "canonical_type": "PreAcceptanceExposureReleaseEvidenceProjectionV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-pre-acceptance-release-evidence-projection.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.pre-acceptance-release-projection.v1"
+      },
+      {
+        "object_kind": "exposure-release-projection",
+        "canonical_type": "ExposureReleaseEvidenceProjectionV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-exposure-release-evidence-projection.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.exposure-release-projection.v1"
+      },
+      {
+        "object_kind": "commerce-profile-event",
+        "canonical_type": "CommerceProfileEventV1",
+        "digest_or_envelope_binding": "released generic commerce-event domain",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.commerce-profile-event.v1"
+      },
+      {
+        "object_kind": "object-verifier-registry",
+        "canonical_type": "GuarantorObjectVerifierRegistryV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-object-verifier-registry.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.object-registry.v1"
+      },
+      {
+        "object_kind": "mutation-verifier-registry",
+        "canonical_type": "GuarantorMutationVerifierRegistryV1",
+        "digest_or_envelope_binding": "tos.service.agent-guarantor-mutation-verifier-registry.v1",
+        "verifier_profile_id": "tos.service.agent-guarantor.verify.mutation-registry.v1"
+      }
+    ]
+  },
+  "object_registry_canonical_cbor_hex": "a367656e74726965739859a46b6f626a6563745f6b696e647821736572766963652d70726f66696c652d7265766973696f6e2d61727469666163746e63616e6f6e6963616c5f74797065782947756172616e746f725365727669636550726f66696c655265766973696f6e417274696661637456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e736572766963652d70726f66696c652d7265766973696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677839656d62656464656420696e2047756172616e746f725365727669636550726f66696c65417274696661637456312e7265766973696f6e735b5da46b6f626a6563745f6b696e647818736572766963652d70726f66696c652d61727469666163746e63616e6f6e6963616c5f74797065782147756172616e746f725365727669636550726f66696c65417274696661637456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e736572766963652d70726f66696c652d61727469666163742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d736572766963652d70726f66696c652d61727469666163742e7631a46b6f626a6563745f6b696e646f736572766963652d70726f66696c656e63616e6f6e6963616c5f74797065781947756172616e746f725365727669636550726f66696c6556317376657269666965725f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e736572766963652d70726f66696c652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782e746f732e736572766963652e6167656e742d67756172616e746f722d736572766963652d70726f66696c652e7631a46b6f626a6563745f6b696e6472636f6c6c61746572616c2d70726f66696c656e63616e6f6e6963616c5f74797065781c47756172616e746f72436f6c6c61746572616c50726f66696c6556317376657269666965725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d70726f66696c652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677831746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d70726f66696c652e7631a46b6f626a6563745f6b696e64781d636f6c6c61746572616c2d7472616e736974696f6e2d70726f66696c656e63616e6f6e6963616c5f74797065781d436f6c6c61746572616c5472616e736974696f6e50726f66696c6556317376657269666965725f70726f66696c655f69647843746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d7472616e736974696f6e2d70726f66696c652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d7472616e736974696f6e2d70726f66696c652e7631a46b6f626a6563745f6b696e646d636c61696d2d70726f66696c656e63616e6f6e6963616c5f747970657747756172616e746f72436c61696d50726f66696c6556317376657269666965725f70726f66696c655f69647833746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d70726f66696c652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782c746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d70726f66696c652e7631a46b6f626a6563745f6b696e6476636c61696d2d636c6f737572652d63617061636974796e63616e6f6e6963616c5f7479706576436c61696d436c6f73757265436170616369747956317376657269666965725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d636c6f737572652d63617061636974792e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677831656d62656464656420696e2072657175657374656420616e6420616363657074656420636f766572616765207465726d73a46b6f626a6563745f6b696e64781b73746167652d616374696f6e2d61646d697373696f6e2d626f64796e63616e6f6e6963616c5f747970657822506f727461626c655374616765416374696f6e41646d697373696f6e426f647956317376657269666965725f70726f66696c655f69647841746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e73746167652d616374696f6e2d61646d697373696f6e2d626f64792e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677858746f732e736572766963652e6167656e742d67756172616e746f722d73746167652d616374696f6e2d61646d697373696f6e2e76313b20656d62656464656420696e206974732065766964656e636520656e76656c6f7065a46b6f626a6563745f6b696e64781f73746167652d616374696f6e2d61646d697373696f6e2d65766964656e63656e63616e6f6e6963616c5f747970657826506f727461626c655374616765416374696f6e41646d697373696f6e45766964656e636556317376657269666965725f70726f66696c655f69647845746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e73746167652d616374696f6e2d61646d697373696f6e2d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677883746f732e736572766963652e6167656e742d67756172616e746f722d73746167652d616374696f6e2d61646d697373696f6e2d65766964656e63652e76313b20656d6265646465642065786163746c79206f6e636520696e206561636820737461676520726573756c74206174206576657279206173737572616e6365206c6576656ca46b6f626a6563745f6b696e6478197061796f75742d657865637574696f6e2d65766964656e63656e63616e6f6e6963616c5f74797065782c417574686f72697a656447756172616e746f725061796f7574457865637574696f6e45766964656e636556317376657269666965725f70726f66696c655f6964783f746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7061796f75742d657865637574696f6e2d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677838746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d657865637574696f6e2d65766964656e63652e7631a46b6f626a6563745f6b696e64727061796f75742d64657374696e6174696f6e6e63616e6f6e6963616c5f74797065735061796f757444657374696e6174696f6e56317376657269666965725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7061796f75742d64657374696e6174696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677831746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d64657374696e6174696f6e2e7631a46b6f626a6563745f6b696e6477636f7665726167652d656e642d636f6d6d69746d656e746e63616e6f6e6963616c5f7479706577436f766572616765456e64436f6d6d69746d656e7456317376657269666965725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f7665726167652d656e642d636f6d6d69746d656e742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677836746f732e736572766963652e6167656e742d67756172616e746f722d636f7665726167652d656e642d636f6d6d69746d656e742e7631a46b6f626a6563745f6b696e647773746167652d6f7065726174696f6e2d62696e64696e676e63616e6f6e6963616c5f74797065782047756172616e746f7253746167654f7065726174696f6e42696e64696e6756317376657269666965725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e73746167652d6f7065726174696f6e2d62696e64696e672e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677836746f732e736572766963652e6167656e742d67756172616e746f722d73746167652d6f7065726174696f6e2d62696e64696e672e7631a46b6f626a6563745f6b696e64781d636f6c6c61746572616c2d636f6e74726f6c2d646973636c6f737572656e63616e6f6e6963616c5f74797065781d436f6c6c61746572616c436f6e74726f6c446973636c6f7375726556317376657269666965725f70726f66696c655f69647843746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d636f6e74726f6c2d646973636c6f737572652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d636f6e74726f6c2d646973636c6f737572652e7631a46b6f626a6563745f6b696e64781b636f6c6c61746572616c2d636f6e74726f6c2d65766964656e63656e63616e6f6e6963616c5f747970657825417574686f72697a6564436f6c6c61746572616c436f6e74726f6c45766964656e636556317376657269666965725f70726f66696c655f69647841746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d636f6e74726f6c2d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677843746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d636f6e74726f6c2d65766964656e63652d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781e6f7065726174696f6e616c2d696e646570656e64656e63652d7465726d736e63616e6f6e6963616c5f74797065782747756172616e746f724f7065726174696f6e616c496e646570656e64656e63655465726d7356317376657269666965725f70726f66696c655f69647844746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6f7065726174696f6e616c2d696e646570656e64656e63652d7465726d732e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783d746f732e736572766963652e6167656e742d67756172616e746f722d6f7065726174696f6e616c2d696e646570656e64656e63652d7465726d732e7631a46b6f626a6563745f6b696e6478216f7065726174696f6e616c2d696e646570656e64656e63652d65766964656e63656e63616e6f6e6963616c5f747970657834417574686f72697a656447756172616e746f724f7065726174696f6e616c496e646570656e64656e636545766964656e636556317376657269666965725f70726f66696c655f69647847746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6f7065726174696f6e616c2d696e646570656e64656e63652d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677849746f732e736572766963652e6167656e742d67756172616e746f722d6f7065726174696f6e616c2d696e646570656e64656e63652d65766964656e63652d656e76656c6f70652e7631a46b6f626a6563745f6b696e6478187265717565737465642d636f7665726167652d7465726d736e63616e6f6e6963616c5f747970657818526571756573746564436f7665726167655465726d7356317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7265717565737465642d636f7665726167652d7465726d732e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d7265717565737465642d636f7665726167652d7465726d732e7631a46b6f626a6563745f6b696e646d71756f74652d726571756573746e63616e6f6e6963616c5f747970657820417574686f72697a6564436f76657261676551756f74655265717565737456317376657269666965725f70726f66696c655f69647833746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e71756f74652d726571756573742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677835746f732e736572766963652e6167656e742d67756172616e746f722d71756f74652d726571756573742d656e76656c6f70652e7631a46b6f626a6563745f6b696e646e636f7665726167652d7465726d736e63616e6f6e6963616c5f74797065781847756172616e746f72436f7665726167655465726d7356317376657269666965725f70726f66696c655f69647834746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f7665726167652d7465726d732e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782d746f732e736572766963652e6167656e742d67756172616e746f722d636f7665726167652d7465726d732e7631a46b6f626a6563745f6b696e647363616e63656c6c6174696f6e2d706f6c6963796e63616e6f6e6963616c5f74797065781c436f76657261676543616e63656c6c6174696f6e506f6c69637956317376657269666965725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e63616e63656c6c6174696f6e2d706f6c6963792e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677832746f732e736572766963652e6167656e742d67756172616e746f722d63616e63656c6c6174696f6e2d706f6c6963792e7631a46b6f626a6563745f6b696e6472636f7665726167652d61677265656d656e746e63616e6f6e6963616c5f7479706578344167656e7441677265656d656e74426f6479563120706c75732070726f66696c652d7175616c69666965642065766964656e63657376657269666965725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f7665726167652d61677265656d656e742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782272656c65617365642067656e657269632041677265656d656e7420646f6d61696e73a46b6f626a6563745f6b696e64781b61677265656d656e742d617574686f72697a6174696f6e2d7365746e63616e6f6e6963616c5f74797065782c47756172616e746f7241677265656d656e74417574686f72697a6174696f6e45766964656e636553657456317376657269666965725f70726f66696c655f69647841746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e61677265656d656e742d617574686f72697a6174696f6e2d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677843746f732e736572766963652e6167656e742d67756172616e746f722d61677265656d656e742d617574686f72697a6174696f6e2d65766964656e63652d7365742e7631a46b6f626a6563745f6b696e647819617574686f726974792d61646d697373696f6e2d70726f6f666e63616e6f6e6963616c5f747970657824417574686f7269747941646d697373696f6e456c69676962696c69747950726f6f6656317376657269666965725f70726f66696c655f6964783f746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e617574686f726974792d61646d697373696f6e2d70726f6f662e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677844746f732e736572766963652e6167656e742d67756172616e746f722d617574686f726974792d61646d697373696f6e2d656c69676962696c6974792d70726f6f662e7631a46b6f626a6563745f6b696e64781d617574686f726974792d61646d697373696f6e2d70726f6f662d7365746e63616e6f6e6963616c5f747970657827417574686f7269747941646d697373696f6e456c69676962696c69747950726f6f6653657456317376657269666965725f70726f66696c655f69647843746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e617574686f726974792d61646d697373696f6e2d70726f6f662d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677848746f732e736572766963652e6167656e742d67756172616e746f722d617574686f726974792d61646d697373696f6e2d656c69676962696c6974792d70726f6f662d7365742e7631a46b6f626a6563745f6b696e64781d6669726d2d6f666665722d61677265656d656e742d65766964656e63656e63616e6f6e6963616c5f74797065782547756172616e746f724669726d4f6666657241677265656d656e7445766964656e636556317376657269666965725f70726f66696c655f69647843746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6669726d2d6f666665722d61677265656d656e742d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d6669726d2d6f666665722d61677265656d656e742d65766964656e63652e7631a46b6f626a6563745f6b696e647667756172616e746f722d65766964656e63652d7365746e63616e6f6e6963616c5f74797065781f43616e6f6e6963616c47756172616e746f7245766964656e636553657456317376657269666965725f70726f66696c655f69647832746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e65766964656e63652d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782b746f732e736572766963652e6167656e742d67756172616e746f722d65766964656e63652d7365742e7631a46b6f626a6563745f6b696e64781d6578706f737572652d61646d697373696f6e2d64657363726970746f726e63616e6f6e6963616c5f74797065782550726f76696465724578706f7375726541646d697373696f6e44657363726970746f7256317376657269666965725f70726f66696c655f69647843746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6578706f737572652d61646d697373696f6e2d64657363726970746f722e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677831746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d61646d697373696f6e2e7631a46b6f626a6563745f6b696e6478186669726d2d6f666665722d726563697069656e742d7365746e63616e6f6e6963616c5f74797065774669726d4f66666572526563697069656e7453657456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6669726d2d6f666665722d726563697069656e742d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d6669726d2d6f666665722d726563697069656e742d7365742e7631a46b6f626a6563745f6b696e64781a6578706f737572652d7265736572766174696f6e2d73636f70656e63616e6f6e6963616c5f74797065782250726f76696465724578706f737572655265736572766174696f6e53636f706556317376657269666965725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6578706f737572652d7265736572766174696f6e2d73636f70652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677830746f732e736572766963652e6167656e742d67756172616e746f722d7265736572766174696f6e2d73636f70652e7631a46b6f626a6563745f6b696e6478246669726d2d6f666665722d617574686f726974792d696e7374616e63652d6566666563746e63616e6f6e6963616c5f7479706578224669726d4f66666572417574686f72697479496e7374616e636545666665637456317376657269666965725f70726f66696c655f69647841746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6669726d2d6f666665722d617574686f726974792d6566666563742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677829656d62656464656420696e204669726d4f6666657249737375616e6365416374696f6e426f64795631a46b6f626a6563745f6b696e64781a6578706f737572652d61646d697373696f6e2d726563656970746e63616e6f6e6963616c5f74797065782c417574686f72697a656450726f76696465724578706f7375726541646d697373696f6e5265636569707456317376657269666965725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6578706f737572652d61646d697373696f6e2d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677838746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d726563656970742d656e76656c6f70652e7631a46b6f626a6563745f6b696e646a6669726d2d6f666665726e63616e6f6e6963616c5f74797065781d417574686f72697a65644669726d436f7665726167654f6666657256317376657269666965725f70726f66696c655f69647830746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6669726d2d6f666665722e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677832746f732e736572766963652e6167656e742d67756172616e746f722d6669726d2d6f666665722d656e76656c6f70652e7631a46b6f626a6563745f6b696e64746f666665722d6e6f6e2d616363657074616e63656e63616e6f6e6963616c5f747970657826417574686f72697a65644f666665724e6f6e416363657074616e636545766964656e636556317376657269666965725f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6f666665722d6e6f6e2d616363657074616e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d6f666665722d6e6f6e2d616363657074616e63652d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781f7072652d616363657074616e63652d6578706f737572652d72656c656173656e63616e6f6e6963616c5f74797065782f417574686f72697a6564507265416363657074616e63654578706f7375726552656c656173655265636569707456317376657269666965725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7072652d616363657074616e63652d72656c656173652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677846746f732e736572766963652e6167656e742d67756172616e746f722d7072652d616363657074616e63652d72656c656173652d726563656970742d656e76656c6f70652e7631a46b6f626a6563745f6b696e6472616363657074616e63652d726571756573746e63616e6f6e6963616c5f747970657825417574686f72697a6564436f766572616765416363657074616e63655265717565737456317376657269666965725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e616363657074616e63652d726571756573742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783a746f732e736572766963652e6167656e742d67756172616e746f722d616363657074616e63652d726571756573742d656e76656c6f70652e7631a46b6f626a6563745f6b696e6472616363657074616e63652d726563656970746e63616e6f6e6963616c5f747970657825417574686f72697a6564436f766572616765416363657074616e63655265636569707456317376657269666965725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e616363657074616e63652d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783a746f732e736572766963652e6167656e742d67756172616e746f722d616363657074616e63652d726563656970742d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781861637469766174696f6e2d61646d697373696f6e2d6375746e63616e6f6e6963616c5f74797065781d41637469766174696f6e41646d697373696f6e43757450726f6f6656317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e61637469766174696f6e2d61646d697373696f6e2d6375742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677833746f732e736572766963652e6167656e742d67756172616e746f722d61637469766174696f6e2d6375742d70726f6f662e7631a46b6f626a6563745f6b696e647361637469766174696f6e2d65766964656e63656e63616e6f6e6963616c5f747970657826417574686f72697a6564436f76657261676541637469766174696f6e45766964656e636556317376657269666965725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e61637469766174696f6e2d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783b746f732e736572766963652e6167656e742d67756172616e746f722d61637469766174696f6e2d65766964656e63652d656e76656c6f70652e7631a46b6f626a6563745f6b696e64776e6f6e2d61637469766174696f6e2d65766964656e63656e63616e6f6e6963616c5f747970657829417574686f72697a6564436f7665726167654e6f6e41637469766174696f6e45766964656e636556317376657269666965725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6e6f6e2d61637469766174696f6e2d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783f746f732e736572766963652e6167656e742d67756172616e746f722d6e6f6e2d61637469766174696f6e2d65766964656e63652d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781f6e6f6e2d61637469766174696f6e2d6578706f737572652d72656c656173656e63616e6f6e6963616c5f74797065782f417574686f72697a65644e6f6e41637469766174696f6e4578706f7375726552656c656173655265636569707456317376657269666965725f70726f66696c655f69647845746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6e6f6e2d61637469766174696f6e2d6578706f737572652d72656c656173652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677847746f732e736572766963652e6167656e742d67756172616e746f722d6e6f6e2d61637469766174696f6e2d6578706f737572652d72656c656173652d656e76656c6f70652e7631a46b6f626a6563745f6b696e647463616e63656c6c6174696f6e2d726571756573746e63616e6f6e6963616c5f747970657827417574686f72697a6564436f76657261676543616e63656c6c6174696f6e5265717565737456317376657269666965725f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e63616e63656c6c6174696f6e2d726571756573742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d63616e63656c6c6174696f6e2d726571756573742d656e76656c6f70652e7631a46b6f626a6563745f6b696e647463616e63656c6c6174696f6e2d726563656970746e63616e6f6e6963616c5f747970657827417574686f72697a6564436f76657261676543616e63656c6c6174696f6e5265636569707456317376657269666965725f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e63616e63656c6c6174696f6e2d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d63616e63656c6c6174696f6e2d726563656970742d656e76656c6f70652e7631a46b6f626a6563745f6b696e6470636f6c6c61746572616c2d7465726d736e63616e6f6e6963616c5f7479706571436f6c6c61746572616c5465726d7356317376657269666965725f70726f66696c655f69647836746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d7465726d732e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782b656d62656464656420696e2074686520616363657074656420636f7665726167652041677265656d656e74a46b6f626a6563745f6b696e647819636f6c6c61746572616c2d706f736974696f6e2d73746174656e63616e6f6e6963616c5f747970657819436f6c6c61746572616c506f736974696f6e537461746556317376657269666965725f70726f66696c655f6964783f746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d706f736974696f6e2d73746174652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677838746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d706f736974696f6e2d73746174652e7631a46b6f626a6563745f6b696e64781a636f6c6c61746572616c2d616461707465722d726571756573746e63616e6f6e6963616c5f74797065781a436f6c6c61746572616c416461707465725265717565737456317376657269666965725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d616461707465722d726571756573742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677839746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d616461707465722d726571756573742e7631a46b6f626a6563745f6b696e64781b636f6c6c61746572616c2d616461707465722d65766964656e63656e63616e6f6e6963616c5f74797065781b436f6c6c61746572616c4164617074657245766964656e636556317376657269666965725f70726f66696c655f69647841746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d616461707465722d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783a746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d616461707465722d65766964656e63652e7631a46b6f626a6563745f6b696e6473636f6c6c61746572616c2d65766964656e63656e63616e6f6e6963616c5f74797065781e417574686f72697a6564436f6c6c61746572616c45766964656e636556317376657269666965725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783b746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d65766964656e63652d656e76656c6f70652e7631a46b6f626a6563745f6b696e64782d636f6c6c61746572616c2d7061796f75742d7061796d656e742d65766964656e63652d70726f6a656374696f6e6e63616e6f6e6963616c5f74797065782b436f6c6c61746572616c5061796f75745061796d656e7445766964656e636550726f6a656374696f6e56317376657269666965725f70726f66696c655f69647848746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6c6c61746572616c2d7061796f75742d7061796d656e742d65766964656e63652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677841746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d7061796f75742d7061796d656e742d65766964656e63652e7631a46b6f626a6563745f6b696e6478187472696767657265642d6f626c69676174696f6e2d7365746e63616e6f6e6963616c5f7479706578185472696767657265644f626c69676174696f6e53657456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7472696767657265642d6f626c69676174696f6e2d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d7472696767657265642d6f626c69676174696f6e2d7365742e7631a46b6f626a6563745f6b696e6477636c61696d2d65766964656e63652d6d616e69666573746e63616e6f6e6963616c5f7479706577436c61696d45766964656e63654d616e696665737456317376657269666965725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d65766964656e63652d6d616e69666573742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677836746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d65766964656e63652d6d616e69666573742e7631a46b6f626a6563745f6b696e64781a6f746865722d7265636f766572792d6465636c61726174696f6e6e63616e6f6e6963616c5f74797065781a4f746865725265636f766572794465636c61726174696f6e56317376657269666965725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6f746865722d7265636f766572792d6465636c61726174696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677839746f732e736572766963652e6167656e742d67756172616e746f722d6f746865722d7265636f766572792d6465636c61726174696f6e2e7631a46b6f626a6563745f6b696e6465636c61696d6e63616e6f6e6963616c5f747970657819417574686f72697a6564436f766572616765436c61696d56317376657269666965725f70726f66696c655f6964782b746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782d746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d656e76656c6f70652e7631a46b6f626a6563745f6b696e6475636c61696d2d696e67726573732d726563656970746e63616e6f6e6963616c5f747970657829417574686f72697a6564436c61696d5375626d697373696f6e496e67726573735265636569707456317376657269666965725f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d696e67726573732d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783d746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d696e67726573732d726563656970742d656e76656c6f70652e7631a46b6f626a6563745f6b696e6471636c61696d2d696e67726573732d6375746e63616e6f6e6963616c5f74797065781f436c61696d496e677265737341646d697373696f6e43757450726f6f6656317376657269666965725f70726f66696c655f69647837746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d696e67726573732d6375742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677836746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d696e67726573732d6375742d70726f6f662e7631a46b6f626a6563745f6b696e64782a636c61696d2d7375626d697373696f6e2d617574686f726974792d696e7374616e63652d6566666563746e63616e6f6e6963616c5f747970657828436c61696d5375626d697373696f6e417574686f72697479496e7374616e636545666665637456317376657269666965725f70726f66696c655f69647847746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d7375626d697373696f6e2d617574686f726974792d6566666563742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677849746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d7375626d697373696f6e2d617574686f726974792d696e7374616e63652d6566666563742e7631a46b6f626a6563745f6b696e6477636c61696d2d61646d697373696f6e2d726563656970746e63616e6f6e6963616c5f747970657821417574686f72697a6564436c61696d41646d697373696f6e5265636569707456317376657269666965725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d61646d697373696f6e2d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d61646d697373696f6e2d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781a636c61696d2d66696c696e672d636c6f73652d726563656970746e63616e6f6e6963616c5f747970657823417574686f72697a6564436c61696d46696c696e67436c6f73655265636569707456317376657269666965725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d66696c696e672d636c6f73652d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783a746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d66696c696e672d636c6f73652d656e76656c6f70652e7631a46b6f626a6563745f6b696e646e636c61696d2d6465636973696f6e6e63616e6f6e6963616c5f747970657819417574686f72697a6564436c61696d4465636973696f6e56317376657269666965725f70726f66696c655f69647834746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d6465636973696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677836746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d6465636973696f6e2d656e76656c6f70652e7631a46b6f626a6563745f6b696e647820636c61696d2d7265766973696f6e2d65706f63682d6578706563746174696f6e6e63616e6f6e6963616c5f74797065781f436c61696d5265766973696f6e45706f63684578706563746174696f6e56317376657269666965725f70726f66696c655f69647846746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d7265766973696f6e2d65706f63682d6578706563746174696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783f746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d7265766973696f6e2d65706f63682d6578706563746174696f6e2e7631a46b6f626a6563745f6b696e647820636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970746e63616e6f6e6963616c5f747970657829417574686f72697a6564436c61696d4465636973696f6e41646d697373696f6e5265636569707456317376657269666965725f70726f66696c655f69647846746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677840746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d6465636973696f6e2d61646d697373696f6e2d656e76656c6f70652e7631a46b6f626a6563745f6b696e647825636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742d7365616c6e63616e6f6e6963616c5f74797065783a436c61696d4465636973696f6e41646d697373696f6e526563656970745365616c426f6479563120706c757320617574686f72697a6174696f6e7376657269666965725f70726f66696c655f6964784b746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742d7365616c2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677844746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742d7365616c2e7631a46b6f626a6563745f6b696e647826636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742d70726f6f666e63616e6f6e6963616c5f747970657824436c61696d4465636973696f6e41646d697373696f6e5265636569707450726f6f6656317376657269666965725f70726f66696c655f6964784c746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742d70726f6f662e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677845746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d6465636973696f6e2d61646d697373696f6e2d726563656970742d70726f6f662e7631a46b6f626a6563745f6b696e64781a6465636973696f6e2d6170706c69636174696f6e2d746f6b656e6e63616e6f6e6963616c5f74797065781a4465636973696f6e4170706c69636174696f6e546f6b656e56317376657269666965725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6465636973696f6e2d6170706c69636174696f6e2d746f6b656e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677839746f732e736572766963652e6167656e742d67756172616e746f722d6465636973696f6e2d6170706c69636174696f6e2d746f6b656e2e7631a46b6f626a6563745f6b696e647822636c61696d2d6465636973696f6e2d6170706c69636174696f6e2d726563656970746e63616e6f6e6963616c5f74797065782b417574686f72697a6564436c61696d4465636973696f6e4170706c69636174696f6e5265636569707456317376657269666965725f70726f66696c655f69647848746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d6465636973696f6e2d6170706c69636174696f6e2d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d6465636973696f6e2d6170706c69636174696f6e2d656e76656c6f70652e7631a46b6f626a6563745f6b696e6478216465636973696f6e2d6170706c69636174696f6e2d726563656970742d7365616c6e63616e6f6e6963616c5f7479706578374465636973696f6e4170706c69636174696f6e526563656970745365616c426f6479563120706c757320617574686f72697a6174696f6e7376657269666965725f70726f66696c655f69647847746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6465636973696f6e2d6170706c69636174696f6e2d726563656970742d7365616c2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677840746f732e736572766963652e6167656e742d67756172616e746f722d6465636973696f6e2d6170706c69636174696f6e2d726563656970742d7365616c2e7631a46b6f626a6563745f6b696e6478226465636973696f6e2d6170706c69636174696f6e2d726563656970742d70726f6f666e63616e6f6e6963616c5f7479706578214465636973696f6e4170706c69636174696f6e5265636569707450726f6f6656317376657269666965725f70726f66696c655f69647848746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6465636973696f6e2d6170706c69636174696f6e2d726563656970742d70726f6f662e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677841746f732e736572766963652e6167656e742d67756172616e746f722d6465636973696f6e2d6170706c69636174696f6e2d726563656970742d70726f6f662e7631a46b6f626a6563745f6b696e64781d636c61696d2d61646d697373696f6e2d726563656970742d70726f6f666e63616e6f6e6963616c5f74797065781c436c61696d41646d697373696f6e5265636569707450726f6f6656317376657269666965725f70726f66696c655f69647843746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d61646d697373696f6e2d726563656970742d70726f6f662e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783c746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d61646d697373696f6e2d726563656970742d70726f6f662e7631a46b6f626a6563745f6b696e64781c636c61696d2d61646d697373696f6e2d726563656970742d7365616c6e63616e6f6e6963616c5f747970657832436c61696d41646d697373696f6e526563656970745365616c426f6479563120706c757320617574686f72697a6174696f6e7376657269666965725f70726f66696c655f69647842746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d61646d697373696f6e2d726563656970742d7365616c2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783b746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d61646d697373696f6e2d726563656970742d7365616c2e7631a46b6f626a6563745f6b696e64781e636c61696d2d73746174652d7472616e736974696f6e2d726563656970746e63616e6f6e6963616c5f747970657827417574686f72697a6564436c61696d53746174655472616e736974696f6e5265636569707456317376657269666965725f70726f66696c655f69647844746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d73746174652d7472616e736974696f6e2d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783e746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d73746174652d7472616e736974696f6e2d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781f636f6e646974696f6e616c2d736574746c656d656e742d74656d706c6174656e63616e6f6e6963616c5f74797065781f436f6e646974696f6e616c536574746c656d656e7454656d706c61746556317376657269666965725f70726f66696c655f69647845746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6e646974696f6e616c2d736574746c656d656e742d74656d706c6174652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782b656d62656464656420696e2074686520616363657074656420636f7665726167652041677265656d656e74a46b6f626a6563745f6b696e6475736574746c656d656e742d706172616d65746572736e63616e6f6e6963616c5f74797065782650726f66696c655175616c6966696564536574746c656d656e74506172616d657465727356317376657269666965725f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e736574746c656d656e742d706172616d65746572732e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677834746f732e736572766963652e6167656e742d67756172616e746f722d736574746c656d656e742d706172616d65746572732e7631a46b6f626a6563745f6b696e6471636c61696d2d7061796f75742d6c696e656e63616e6f6e6963616c5f7479706571436c61696d5061796f75744c696e6556317376657269666965725f70726f66696c655f69647837746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d7061796f75742d6c696e652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782a746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d6c696e652e7631a46b6f626a6563745f6b696e6478186d6174657269616c697a65642d7061796f75742d6c696e656e63616e6f6e6963616c5f7479706578184d6174657269616c697a65645061796f75744c696e6556317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6d6174657269616c697a65642d7061796f75742d6c696e652e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d6d6174657269616c697a65642d7061796f75742d6c696e652e7631a46b6f626a6563745f6b696e64776d6174657269616c697a65642d7061796f75742d7365746e63616e6f6e6963616c5f7479706578214d6174657269616c697a65645061796f75744f626c69676174696f6e53657456317376657269666965725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6d6174657269616c697a65642d7061796f75742d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677834746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d6f626c69676174696f6e2d7365742e7631a46b6f626a6563745f6b696e64737465726d696e616c2d7061796f75742d7365746e63616e6f6e6963616c5f74797065781b5465726d696e616c5061796f757445766964656e636553657456317376657269666965725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7465726d696e616c2d7061796f75742d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783b746f732e736572766963652e6167656e742d67756172616e746f722d7465726d696e616c2d7061796f75742d65766964656e63652d7365742e7631a46b6f626a6563745f6b696e64781c636f7665726167652d7465726d696e616c2d7061796f75742d7365746e63616e6f6e6963616c5f747970657823436f7665726167655465726d696e616c5061796f757445766964656e636553657456317376657269666965725f70726f66696c655f69647842746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f7665726167652d7465726d696e616c2d7061796f75742d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677844746f732e736572766963652e6167656e742d67756172616e746f722d636f7665726167652d7465726d696e616c2d7061796f75742d65766964656e63652d7365742e7631a46b6f626a6563745f6b696e647821636c61696d2d7465726d696e616c2d7265736f6c7574696f6e2d7265662d7365746e63616e6f6e6963616c5f74797065781f436c61696d5465726d696e616c5265736f6c7574696f6e52656653657456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636c61696d2d7265736f6c7574696f6e2d7265662d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677833746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d7265736f6c7574696f6e2d7365742e7631a46b6f626a6563745f6b696e647818636f7665726167652d636c6f737572652d636f6e746578746e63616e6f6e6963616c5f747970657820436f766572616765436c6f7375726545766964656e6365436f6e7465787456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f7665726167652d636c6f737572652d636f6e746578742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d636f7665726167652d636c6f737572652d636f6e746578742e7631a46b6f626a6563745f6b696e64727465726d696e616c2d636c61696d2d7365746e63616e6f6e6963616c5f747970657824417574686f72697a65645465726d696e616c436c61696d53657445766964656e636556317376657269666965725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7465726d696e616c2d636c61696d2d7365742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783a746f732e736572766963652e6167656e742d67756172616e746f722d7465726d696e616c2d636c61696d2d7365742d65766964656e63652e7631a46b6f626a6563745f6b696e64746578706f737572652d646973706f736974696f6e6e63616e6f6e6963616c5f7479706578204578706f73757265446973706f736974696f6e436f6d7075746174696f6e56317376657269666965725f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6578706f737572652d646973706f736974696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677833746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d646973706f736974696f6e2e7631a46b6f626a6563745f6b696e6478186578706f737572652d72656c656173652d726563656970746e63616e6f6e6963616c5f747970657822417574686f72697a65644578706f7375726552656c656173655265636569707456317376657269666965725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6578706f737572652d72656c656173652d726563656970742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677840746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d72656c656173652d726563656970742d656e76656c6f70652e7631a46b6f626a6563745f6b696e6473636f7665726167652d7265736f6c7574696f6e6e63616e6f6e6963616c5f74797065781e417574686f72697a6564436f7665726167655265736f6c7574696f6e56317376657269666965725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f7665726167652d7265736f6c7574696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677832746f732e736572766963652e6167656e742d67756172616e746f722d7265736f6c7574696f6e2d656e76656c6f70652e7631a46b6f626a6563745f6b696e64781e7472616e736974696f6e2d65766964656e63652d70726f6a656374696f6e6e63616e6f6e6963616c5f74797065781e5472616e736974696f6e45766964656e636550726f6a656374696f6e56317376657269666965725f70726f66696c655f69647844746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7472616e736974696f6e2d65766964656e63652d70726f6a656374696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67783d746f732e736572766963652e6167656e742d67756172616e746f722d7472616e736974696f6e2d65766964656e63652d70726f6a656374696f6e2e7631a46b6f626a6563745f6b696e6478217072652d616363657074616e63652d72656c656173652d70726f6a656374696f6e6e63616e6f6e6963616c5f747970657830507265416363657074616e63654578706f7375726552656c6561736545766964656e636550726f6a656374696f6e56317376657269666965725f70726f66696c655f69647847746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e7072652d616363657074616e63652d72656c656173652d70726f6a656374696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677849746f732e736572766963652e6167656e742d67756172616e746f722d7072652d616363657074616e63652d72656c656173652d65766964656e63652d70726f6a656374696f6e2e7631a46b6f626a6563745f6b696e64781b6578706f737572652d72656c656173652d70726f6a656374696f6e6e63616e6f6e6963616c5f7479706578234578706f7375726552656c6561736545766964656e636550726f6a656374696f6e56317376657269666965725f70726f66696c655f69647841746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6578706f737572652d72656c656173652d70726f6a656374696f6e2e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677843746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d72656c656173652d65766964656e63652d70726f6a656374696f6e2e7631a46b6f626a6563745f6b696e6476636f6d6d657263652d70726f66696c652d6576656e746e63616e6f6e6963616c5f7479706576436f6d6d6572636550726f66696c654576656e7456317376657269666965725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e636f6d6d657263652d70726f66696c652d6576656e742e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e67782672656c65617365642067656e6572696320636f6d6d657263652d6576656e7420646f6d61696ea46b6f626a6563745f6b696e6478186f626a6563742d76657269666965722d72656769737472796e63616e6f6e6963616c5f74797065782147756172616e746f724f626a6563745665726966696572526567697374727956317376657269666965725f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6f626a6563742d72656769737472792e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677837746f732e736572766963652e6167656e742d67756172616e746f722d6f626a6563742d76657269666965722d72656769737472792e7631a46b6f626a6563745f6b696e64781a6d75746174696f6e2d76657269666965722d72656769737472796e63616e6f6e6963616c5f74797065782347756172616e746f724d75746174696f6e5665726966696572526567697374727956317376657269666965725f70726f66696c655f69647837746f732e736572766963652e6167656e742d67756172616e746f722e7665726966792e6d75746174696f6e2d72656769737472792e7631781a6469676573745f6f725f656e76656c6f70655f62696e64696e677839746f732e736572766963652e6167656e742d67756172616e746f722d6d75746174696f6e2d76657269666965722d72656769737472792e76316e736368656d615f76657273696f6e017072656769737472795f76657273696f6e01",
+  "object_registry_digest": "sha256:542e9bb27414ab27166f05c43998b0cd8506e8129ef720e7208ed1fd43ca69eb",
+  "mutation_registry": {
+    "schema_version": 1,
+    "registry_version": 1,
+    "entries": [
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.collateral-transition.v1",
+        "action_kind": "collateral.transition",
+        "operation_purpose": "collateral-transition",
+        "request_schema_version": 1,
+        "request_type": "CollateralTransitionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.collateral-transition.v1",
+        "result_components": [
+          {
+            "role": "collateral_evidence",
+            "canonical_type": "AuthorizedCollateralEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-collateral-evidence-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.collateral-transition.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.collateral-transition.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.collateral-transition.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.offer-non-acceptance.v1",
+        "action_kind": "commercial.quote.close",
+        "operation_purpose": "offer-non-acceptance",
+        "request_schema_version": 1,
+        "request_type": "OfferNonAcceptanceResolutionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.offer-non-acceptance.v1",
+        "result_components": [
+          {
+            "role": "non_acceptance",
+            "canonical_type": "AuthorizedOfferNonAcceptanceEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-offer-non-acceptance-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.offer-non-acceptance.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.offer-non-acceptance.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.offer-non-acceptance.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.firm-offer-issuance.v1",
+        "action_kind": "commercial.quote.issue",
+        "operation_purpose": "firm-offer-issuance",
+        "request_schema_version": 1,
+        "request_type": "FirmOfferIssuanceActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.firm-offer-issuance.v1",
+        "result_components": [
+          {
+            "role": "exposure_receipt",
+            "canonical_type": "AuthorizedProviderExposureAdmissionReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-exposure-receipt-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          },
+          {
+            "role": "firm_offer",
+            "canonical_type": "AuthorizedFirmCoverageOfferV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-firm-offer-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.firm-offer-issuance.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.firm-offer-issuance.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.firm-offer-issuance.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.claim-decision-admission.v1",
+        "action_kind": "conditional.claim-decision.admit",
+        "operation_purpose": "claim-decision-admission",
+        "request_schema_version": 1,
+        "request_type": "ClaimDecisionAdmissionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-admission.v1",
+        "result_components": [
+          {
+            "role": "decision_admission_receipt",
+            "canonical_type": "AuthorizedClaimDecisionAdmissionReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-claim-decision-admission-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-admission.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-admission.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-admission.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.claim-filing-close.v1",
+        "action_kind": "conditional.claim-filing.close",
+        "operation_purpose": "claim-filing-close",
+        "request_schema_version": 1,
+        "request_type": "ClaimFilingCloseActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.claim-filing-close.v1",
+        "result_components": [
+          {
+            "role": "filing_close_receipt",
+            "canonical_type": "AuthorizedClaimFilingCloseReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-claim-filing-close-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.claim-filing-close.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.claim-filing-close.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.claim-filing-close.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.claim-decision-application.v1",
+        "action_kind": "conditional.claim.decide",
+        "operation_purpose": "claim-decision-application",
+        "request_schema_version": 1,
+        "request_type": "ClaimDecisionApplicationActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-application.v1",
+        "result_components": [
+          {
+            "role": "materialized_payout_set",
+            "canonical_type": "MaterializedPayoutObligationSetV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-payout-obligation-set.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          },
+          {
+            "role": "application_receipt",
+            "canonical_type": "AuthorizedClaimDecisionApplicationReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-decision-application-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-application.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-application.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.claim-decision-application.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.claim-submission-ingress.v1",
+        "action_kind": "conditional.claim.ingress",
+        "operation_purpose": "claim-submission-ingress",
+        "request_schema_version": 1,
+        "request_type": "ClaimSubmissionIngressActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.claim-submission-ingress.v1",
+        "result_components": [
+          {
+            "role": "claim_ingress_receipt",
+            "canonical_type": "AuthorizedClaimSubmissionIngressReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-claim-ingress-receipt-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.claim-submission-ingress.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.claim-submission-ingress.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.claim-submission-ingress.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.claim-admission.v1",
+        "action_kind": "conditional.claim.submit",
+        "operation_purpose": "claim-admission",
+        "request_schema_version": 1,
+        "request_type": "ClaimSubmissionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.claim-admission.v1",
+        "result_components": [
+          {
+            "role": "claim_admission_receipt",
+            "canonical_type": "AuthorizedClaimAdmissionReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-claim-admission-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.claim-admission.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.claim-admission.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.claim-admission.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.claim-state-transition.v1",
+        "action_kind": "conditional.claim.transition",
+        "operation_purpose": "claim-state-transition",
+        "request_schema_version": 1,
+        "request_type": "ClaimStateTransitionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.claim-state-transition.v1",
+        "result_components": [
+          {
+            "role": "state_transition_receipt",
+            "canonical_type": "AuthorizedClaimStateTransitionReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-claim-state-transition-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.claim-state-transition.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.claim-state-transition.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.claim-state-transition.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.coverage-acceptance.v1",
+        "action_kind": "conditional.obligation.transition",
+        "operation_purpose": "coverage-acceptance",
+        "request_schema_version": 1,
+        "request_type": "CoverageAcceptanceAdmissionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.coverage-acceptance.v1",
+        "result_components": [
+          {
+            "role": "acceptance_receipt",
+            "canonical_type": "AuthorizedCoverageAcceptanceReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-acceptance-receipt-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.coverage-acceptance.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.coverage-acceptance.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.coverage-acceptance.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.coverage-activation.v1",
+        "action_kind": "conditional.obligation.transition",
+        "operation_purpose": "coverage-activation",
+        "request_schema_version": 1,
+        "request_type": "CoverageActivationActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.coverage-activation.v1",
+        "result_components": [
+          {
+            "role": "activation_evidence",
+            "canonical_type": "AuthorizedCoverageActivationEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-activation-evidence-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.coverage-activation.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.coverage-activation.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.coverage-activation.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.coverage-cancellation.v1",
+        "action_kind": "conditional.obligation.transition",
+        "operation_purpose": "coverage-cancellation",
+        "request_schema_version": 1,
+        "request_type": "CoverageCancellationActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.coverage-cancellation.v1",
+        "result_components": [
+          {
+            "role": "cancellation_receipt",
+            "canonical_type": "AuthorizedCoverageCancellationReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-cancellation-receipt-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.coverage-cancellation.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.coverage-cancellation.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.coverage-cancellation.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.coverage-closure.v1",
+        "action_kind": "conditional.obligation.transition",
+        "operation_purpose": "coverage-closure",
+        "request_schema_version": 1,
+        "request_type": "CoverageClosureActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.coverage-closure.v1",
+        "result_components": [
+          {
+            "role": "terminal_claim_set",
+            "canonical_type": "AuthorizedTerminalClaimSetEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-terminal-claim-set-evidence.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.coverage-closure.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.coverage-closure.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.coverage-closure.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.coverage-non-activation.v1",
+        "action_kind": "conditional.obligation.transition",
+        "operation_purpose": "coverage-non-activation",
+        "request_schema_version": 1,
+        "request_type": "CoverageNonActivationActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.coverage-non-activation.v1",
+        "result_components": [
+          {
+            "role": "non_activation_evidence",
+            "canonical_type": "AuthorizedCoverageNonActivationEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-non-activation-evidence-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.coverage-non-activation.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.coverage-non-activation.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.coverage-non-activation.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.coverage-resolution.v1",
+        "action_kind": "conditional.obligation.transition",
+        "operation_purpose": "coverage-resolution",
+        "request_schema_version": 1,
+        "request_type": "CoverageResolutionActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.coverage-resolution.v1",
+        "result_components": [
+          {
+            "role": "coverage_resolution",
+            "canonical_type": "AuthorizedCoverageResolutionV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-resolution-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.coverage-resolution.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.coverage-resolution.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.coverage-resolution.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.direct-payout.v1",
+        "action_kind": "payment.direct",
+        "operation_purpose": "guarantor-payout",
+        "request_schema_version": 1,
+        "request_type": "GuarantorAgreementPaymentActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.direct-payout.v1",
+        "result_components": [
+          {
+            "role": "payout_execution_evidence",
+            "canonical_type": "AuthorizedGuarantorPayoutExecutionEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-payout-execution-evidence.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.direct-payout.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.direct-payout.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.direct-payout.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.domain-bound-payout.v1",
+        "action_kind": "payment.domain-bound",
+        "operation_purpose": "guarantor-payout",
+        "request_schema_version": 1,
+        "request_type": "GuarantorAgreementPaymentActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.domain-bound-payout.v1",
+        "result_components": [
+          {
+            "role": "payout_execution_evidence",
+            "canonical_type": "AuthorizedGuarantorPayoutExecutionEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-payout-execution-evidence.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.domain-bound-payout.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.domain-bound-payout.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.domain-bound-payout.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.post-acceptance-release.v1",
+        "action_kind": "portfolio.release",
+        "operation_purpose": "post-acceptance",
+        "request_schema_version": 1,
+        "request_type": "ExposureReleaseActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.post-acceptance-release.v1",
+        "result_components": [
+          {
+            "role": "release_receipt",
+            "canonical_type": "AuthorizedExposureReleaseReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-exposure-release-receipt-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.post-acceptance-release.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.post-acceptance-release.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.post-acceptance-release.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.pre-acceptance-release.v1",
+        "action_kind": "portfolio.release",
+        "operation_purpose": "pre-acceptance",
+        "request_schema_version": 1,
+        "request_type": "PreAcceptanceExposureReleaseActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.pre-acceptance-release.v1",
+        "result_components": [
+          {
+            "role": "release_receipt",
+            "canonical_type": "AuthorizedPreAcceptanceExposureReleaseReceiptV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-pre-acceptance-release-receipt-envelope.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.pre-acceptance-release.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.pre-acceptance-release.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.pre-acceptance-release.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.collateral-backed-payout.v1",
+        "action_kind": "settlement.external",
+        "operation_purpose": "collateral-backed-payout",
+        "request_schema_version": 1,
+        "request_type": "CollateralBackedAgreementPaymentActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.collateral-backed-payout.v1",
+        "result_components": [
+          {
+            "role": "payout_execution_evidence",
+            "canonical_type": "AuthorizedGuarantorPayoutExecutionEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-payout-execution-evidence.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.collateral-backed-payout.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.collateral-backed-payout.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.collateral-backed-payout.v1"
+      },
+      {
+        "operation_id": "tos.service.agent-guarantor.mutate.external-payout.v1",
+        "action_kind": "settlement.external",
+        "operation_purpose": "guarantor-payout",
+        "request_schema_version": 1,
+        "request_type": "GuarantorAgreementPaymentActionBodyV1",
+        "request_body_profile_id": "tos.service.agent-guarantor.mutate.external-payout.v1",
+        "result_components": [
+          {
+            "role": "payout_execution_evidence",
+            "canonical_type": "AuthorizedGuarantorPayoutExecutionEvidenceV1",
+            "digest_or_envelope_domain": "tos.service.agent-guarantor-payout-execution-evidence.v1",
+            "cardinality": "exactly_one",
+            "presence_rule": "accepted_effect_v1"
+          }
+        ],
+        "required_context_types": [],
+        "semantic_field_derivation_profile_id": "tos.service.agent-guarantor.mutate.external-payout.v1",
+        "transition_validator_profile_id": "tos.service.agent-guarantor.mutate.external-payout.v1",
+        "materializer_profile_id": "tos.service.agent-guarantor.mutate.external-payout.v1"
+      }
+    ]
+  },
+  "mutation_registry_canonical_cbor_hex": "a367656e747269657395ab6b616374696f6e5f6b696e6475636f6c6c61746572616c2e7472616e736974696f6e6c6f7065726174696f6e5f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d7472616e736974696f6e2e76316c726571756573745f747970657820436f6c6c61746572616c5472616e736974696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736575636f6c6c61746572616c2d7472616e736974696f6e71726573756c745f636f6d706f6e656e747381a564726f6c6573636f6c6c61746572616c5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065781e417574686f72697a6564436f6c6c61746572616c45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783b746f732e736572766963652e6167656e742d67756172616e746f722d636f6c6c61746572616c2d65766964656e63652d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d7472616e736974696f6e2e763177726571756573745f626f64795f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d7472616e736974696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d7472616e736974696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d7472616e736974696f6e2e7631ab6b616374696f6e5f6b696e6476636f6d6d65726369616c2e71756f74652e636c6f73656c6f7065726174696f6e5f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6f666665722d6e6f6e2d616363657074616e63652e76316c726571756573745f7479706578284f666665724e6f6e416363657074616e63655265736f6c7574696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f7365746f666665722d6e6f6e2d616363657074616e636571726573756c745f636f6d706f6e656e747381a564726f6c656e6e6f6e5f616363657074616e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657826417574686f72697a65644f666665724e6f6e416363657074616e636545766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783c746f732e736572766963652e6167656e742d67756172616e746f722d6f666665722d6e6f6e2d616363657074616e63652d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6f666665722d6e6f6e2d616363657074616e63652e763177726571756573745f626f64795f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6f666665722d6e6f6e2d616363657074616e63652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6f666665722d6e6f6e2d616363657074616e63652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783a746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6f666665722d6e6f6e2d616363657074616e63652e7631ab6b616374696f6e5f6b696e6476636f6d6d65726369616c2e71756f74652e69737375656c6f7065726174696f6e5f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6669726d2d6f666665722d69737375616e63652e76316c726571756573745f74797065781d4669726d4f6666657249737375616e6365416374696f6e426f64795631716f7065726174696f6e5f707572706f7365736669726d2d6f666665722d69737375616e636571726573756c745f636f6d706f6e656e747382a564726f6c65706578706f737572655f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782c417574686f72697a656450726f76696465724578706f7375726541646d697373696f6e52656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7838746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d726563656970742d656e76656c6f70652e7631a564726f6c656a6669726d5f6f666665726b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065781d417574686f72697a65644669726d436f7665726167654f66666572563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7832746f732e736572766963652e6167656e742d67756172616e746f722d6669726d2d6f666665722d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6669726d2d6f666665722d69737375616e63652e763177726571756573745f626f64795f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6669726d2d6f666665722d69737375616e63652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6669726d2d6f666665722d69737375616e63652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6669726d2d6f666665722d69737375616e63652e7631ab6b616374696f6e5f6b696e647820636f6e646974696f6e616c2e636c61696d2d6465636973696f6e2e61646d69746c6f7065726174696f6e5f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d61646d697373696f6e2e76316c726571756573745f747970657822436c61696d4465636973696f6e41646d697373696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f73657818636c61696d2d6465636973696f6e2d61646d697373696f6e71726573756c745f636f6d706f6e656e747381a564726f6c65781a6465636973696f6e5f61646d697373696f6e5f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657829417574686f72697a6564436c61696d4465636973696f6e41646d697373696f6e52656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7840746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d6465636973696f6e2d61646d697373696f6e2d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d61646d697373696f6e2e763177726571756573745f626f64795f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d61646d697373696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d61646d697373696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d61646d697373696f6e2e7631ab6b616374696f6e5f6b696e64781e636f6e646974696f6e616c2e636c61696d2d66696c696e672e636c6f73656c6f7065726174696f6e5f69647838746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d66696c696e672d636c6f73652e76316c726571756573745f74797065781c436c61696d46696c696e67436c6f7365416374696f6e426f64795631716f7065726174696f6e5f707572706f736572636c61696d2d66696c696e672d636c6f736571726573756c745f636f6d706f6e656e747381a564726f6c657466696c696e675f636c6f73655f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657823417574686f72697a6564436c61696d46696c696e67436c6f736552656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783a746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d66696c696e672d636c6f73652d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d66696c696e672d636c6f73652e763177726571756573745f626f64795f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d66696c696e672d636c6f73652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d66696c696e672d636c6f73652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647838746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d66696c696e672d636c6f73652e7631ab6b616374696f6e5f6b696e647818636f6e646974696f6e616c2e636c61696d2e6465636964656c6f7065726174696f6e5f69647840746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d6170706c69636174696f6e2e76316c726571756573745f747970657824436c61696d4465636973696f6e4170706c69636174696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f7365781a636c61696d2d6465636973696f6e2d6170706c69636174696f6e71726573756c745f636f6d706f6e656e747382a564726f6c65776d6174657269616c697a65645f7061796f75745f7365746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f7479706578214d6174657269616c697a65645061796f75744f626c69676174696f6e536574563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7834746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d6f626c69676174696f6e2d7365742e7631a564726f6c65736170706c69636174696f6e5f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782b417574686f72697a6564436c61696d4465636973696f6e4170706c69636174696f6e52656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783c746f732e736572766963652e6167656e742d67756172616e746f722d6465636973696f6e2d6170706c69636174696f6e2d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d6170706c69636174696f6e2e763177726571756573745f626f64795f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d6170706c69636174696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d6170706c69636174696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647840746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d6465636973696f6e2d6170706c69636174696f6e2e7631ab6b616374696f6e5f6b696e647819636f6e646974696f6e616c2e636c61696d2e696e67726573736c6f7065726174696f6e5f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d7375626d697373696f6e2d696e67726573732e76316c726571756573745f747970657822436c61696d5375626d697373696f6e496e6772657373416374696f6e426f64795631716f7065726174696f6e5f707572706f73657818636c61696d2d7375626d697373696f6e2d696e677265737371726573756c745f636f6d706f6e656e747381a564726f6c6575636c61696d5f696e67726573735f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657829417574686f72697a6564436c61696d5375626d697373696f6e496e677265737352656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783d746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d696e67726573732d726563656970742d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d7375626d697373696f6e2d696e67726573732e763177726571756573745f626f64795f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d7375626d697373696f6e2d696e67726573732e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d7375626d697373696f6e2d696e67726573732e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d7375626d697373696f6e2d696e67726573732e7631ab6b616374696f6e5f6b696e647818636f6e646974696f6e616c2e636c61696d2e7375626d69746c6f7065726174696f6e5f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d61646d697373696f6e2e76316c726571756573745f74797065781b436c61696d5375626d697373696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f73656f636c61696d2d61646d697373696f6e71726573756c745f636f6d706f6e656e747381a564726f6c6577636c61696d5f61646d697373696f6e5f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657821417574686f72697a6564436c61696d41646d697373696f6e52656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7837746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d61646d697373696f6e2d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d61646d697373696f6e2e763177726571756573745f626f64795f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d61646d697373696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d61646d697373696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d61646d697373696f6e2e7631ab6b616374696f6e5f6b696e64781c636f6e646974696f6e616c2e636c61696d2e7472616e736974696f6e6c6f7065726174696f6e5f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d73746174652d7472616e736974696f6e2e76316c726571756573745f747970657820436c61696d53746174655472616e736974696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736576636c61696d2d73746174652d7472616e736974696f6e71726573756c745f636f6d706f6e656e747381a564726f6c65781873746174655f7472616e736974696f6e5f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657827417574686f72697a6564436c61696d53746174655472616e736974696f6e52656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783e746f732e736572766963652e6167656e742d67756172616e746f722d636c61696d2d73746174652d7472616e736974696f6e2d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d73746174652d7472616e736974696f6e2e763177726571756573745f626f64795f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d73746174652d7472616e736974696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d73746174652d7472616e736974696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636c61696d2d73746174652d7472616e736974696f6e2e7631ab6b616374696f6e5f6b696e647821636f6e646974696f6e616c2e6f626c69676174696f6e2e7472616e736974696f6e6c6f7065726174696f6e5f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d616363657074616e63652e76316c726571756573745f747970657827436f766572616765416363657074616e636541646d697373696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736573636f7665726167652d616363657074616e636571726573756c745f636f6d706f6e656e747381a564726f6c6572616363657074616e63655f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657825417574686f72697a6564436f766572616765416363657074616e636552656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783a746f732e736572766963652e6167656e742d67756172616e746f722d616363657074616e63652d726563656970742d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d616363657074616e63652e763177726571756573745f626f64795f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d616363657074616e63652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d616363657074616e63652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d616363657074616e63652e7631ab6b616374696f6e5f6b696e647821636f6e646974696f6e616c2e6f626c69676174696f6e2e7472616e736974696f6e6c6f7065726174696f6e5f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d61637469766174696f6e2e76316c726571756573745f74797065781e436f76657261676541637469766174696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736573636f7665726167652d61637469766174696f6e71726573756c745f636f6d706f6e656e747381a564726f6c657361637469766174696f6e5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657826417574686f72697a6564436f76657261676541637469766174696f6e45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783b746f732e736572766963652e6167656e742d67756172616e746f722d61637469766174696f6e2d65766964656e63652d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d61637469766174696f6e2e763177726571756573745f626f64795f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d61637469766174696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d61637469766174696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d61637469766174696f6e2e7631ab6b616374696f6e5f6b696e647821636f6e646974696f6e616c2e6f626c69676174696f6e2e7472616e736974696f6e6c6f7065726174696f6e5f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d63616e63656c6c6174696f6e2e76316c726571756573745f747970657820436f76657261676543616e63656c6c6174696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736575636f7665726167652d63616e63656c6c6174696f6e71726573756c745f636f6d706f6e656e747381a564726f6c657463616e63656c6c6174696f6e5f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657827417574686f72697a6564436f76657261676543616e63656c6c6174696f6e52656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783c746f732e736572766963652e6167656e742d67756172616e746f722d63616e63656c6c6174696f6e2d726563656970742d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d63616e63656c6c6174696f6e2e763177726571756573745f626f64795f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d63616e63656c6c6174696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d63616e63656c6c6174696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783b746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d63616e63656c6c6174696f6e2e7631ab6b616374696f6e5f6b696e647821636f6e646974696f6e616c2e6f626c69676174696f6e2e7472616e736974696f6e6c6f7065726174696f6e5f69647836746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d636c6f737572652e76316c726571756573745f74797065781b436f766572616765436c6f73757265416374696f6e426f64795631716f7065726174696f6e5f707572706f736570636f7665726167652d636c6f7375726571726573756c745f636f6d706f6e656e747381a564726f6c65727465726d696e616c5f636c61696d5f7365746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657824417574686f72697a65645465726d696e616c436c61696d53657445766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783a746f732e736572766963652e6167656e742d67756172616e746f722d7465726d696e616c2d636c61696d2d7365742d65766964656e63652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647836746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d636c6f737572652e763177726571756573745f626f64795f70726f66696c655f69647836746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d636c6f737572652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647836746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d636c6f737572652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647836746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d636c6f737572652e7631ab6b616374696f6e5f6b696e647821636f6e646974696f6e616c2e6f626c69676174696f6e2e7472616e736974696f6e6c6f7065726174696f6e5f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d6e6f6e2d61637469766174696f6e2e76316c726571756573745f747970657821436f7665726167654e6f6e41637469766174696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736577636f7665726167652d6e6f6e2d61637469766174696f6e71726573756c745f636f6d706f6e656e747381a564726f6c65776e6f6e5f61637469766174696f6e5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657829417574686f72697a6564436f7665726167654e6f6e41637469766174696f6e45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e783f746f732e736572766963652e6167656e742d67756172616e746f722d6e6f6e2d61637469766174696f6e2d65766964656e63652d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d6e6f6e2d61637469766174696f6e2e763177726571756573745f626f64795f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d6e6f6e2d61637469766174696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d6e6f6e2d61637469766174696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d6e6f6e2d61637469766174696f6e2e7631ab6b616374696f6e5f6b696e647821636f6e646974696f6e616c2e6f626c69676174696f6e2e7472616e736974696f6e6c6f7065726174696f6e5f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d7265736f6c7574696f6e2e76316c726571756573745f74797065781e436f7665726167655265736f6c7574696f6e416374696f6e426f64795631716f7065726174696f6e5f707572706f736573636f7665726167652d7265736f6c7574696f6e71726573756c745f636f6d706f6e656e747381a564726f6c6573636f7665726167655f7265736f6c7574696f6e6b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065781e417574686f72697a6564436f7665726167655265736f6c7574696f6e563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7832746f732e736572766963652e6167656e742d67756172616e746f722d7265736f6c7574696f6e2d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d7265736f6c7574696f6e2e763177726571756573745f626f64795f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d7265736f6c7574696f6e2e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d7265736f6c7574696f6e2e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f7665726167652d7265736f6c7574696f6e2e7631ab6b616374696f6e5f6b696e646e7061796d656e742e6469726563746c6f7065726174696f6e5f69647833746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6469726563742d7061796f75742e76316c726571756573745f74797065782547756172616e746f7241677265656d656e745061796d656e74416374696f6e426f64795631716f7065726174696f6e5f707572706f73657067756172616e746f722d7061796f757471726573756c745f636f6d706f6e656e747381a564726f6c6578197061796f75745f657865637574696f6e5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782c417574686f72697a656447756172616e746f725061796f7574457865637574696f6e45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7838746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d657865637574696f6e2d65766964656e63652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647833746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6469726563742d7061796f75742e763177726571756573745f626f64795f70726f66696c655f69647833746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6469726563742d7061796f75742e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647833746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6469726563742d7061796f75742e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647833746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e6469726563742d7061796f75742e7631ab6b616374696f6e5f6b696e64747061796d656e742e646f6d61696e2d626f756e646c6f7065726174696f6e5f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e646f6d61696e2d626f756e642d7061796f75742e76316c726571756573745f74797065782547756172616e746f7241677265656d656e745061796d656e74416374696f6e426f64795631716f7065726174696f6e5f707572706f73657067756172616e746f722d7061796f757471726573756c745f636f6d706f6e656e747381a564726f6c6578197061796f75745f657865637574696f6e5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782c417574686f72697a656447756172616e746f725061796f7574457865637574696f6e45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7838746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d657865637574696f6e2d65766964656e63652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e646f6d61696e2d626f756e642d7061796f75742e763177726571756573745f626f64795f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e646f6d61696e2d626f756e642d7061796f75742e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e646f6d61696e2d626f756e642d7061796f75742e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647839746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e646f6d61696e2d626f756e642d7061796f75742e7631ab6b616374696f6e5f6b696e6471706f7274666f6c696f2e72656c656173656c6f7065726174696f6e5f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e706f73742d616363657074616e63652d72656c656173652e76316c726571756573745f74797065781b4578706f7375726552656c65617365416374696f6e426f64795631716f7065726174696f6e5f707572706f73656f706f73742d616363657074616e636571726573756c745f636f6d706f6e656e747381a564726f6c656f72656c656173655f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f747970657822417574686f72697a65644578706f7375726552656c6561736552656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7840746f732e736572766963652e6167656e742d67756172616e746f722d6578706f737572652d72656c656173652d726563656970742d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e706f73742d616363657074616e63652d72656c656173652e763177726571756573745f626f64795f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e706f73742d616363657074616e63652d72656c656173652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e706f73742d616363657074616e63652d72656c656173652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783d746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e706f73742d616363657074616e63652d72656c656173652e7631ab6b616374696f6e5f6b696e6471706f7274666f6c696f2e72656c656173656c6f7065726174696f6e5f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e7072652d616363657074616e63652d72656c656173652e76316c726571756573745f747970657828507265416363657074616e63654578706f7375726552656c65617365416374696f6e426f64795631716f7065726174696f6e5f707572706f73656e7072652d616363657074616e636571726573756c745f636f6d706f6e656e747381a564726f6c656f72656c656173655f726563656970746b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782f417574686f72697a6564507265416363657074616e63654578706f7375726552656c6561736552656365697074563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7846746f732e736572766963652e6167656e742d67756172616e746f722d7072652d616363657074616e63652d72656c656173652d726563656970742d656e76656c6f70652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e7072652d616363657074616e63652d72656c656173652e763177726571756573745f626f64795f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e7072652d616363657074616e63652d72656c656173652e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e7072652d616363657074616e63652d72656c656173652e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783c746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e7072652d616363657074616e63652d72656c656173652e7631ab6b616374696f6e5f6b696e6473736574746c656d656e742e65787465726e616c6c6f7065726174696f6e5f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d6261636b65642d7061796f75742e76316c726571756573745f74797065782c436f6c6c61746572616c4261636b656441677265656d656e745061796d656e74416374696f6e426f64795631716f7065726174696f6e5f707572706f73657818636f6c6c61746572616c2d6261636b65642d7061796f757471726573756c745f636f6d706f6e656e747381a564726f6c6578197061796f75745f657865637574696f6e5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782c417574686f72697a656447756172616e746f725061796f7574457865637574696f6e45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7838746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d657865637574696f6e2d65766964656e63652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d6261636b65642d7061796f75742e763177726571756573745f626f64795f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d6261636b65642d7061796f75742e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d6261636b65642d7061796f75742e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f6964783e746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e636f6c6c61746572616c2d6261636b65642d7061796f75742e7631ab6b616374696f6e5f6b696e6473736574746c656d656e742e65787465726e616c6c6f7065726174696f6e5f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e65787465726e616c2d7061796f75742e76316c726571756573745f74797065782547756172616e746f7241677265656d656e745061796d656e74416374696f6e426f64795631716f7065726174696f6e5f707572706f73657067756172616e746f722d7061796f757471726573756c745f636f6d706f6e656e747381a564726f6c6578197061796f75745f657865637574696f6e5f65766964656e63656b63617264696e616c6974796b65786163746c795f6f6e656d70726573656e63655f72756c657261636365707465645f6566666563745f76316e63616e6f6e6963616c5f74797065782c417574686f72697a656447756172616e746f725061796f7574457865637574696f6e45766964656e6365563178196469676573745f6f725f656e76656c6f70655f646f6d61696e7838746f732e736572766963652e6167656e742d67756172616e746f722d7061796f75742d657865637574696f6e2d65766964656e63652e763176726571756573745f736368656d615f76657273696f6e017672657175697265645f636f6e746578745f747970657380776d6174657269616c697a65725f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e65787465726e616c2d7061796f75742e763177726571756573745f626f64795f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e65787465726e616c2d7061796f75742e7631781f7472616e736974696f6e5f76616c696461746f725f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e65787465726e616c2d7061796f75742e7631782473656d616e7469635f6669656c645f64657269766174696f6e5f70726f66696c655f69647835746f732e736572766963652e6167656e742d67756172616e746f722e6d75746174652e65787465726e616c2d7061796f75742e76316e736368656d615f76657273696f6e017072656769737472795f76657273696f6e01",
+  "mutation_registry_digest": "sha256:8871cc1eed62f9f301c02f0be82a6fc614fc6248d64fa41158e1c180ec36a12b",
+  "coverage_state_vectors": [
+    {
+      "name": "accepted-genesis",
+      "state": {
+        "coverage_agreement_body_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "coverage_obligation_id": "obligation:coverage",
+        "reservation_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "coverage_status": "pending_authorization",
+        "claim_filing_status": "not_open",
+        "adapter_evidence_status": "current",
+        "coverage_revision": 1,
+        "filing_state_revision": 1,
+        "last_evidence_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "canonical_cbor_hex": "a96e7265736572766174696f6e5f696478477368613235363a323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232326f636f7665726167655f7374617475737570656e64696e675f617574686f72697a6174696f6e71636f7665726167655f7265766973696f6e0173636c61696d5f66696c696e675f737461747573686e6f745f6f70656e746c6173745f65766964656e63655f64696765737478477368613235363a333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333337566696c696e675f73746174655f7265766973696f6e0176636f7665726167655f6f626c69676174696f6e5f6964736f626c69676174696f6e3a636f76657261676577616461707465725f65766964656e63655f7374617475736763757272656e74781e636f7665726167655f61677265656d656e745f626f64795f64696765737478477368613235363a31313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131",
+      "digest": "sha256:f70fe850b7ef903a936f5d7f95d696e304e5f2e00f9a891f77dc503493635332"
+    },
+    {
+      "name": "activated",
+      "state": {
+        "coverage_agreement_body_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "coverage_obligation_id": "obligation:coverage",
+        "reservation_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "coverage_status": "active",
+        "claim_filing_status": "open",
+        "adapter_evidence_status": "current",
+        "coverage_revision": 2,
+        "filing_state_revision": 2,
+        "last_evidence_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "canonical_cbor_hex": "a96e7265736572766174696f6e5f696478477368613235363a323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232326f636f7665726167655f7374617475736661637469766571636f7665726167655f7265766973696f6e0273636c61696d5f66696c696e675f737461747573646f70656e746c6173745f65766964656e63655f64696765737478477368613235363a343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434343434347566696c696e675f73746174655f7265766973696f6e0276636f7665726167655f6f626c69676174696f6e5f6964736f626c69676174696f6e3a636f76657261676577616461707465725f65766964656e63655f7374617475736763757272656e74781e636f7665726167655f61677265656d656e745f626f64795f64696765737478477368613235363a31313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131",
+      "digest": "sha256:8a6332fee11bfbaadd3a92a60b1eca8d59b801cfbfa69f39a1960fcda7c78273"
+    },
+    {
+      "name": "filing-frozen-zero-claims",
+      "state": {
+        "coverage_agreement_body_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "coverage_obligation_id": "obligation:coverage",
+        "reservation_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "coverage_status": "active",
+        "claim_filing_status": "frozen",
+        "adapter_evidence_status": "current",
+        "coverage_revision": 3,
+        "filing_state_revision": 3,
+        "claim_admission_log_root": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "last_evidence_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "canonical_cbor_hex": "aa6e7265736572766174696f6e5f696478477368613235363a323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232326f636f7665726167655f7374617475736661637469766571636f7665726167655f7265766973696f6e0373636c61696d5f66696c696e675f7374617475736666726f7a656e746c6173745f65766964656e63655f64696765737478477368613235363a363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636367566696c696e675f73746174655f7265766973696f6e0376636f7665726167655f6f626c69676174696f6e5f6964736f626c69676174696f6e3a636f76657261676577616461707465725f65766964656e63655f7374617475736763757272656e747818636c61696d5f61646d697373696f6e5f6c6f675f726f6f7478477368613235363a35353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535353535781e636f7665726167655f61677265656d656e745f626f64795f64696765737478477368613235363a31313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131",
+      "digest": "sha256:ec8b0db74ce55d8bc245bb85ec4632f1e156f9a006349cfe188ec2eb286ef51a"
+    }
+  ],
+  "semantic_action_vectors": [
+    {
+      "name": "guarantor-domain-bound-payout",
+      "action_kind": "payment.domain-bound",
+      "fields": [
+        {
+          "name": "owner_id",
+          "type": "id",
+          "text": "owner:guarantor"
+        },
+        {
+          "name": "agent_id",
+          "type": "id",
+          "text": "agent:guarantor"
+        },
+        {
+          "name": "agreement_body_digest",
+          "type": "digest32",
+          "text": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "name": "obligation_instance_id",
+          "type": "digest32",
+          "text": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "name": "payer_id",
+          "type": "id",
+          "text": "agent:guarantor"
+        },
+        {
+          "name": "payee_id",
+          "type": "id",
+          "text": "agent:beneficiary"
+        },
+        {
+          "name": "network_domain_digest",
+          "type": "digest32",
+          "text": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "name": "asset_digest",
+          "type": "digest32",
+          "text": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        {
+          "name": "amount_atomic",
+          "type": "id",
+          "text": "1250000"
+        },
+        {
+          "name": "destination_digest",
+          "type": "digest32",
+          "text": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        }
+      ],
+      "stable_action_id": "sha256:f754c596fd8cfe9583a1c12d748ecf5d72b891e52fbb9b108b317defa34d3d0f",
+      "preimage_hex": "544f532d5341490000010001002b746f732e73656d616e7469632d616374696f6e2e7061796d656e742e646f6d61696e2d626f756e642e763100147061796d656e742e646f6d61696e2d626f756e64000a00086f776e65725f69640000000f6f776e65723a67756172616e746f7200086167656e745f69640000000f6167656e743a67756172616e746f72001561677265656d656e745f626f64795f64696765737400000020111111111111111111111111111111111111111111111111111111111111111100166f626c69676174696f6e5f696e7374616e63655f6964000000202222222222222222222222222222222222222222222222222222222222222222000870617965725f69640000000f6167656e743a67756172616e746f72000870617965655f6964000000116167656e743a62656e656669636961727900156e6574776f726b5f646f6d61696e5f646967657374000000203333333333333333333333333333333333333333333333333333333333333333000c61737365745f646967657374000000204444444444444444444444444444444444444444444444444444444444444444000d616d6f756e745f61746f6d69630000000731323530303030001264657374696e6174696f6e5f646967657374000000205555555555555555555555555555555555555555555555555555555555555555"
+    }
+  ]
+}

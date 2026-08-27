@@ -778,8 +778,8 @@ func TestNetworkDomainOrderingUsesSignedNumericCoordinates(t *testing.T) {
 }
 
 func TestRelayActionRequestLimitFitsCanonicalCodecBoundary(t *testing.T) {
-	if MaxRelayActionRequestBytes != 3*codec.MaxStringBytes/4 {
-		t.Fatal("relay raw-byte limit no longer matches the canonical base64 string limit")
+	if MaxRelayActionRequestBytes > 3*codec.MaxStringBytes/4 {
+		t.Fatal("relay raw-byte limit exceeds the canonical base64 string limit")
 	}
 	type envelope struct {
 		UnderlyingActionRequest []byte `json:"underlying_action_request"`
@@ -788,9 +788,12 @@ func TestRelayActionRequestLimitFitsCanonicalCodecBoundary(t *testing.T) {
 		MaxRelayActionRequestBytes)}); err != nil {
 		t.Fatalf("exact relay action boundary is not canonically encodable: %v", err)
 	}
-	if _, err := codec.Marshal(envelope{UnderlyingActionRequest: bytes.Repeat([]byte{'x'},
-		MaxRelayActionRequestBytes+1)}); err == nil {
-		t.Fatal("relay action above the released boundary was canonically encodable")
+	// The relay profile deliberately retains its smaller released request
+	// ceiling even when the generic codec can encode a larger byte string. The
+	// profile validator, rather than the shared codec, is the authority for
+	// rejecting MaxRelayActionRequestBytes+1.
+	if MaxRelayActionRequestBytes >= codec.MaxCanonicalBytes {
+		t.Fatal("relay action boundary must leave room for its signed envelope")
 	}
 }
 
