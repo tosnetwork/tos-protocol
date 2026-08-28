@@ -17,17 +17,19 @@ import (
 )
 
 const (
-	AgentOperationSchemaV1          uint16 = 1
-	AgentOperationEnvelopeDomain           = "tos.agent-operation-envelope.v1"
-	AgentOperationBodyDomain               = "tos.agent-operation-body.v1"
-	AgentOperationSignatureDomain          = "tos.agent-operation-signature.v1"
-	AgentIntentPayloadProfileURI           = "tos.service.agent-intent-payload.v1"
-	MaxAgentOperationEnvelopeBytes         = 1 << 20
-	MaxAgentOperationPayloadBytes          = 64 << 20
-	MaxAgentOperationPredecessors          = 32
-	MaxAgentOperationExtensions            = 32
-	MaxAgentOperationExtensionBytes        = 64 << 10
-	MaxAgentOperationClockSkew             = 5 * time.Minute
+	AgentOperationSchemaV1            uint16 = 1
+	AgentOperationEnvelopeDomain             = "tos.agent-operation-envelope.v1"
+	AgentOperationBodyDomain                 = "tos.agent-operation-body.v1"
+	AgentOperationSignatureDomain            = "tos.agent-operation-signature.v1"
+	AgentIntentPayloadProfileURI             = "tos.service.agent-intent-payload.v1"
+	OperationOutcomePayloadProfileURI        = "tos.operation-outcome.event.v1"
+	AgentOperationIDDomain                   = "tos.agent-operation-id.v1"
+	MaxAgentOperationEnvelopeBytes           = 1 << 20
+	MaxAgentOperationPayloadBytes            = 64 << 20
+	MaxAgentOperationPredecessors            = 32
+	MaxAgentOperationExtensions              = 32
+	MaxAgentOperationExtensionBytes          = 64 << 10
+	MaxAgentOperationClockSkew               = 5 * time.Minute
 )
 
 type AgentOperationExtensionV1 struct {
@@ -96,6 +98,30 @@ func AgentOperationBodyDigestV1(body AgentOperationBodyV1) (string, error) {
 	return codec.Digest(AgentOperationBodyDomain, body)
 }
 
+// DeriveAgentOperationIDV1 derives the assertion identity from the complete
+// operation body except for the identity field itself. This prevents callers
+// from assigning aliases to otherwise identical signed assertions.
+func DeriveAgentOperationIDV1(body AgentOperationBodyV1) (string, error) {
+	projection := body
+	projection.OperationID = ""
+	if projection.SchemaVersion != AgentOperationSchemaV1 || projection.NetworkID == "" ||
+		projection.ActorAgentID == "" || projection.PayloadDigest == "" {
+		return "", errors.New("Agent operation ID projection is incomplete")
+	}
+	return codec.Digest(AgentOperationIDDomain, projection)
+}
+
+func validateDerivedOperationIDV1(body AgentOperationBodyV1) error {
+	if body.PayloadProfile.ProfileURI != OperationOutcomePayloadProfileURI {
+		return nil
+	}
+	derived, err := DeriveAgentOperationIDV1(body)
+	if err != nil || body.OperationID != derived {
+		return errors.New("operation outcome operation ID is not verifier-derived")
+	}
+	return nil
+}
+
 func AgentOperationEnvelopeDigestV1(envelope AgentOperationEnvelopeV1) (string, error) {
 	if err := validateAgentOperationEnvelopeShapeV1(envelope); err != nil {
 		return "", err
@@ -108,6 +134,9 @@ func SignAgentOperationV1(body AgentOperationBodyV1, authoritySubject string, ke
 	if err := ValidateAgentOperationBodyV1(body); err != nil || authoritySubject != body.ActorAgentID ||
 		len(key) != ed25519.PrivateKeySize || len(historicalProof) == 0 || len(historicalProof) > 64<<10 {
 		return AgentOperationEnvelopeV1{}, errors.New("Agent operation signing request is invalid")
+	}
+	if err := validateDerivedOperationIDV1(body); err != nil {
+		return AgentOperationEnvelopeV1{}, err
 	}
 	message, err := agentOperationSignatureMessage(body)
 	if err != nil {
@@ -131,6 +160,9 @@ func VerifyAgentOperationV1(envelope AgentOperationEnvelopeV1, payload []byte,
 		return errors.New("Agent operation envelope is invalid")
 	}
 	body := envelope.Body
+	if err := validateDerivedOperationIDV1(body); err != nil {
+		return err
+	}
 	nowUnix := now.UTC().Unix()
 	if nowUnix < 0 {
 		return errors.New("Agent operation verification time is invalid")

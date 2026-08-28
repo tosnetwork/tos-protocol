@@ -151,6 +151,9 @@ var semanticActionRegistry = buildSemanticActionRegistry()
 
 func buildSemanticActionRegistry() map[string]SemanticActionEntry {
 	entries := []SemanticActionEntry{
+		entry("operation.journal.append", SuccessorNone, f("owner_id", SemanticID), f("agent_id", SemanticID), f("ordering_domain", SemanticDigest32), f("epoch", SemanticU64), f("sequence", SemanticU64), f("event_content_id", SemanticDigest32)),
+		entry("operation.publish", SuccessorNone, f("owner_id", SemanticID), f("agent_id", SemanticID), f("carrier_id", SemanticID), f("operation_id", SemanticDigest32), f("operation_envelope_digest", SemanticDigest32), f("audience_policy_digest", SemanticDigest32), f("carrier_profile_digest", SemanticDigest32)),
+		entry("operation.private-send", SuccessorNone, f("owner_id", SemanticID), f("agent_id", SemanticID), f("recipient_set_digest", SemanticDigest32), f("membership_epoch", SemanticU64), f("audience_policy_digest", SemanticDigest32), f("operation_id", SemanticDigest32), f("operation_envelope_digest", SemanticDigest32), f("conversation_scope_digest", SemanticDigest32), f("transport_profile_digest", SemanticDigest32)),
 		entry("publication.publish", SuccessorNone, f("owner_id", SemanticID), f("agent_id", SemanticID), f("carrier_id", SemanticID), f("intent_object_id", SemanticID), f("revision", SemanticU64), f("operation_digest", SemanticDigest32)),
 		entry("authority.instance", SuccessorNone, f("owner_id", SemanticID), f("agent_id", SemanticID), f("purpose_kind", SemanticKind), f("mandate_digest", SemanticDigest32), f("allocation_request_digest", SemanticDigest32), f("authority_allocation_sequence", SemanticU64)),
 		entry("publication.reply", SuccessorAuthorityInstance, f("owner_id", SemanticID), f("agent_id", SemanticID), f("carrier_id", SemanticID), f("parent_operation_digest", SemanticDigest32), f("authority_instance_id", SemanticDigest32)),
