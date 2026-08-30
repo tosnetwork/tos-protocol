@@ -290,7 +290,7 @@ func ObjectDigest(object ProfileObjectV1) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(canonical) > int(^uint32(0)) {
+	if uint64(len(canonical)) > uint64(^uint32(0)) {
 		return nil, errors.New("canonical object exceeds framing limit")
 	}
 	hash := sha256.New()
