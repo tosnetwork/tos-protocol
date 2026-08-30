@@ -90,7 +90,10 @@ func BuildEscrowStateInitV2(workchain int32, code *cell.Cell, init EscrowInitV2)
 		quote.Terms.ExecutionSignerAuthorization != "sha256:"+hex.EncodeToString(authorization.Hash()) ||
 		proposal.TransportBindingDigest != "sha256:"+hex.EncodeToString(transport.Hash()) ||
 		proposal.DisputePolicyDigest != "sha256:"+hex.EncodeToString(dispute.Hash()) ||
-		init.Terms.FundingDeadline > init.Terms.RefundAvailableAt || quote.Extension.ExecutionDeadline >= init.Terms.RefundAvailableAt {
+		init.Terms.FundingDeadline > init.Terms.RefundAvailableAt || quote.Extension.ExecutionDeadline >= init.Terms.RefundAvailableAt ||
+		init.Terms.FundingDeadline < quote.Extension.AcceptByUnix || init.Terms.FundingDeadline >= quote.Extension.ExecutionDeadline {
+		// The escrow contract enforces accept_by <= funding_deadline <
+		// execution_deadline < refund_at; build nothing it would reject at accept.
 		return EscrowIdentityV1{}, errors.New("escrow V2 terms, authorization, policy, or deadlines differ from Quote")
 	}
 	quoteMaster, quoteWalletCode, err := acceptedQuoteAssetRouteFromProposal(proposal)
