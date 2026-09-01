@@ -97,6 +97,55 @@ func TestAgreementTargetsAndDigestBindEveryObligation(t *testing.T) {
 	}
 }
 
+func TestAgreementSuccessorRequiresExactConsecutiveLineage(t *testing.T) {
+	now := time.Unix(2_000_000_000, 0).UTC()
+	predecessor := validAgreementBody(t, now)
+	predecessorDigest, err := AgreementBodyDigest(predecessor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	successor := predecessor
+	successor.Version = 2
+	successor.PredecessorAgreementDigest = predecessorDigest
+	successor.Terms = []byte("Review the submitted source and deliver a narrower report for 45 atomic units.")
+	successor.Obligations = append([]AgreementObligation(nil), predecessor.Obligations...)
+	successor.Obligations[1].Amount = &AgreementAmount{AssetNamespace: "tos.asset", AssetIdentifier: "native", AmountAtomic: "45", Unit: "total"}
+	successor.AuthorizationPredicates = append([]AgreementAuthorizationPredicate(nil), predecessor.AuthorizationPredicates...)
+	for index := range successor.AuthorizationPredicates {
+		successor.AuthorizationPredicates[index].EvidenceTargetProjectionDigest = ""
+	}
+	successor, err = PrepareAgreementTargets(successor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateAgreementSuccessor(predecessor, successor); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*AgentAgreementBody){
+		"Agreement ID":      func(body *AgentAgreementBody) { body.AgreementID = "agreement:other" },
+		"skipped version":   func(body *AgentAgreementBody) { body.Version = 3 },
+		"wrong predecessor": func(body *AgentAgreementBody) { body.PredecessorAgreementDigest = "sha256:" + strings.Repeat("e", 64) },
+		"different network": func(body *AgentAgreementBody) { body.NetworkContext = "tos:other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			mutated := successor
+			mutate(&mutated)
+			mutated.AuthorizationPredicates = append([]AgreementAuthorizationPredicate(nil), mutated.AuthorizationPredicates...)
+			for index := range mutated.AuthorizationPredicates {
+				mutated.AuthorizationPredicates[index].EvidenceTargetProjectionDigest = ""
+			}
+			mutated, err = PrepareAgreementTargets(mutated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateAgreementSuccessor(predecessor, mutated); err == nil {
+				t.Fatalf("successor with %s was accepted", name)
+			}
+		})
+	}
+}
+
 func TestAgreementRequiresAcyclicObligorAuthorizedGraph(t *testing.T) {
 	now := time.Unix(2_000_000_000, 0).UTC()
 	body := validAgreementBody(t, now)
@@ -176,4 +225,91 @@ func TestCompleteAgentEvidenceAuthorizesAgreement(t *testing.T) {
 	if err := ValidateAgreementAuthorization(replayed, AgentSignatureEvidenceVerifier{Resolver: keys}, now); err == nil {
 		t.Fatal("evidence replayed onto another Agreement body")
 	}
+}
+
+func TestAgreementAuthorizationEnforcesBodyPredicateAndAcceptanceValidity(t *testing.T) {
+	now := time.Unix(2_000_000_000, 0).UTC()
+
+	t.Run("body bounds", func(t *testing.T) {
+		body := validAgreementBody(t, now)
+		agreement, verifier := fullyAuthorizedAgentAgreement(t, body, body.ExpiresAtUnix)
+		if err := ValidateAgreementAuthorization(agreement, verifier, now.Add(-time.Second)); err == nil {
+			t.Fatal("Agreement authorized before its valid-from time")
+		}
+		if err := ValidateAgreementAuthorization(agreement, verifier, time.Unix(int64(body.ExpiresAtUnix), 0)); err == nil {
+			t.Fatal("Agreement authorized at its exclusive expiry")
+		}
+	})
+
+	t.Run("predicate not yet valid", func(t *testing.T) {
+		body := validAgreementBody(t, now)
+		for index := range body.AuthorizationPredicates {
+			body.AuthorizationPredicates[index].ValidFromUnix = uint64(now.Add(time.Minute).Unix())
+			body.AuthorizationPredicates[index].EvidenceTargetProjectionDigest = ""
+		}
+		var err error
+		body, err = PrepareAgreementTargets(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		agreement, verifier := fullyAuthorizedAgentAgreement(t, body, body.ExpiresAtUnix)
+		if err := ValidateAgreementAuthorization(agreement, verifier, now); err == nil {
+			t.Fatal("Agreement authorized before its predicates became valid")
+		}
+	})
+
+	t.Run("acceptance outlives body or predicate", func(t *testing.T) {
+		body := validAgreementBody(t, now)
+		agreement, verifier := fullyAuthorizedAgentAgreement(t, body, uint64(now.Add(2*time.Hour).Unix()))
+		if err := ValidateAgreementAuthorization(agreement, verifier, now); err == nil {
+			t.Fatal("acceptance extending beyond the Agreement validity window was accepted")
+		}
+
+		body = validAgreementBody(t, now)
+		body.ExpiresAtUnix = uint64(now.Add(2 * time.Hour).Unix())
+		for index := range body.AuthorizationPredicates {
+			body.AuthorizationPredicates[index].EvidenceTargetProjectionDigest = ""
+		}
+		body, err := PrepareAgreementTargets(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		agreement, verifier = fullyAuthorizedAgentAgreement(t, body, uint64(now.Add(90*time.Minute).Unix()))
+		if err := ValidateAgreementAuthorization(agreement, verifier, now); err == nil {
+			t.Fatal("acceptance extending beyond its predicate validity window was accepted")
+		}
+	})
+}
+
+func fullyAuthorizedAgentAgreement(t *testing.T, body AgentAgreementBody,
+	acceptanceExpiresAtUnix uint64) (AgentAgreement, AgentSignatureEvidenceVerifier) {
+	t.Helper()
+	digest, err := AgreementBodyDigest(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := agreementKeyResolver{}
+	agreement := AgentAgreement{Body: body}
+	for _, predicate := range body.AuthorizationPredicates {
+		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys[predicate.AuthoritySubject.SubjectIdentifier] = publicKey
+		acceptance, err := SignAgreementAcceptance(AgreementAcceptanceBody{
+			AgreementID: body.AgreementID, AgreementVersion: body.Version, AgreementBodyDigest: digest,
+			AcceptingSubject: predicate.AuthoritySubject, AcceptedRoles: predicate.RoleScope,
+			PredicateIDs: []string{predicate.PredicateID}, EvidenceTargetProjectionDigests: []string{predicate.EvidenceTargetProjectionDigest},
+			ExpiresAtUnix: acceptanceExpiresAtUnix,
+		}, privateKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		evidence, err := AgentSignatureEvidence(body, acceptance)
+		if err != nil {
+			t.Fatal(err)
+		}
+		agreement.AuthorizationEvidence = append(agreement.AuthorizationEvidence, evidence)
+	}
+	return agreement, AgentSignatureEvidenceVerifier{Resolver: keys}
 }

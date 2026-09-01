@@ -72,3 +72,41 @@ func TestTOSEscrowObservationDoesNotRecognizeLockedPrincipalAsRevenue(t *testing
 		t.Fatal(err)
 	}
 }
+
+func TestCostObservationGenesisAndContraLineage(t *testing.T) {
+	d := outcomeDigest("a")
+	genesis := CostObservationPayloadV1{SubjectKind: "execution", SubjectID: "execution:1", CostItemID: "model:1",
+		CostClass: "usage_measured", Category: "model", AssetIdentityDigest: d, AmountAtomic: "125",
+		EconomicDirection: "debit", QuantityDigest: outcomeDigest("b"), MeterIntervalDigest: outcomeDigest("c"),
+		MeterUnit: "token", InvoiceIdentityDigest: outcomeDigest("d"), PaymentRequestDigest: outcomeDigest("e"),
+		MeterOrInvoiceEvidenceDigest: outcomeDigest("f"), AccountingPolicyDigest: outcomeDigest("1"), IncurredAtUnix: 10}
+	if err := ValidateCostObservationPayloadV1(genesis); err != nil {
+		t.Fatalf("first cost observation was not constructible: %v", err)
+	}
+
+	genesis.OriginalCostAssertionRef = OutcomeAssertionRefV1{NetworkID: "tos:test", ActorAgentID: "agent:a",
+		OperationID: outcomeDigest("2"), OperationEnvelopeDigest: outcomeDigest("3")}
+	if ValidateCostObservationPayloadV1(genesis) == nil {
+		t.Fatal("non-contra cost accepted correction lineage")
+	}
+
+	contra := genesis
+	contra.CostClass = "contra"
+	if err := ValidateCostObservationPayloadV1(contra); err != nil {
+		t.Fatalf("contra rejected its exact original assertion: %v", err)
+	}
+	contra.OriginalCostAssertionRef = OutcomeAssertionRefV1{}
+	if ValidateCostObservationPayloadV1(contra) == nil {
+		t.Fatal("contra accepted an empty original assertion")
+	}
+	contra.OriginalCostAssertionRef = OutcomeAssertionRefV1{NetworkID: "tos:test", ActorAgentID: "agent:a",
+		OperationID: outcomeDigest("2"), OperationEnvelopeDigest: "sha256:bad"}
+	if ValidateCostObservationPayloadV1(contra) == nil {
+		t.Fatal("contra accepted malformed original assertion lineage")
+	}
+	contra.OriginalCostAssertionRef = OutcomeAssertionRefV1{NetworkID: "tos:test", ActorAgentID: "agent:a",
+		OperationID: "operation:opaque", OperationEnvelopeDigest: outcomeDigest("3")}
+	if ValidateCostObservationPayloadV1(contra) == nil {
+		t.Fatal("contra accepted a non-digest original operation id")
+	}
+}

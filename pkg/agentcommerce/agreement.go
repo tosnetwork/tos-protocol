@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -247,9 +248,40 @@ func AgreementBodyDigest(body AgentAgreementBody) (string, error) {
 	return codec.Digest("tos.agent-agreement-body.v1", body)
 }
 
+// ValidateAgreementSuccessor verifies the cross-object lineage rules that
+// cannot be checked by ValidateAgreementBody in isolation. A successor is a
+// complete replacement body in the same Agreement version chain; it is never a
+// patch and its predecessor digest must identify the exact validated body.
+func ValidateAgreementSuccessor(predecessor, successor AgentAgreementBody) error {
+	if err := ValidateAgreementBody(predecessor); err != nil {
+		return fmt.Errorf("agreement predecessor body: %w", err)
+	}
+	if err := ValidateAgreementBody(successor); err != nil {
+		return fmt.Errorf("agreement successor body: %w", err)
+	}
+	if successor.AgreementID != predecessor.AgreementID {
+		return errors.New("agreement successor changes Agreement ID")
+	}
+	if predecessor.Version == ^uint64(0) || successor.Version != predecessor.Version+1 {
+		return errors.New("agreement successor version is not consecutive")
+	}
+	predecessorDigest, err := AgreementBodyDigest(predecessor)
+	if err != nil {
+		return err
+	}
+	if successor.PredecessorAgreementDigest != predecessorDigest {
+		return errors.New("agreement successor does not bind the exact predecessor")
+	}
+	if successor.NetworkContext != predecessor.NetworkContext {
+		return errors.New("agreement successor changes network context")
+	}
+	return nil
+}
+
 func validateAgreementBody(body AgentAgreementBody, requireTargets bool) error {
 	if body.SchemaVersion != 1 || !boundedIdentifier(body.AgreementID, 256) || body.Version == 0 ||
-		!boundedIdentifier(body.NetworkContext, 256) || body.ValidFromUnix == 0 || body.ExpiresAtUnix <= body.ValidFromUnix ||
+		!boundedIdentifier(body.NetworkContext, 256) || body.ValidFromUnix == 0 || body.ValidFromUnix > math.MaxInt64 ||
+		body.ExpiresAtUnix > math.MaxInt64 || body.ExpiresAtUnix <= body.ValidFromUnix ||
 		!boundedIdentifier(body.TermsContentType, 128) || len(body.Terms) == 0 || len(body.Terms) > MaxAgreementTermsBytes {
 		return errors.New("agreement envelope is invalid")
 	}
@@ -293,7 +325,8 @@ func validateAgreementBody(body AgentAgreementBody, requireTargets bool) error {
 			!validAuthoritySubject(predicate.AuthoritySubject) || validateSortedStrings(predicate.RoleScope, 32, 128) != nil ||
 			validateSortedStrings(predicate.ObligationIDs, MaxAgreementObligations, 128) != nil || len(predicate.ObligationIDs) == 0 ||
 			!boundedIdentifier(predicate.EvidenceProfileURI, 256) || predicate.EvidenceProfileVersion == 0 ||
-			!canonicalDigestPattern.MatchString(predicate.EvidenceProfileDigest) || predicate.ExpiresAtUnix == 0 ||
+			!canonicalDigestPattern.MatchString(predicate.EvidenceProfileDigest) || predicate.ValidFromUnix > math.MaxInt64 ||
+			predicate.ExpiresAtUnix == 0 || predicate.ExpiresAtUnix > math.MaxInt64 ||
 			predicate.ValidFromUnix > predicate.ExpiresAtUnix || validateSortedStrings(predicate.RequiredExtensions, 64, 256) != nil ||
 			validateSortedStrings(predicate.OptionalExtensions, 64, 256) != nil {
 			return errors.New("agreement authorization predicate is invalid")
@@ -419,8 +452,13 @@ func validateAgreementEvidenceSet(agreement AgentAgreement, verifier AgreementEv
 	if err := ValidateAgreementBody(agreement.Body); err != nil {
 		return err
 	}
-	if verifier == nil {
+	if verifier == nil || now.IsZero() {
 		return errors.New("agreement evidence verifier is required")
+	}
+	now = now.UTC()
+	if now.Before(time.Unix(int64(agreement.Body.ValidFromUnix), 0).UTC()) ||
+		!now.Before(time.Unix(int64(agreement.Body.ExpiresAtUnix), 0).UTC()) {
+		return errors.New("agreement body is outside its authorization validity window")
 	}
 	bodyDigest, err := AgreementBodyDigest(agreement.Body)
 	if err != nil {
@@ -428,6 +466,10 @@ func validateAgreementEvidenceSet(agreement AgentAgreement, verifier AgreementEv
 	}
 	groups := make(map[string][]AgreementAuthorizationPredicate)
 	for _, predicate := range agreement.Body.AuthorizationPredicates {
+		if predicate.ValidFromUnix != 0 && now.Before(time.Unix(int64(predicate.ValidFromUnix), 0).UTC()) ||
+			!now.Before(time.Unix(int64(predicate.ExpiresAtUnix), 0).UTC()) {
+			return errors.New("agreement authorization predicate is outside its validity window")
+		}
 		key := predicate.AuthoritySubject.key() + "\x00" + predicate.EvidenceProfileURI + fmt.Sprintf("\x00%d\x00", predicate.EvidenceProfileVersion) + predicate.EvidenceProfileDigest
 		groups[key] = append(groups[key], predicate)
 	}
@@ -451,6 +493,17 @@ func validateAgreementEvidenceSet(agreement AgentAgreement, verifier AgreementEv
 		for index, predicate := range predicates {
 			if predicate.PredicateID != evidence.PredicateIDs[index] || predicate.EvidenceTargetProjectionDigest != evidence.EvidenceTargetProjectionDigests[index] {
 				return errors.New("agreement evidence predicate or target mismatch")
+			}
+		}
+		if evidence.EvidenceProfileURI == EvidenceProfileAgentSignature || evidence.EvidenceProfileURI == EvidenceProfileAuthoritySignature {
+			acceptance, decodeErr := DecodeSignedAgreementAcceptance(evidence.Evidence)
+			if decodeErr != nil || acceptance.Body.ExpiresAtUnix > agreement.Body.ExpiresAtUnix {
+				return errors.New("agreement acceptance exceeds the body validity window")
+			}
+			for _, predicate := range predicates {
+				if acceptance.Body.ExpiresAtUnix > predicate.ExpiresAtUnix {
+					return errors.New("agreement acceptance exceeds its predicate validity window")
+				}
 			}
 		}
 		if err := verifier.VerifyAgreementEvidence(evidence, now); err != nil {

@@ -157,6 +157,17 @@ func main() {
 		State: "failed", StateRevision: 4, StartActionID: digest("9"), StartRequestDigest: digest("a"), AuthoritativeRecord: digest("b"), ObservedAtUnix: uint64(now.Unix())}
 	carrierObservation := commerce.CarrierReceiptObservationV1{CarrierID: "carrier:one", OperationEnvelopeDigest: envelopeDigest, CarrierReceiptDigest: digest("1"),
 		CarrierSequence: 19, AcceptedAtUnix: uint64(now.Unix()), RetentionCommitment: digest("2")}
+	costGenesis := commerce.CostObservationPayloadV1{SubjectKind: "execution", SubjectID: digest("8"), CostItemID: "model:fixture",
+		CostClass: "usage_measured", Category: "model", AssetIdentityDigest: digest("3"), AmountAtomic: "125",
+		EconomicDirection: "debit", QuantityDigest: digest("4"), MeterIntervalDigest: digest("5"), MeterUnit: "token",
+		InvoiceIdentityDigest: digest("6"), PaymentRequestDigest: digest("7"), MeterOrInvoiceEvidenceDigest: digest("8"),
+		AccountingPolicyDigest: digest("9"), IncurredAtUnix: uint64(now.Unix())}
+	costContra := costGenesis
+	costContra.CostItemID = "model:fixture:reversal"
+	costContra.CostClass = "contra"
+	costContra.EconomicDirection = "credit"
+	costContra.OriginalCostAssertionRef = commerce.OutcomeAssertionRefV1{NetworkID: body.NetworkID, ActorAgentID: body.ActorAgentID,
+		OperationID: digest("a"), OperationEnvelopeDigest: digest("b")}
 	giftObservation := commerce.TransferObservationV1{TransferClass: "gift", NetworkID: body.NetworkID, TransactionDigest: digest("1"), FinalityEvidenceDigest: digest("2"),
 		PayerID: "agent:payer", PayeeID: "agent:payee", AssetIdentityDigest: digest("3"), AmountAtomic: "7", DestinationDigest: digest("4"), GiftObjectDigest: digest("5"),
 		AdapterProfileURI: "tos.transfer.tos.v1", ResolutionState: "validator_finalized", ObservedAtUnix: uint64(now.Unix())}
@@ -221,13 +232,14 @@ func main() {
 		commerce.ValidateAssetConversionEvidenceV1(conversion), commerce.ValidateOutcomeForecastV1(forecast),
 		commerce.ValidateCalibrationReportV1(calibration), commerce.ValidateFinancialReportV1(financial), commerce.ValidateOutcomeCensoringV1(censoring),
 		commerce.ValidateEvidenceAvailabilityObservationV1(availability), commerce.ValidateGateExecutionObservationV1(gateObservation),
-		commerce.ValidateCarrierReceiptObservationV1(carrierObservation), commerce.ValidateTransferObservationV1(giftObservation),
+		commerce.ValidateCarrierReceiptObservationV1(carrierObservation), commerce.ValidateCostObservationPayloadV1(costGenesis),
+		commerce.ValidateCostObservationPayloadV1(costContra), commerce.ValidateTransferObservationV1(giftObservation),
 		commerce.ValidateTransferObservationV1(paymentObservation), commerce.ValidateTOSEscrowObservationV1(escrowObservation),
 		commerce.ValidateAudiencePolicyV1(audiencePolicy), commerce.ValidateLearningDatasetManifestV1(learning),
 		commerce.ValidateSkillPromotionDecisionV1(promotion)} {
 		must(validation)
 	}
-	doc := document{Schema: "tos.operation-outcome-conformance.v1", NegativeMutations: []string{"caller-selected-operation-id", "event-payload-substitution", "envelope-signature-substitution", "unsorted-evidence", "cross-issuer-content-deduplication", "publication-action-reused-across-carriers", "private-send-reused-after-membership-epoch-change"}}
+	doc := document{Schema: "tos.operation-outcome-conformance.v1", NegativeMutations: []string{"caller-selected-operation-id", "event-payload-substitution", "envelope-signature-substitution", "unsorted-evidence", "cross-issuer-content-deduplication", "publication-action-reused-across-carriers", "private-send-reused-after-membership-epoch-change", "genesis-cost-with-original-reference", "contra-cost-without-original-reference", "contra-cost-with-malformed-original-reference"}}
 	add := func(name, domain string, value any) {
 		canonical, err := codec.Marshal(value)
 		must(err)
@@ -258,6 +270,8 @@ func main() {
 	add("evidence_availability", "tos.operation-outcome.evidence-availability.v1", availability)
 	add("gate_execution", "tos.operation-outcome.gate-execution.v1", gateObservation)
 	add("carrier_receipt", "tos.operation-outcome.carrier-receipt.v1", carrierObservation)
+	add("cost_genesis", "tos.operation-outcome.cost.v1", costGenesis)
+	add("cost_contra", "tos.operation-outcome.cost.v1", costContra)
 	add("gift_transfer", "tos.operation-outcome.transfer.gift.v1", giftObservation)
 	add("agreement_payment", "tos.operation-outcome.transfer.agreement-payment.v1", paymentObservation)
 	add("tos_escrow_transfer", "tos.operation-outcome.transfer.tos-escrow.v1", escrowObservation)

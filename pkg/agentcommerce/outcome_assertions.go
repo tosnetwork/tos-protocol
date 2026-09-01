@@ -176,8 +176,14 @@ func ValidateCostObservationPayloadV1(value CostObservationPayloadV1) error {
 		return errors.New("outcome cost observation is invalid")
 	}
 	ref := value.OriginalCostAssertionRef
-	if !outcomeToken(ref.NetworkID, 256) || !outcomeToken(ref.ActorAgentID, 256) || !outcomeToken(ref.OperationID, 256) || !digest32(ref.OperationEnvelopeDigest) {
-		return errors.New("cost original assertion reference is invalid")
+	emptyRef := ref.NetworkID == "" && ref.ActorAgentID == "" && ref.OperationID == "" && ref.OperationEnvelopeDigest == ""
+	if value.CostClass == "contra" {
+		if !outcomeToken(ref.NetworkID, 256) || !outcomeToken(ref.ActorAgentID, 256) ||
+			!digest32(ref.OperationID) || !digest32(ref.OperationEnvelopeDigest) {
+			return errors.New("contra cost lacks its exact original assertion")
+		}
+	} else if !emptyRef {
+		return errors.New("non-contra cost claims an original assertion")
 	}
 	return nil
 }
