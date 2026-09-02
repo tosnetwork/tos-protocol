@@ -30,20 +30,22 @@ type PaidDemandEscrowDeployer interface {
 }
 
 type TOSCTLPaidDemandEscrowDeployerConfig struct {
-	BinaryPath      string
-	ConfigPath      string
-	WalletName      string
-	RelayerAddress  string
-	AttachedNanoTOS uint64
-	Timeout         time.Duration
-	VaultURL        string
+	BinaryPath                         string
+	ConfigPath                         string
+	WalletName                         string
+	RelayerAddress                     string
+	AttachedNanoTOS                    uint64
+	Timeout                            time.Duration
+	VaultURL                           string
+	AcknowledgeUnpinnedManualBroadcast bool
 }
 
 type TOSCTLPaidDemandEscrowDeployer struct {
-	binary, config, wallet, relayer string
-	attached                        uint64
-	timeout                         time.Duration
-	runner                          commandRunner
+	binary, config, wallet, relayer    string
+	attached                           uint64
+	timeout                            time.Duration
+	runner                             commandRunner
+	acknowledgeUnpinnedManualBroadcast bool
 }
 
 func NewTOSCTLPaidDemandEscrowDeployer(config TOSCTLPaidDemandEscrowDeployerConfig) (*TOSCTLPaidDemandEscrowDeployer, error) {
@@ -69,7 +71,8 @@ func NewTOSCTLPaidDemandEscrowDeployer(config TOSCTLPaidDemandEscrowDeployerConf
 	}
 	return &TOSCTLPaidDemandEscrowDeployer{binary: config.BinaryPath, config: config.ConfigPath,
 		wallet: config.WalletName, relayer: config.RelayerAddress, attached: config.AttachedNanoTOS,
-		timeout: config.Timeout, runner: runner}, nil
+		timeout: config.Timeout, runner: runner,
+		acknowledgeUnpinnedManualBroadcast: config.AcknowledgeUnpinnedManualBroadcast}, nil
 }
 
 func (deployer *TOSCTLPaidDemandEscrowDeployer) PreparePaidDemandDeployment(ctx context.Context,
@@ -149,7 +152,8 @@ func (deployer *TOSCTLPaidDemandEscrowDeployer) BroadcastPaidDemandDeployment(ct
 	if err != nil || cellHash(message) != prepared.MessageHash {
 		return errors.New("Paid Demand deployment message changed")
 	}
-	raw, err := deployer.run(ctx, "wallet", "broadcast-prepared", "--message-boc", prepared.MessageBOCBase64, "--yes", "-c", deployer.config)
+	arguments := deployer.broadcastArguments(prepared.MessageBOCBase64)
+	raw, err := deployer.run(ctx, arguments...)
 	if err != nil {
 		return fmt.Errorf("Paid Demand deployment outcome is ambiguous: %w%s", err, boundedCommandDiagnostic(raw))
 	}
@@ -165,6 +169,15 @@ func (deployer *TOSCTLPaidDemandEscrowDeployer) BroadcastPaidDemandDeployment(ct
 		return errors.New("Paid Demand deployment outcome is ambiguous")
 	}
 	return nil
+}
+
+func (deployer *TOSCTLPaidDemandEscrowDeployer) broadcastArguments(messageBOC string) []string {
+	arguments := []string{"wallet", "broadcast-prepared", "--message-boc", messageBOC, "--yes"}
+	if deployer.acknowledgeUnpinnedManualBroadcast {
+		arguments = append(arguments, "--acknowledge-unpinned-manual-broadcast")
+	}
+	arguments = append(arguments, "-c", deployer.config)
+	return arguments
 }
 
 func boundedCommandDiagnostic(raw []byte) string {

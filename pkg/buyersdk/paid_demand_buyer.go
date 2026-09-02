@@ -491,7 +491,13 @@ func (buyer *PaidDemandBuyer) submitEffect(ctx context.Context, purchase *Prepar
 	if err != nil {
 		return err
 	}
-	return buyer.actionSender.BroadcastWalletAction(ctx, prepared)
+	if err := buyer.actionSender.BroadcastWalletAction(ctx, prepared); err != nil {
+		return err
+	}
+	if resolver, ok := buyer.actionSender.(WalletActionResolver); ok {
+		return resolver.ResolveWalletAction(ctx, prepared)
+	}
+	return nil
 }
 
 func (buyer *PaidDemandBuyer) resolveExact(ctx context.Context,
