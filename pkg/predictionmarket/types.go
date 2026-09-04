@@ -48,12 +48,13 @@ const (
 )
 
 var (
-	orderDomainHash     = sha256Bytes([]byte("TOS_PREDICTION_ORDER_V1"))
-	resultDomainHash    = sha256Bytes([]byte("TOS_PREDICTION_RESULT_V1"))
-	normalContextDomain = sha256Bytes([]byte("TOS_PREDICTION_NORMAL_CONTEXT_V1"))
-	reviewBaseDomain    = sha256Bytes([]byte("TOS_PREDICTION_REVIEW_BASE_CONTEXT_V1"))
-	reviewVoteDomain    = sha256Bytes([]byte("TOS_PREDICTION_REVIEW_VOTE_CONTEXT_V1"))
-	zeroHash            Hash32
+	orderDomainHash      = sha256Bytes([]byte("TOS_PREDICTION_ORDER_V1"))
+	resultDomainHash     = sha256Bytes([]byte("TOS_PREDICTION_RESULT_V1"))
+	normalContextDomain  = sha256Bytes([]byte("TOS_PREDICTION_NORMAL_CONTEXT_V1"))
+	reviewBaseDomain     = sha256Bytes([]byte("TOS_PREDICTION_REVIEW_BASE_CONTEXT_V1"))
+	reviewVoteDomain     = sha256Bytes([]byte("TOS_PREDICTION_REVIEW_VOTE_CONTEXT_V1"))
+	accountBindingDomain = []byte("TOS_PREDICTION_ACCOUNT_BINDING_V1")
+	zeroHash             Hash32
 )
 
 type Hash32 [32]byte
@@ -85,6 +86,22 @@ func cellHash(value *cell.Cell) Hash32 {
 
 func sha256Bytes(value []byte) Hash32 {
 	return sha256.Sum256(value)
+}
+
+// PredictionAccountBindingDigestV1 binds semantic custody fields to one
+// canonical raw standard address without depending on display/base64 flags.
+// The preimage is the ASCII domain, one two's-complement int8 workchain byte,
+// and the 256-bit account ID.
+func PredictionAccountBindingDigestV1(rawAddress string) (Hash32, error) {
+	parsed, err := parseCanonicalAddress(rawAddress)
+	if err != nil {
+		return Hash32{}, err
+	}
+	preimage := make([]byte, 0, len(accountBindingDomain)+1+32)
+	preimage = append(preimage, accountBindingDomain...)
+	preimage = append(preimage, byte(int8(parsed.Workchain())))
+	preimage = append(preimage, parsed.Data()...)
+	return sha256Bytes(preimage), nil
 }
 
 type Action uint8
