@@ -3,6 +3,7 @@ package agentgift
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -65,6 +66,102 @@ func buildCancelBOC(t *testing.T, globalID int32, seqno, validUntil uint32, acco
 		t.Fatal(err)
 	}
 	return root.ToBOCWithFlags(false)
+}
+
+func buildCheckedContractCallV2BOC(t *testing.T, globalID int32, epoch uint64, seqno, validUntil uint32,
+	account, destination string, amount uint64, flags uint64, callBody *cell.Cell, private ed25519.PrivateKey,
+	trailing bool,
+) []byte {
+	t.Helper()
+	accountAddress, err := address.ParseRawAddr(account)
+	if err != nil {
+		t.Fatal(err)
+	}
+	destinationAddress, err := address.ParseRawAddr(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadBuilder := cell.BeginCell().MustStoreUInt(AgentCheckedContractCallV2Opcode, 32).
+		MustStoreInt(int64(globalID), 32).MustStoreUInt(epoch, 64).MustStoreUInt(uint64(seqno), 32).
+		MustStoreUInt(uint64(validUntil), 32).MustStoreAddr(destinationAddress).MustStoreCoins(amount).
+		MustStoreUInt(flags, 8)
+	if trailing {
+		payloadBuilder.MustStoreUInt(1, 1)
+	}
+	payload := payloadBuilder.MustStoreRef(callBody).EndCell()
+	var payloadHash [32]byte
+	copy(payloadHash[:], payload.Hash())
+	hash, err := controllerBindingHash(account, globalID, payloadHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := cell.BeginCell().MustStoreSlice(ed25519.Sign(private, hash), 512).
+		MustStoreBuilder(payload.ToBuilder()).EndCell()
+	root, err := (&tlb.ExternalMessage{
+		SrcAddr: address.NewAddressNone(), DstAddr: accountAddress, ImportFee: tlb.ZeroCoins, Body: body,
+	}).ToCell()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root.ToBOCWithFlags(false)
+}
+
+func TestParseAndVerifyAgentCheckedContractCallV2BOC(t *testing.T) {
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := testRequest().SenderAgentAccount
+	destination := "0:" + strings.Repeat("d", 64)
+	callBody := cell.BeginCell().MustStoreUInt(0x504d000f, 32).MustStoreUInt(7, 64).EndCell()
+	boc := buildCheckedContractCallV2BOC(
+		t, 42, 3, 9, 2_000_000_000, account, destination, 1_000_000_000,
+		AgentCheckedContractCallV2Flags, callBody, private, false,
+	)
+	parsed, err := VerifyPreparedAgentCheckedContractCallV2(boc, ExpectedCheckedContractCallV2{
+		SenderAgentAccount: account, GlobalID: 42, ControllerEpoch: 3, Seqno: 9,
+		ValidUntil: 2_000_000_000, DestinationAddress: destination, AmountAtomic: 1_000_000_000,
+		BodyBOC: callBody.ToBOCWithFlags(false),
+	})
+	if err != nil || parsed.BodyHash != "tvm-cell-sha256:"+hex.EncodeToString(callBody.Hash()) {
+		t.Fatalf("valid checked call failed: parsed=%+v err=%v", parsed, err)
+	}
+	for name, mutate := range map[string]func(*ExpectedCheckedContractCallV2){
+		"source": func(v *ExpectedCheckedContractCallV2) { v.SenderAgentAccount = destination },
+		"global": func(v *ExpectedCheckedContractCallV2) { v.GlobalID++ },
+		"epoch":  func(v *ExpectedCheckedContractCallV2) { v.ControllerEpoch++ },
+		"seqno":  func(v *ExpectedCheckedContractCallV2) { v.Seqno++ },
+		"expiry": func(v *ExpectedCheckedContractCallV2) { v.ValidUntil++ },
+		"target": func(v *ExpectedCheckedContractCallV2) { v.DestinationAddress = account },
+		"amount": func(v *ExpectedCheckedContractCallV2) { v.AmountAtomic++ },
+		"body": func(v *ExpectedCheckedContractCallV2) {
+			v.BodyBOC = cell.BeginCell().MustStoreUInt(1, 1).EndCell().ToBOCWithFlags(false)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			expected := ExpectedCheckedContractCallV2{
+				SenderAgentAccount: account, GlobalID: 42, ControllerEpoch: 3, Seqno: 9,
+				ValidUntil: 2_000_000_000, DestinationAddress: destination, AmountAtomic: 1_000_000_000,
+				BodyBOC: callBody.ToBOCWithFlags(false),
+			}
+			mutate(&expected)
+			if _, verifyErr := VerifyPreparedAgentCheckedContractCallV2(boc, expected); verifyErr == nil {
+				t.Fatal("checked call substitution accepted")
+			}
+		})
+	}
+	if _, err := ParseAgentCheckedContractCallV2BOC(buildCheckedContractCallV2BOC(
+		t, 42, 3, 9, 2_000_000_000, account, destination, 1,
+		2, callBody, private, false,
+	)); err == nil {
+		t.Fatal("wrong V2 flags accepted")
+	}
+	if _, err := ParseAgentCheckedContractCallV2BOC(buildCheckedContractCallV2BOC(
+		t, 42, 3, 9, 2_000_000_000, account, destination, 1,
+		AgentCheckedContractCallV2Flags, callBody, private, true,
+	)); err == nil {
+		t.Fatal("trailing V2 payload material accepted")
+	}
 }
 
 func TestParseAndVerifyAgentCancelSeqnoBOC(t *testing.T) {
