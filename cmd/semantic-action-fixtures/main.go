@@ -38,7 +38,18 @@ func main() {
 	for kind := range registry {
 		kinds = append(kinds, kind)
 	}
-	sort.Strings(kinds)
+	// Additive namespaces are appended after every pre-existing V1 kind so a
+	// newly released kind cannot renumber and silently rewrite older golden
+	// inputs or stable action IDs. Entries remain lexicographic within each
+	// partition.
+	sort.Slice(kinds, func(left, right int) bool {
+		leftPrediction := strings.HasPrefix(kinds[left], "prediction.")
+		rightPrediction := strings.HasPrefix(kinds[right], "prediction.")
+		if leftPrediction != rightPrediction {
+			return !leftPrediction
+		}
+		return kinds[left] < kinds[right]
+	})
 	doc := document{Schema: "tos.semantic-action-conformance.v1"}
 	for actionIndex, kind := range kinds {
 		entry := registry[kind]
