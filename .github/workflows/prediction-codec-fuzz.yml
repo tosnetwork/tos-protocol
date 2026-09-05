@@ -1,0 +1,30 @@
+name: Prediction codec fuzz
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/prediction-codec-fuzz.yml"
+      - "pkg/predictionmarket/**"
+
+permissions:
+  contents: read
+
+jobs:
+  malformed-cell-decoders:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+      # The regular suite runs the fixed seeds. This bounded native fuzz run
+      # additionally mutates untrusted BOCs and must find neither a panic nor
+      # an invariant violation in the strict PredictionMarket decoders.
+      - name: Fuzz strict PredictionMarket decoders
+        run: >-
+          go test ./pkg/predictionmarket
+          -run '^$'
+          -fuzz '^FuzzPredictionDecoders$'
+          -fuzztime=30s
