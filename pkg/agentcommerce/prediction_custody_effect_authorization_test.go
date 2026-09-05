@@ -30,6 +30,7 @@ func testPredictionCustodyEffect(now time.Time) PredictionCustodyEffectAuthoriza
 		ApprovalDigestOrZero: "sha256:" + strings.Repeat("0", 64),
 		MarketID:             "sha256:" + strings.Repeat("9", 64),
 		MarketAddress:        "0:" + strings.Repeat("a", 64),
+		Destination:          "0:" + strings.Repeat("a", 64),
 		MarketConfigHash:     "tvm-cell-sha256:" + strings.Repeat("b", 64),
 		MarketCodeHash:       "tvm-cell-sha256:" + strings.Repeat("c", 64),
 		AmountNanoTOS:        900_000_000, BodyHash: "tvm-cell-sha256:" + strings.Repeat("d", 64),
@@ -74,6 +75,9 @@ func TestPredictionCustodyEffectAuthorizationBindsClosedExactEffect(t *testing.T
 		"amount": func(candidate *PredictionCustodyEffectAuthorizationV1) { candidate.AmountNanoTOS++ },
 		"network": func(candidate *PredictionCustodyEffectAuthorizationV1) {
 			candidate.NetworkDomain.ZeroStateRootHash = "sha256:" + strings.Repeat("e", 64)
+		},
+		"destination": func(candidate *PredictionCustodyEffectAuthorizationV1) {
+			candidate.Destination = "0:" + strings.Repeat("e", 64)
 		},
 	}
 	for name, mutate := range mutations {
@@ -133,8 +137,20 @@ func TestPredictionCustodyEffectAuthorizationStrictJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	decoded, err := DecodePredictionCustodyEffectAuthorizationV1JSON(raw)
-	if err != nil || decoded.Proof != signed.Proof {
+	if err != nil || decoded.Proof != signed.Proof || decoded.Destination != signed.MarketAddress {
 		t.Fatalf("strict round trip failed: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	delete(fields, "destination")
+	withoutDestination, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodePredictionCustodyEffectAuthorizationV1JSON(withoutDestination); err == nil {
+		t.Fatal("prediction custody authorization omitted its explicit destination")
 	}
 	unknown := append(append([]byte(nil), raw[:len(raw)-1]...), []byte(`,"agreement_body_digest":"sha256:00"}`)...)
 	if _, err := DecodePredictionCustodyEffectAuthorizationV1JSON(unknown); err == nil {
