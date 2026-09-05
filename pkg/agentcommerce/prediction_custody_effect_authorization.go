@@ -44,9 +44,10 @@ var predictionCustodyEffectKinds = map[string]struct{}{
 }
 
 // PredictionCustodyEffectAuthorizationV1 is an owner-custody capability for
-// one exact PredictionMarket call through Agent Account V2. It is deliberately
-// not a variant of the Agreement/escrow authorization: no Agreement field can
-// be invented to make a prediction action fit that schema.
+// one exact PredictionMarket call through the Agent Account checked-call v2
+// action. It is deliberately not a variant of the Agreement/escrow
+// authorization: no Agreement field can be invented to make a prediction
+// action fit that schema.
 type PredictionCustodyEffectAuthorizationV1 struct {
 	SchemaVersion              uint16               `json:"schema_version"`
 	Profile                    string               `json:"profile"`
