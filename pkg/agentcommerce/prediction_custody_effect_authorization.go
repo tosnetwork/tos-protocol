@@ -68,13 +68,17 @@ type PredictionCustodyEffectAuthorizationV1 struct {
 	ApprovalDigestOrZero       string               `json:"approval_digest_or_zero"`
 	MarketID                   string               `json:"market_id"`
 	MarketAddress              string               `json:"market_address"`
-	MarketConfigHash           string               `json:"market_config_hash"`
-	MarketCodeHash             string               `json:"market_code_hash"`
-	AmountNanoTOS              uint64               `json:"amount_nanotos"`
-	BodyHash                   string               `json:"body_hash"`
-	ExpiresAtUnix              uint64               `json:"expires_at_unix"`
-	PublicKey                  string               `json:"public_key"`
-	Proof                      string               `json:"proof"`
+	// Destination duplicates MarketAddress at the transport boundary.  It is
+	// required so the JSON accepted by tosctl is explicit about the target;
+	// validation below makes the duplicate non-malleable.
+	Destination      string `json:"destination"`
+	MarketConfigHash string `json:"market_config_hash"`
+	MarketCodeHash   string `json:"market_code_hash"`
+	AmountNanoTOS    uint64 `json:"amount_nanotos"`
+	BodyHash         string `json:"body_hash"`
+	ExpiresAtUnix    uint64 `json:"expires_at_unix"`
+	PublicKey        string `json:"public_key"`
+	Proof            string `json:"proof"`
 }
 
 func IsPredictionCustodyEffectKind(kind string) bool {
@@ -181,6 +185,7 @@ func predictionCustodyEffectPreimageV1(body PredictionCustodyEffectAuthorization
 		!canonicalDigestPattern.MatchString(body.WriterFenceDigest) || body.PolicyRevision == 0 ||
 		!canonicalDigestPattern.MatchString(body.MandateDigest) || !canonicalDigestOrZero(body.ApprovalDigestOrZero) ||
 		!canonicalNonZeroDigest(body.MarketID, canonicalDigestPattern) ||
+		body.Destination != body.MarketAddress ||
 		!canonicalNonZeroDigest(body.SourceAgentAccountCodeHash, custodyCellDigestPattern) ||
 		!canonicalNonZeroDigest(body.MarketConfigHash, custodyCellDigestPattern) ||
 		!canonicalNonZeroDigest(body.MarketCodeHash, custodyCellDigestPattern) ||
