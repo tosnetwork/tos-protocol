@@ -218,6 +218,26 @@ func buildSemanticActionRegistry() map[string]SemanticActionEntry {
 		entry("report.correct", SuccessorTerminal, f("owner_id", SemanticID), f("agent_id", SemanticID), f("report_series_id", SemanticDigest32), f("prior_report_digest", SemanticDigest32), f("correction_revision", SemanticU64), f("correction_delta_digest", SemanticDigest32)),
 		entry("owner.projection.checkpoint", SuccessorNone, f("owner_id", SemanticID), f("agent_id", SemanticID), f("projection_source_set_digest", SemanticDigest32), f("event_set_root", SemanticDigest32), f("snapshot_revision", SemanticU64)),
 		entry("owner.device-session.revoke", SuccessorTerminal, f("owner_id", SemanticID), f("agent_id", SemanticID), f("session_id", SemanticID), f("session_generation", SemanticU64), f("session_revocation_generation", SemanticU64)),
+		entry("prediction.market.deploy", SuccessorNone, predictionFields(f("market_config_hash", SemanticDigest32), f("deployment_salt", SemanticDigest32), f("contract_code_hash", SemanticDigest32))...),
+		entry("prediction.collateral.deposit", SuccessorAuthorityInstance, predictionFields(f("account_binding_digest", SemanticDigest32), f("amount_atomic", SemanticID), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.reserve.top-up", SuccessorAuthorityInstance, predictionFields(f("amount_atomic", SemanticID), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.trading-key.rotate", SuccessorNone, predictionFields(f("account_binding_digest", SemanticDigest32), f("expected_key_epoch", SemanticU64), f("trading_public_key_digest", SemanticDigest32))...),
+		entry("prediction.order.authorize", SuccessorNone, predictionFields(f("order_digest", SemanticDigest32), f("valid_until", SemanticU64), f("worst_case_risk_digest", SemanticDigest32))...),
+		entry("prediction.order.publish", SuccessorNone, predictionFields(f("order_digest", SemanticDigest32), f("signed_order_cell_hash", SemanticDigest32), f("carrier_id", SemanticID))...),
+		entry("prediction.order.cancel-exact", SuccessorNone, predictionFields(f("order_digest", SemanticDigest32), f("order_cell_hash", SemanticDigest32))...),
+		entry("prediction.order.nonce-floor.raise", SuccessorNone, predictionFields(f("account_binding_digest", SemanticDigest32), f("expected_key_epoch", SemanticU64), f("new_nonce_floor", SemanticU64))...),
+		entry("prediction.match.submit", SuccessorAuthorityInstance, predictionFields(f("maker_order_digest", SemanticDigest32), f("taker_order_digest", SemanticDigest32), f("quantity_lots", SemanticU64), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.position.split", SuccessorAuthorityInstance, predictionFields(f("account_binding_digest", SemanticDigest32), f("quantity_lots", SemanticU64), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.position.merge", SuccessorAuthorityInstance, predictionFields(f("account_binding_digest", SemanticDigest32), f("quantity_lots", SemanticU64), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.position.claim", SuccessorNone, predictionFields(f("beneficiary_account_digest", SemanticDigest32), f("final_outcome", SemanticKind))...),
+		entry("prediction.collateral.withdraw", SuccessorAuthorityInstance, predictionFields(f("account_binding_digest", SemanticDigest32), f("amount_atomic", SemanticID), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.resolution.report", SuccessorNone, predictionFields(f("reporter_account_digest", SemanticDigest32), f("round", SemanticKind), f("round_context_hash", SemanticDigest32), f("vote_statement_hash", SemanticDigest32))...),
+		entry("prediction.resolution.challenge", SuccessorNone, predictionFields(f("challenger_account_digest", SemanticDigest32), f("proposed_statement_hash", SemanticDigest32), f("counter_outcome", SemanticKind), f("counter_evidence_root", SemanticDigest32))...),
+		entry("prediction.resolution.finalize", SuccessorNone, predictionFields(f("finalization_kind", SemanticKind), f("expected_context_hash", SemanticDigest32), f("expected_statement_hash_or_zero", SemanticDigest32))...),
+		entry("prediction.challenge-bond.withdraw", SuccessorNone, predictionFields(f("challenger_account_digest", SemanticDigest32), f("challenge_record_digest", SemanticDigest32))...),
+		entry("prediction.market.advance-phase", SuccessorAuthorityInstance, predictionFields(f("expected_phase_state_digest", SemanticDigest32), f("authority_instance_id", SemanticDigest32))...),
+		entry("prediction.market.compact", SuccessorTerminal, predictionFields(f("expected_terminal_state_digest", SemanticDigest32))...),
+		entry("prediction.terminal-surplus.withdraw", SuccessorAuthorityInstance, predictionFields(f("amount_atomic", SemanticID), f("reserve_recipient_digest", SemanticDigest32), f("authority_instance_id", SemanticDigest32))...),
 	}
 	registry := make(map[string]SemanticActionEntry, len(entries))
 	for _, candidate := range entries {
@@ -231,6 +251,12 @@ func buildSemanticActionRegistry() map[string]SemanticActionEntry {
 
 func f(name string, kind SemanticFieldType) SemanticFieldDefinition {
 	return SemanticFieldDefinition{Name: name, Type: kind}
+}
+
+func predictionFields(specific ...SemanticFieldDefinition) []SemanticFieldDefinition {
+	common := []SemanticFieldDefinition{f("owner_id", SemanticID), f("agent_id", SemanticID),
+		f("network_domain_digest", SemanticDigest32), f("market_id", SemanticDigest32)}
+	return append(common, specific...)
 }
 
 func entry(kind string, successor SuccessorPolicy, fields ...SemanticFieldDefinition) SemanticActionEntry {
